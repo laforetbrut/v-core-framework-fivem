@@ -85,7 +85,7 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | `v-core` | ✅ done | DB, API, callbacks, persistent player, money/job/gang, **permissions**, **logs**, **i18n (fr/en)** |
 | `v-spawn` | ✅ done | Language selection → character creation → appearance editor (heritage/face/hair/details/clothing) |
 | `v-status` | ✅ done | Hunger, thirst, stress, bleeding (injury), illness |
-| `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + player settings panel |
+| `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + compass; drag-to-reposition each element, custom accent colour, minimap control (show/hide, vehicle-only) |
 | `v-notify` | ✅ done | Themed toast notifications (success/error/warning/info) used by `Core.Notify` |
 | `v-loadscreen` | ✅ done | Custom Projet R loading screen (real progress + bilingual tips) |
 | `v-banking` | ✅ done | Fleeca banking: ATM interaction + deposit / withdraw / transfer + history |

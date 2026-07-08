@@ -6,11 +6,17 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="v-root">
+  <!-- Compass (top-center by default) -->
+  <div id="compass" class="compass hidden" data-group="compass">
+    <span class="dir" id="compass-dir">N</span>
+    <span class="deg" id="compass-deg">0°</span>
+  </div>
+
   <!-- Vitals (bottom-left, near the minimap) -->
-  <div id="vitals" class="vitals"></div>
+  <div id="vitals" class="vitals" data-group="vitals"></div>
 
   <!-- Money (bottom-right) -->
-  <div id="money" class="money hidden">
+  <div id="money" class="money hidden" data-group="money">
     <div class="stat" id="stat-cash">
       <span class="ic" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -31,6 +37,13 @@
     </div>
   </div>
 
+  <!-- Layout (drag) mode toolbar -->
+  <div id="layout-bar" class="layout-bar hidden">
+    <span class="dot"></span>
+    <span data-i18n="set.drag_hint">Drag the elements to reposition them</span>
+    <button class="v-btn v-btn--accent" id="btn-layout-done" data-i18n="set.done">Done</button>
+  </div>
+
   <!-- Settings panel -->
   <div id="settings" class="overlay hidden">
     <div class="panel v-panel">
@@ -49,23 +62,37 @@
         </div>
 
         <div class="group">
+          <span class="v-label" data-i18n="set.layout">Layout</span>
+          <button class="v-btn v-btn--ghost full" id="btn-move" data-i18n="set.move">Move elements</button>
+        </div>
+
+        <div class="group">
           <span class="v-label" data-i18n="set.accent">Accent</span>
           <div class="swatches" id="swatches"></div>
+          <label class="custom-color">
+            <input type="color" id="accent-custom" value="#FF6A1A" />
+            <span data-i18n="set.custom">Custom colour</span>
+          </label>
         </div>
 
         <div class="group">
           <span class="v-label"><span data-i18n="set.opacity">Opacity</span> <em id="opacity-val">100%</em></span>
-          <input type="range" id="opacity" min="40" max="100" value="100" />
+          <input type="range" id="opacity" min="30" max="100" value="100" />
         </div>
 
         <div class="group">
           <span class="v-label"><span data-i18n="set.scale">Scale</span> <em id="scale-val">100%</em></span>
-          <input type="range" id="scale" min="80" max="120" value="100" />
+          <input type="range" id="scale" min="70" max="130" value="100" />
         </div>
 
         <div class="group row-between">
           <span class="v-label" style="margin:0" data-i18n="set.dynamic">Hide vitals when full</span>
           <button class="switch" id="dynamic" role="switch"><span></span></button>
+        </div>
+
+        <div class="group row-between">
+          <span class="v-label" style="margin:0" data-i18n="set.mapvehicle">Minimap only in vehicle</span>
+          <button class="switch" id="mapvehicle" role="switch"><span></span></button>
         </div>
       </div>
 

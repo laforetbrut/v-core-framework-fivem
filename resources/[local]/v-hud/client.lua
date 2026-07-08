@@ -3,7 +3,7 @@
 -- persists per-player HUD customization via KVP.
 
 local loaded = false
-local settings = nil
+local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 
 local function loadSettings()
     local raw = GetResourceKvpString('vhud:settings')
@@ -60,8 +60,21 @@ CreateThread(function()
                 stamina = math.max(0, math.min(100, 100 - GetPlayerSprintStaminaRemaining(pid))),
                 oxygen  = underwater and math.floor(GetPlayerUnderwaterTimeRemaining(pid) * 12) or 100,
                 underwater = underwater,
+                heading = GetEntityHeading(ped),
             } })
         end
+    end
+end)
+
+-- ── Minimap control (from player settings) ──
+CreateThread(function()
+    while true do
+        Wait(500)
+        local wantMap = not (settings.elements and settings.elements.minimap == false)
+        if wantMap and settings.minimapVehicleOnly then
+            wantMap = IsPedInAnyVehicle(PlayerPedId(), false)
+        end
+        DisplayRadar(wantMap)
     end
 end)
 
