@@ -40,9 +40,12 @@ local function startCreator()
     FreezeEntityPosition(ped, true)
     SetPlayerControl(PlayerId(), false, 0)
 
-    SetSexModel(0)
-    ApplyAppearance(appearance)
-    CreatorCameraStart()
+    -- Guard the ped/model/camera setup so a native failure can never leave a black screen.
+    pcall(function()
+        SetSexModel(0)
+        ApplyAppearance(appearance)
+        CreatorCameraStart()
+    end)
 
     Wait(200)
     DoScreenFadeIn(500)

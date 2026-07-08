@@ -7,7 +7,10 @@ author 'vyrriox'
 description 'v-banking — Fleeca banking: ATM + account UI (v-core module)'
 version '0.1.0'
 
-dependency 'v-core'
+dependencies {
+    'v-core',
+    'v-ui',
+}
 
 shared_scripts {
     '@v-core/locale/shared.lua',

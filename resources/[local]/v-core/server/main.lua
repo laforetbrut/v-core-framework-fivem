@@ -46,7 +46,12 @@ RegisterNetEvent('v-core:server:playerReady', function()
     if row then
         loadPlayer(src, row, license)
     else
-        -- No character yet -> the client runs the creation flow (v-spawn).
+        -- No character yet -> isolate the player in a private routing bucket so
+        -- several new players creating at once never see or collide with each other.
+        local bucket = 700000 + src
+        SetPlayerRoutingBucket(src, bucket)
+        SetRoutingBucketPopulationEnabled(bucket, false)   -- no NPCs / traffic in the creation instance
+        SetRoutingBucketEntityLockdownMode(bucket, 'strict')
         TriggerClientEvent('v-core:client:needCharacter', src, { language = lang })
     end
 end)
@@ -77,6 +82,7 @@ VCore.RegisterCallback('v-core:createCharacter', function(source, resolve, data)
     end
 
     loadPlayer(source, row, license)
+    SetPlayerRoutingBucket(source, 0)   -- leave the private creation instance -> main world
     creating[source] = nil
     resolve(true)
 end)

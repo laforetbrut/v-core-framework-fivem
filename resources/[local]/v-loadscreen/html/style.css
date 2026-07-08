@@ -15,24 +15,26 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-900); color: var(--text); font-family: var(--font-body); }
 
-/* ── Background layers (GTA footage) ── */
+/* ── Background layers (GTA footage) ──
+   NOTE: z-index MUST be positive — a negative z-index would paint the video
+   behind the body's solid background, hiding it entirely. */
 .bg-video {
   position: fixed; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; z-index: -3;
+  object-fit: cover; z-index: 1;
   animation: kenburns 34s ease-in-out infinite alternate;
 }
 /* Dark, warm-tinted overlay so the branding & progress stay legible over any scene */
 .bg-overlay {
-  position: fixed; inset: 0; z-index: -2;
+  position: fixed; inset: 0; z-index: 2;
   background:
     linear-gradient(90deg, rgba(8, 7, 9, .93) 0%, rgba(8, 7, 9, .6) 42%, rgba(8, 7, 9, .28) 100%),
     linear-gradient(180deg, rgba(8, 7, 9, .35) 0%, transparent 30%, rgba(8, 7, 9, .82) 100%),
     radial-gradient(120% 90% at 82% 88%, rgba(255, 106, 26, .10), transparent 55%);
   pointer-events: none;
 }
-.vignette { position: fixed; inset: 0; z-index: -1; background: radial-gradient(120% 120% at 50% 50%, transparent 52%, rgba(0, 0, 0, .55) 100%); pointer-events: none; }
+.vignette { position: fixed; inset: 0; z-index: 3; background: radial-gradient(120% 120% at 50% 50%, transparent 52%, rgba(0, 0, 0, .55) 100%); pointer-events: none; }
 .scan {
-  position: fixed; left: 0; right: 0; height: 2px; top: 0;
+  position: fixed; left: 0; right: 0; height: 2px; top: 0; z-index: 4;
   background: linear-gradient(90deg, transparent, rgba(255, 106, 26, .5), transparent);
   animation: scan 6s linear infinite;
   opacity: .4;
@@ -40,7 +42,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-9
 
 /* ── Brand + loader ── */
 .stage {
-  position: fixed; inset: 0;
+  position: fixed; inset: 0; z-index: 10;
   display: flex; flex-direction: column; justify-content: center;
   padding: 0 9vw;
   animation: rise .8s cubic-bezier(.2, .9, .25, 1) both;
@@ -67,7 +69,7 @@ html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-9
 }
 
 /* ── Footer / tips ── */
-.foot { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 26px 9vw; }
+.foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 26px 9vw; }
 .tip { display: flex; align-items: center; gap: 12px; min-height: 20px; }
 .tip-tag { font-family: var(--font-display); font-size: 10px; letter-spacing: .18em; color: var(--accent); border: 1px solid rgba(255, 106, 26, .4); border-radius: 5px; padding: 4px 8px; }
 .tip-text { font-size: 14px; color: var(--text-dim); transition: opacity .4s ease; }

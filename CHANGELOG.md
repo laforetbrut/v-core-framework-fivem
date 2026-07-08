@@ -6,6 +6,16 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ## [1.0.0] - 2026-07-08
 
+### Fixed (in-game interface pass)
+
+- **CEF black-box bug** — removed every `backdrop-filter: blur()` (renders as opaque black on FiveM's Chromium 103 CEF) across v-hud, v-spawn, v-banking, v-notify.
+- **Compass box + clicks** — explicit compass width + `overflow:hidden` (kills the oversized black box) and `pointer-events:none` on decorative HUD widgets so they no longer swallow the character-creator's clicks.
+- **color-mix()** — replaced (unsupported before Chromium 111) with static tints in v-notify.
+- **Creation instance** — new players isolated in a private routing bucket so simultaneous joins don't collide.
+- **Loadscreen video** — fixed the video not showing (negative z-index painted it behind the body background); switched to a lighter H.264 MP4 that reliably plays in CEF.
+- **Robustness** — v-banking releases NUI focus on resource stop; `dependency 'v-ui'` added; creation flow guards natives so the screen always fades back in; default GTA cash HUD hidden.
+- **Animations** — critical-vital pulse + compass drop-in.
+
 ### Added (English first)
 
 - **Vanilla server base** — FXServer artifacts plus the official cfx default resources (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames) under `resources/[cfx-default]`.
