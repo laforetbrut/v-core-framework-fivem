@@ -1,0 +1,81 @@
+/* v-loadscreen — Projet R. Self-contained (loadscreen runs before other resources). */
+:root {
+  --bg-900: #0A0A0C;
+  --bg-800: #0E0E12;
+  --text: #ECEAE6;
+  --text-dim: #9C99A2;
+  --text-faint: #5C5A63;
+  --accent: #FF6A1A;
+  --accent-300: #FF9354;
+  --line: rgba(255, 255, 255, .07);
+  --font-display: 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
+  --font-body: 'Segoe UI', 'Inter', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-900); color: var(--text); font-family: var(--font-body); }
+
+/* ── Background layers ── */
+.bg { position: fixed; inset: 0; background: radial-gradient(130% 120% at 82% 88%, #1a120b 0%, #0d0b0d 42%, #08080a 100%); }
+.grid {
+  position: fixed; inset: 0;
+  background-image: linear-gradient(var(--line) 1px, transparent 1px), linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(120% 100% at 80% 90%, #000 20%, transparent 75%);
+  -webkit-mask-image: radial-gradient(120% 100% at 80% 90%, #000 20%, transparent 75%);
+  opacity: .5;
+}
+.glow {
+  position: fixed; right: -8%; bottom: -14%;
+  width: 60vw; height: 60vw;
+  background: radial-gradient(circle, rgba(255, 106, 26, .30), rgba(255, 106, 26, .05) 45%, transparent 70%);
+  filter: blur(20px);
+  animation: pulse 7s ease-in-out infinite;
+}
+.vignette { position: fixed; inset: 0; background: radial-gradient(120% 120% at 50% 50%, transparent 55%, rgba(0, 0, 0, .6) 100%); pointer-events: none; }
+.scan {
+  position: fixed; left: 0; right: 0; height: 2px; top: 0;
+  background: linear-gradient(90deg, transparent, rgba(255, 106, 26, .5), transparent);
+  animation: scan 6s linear infinite;
+  opacity: .4;
+}
+
+/* ── Brand + loader ── */
+.stage {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; justify-content: center;
+  padding: 0 9vw;
+  animation: rise .8s cubic-bezier(.2, .9, .25, 1) both;
+}
+.kicker { font-family: var(--font-display); font-size: 15px; letter-spacing: .55em; color: var(--text-dim); margin-bottom: 10px; }
+.mark {
+  font-family: var(--font-display); font-weight: 700;
+  font-size: clamp(64px, 11vw, 150px); line-height: .92; letter-spacing: .01em;
+  text-shadow: 0 8px 60px rgba(0, 0, 0, .6);
+}
+.mark span { color: var(--accent); text-shadow: 0 0 40px rgba(255, 106, 26, .55); }
+
+.loader { margin-top: 46px; max-width: 560px; }
+.row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.status { font-size: 13px; letter-spacing: .05em; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-display); }
+.pct { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; color: var(--accent-300); }
+.bar { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+.fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-300));
+  box-shadow: 0 0 16px rgba(255, 106, 26, .55);
+  border-radius: 4px;
+  transition: width .5s cubic-bezier(.2, .9, .25, 1);
+}
+
+/* ── Footer / tips ── */
+.foot { position: fixed; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: space-between; padding: 26px 9vw; }
+.tip { display: flex; align-items: center; gap: 12px; min-height: 20px; }
+.tip-tag { font-family: var(--font-display); font-size: 10px; letter-spacing: .18em; color: var(--accent); border: 1px solid rgba(255, 106, 26, .4); border-radius: 5px; padding: 4px 8px; }
+.tip-text { font-size: 14px; color: var(--text-dim); transition: opacity .4s ease; }
+.tip-text.fade { opacity: 0; }
+.sig { font-family: var(--font-display); letter-spacing: .28em; font-size: 11px; color: var(--text-faint); text-transform: uppercase; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes pulse { 0%, 100% { opacity: .8; transform: scale(1); } 50% { opacity: 1; transform: scale(1.08); } }
+@keyframes scan { 0% { top: -2%; } 100% { top: 102%; } }
