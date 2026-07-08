@@ -65,3 +65,9 @@ end)
 RegisterNUICallback('transfer', function(data, cb)
     Core.TriggerCallback('v-banking:transfer', function(res) cb(res or false) end, data)
 end)
+
+-- Never leave a player's cursor/controls stuck if the resource is restarted mid-use.
+AddEventHandler('onResourceStop', function(resName)
+    if resName ~= GetCurrentResourceName() then return end
+    SetNuiFocus(false, false)
+end)

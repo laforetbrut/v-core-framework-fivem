@@ -65,6 +65,16 @@ CreateThread(function()
     end
 end)
 
+-- ── Hide the default GTA HUD pieces we replace ──
+CreateThread(function()
+    while true do
+        Wait(0)
+        HideHudComponentThisFrame(3)   -- cash (single-player)
+        HideHudComponentThisFrame(4)   -- MP cash (we show our own money)
+        HideHudComponentThisFrame(13)  -- cash change
+    end
+end)
+
 -- ── Compass heading (only while the compass is enabled) ──
 CreateThread(function()
     while true do

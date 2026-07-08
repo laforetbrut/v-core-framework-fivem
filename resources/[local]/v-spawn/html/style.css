@@ -73,7 +73,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:15px; h
 .foot .v-btn { flex:1; }
 
 /* ── Camera controls ── */
-.cam { position:fixed; bottom:26px; left:calc(50% - 180px); transform:translateX(-50%); display:flex; align-items:center; gap:12px; padding:8px; background:rgba(16,16,21,.85); border:1px solid var(--v-line); border-radius:12px; backdrop-filter:blur(8px); }
+.cam { position:fixed; bottom:26px; left:calc(50% - 180px); transform:translateX(-50%); display:flex; align-items:center; gap:12px; padding:8px; background:rgba(16,16,21,.95); border:1px solid var(--v-line); border-radius:12px; }
 .cam-btn { width:40px; height:40px; border-radius:9px; border:1px solid var(--v-line-2); background:var(--v-bg-600); color:var(--v-text); font-size:22px; cursor:pointer; }
 .cam-btn:hover { border-color:var(--v-accent); }
 .cam-zones { display:flex; gap:4px; }
