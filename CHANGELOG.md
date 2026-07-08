@@ -18,6 +18,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **v-inventory module** — grid inventory with weight & slots, drag-and-drop, use/give/drop, item definitions from the `items` table, vehicle **trunk** (E at the rear) and persistent **stashes** (`stashes` table, reused for gang boxes & ground drops); server exports (`AddItem`/`RemoveItem`/`GetItemCount`/`RegisterUsableItem`) for shops/jobs/crafting. Food/water/bandage hooked to v-status. Fully fr/en, CEF-103-safe NUI.
+- **v-core inventory accessors** — `player.GetInventory()` / `player.SetInventory()` so modules mutate the canonical, persisted inventory.
+
 - **Vanilla server base** — FXServer artifacts plus the official cfx default resources (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames) under `resources/[cfx-default]`.
 - **Clean configuration** — `server.cfg` with endpoints on 30120, OneSync enabled, system chat, and a `[local]` folder reserved for our own scripts. No framework, no database dependency.
 - **v-core framework** — `resources/[local]/v-core`: `exports['v-core']:GetCore()` API on client and server, a client↔server callback system, **database-persistent player object** (money/job/gang/metadata) loaded from and saved to MariaDB via oxmysql, autosave + save-on-drop lifecycle, and namespaced events (`onPlayerLoaded`, `onMoneyChange`, …) so modules stay decoupled.
