@@ -87,6 +87,7 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | `v-status` | ✅ done | Hunger, thirst, stress, bleeding (injury), illness |
 | `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + player settings panel |
 | `v-notify` | ✅ done | Themed toast notifications (success/error/warning/info) used by `Core.Notify` |
+| `v-loadscreen` | ✅ done | Custom Projet R loading screen (real progress + bilingual tips) |
 | `v-banking` | ✅ done | Fleeca banking: ATM interaction + deposit / withdraw / transfer + history |
 | `v-inventory` | 🔨 next | Item grid + pose menu, weight, use/drop/give, trunk/glovebox, gang stash |
 | `v-phone` | ⬜ | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
