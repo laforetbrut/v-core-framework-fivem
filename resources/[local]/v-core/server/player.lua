@@ -21,9 +21,10 @@ function VCore.NewPlayer(source, row)
     self.money     = { cash = row.cash, bank = row.bank }
     self.job       = { name = row.job, grade = row.job_grade }
     self.gang      = { name = row.gang, grade = row.gang_grade }
-    self.position  = VCore.DB.AsTable(row.position)
-    self.metadata  = VCore.DB.AsTable(row.metadata)
-    self.inventory = VCore.DB.AsTable(row.inventory)
+    self.position   = VCore.DB.AsTable(row.position)
+    self.metadata   = VCore.DB.AsTable(row.metadata)
+    self.inventory  = VCore.DB.AsTable(row.inventory)
+    self.appearance = VCore.DB.AsTable(row.appearance)
 
     -- ── Money ──────────────────────────────────────────────
     function self.GetMoney(account)
@@ -106,6 +107,7 @@ function VCore.NewPlayer(source, row)
             gang       = self.gang,
             metadata   = self.metadata,
             permission = self.permission,
+            appearance = self.appearance,
         }
     end
 

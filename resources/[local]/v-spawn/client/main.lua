@@ -1,0 +1,120 @@
+-- v-spawn | client flow
+-- language selection -> identity -> appearance editor -> create & spawn.
+local Core = exports['v-core']:GetCore()
+
+local active = false
+local currentLang = 'fr'
+local identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
+local appearance = nil
+
+local function finishCreator()
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close' })
+    CreatorCameraStop()
+    DoScreenFadeOut(400)
+    Wait(450)
+    local ped = PlayerPedId()
+    local s = Config.Spawn
+    SetEntityCoordsNoOffset(ped, s.x, s.y, s.z, false, false, false)
+    SetEntityHeading(ped, s.w)
+    FreezeEntityPosition(ped, false)
+    SetPlayerControl(PlayerId(), true, 0)
+    Wait(300)
+    ClearPedTasksImmediately(ped)
+    DoScreenFadeIn(500)
+    active = false
+end
+
+local function startCreator()
+    active = true
+    identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
+    appearance = DefaultAppearance(0)
+
+    DoScreenFadeOut(400)
+    Wait(450)
+
+    local ped = PlayerPedId()
+    local c = Config.CreatorCoords
+    SetEntityCoordsNoOffset(ped, c.x, c.y, c.z, false, false, false)
+    SetEntityHeading(ped, c.w)
+    FreezeEntityPosition(ped, true)
+    SetPlayerControl(PlayerId(), false, 0)
+
+    SetSexModel(0)
+    ApplyAppearance(appearance)
+    CreatorCameraStart()
+
+    Wait(200)
+    DoScreenFadeIn(500)
+
+    SetNuiFocus(true, true)
+    SendNUIMessage({ action = 'open' })
+end
+
+RegisterNetEvent('v-core:client:needCharacter', function(info)
+    if active then return end
+    currentLang = (info and info.language) or 'fr'
+    startCreator()
+end)
+
+-- Apply saved appearance for returning characters.
+AddEventHandler('v-core:client:onPlayerLoaded', function(data)
+    if active then return end
+    if data.appearance and next(data.appearance) then
+        CreateThread(function()
+            Wait(500)
+            if data.appearance.sex then SetSexModel(data.appearance.sex); Wait(200) end
+            ApplyAppearance(data.appearance)
+        end)
+    end
+end)
+
+-- ── NUI callbacks ──
+RegisterNUICallback('selectLang', function(data, cb)
+    currentLang = (data.lang == 'en') and 'en' or 'fr'
+    Core.TriggerCallback('v-core:setLanguage', function() end, currentLang)
+    SendNUIMessage({ action = 'strings', strings = Locales[currentLang] or {} })
+    SendNUIMessage({ action = 'screen', screen = 'identity' })
+    cb('ok')
+end)
+
+RegisterNUICallback('setSex', function(data, cb)
+    local sex = tonumber(data.sex) or 0
+    identity.sex = sex
+    appearance = DefaultAppearance(sex)
+    SetSexModel(sex)
+    ApplyAppearance(appearance)
+    SendNUIMessage({ action = 'appearance', data = appearance })
+    cb('ok')
+end)
+
+RegisterNUICallback('identityNext', function(data, cb)
+    identity.firstname = tostring(data.firstname or ''):sub(1, 24)
+    identity.lastname  = tostring(data.lastname or ''):sub(1, 24)
+    identity.dob       = tostring(data.dob or '2000-01-01')
+    SendNUIMessage({ action = 'screen', screen = 'appearance', appearance = appearance })
+    cb('ok')
+end)
+
+RegisterNUICallback('updateAppearance', function(data, cb)
+    appearance = data.appearance or appearance
+    ApplyAppearance(appearance)
+    cb('ok')
+end)
+
+RegisterNUICallback('camera', function(data, cb)
+    if data.rotate then CreatorCameraRotate((data.rotate or 0) + 0.0) end
+    if data.zone then CreatorCameraZone(data.zone) end
+    cb('ok')
+end)
+
+RegisterNUICallback('confirm', function(data, cb)
+    if data.appearance then appearance = data.appearance end
+    Core.TriggerCallback('v-core:createCharacter', function(ok)
+        if ok then finishCreator() end
+    end, {
+        firstname = identity.firstname, lastname = identity.lastname,
+        dob = identity.dob, sex = identity.sex, appearance = appearance,
+    })
+    cb('ok')
+end)

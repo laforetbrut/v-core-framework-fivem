@@ -82,12 +82,16 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | Module | Status | Responsibility |
 |--------|--------|----------------|
 | `v-ui` | ✅ done | Shared design system (dark/orange theme tokens) |
-| `v-core` | ✅ done | DB, API, callbacks, persistent player, money/job/gang, **permissions**, **logs** |
+| `v-core` | ✅ done | DB, API, callbacks, persistent player, money/job/gang, **permissions**, **logs**, **i18n (fr/en)** |
+| `v-spawn` | ✅ done | Language selection → character creation → appearance editor (heritage/face/hair/details/clothing) |
 | `v-status` | ✅ done | Hunger, thirst, stress, bleeding (injury), illness |
 | `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + player settings panel |
-| `v-phone` | ⬜ next | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
+| `v-banking` | 🔨 next | Fleeca/Maze Bank logic behind the phone bank app + ATMs |
+| `v-inventory` | ⬜ | Item grid + pose menu, weight, use/drop/give, trunk/glovebox, gang stash |
+| `v-phone` | ⬜ | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
 | `v-radial` | ⬜ | Radial menu (context actions) — the other main interaction surface |
-| `v-banking` | ⬜ | Fleeca/Maze Bank logic behind the phone bank app + ATMs |
+| `v-drugs` | ⬜ | GTA-lore drug system (grow/process/deal) |
+| `v-police` | ⬜ | Police + investigation (evidence, MDT, cuffs, jail) |
 | `v-inventory` | ⬜ | Item grid, weight, use/drop/give, registry from `items` table |
 | `v-shops` | ⬜ | 24/7, Ammu-Nation, LSC… buy from `shops` table |
 | `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys, LSC |
@@ -114,3 +118,6 @@ exports['v-status']:Add(source, 'hunger', 25) -- food/drink items call this
 exports['v-status']:SetBleed(source, 0)       -- bandage / treatment
 exports['v-status']:Heal(source)              -- EMS full cleanse
 ```
+
+## i18n (fr / en)
+Every resource does `shared_script '@v-core/locale/shared.lua'`, defines its own `Locales = { en = {...}, fr = {...} }`, and calls `L('key', ...)`. The player's language lives in `LocalPlayer.state.lang` (client) / `Player(src).state.lang` (server); use `LP(src, 'key')` server-side. NUI text is driven by sending `Locales[lang]` to the page. Default via `set vcore_lang "fr"`; each player picks their language in v-spawn.

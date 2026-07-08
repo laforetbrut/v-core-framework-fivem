@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <!-- Language selection -->
+  <div id="screen-language" class="lang-overlay hidden">
+    <div class="lang-card">
+      <div class="lang-brand"><span class="dot"></span> PROJET R</div>
+      <h1 class="lang-title">Choisis ta langue<span>Select your language</span></h1>
+      <div class="lang-btns">
+        <button class="lang-btn" data-lang="fr"><span class="flag">FR</span><span>Français</span></button>
+        <button class="lang-btn" data-lang="en"><span class="flag">EN</span><span>English</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right dock -->
+  <div id="panel" class="panel hidden">
+    <div class="panel__head">
+      <span class="dot"></span>
+      <h1 class="v-title" id="panel-title" data-i18n="id.title">Create your character</h1>
+    </div>
+
+    <!-- Identity -->
+    <div id="screen-identity" class="screen">
+      <div class="field"><label class="v-label" data-i18n="id.firstname">First name</label><input id="firstname" maxlength="24" autocomplete="off" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.lastname">Last name</label><input id="lastname" maxlength="24" autocomplete="off" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.dob">Date of birth</label><input id="dob" type="date" value="2000-01-01" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.sex">Sex</label>
+        <div class="seg">
+          <button class="seg-btn on" data-sex="0" data-i18n="id.male">Male</button>
+          <button class="seg-btn" data-sex="1" data-i18n="id.female">Female</button>
+        </div>
+      </div>
+      <div class="err" id="id-err"></div>
+      <button class="v-btn v-btn--accent full" id="btn-next" data-i18n="id.next">Next</button>
+    </div>
+
+    <!-- Appearance -->
+    <div id="screen-appearance" class="screen hidden">
+      <div class="tabs" id="tabs"></div>
+      <div class="controls v-scroll" id="controls"></div>
+      <div class="foot">
+        <button class="v-btn v-btn--ghost" id="btn-back" data-i18n="app.back">Back</button>
+        <button class="v-btn v-btn--accent" id="btn-confirm" data-i18n="app.confirm">Confirm &amp; Spawn</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Camera controls -->
+  <div id="cam" class="cam hidden">
+    <button class="cam-btn" data-rot="-30" aria-label="rotate left">‹</button>
+    <div class="cam-zones">
+      <button class="cam-zone on" data-zone="body">Body</button>
+      <button class="cam-zone" data-zone="head">Head</button>
+      <button class="cam-zone" data-zone="legs">Legs</button>
+    </div>
+    <button class="cam-btn" data-rot="30" aria-label="rotate right">›</button>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

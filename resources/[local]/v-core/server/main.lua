@@ -6,23 +6,7 @@ VCore = VCore or {}
 exports('GetCore', function() return VCore end)
 
 -- ── Player load ────────────────────────────────────────────────
-RegisterNetEvent('v-core:server:playerReady', function()
-    local src = source
-    if VCore.Players[src] then return end
-
-    local license = VCore.GetLicense(src)
-    if not license then
-        DropPlayer(src, 'v-core: no license identifier found.')
-        return
-    end
-
-    VCore.DB.EnsureUser(license, GetPlayerName(src))
-
-    local row = VCore.DB.GetCharacterByLicense(license)
-    if not row then
-        row = VCore.DB.CreateDefaultCharacter(license, GetPlayerName(src))
-    end
-
+local function loadPlayer(src, row, license)
     local player = VCore.NewPlayer(src, row)
 
     -- Resolve permission: DB value, upgraded by any config bootstrap admin.
@@ -38,8 +22,61 @@ RegisterNetEvent('v-core:server:playerReady', function()
 
     VCore.Debug(('player loaded: %s [%s] (id %s, %s)'):format(player.name, player.citizenid, src, perm))
     VCore.Log('connect', ('%s connected'):format(player.name), { source = src }, player.citizenid)
+    VCore.Notify(src, LP(src, 'core.welcome', Config.ServerName, player.name), 'info')
     TriggerClientEvent('v-core:client:playerLoaded', src, player.ExportData())
     TriggerEvent('v-core:server:onPlayerLoaded', src, player)
+end
+VCore.LoadPlayer = loadPlayer
+
+RegisterNetEvent('v-core:server:playerReady', function()
+    local src = source
+    if VCore.Players[src] then return end
+
+    local license = VCore.GetLicense(src)
+    if not license then
+        DropPlayer(src, 'v-core: no license identifier found.')
+        return
+    end
+
+    VCore.DB.EnsureUser(license, GetPlayerName(src))
+    local lang = VCore.DB.GetUserLanguage(license)
+    Player(src).state:set('lang', lang, true)
+
+    local row = VCore.DB.GetCharacterByLicense(license)
+    if row then
+        loadPlayer(src, row, license)
+    else
+        -- No character yet -> the client runs the creation flow (v-spawn).
+        TriggerClientEvent('v-core:client:needCharacter', src, { language = lang })
+    end
+end)
+
+-- Language selection (from v-spawn).
+VCore.RegisterCallback('v-core:setLanguage', function(source, resolve, lang)
+    lang = (lang == 'en') and 'en' or 'fr'
+    local license = VCore.GetLicense(source)
+    if license then VCore.DB.SetUserLanguage(license, lang) end
+    Player(source).state:set('lang', lang, true)
+    resolve(lang)
+end)
+
+-- Character creation (from v-spawn): identity + appearance -> create + load.
+VCore.RegisterCallback('v-core:createCharacter', function(source, resolve, data)
+    local license = VCore.GetLicense(source)
+    if not license or VCore.Players[source] then resolve(false); return end
+    local row = VCore.DB.CreateCharacter(license, data or {})
+    if not row then resolve(false); return end
+    loadPlayer(source, row, license)
+    resolve(true)
+end)
+
+-- Persist appearance changes (barber / clothing stores later).
+RegisterNetEvent('v-core:server:saveAppearance', function(appearance)
+    local player = VCore.GetPlayer(source)
+    if player then
+        player.appearance = appearance
+        VCore.DB.SaveAppearance(player.citizenid, appearance)
+    end
 end)
 
 -- ── Player unload (save) ───────────────────────────────────────

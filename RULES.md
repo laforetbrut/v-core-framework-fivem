@@ -65,6 +65,15 @@ All in-game UI shares **one** design language, defined once in `resources/[local
 2. **Everything manageable in-game via permissions.** Every content system must let an authorized user create/modify/delete its data live in-game (jobs, grades, prices, shops, items, vehicles, weather…). Build management UIs, not console commands; gate them with the v-core permission tiers (`user < mod < admin < superadmin`) and surface them in `v-admin`.
 3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules may vary their accent to fit their subject while keeping the dark base (§3.5).
 
+## 3.7 Change discipline — MANDATORY
+
+Whenever a script is created or modified:
+1. **Trace the wiring.** Check every resource that communicates with it (exports, events, callbacks, shared DB tables) and update those call sites so nothing breaks.
+2. **Update the docs that go with it.** Keep `ARCHITECTURE.md` (API + wiring), `CHANGELOG.md`, `RULES.md`, and any module README in sync with the change — in the same commit.
+3. **Always update the Module roadmap** (in `ARCHITECTURE.md`) every time work starts or finishes on a module — mark it 🔨 in-progress or ✅ done.
+4. **i18n:** every player-facing string goes through the locale system (`L('key')`), with both `fr` and `en` entries added. Never hardcode display text.
+5. **In-game configurable:** every content system ships a permission-gated in-game management UI (no console-only config).
+
 ## 4. Project Structure
 
 ```
