@@ -89,12 +89,12 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | `v-notify` | ✅ done | Themed toast notifications (success/error/warning/info) used by `Core.Notify` |
 | `v-loadscreen` | ✅ done | Custom Projet R loading screen: GTA cinematic WebM background + real progress + bilingual tips |
 | `v-banking` | ✅ done | Fleeca banking: ATM interaction + deposit / withdraw / transfer + history |
-| `v-inventory` | 🔨 next | Item grid + pose menu, weight, use/drop/give, trunk/glovebox, gang stash |
+| `v-inventory` | ✅ done | Grid inventory (weight, slots), use/drop/give, vehicle trunk, stashes, item defs from `items` |
+| `v-shops` | 🔨 next | 24/7, Ammu-Nation, LSC… buy from `shops` table (uses v-inventory) |
 | `v-phone` | ⬜ | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
 | `v-radial` | ⬜ | Radial menu (context actions) — the other main interaction surface |
 | `v-drugs` | ⬜ | GTA-lore drug system (grow/process/deal) |
 | `v-police` | ⬜ | Police + investigation (evidence, MDT, cuffs, jail) |
-| `v-shops` | ⬜ | 24/7, Ammu-Nation, LSC… buy from `shops` table |
 | `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys, LSC |
 | `v-jobs` | ⬜ | Jobs, grades, duty, salaries (`jobs` table) + in-game manager |
 | `v-gangs` | ⬜ | Gangs & mafias, territories (`gangs` table) |
@@ -118,6 +118,13 @@ exports['v-status']:Get(source)               -- { hunger, thirst, stress, bleed
 exports['v-status']:Add(source, 'hunger', 25) -- food/drink items call this
 exports['v-status']:SetBleed(source, 0)       -- bandage / treatment
 exports['v-status']:Heal(source)              -- EMS full cleanse
+
+-- v-inventory (server) — used by shops, jobs, crafting, ...
+exports['v-inventory']:AddItem(src, 'water', 2)      -- true/false (weight & slots checked)
+exports['v-inventory']:RemoveItem(src, 'water', 1)
+exports['v-inventory']:GetItemCount(src, 'water')
+exports['v-inventory']:RegisterUsableItem('water', function(src, item) ... end)
+-- open a secondary container client-side: TriggerServerEvent('v-inventory:server:openStash', id, label, kind)
 ```
 
 ## i18n (fr / en)

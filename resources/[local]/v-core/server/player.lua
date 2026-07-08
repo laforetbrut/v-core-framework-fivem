@@ -74,6 +74,15 @@ function VCore.NewPlayer(source, row)
         return self.metadata[key]
     end
 
+    -- ── Inventory (owned by v-inventory; these keep v-core the source of truth for saving) ──
+    function self.GetInventory()
+        return self.inventory
+    end
+
+    function self.SetInventory(items)
+        self.inventory = items or {}
+    end
+
     -- ── Permissions ────────────────────────────────────────
     self.permission = 'user'   -- set by the loader from the users table
 

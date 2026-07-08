@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="inv" class="inv-overlay hidden">
+    <div class="inv">
+      <button class="inv-close" id="inv-close" aria-label="Close">&times;</button>
+
+      <div class="grids">
+        <section class="col" id="col-player">
+          <div class="col-head">
+            <span class="v-title" data-i18n="inv.title">Inventory</span>
+            <div class="wrap-w"><div class="wbar"><i id="pw-fill"></i></div><span class="wtxt" id="pw-txt">0 / 0</span></div>
+          </div>
+          <div class="grid" id="grid-player"></div>
+        </section>
+
+        <section class="col hidden" id="col-secondary">
+          <div class="col-head">
+            <span class="v-title" id="sec-label">Stash</span>
+            <div class="wrap-w"><div class="wbar"><i id="sw-fill"></i></div><span class="wtxt" id="sw-txt">0 / 0</span></div>
+          </div>
+          <div class="grid" id="grid-secondary"></div>
+        </section>
+      </div>
+
+      <div class="actions hidden" id="actions">
+        <div class="sel" id="sel-info"></div>
+        <div class="amt-wrap">
+          <input type="range" id="amt" min="1" max="1" value="1" />
+          <span class="amt-val" id="amt-val">1</span>
+        </div>
+        <button class="v-btn" id="act-use" data-i18n="inv.use">Use</button>
+        <button class="v-btn" id="act-give" data-i18n="inv.give">Give</button>
+        <button class="v-btn v-btn--danger" id="act-drop" data-i18n="inv.drop">Drop</button>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
