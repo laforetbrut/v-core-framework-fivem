@@ -9,6 +9,7 @@ SET NAMES utf8mb4;
 CREATE TABLE IF NOT EXISTS `users` (
   `license`    VARCHAR(60) NOT NULL,
   `name`       VARCHAR(64) DEFAULT NULL,
+  `permission` VARCHAR(20) NOT NULL DEFAULT 'user',   -- user / mod / admin / superadmin
   `created_at` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_seen`  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`license`)
@@ -107,6 +108,20 @@ CREATE TABLE IF NOT EXISTS `server_config` (
   `key`   VARCHAR(64) NOT NULL,
   `value` JSON NOT NULL,
   PRIMARY KEY (`key`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Structured logs (admin actions, economy, anti-cheat, ...).
+CREATE TABLE IF NOT EXISTS `logs` (
+  `id`        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `category`  VARCHAR(40) NOT NULL,
+  `citizenid` VARCHAR(16) DEFAULT NULL,
+  `message`   VARCHAR(255) NOT NULL,
+  `data`      JSON DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `category` (`category`),
+  KEY `citizenid` (`citizenid`),
+  KEY `created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ─── Seed data ───────────────────────────────────────────────

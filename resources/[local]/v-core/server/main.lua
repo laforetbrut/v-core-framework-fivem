@@ -24,9 +24,20 @@ RegisterNetEvent('v-core:server:playerReady', function()
     end
 
     local player = VCore.NewPlayer(src, row)
+
+    -- Resolve permission: DB value, upgraded by any config bootstrap admin.
+    local perm = VCore.DB.GetUserPermission(license)
+    local bootstrap = Config.Admins[license]
+    if bootstrap and VCore.PermRank(bootstrap) > VCore.PermRank(perm) then
+        perm = bootstrap
+        VCore.DB.SetUserPermission(license, perm)
+    end
+    player.permission = perm
+
     VCore.Players[src] = player
 
-    VCore.Debug(('player loaded: %s [%s] (id %s)'):format(player.name, player.citizenid, src))
+    VCore.Debug(('player loaded: %s [%s] (id %s, %s)'):format(player.name, player.citizenid, src, perm))
+    VCore.Log('connect', ('%s connected'):format(player.name), { source = src }, player.citizenid)
     TriggerClientEvent('v-core:client:playerLoaded', src, player.ExportData())
     TriggerEvent('v-core:server:onPlayerLoaded', src, player)
 end)
@@ -68,12 +79,29 @@ VCore.RegisterCallback('v-core:getPlayerData', function(source, resolve)
     resolve(player and player.ExportData() or nil)
 end)
 
--- ── Demo command: /vmoney -> shows your balances ───────────────
-RegisterCommand('vmoney', function(source)
-    local player = VCore.GetPlayer(source)
-    if not player then return end
-    VCore.Notify(source, ('Cash: $%s  |  Bank: $%s'):format(
-        VCore.FormatMoney(player.money.cash), VCore.FormatMoney(player.money.bank)), 'info')
+-- ── Admin commands (permission-gated; players never type commands) ──
+-- /givemoney <id> <cash|bank> <amount>
+RegisterCommand('givemoney', function(source, args)
+    if source ~= 0 and not VCore.HasPermission(source, 'admin') then return end
+    local target = tonumber(args[1])
+    local account = args[2] or 'cash'
+    local amount = tonumber(args[3])
+    local player = target and VCore.GetPlayer(target)
+    if not player or not amount then return end
+    if player.AddMoney(account, amount, 'admin-give') then
+        VCore.Log('economy', ('admin gave $%d %s to %s'):format(amount, account, player.citizenid),
+            { by = source }, player.citizenid)
+    end
+end, false)
+
+-- /setperm <id> <user|mod|admin|superadmin>
+RegisterCommand('setperm', function(source, args)
+    if source ~= 0 and not VCore.HasPermission(source, 'superadmin') then return end
+    local target = tonumber(args[1])
+    local level = args[2]
+    if target and level and VCore.SetPermission(target, level) then
+        VCore.Log('admin', ('permission of %d set to %s'):format(target, level), { by = source })
+    end
 end, false)
 
 CreateThread(function()

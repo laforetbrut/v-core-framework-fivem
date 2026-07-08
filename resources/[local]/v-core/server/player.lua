@@ -73,6 +73,13 @@ function VCore.NewPlayer(source, row)
         return self.metadata[key]
     end
 
+    -- ── Permissions ────────────────────────────────────────
+    self.permission = 'user'   -- set by the loader from the users table
+
+    function self.HasPermission(needed)
+        return VCore.HasPermission(self.source, needed)
+    end
+
     -- ── Persistence ────────────────────────────────────────
     --- Snapshot the current server position before saving.
     function self.UpdatePosition()
@@ -91,13 +98,14 @@ function VCore.NewPlayer(source, row)
     --- Data sent to the client on load / refresh (no server-only fields).
     function self.ExportData()
         return {
-            citizenid = self.citizenid,
-            name      = self.name,
-            charinfo  = self.charinfo,
-            money     = self.money,
-            job       = self.job,
-            gang      = self.gang,
-            metadata  = self.metadata,
+            citizenid  = self.citizenid,
+            name       = self.name,
+            charinfo   = self.charinfo,
+            money      = self.money,
+            job        = self.job,
+            gang       = self.gang,
+            metadata   = self.metadata,
+            permission = self.permission,
         }
     end
 

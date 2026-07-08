@@ -6,7 +6,11 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="v-root">
-  <div id="hud" class="hud hidden">
+  <!-- Vitals (bottom-left, near the minimap) -->
+  <div id="vitals" class="vitals"></div>
+
+  <!-- Money (bottom-right) -->
+  <div id="money" class="money hidden">
     <div class="stat" id="stat-cash">
       <span class="ic" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -15,23 +19,59 @@
           <path d="M20 11h-4a2 2 0 0 0 0 4h4a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1Z" />
         </svg>
       </span>
-      <div class="meta">
-        <span class="lbl">Cash</span>
-        <span class="val" id="cash">$0</span>
-      </div>
+      <div class="meta"><span class="lbl">Cash</span><span class="val" id="cash">$0</span></div>
     </div>
-
     <div class="stat" id="stat-bank">
       <span class="ic" aria-hidden="true">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9.5 12 4l9 5.5" />
-          <path d="M5 10v7M9 10v7M15 10v7M19 10v7" />
-          <path d="M3 20h18" />
+          <path d="M3 9.5 12 4l9 5.5" /><path d="M5 10v7M9 10v7M15 10v7M19 10v7" /><path d="M3 20h18" />
         </svg>
       </span>
-      <div class="meta">
-        <span class="lbl">Bank</span>
-        <span class="val" id="bank">$0</span>
+      <div class="meta"><span class="lbl">Bank</span><span class="val" id="bank">$0</span></div>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div id="settings" class="overlay hidden">
+    <div class="panel v-panel">
+      <div class="panel__head">
+        <div class="brand">
+          <span class="dot"></span>
+          <h1 class="v-title">HUD <span class="v-title__accent">Settings</span></h1>
+        </div>
+        <button class="close" id="btn-close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="panel__body v-scroll">
+        <div class="group">
+          <span class="v-label">Elements</span>
+          <div class="toggles" id="toggles"></div>
+        </div>
+
+        <div class="group">
+          <span class="v-label">Accent</span>
+          <div class="swatches" id="swatches"></div>
+        </div>
+
+        <div class="group">
+          <span class="v-label">Opacity <em id="opacity-val">100%</em></span>
+          <input type="range" id="opacity" min="40" max="100" value="100" />
+        </div>
+
+        <div class="group">
+          <span class="v-label">Scale <em id="scale-val">100%</em></span>
+          <input type="range" id="scale" min="80" max="120" value="100" />
+        </div>
+
+        <div class="group row-between">
+          <span class="v-label" style="margin:0">Hide vitals when full</span>
+          <button class="switch" id="dynamic" role="switch"><span></span></button>
+        </div>
+      </div>
+
+      <div class="panel__foot">
+        <button class="v-btn v-btn--ghost" id="btn-reset">Reset</button>
+        <button class="v-btn v-btn--accent" id="btn-save">Save</button>
       </div>
     </div>
   </div>

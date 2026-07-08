@@ -58,6 +58,22 @@ function VCore.DB.SaveCharacter(player)
     )
 end
 
+--- Read an account's permission level.
+function VCore.DB.GetUserPermission(license)
+    return MySQL.scalar.await('SELECT permission FROM users WHERE license = ?', { license }) or 'user'
+end
+
+--- Persist an account's permission level.
+function VCore.DB.SetUserPermission(license, level)
+    MySQL.update.await('UPDATE users SET permission = ? WHERE license = ?', { level, license })
+end
+
+--- Fire-and-forget log insert (never blocks the caller).
+function VCore.DB.InsertLog(category, message, data, citizenid)
+    MySQL.insert('INSERT INTO logs (category, citizenid, message, data) VALUES (?, ?, ?, ?)',
+        { category, citizenid, message, data and json.encode(data) or nil })
+end
+
 --- Load every item definition keyed by name (used by inventory/shops).
 function VCore.DB.GetItems()
     local rows = MySQL.query.await('SELECT * FROM items') or {}
