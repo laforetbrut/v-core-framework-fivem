@@ -1,0 +1,79 @@
+/* v-hud — money HUD. Tokens fall back inline in case v-ui isn't loaded. */
+:root {
+  --v-bg-800: #101015;
+  --v-bg-700: #17171D;
+  --v-line: #2A2A33;
+  --v-text: #ECEAE6;
+  --v-text-dim: #9C99A2;
+  --v-accent: #FF6A1A;
+  --v-accent-300: #FF9354;
+  --v-success: #43C46A;
+  --v-danger: #E5484D;
+  --v-font-display: 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
+  --v-font-body: 'Segoe UI', 'Inter', system-ui, sans-serif;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+.hud {
+  position: fixed;
+  right: 26px;
+  bottom: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  animation: v-fade-up .35s ease;
+}
+
+.hud.hidden { display: none; }
+
+.stat {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 174px;
+  padding: 9px 15px 9px 12px;
+  background: linear-gradient(180deg, rgba(23, 23, 29, .92), rgba(16, 16, 21, .92));
+  border: 1px solid var(--v-line);
+  border-left: 2px solid var(--v-accent);
+  border-radius: 10px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
+}
+
+.stat .ic { width: 20px; height: 20px; color: var(--v-accent); flex: 0 0 auto; display: flex; }
+.stat .ic svg { width: 20px; height: 20px; }
+#stat-bank .ic { color: var(--v-accent-300); }
+
+.stat .meta { display: flex; flex-direction: column; line-height: 1.05; }
+
+.stat .lbl {
+  font-family: var(--v-font-body);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--v-text-dim);
+}
+
+.stat .val {
+  font-family: var(--v-font-display);
+  font-size: 19px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--v-text);
+  margin-top: 1px;
+}
+
+.flash-up   { animation: v-flash-up .9s ease; }
+.flash-down { animation: v-flash-down .9s ease; }
+
+@keyframes v-fade-up   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes v-flash-up   { 0% { color: var(--v-success); } 100% { color: var(--v-text); } }
+@keyframes v-flash-down { 0% { color: var(--v-danger); }  100% { color: var(--v-text); } }

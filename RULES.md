@@ -29,6 +29,36 @@
 - **Structure:** one resource = one folder in `resources/[local]/`; declare everything in `fxmanifest.lua`.
 - **Do NOT:** edit vendored `[cfx-default]` resources (override in `[local]`), hardcode secrets, leave `print` spam in shipped code.
 
+## 3.5 Visual Identity (v-ui) — MANDATORY
+
+All in-game UI shares **one** design language, defined once in `resources/[local]/v-ui/theme.css` and reused via `<link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">`.
+
+**Mood:** dark, warm-orange, condensed-industrial, high-legibility — tactical RP, not corporate. **Deliberately avoids the generic "AI" look**: no purple/blue gradients, no heavy glassmorphism, no centered emoji cards, no pastel rounded everything.
+
+**Palette (CSS variables):**
+
+| Token | Value | Use |
+|-------|-------|-----|
+| `--v-bg-900` | `#0B0B0D` | app background (near-black) |
+| `--v-bg-800` / `--v-bg-700` / `--v-bg-600` | `#101015` / `#17171D` / `#1E1E26` | panel · raised · input |
+| `--v-line` / `--v-line-2` | `#2A2A33` / `#3B3B47` | borders |
+| `--v-text` / `--v-text-dim` / `--v-text-faint` | `#ECEAE6` / `#9C99A2` / `#63616C` | text hierarchy |
+| `--v-accent` | `#FF6A1A` | **primary orange (brand)** |
+| `--v-accent-600` / `--v-accent-300` | `#E8560C` / `#FF9354` | pressed / hover |
+| `--v-success` / `--v-danger` / `--v-warning` / `--v-info` | `#43C46A` / `#E5484D` / `#F5A623` / `#4AA8FF` | status |
+
+**Typography:**
+- Display & numbers: `Bahnschrift` (condensed, industrial) — titles, money, stats.
+- Body: `Segoe UI`. Mono: `Consolas` for ids/codes.
+- Numbers always `font-variant-numeric: tabular-nums`.
+
+**Rules:**
+- One accent only (orange). No second brand color.
+- Labels: UPPERCASE + letter-spacing. Body: sentence case.
+- Sharp & restrained: 6–16px radii, thin borders, subtle shadows. No glow except accent-on-hover.
+- Line icons (stroke, `currentColor`) — **never emoji**.
+- Motion is quick and functional (120–350ms), never bouncy.
+
 ## 4. Project Structure
 
 ```
