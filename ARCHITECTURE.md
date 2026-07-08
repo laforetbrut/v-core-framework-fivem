@@ -82,17 +82,35 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | Module | Status | Responsibility |
 |--------|--------|----------------|
 | `v-ui` | ✅ done | Shared design system (dark/orange theme tokens) |
-| `v-core` | ✅ done | DB, API, callbacks, persistent player, money/job/gang |
-| `v-hud` | ✅ done | Money HUD (+ later: health/armor/hunger/thirst/voice) |
-| `v-banking` | ⬜ next | ATM + bank UI, transfers, transaction log |
-| `v-inventory` | ⬜ | Item grid, weight, use/drop/give, item registry from `items` table |
-| `v-shops` | ⬜ | Shop peds/markers, buy from `shops` table |
-| `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys |
-| `v-jobs` | ⬜ | Job system + duty + salaries (`jobs` table) |
+| `v-core` | ✅ done | DB, API, callbacks, persistent player, money/job/gang, **permissions**, **logs** |
+| `v-status` | ✅ done | Hunger, thirst, stress, bleeding (injury), illness |
+| `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + player settings panel |
+| `v-phone` | ⬜ next | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
+| `v-radial` | ⬜ | Radial menu (context actions) — the other main interaction surface |
+| `v-banking` | ⬜ | Fleeca/Maze Bank logic behind the phone bank app + ATMs |
+| `v-inventory` | ⬜ | Item grid, weight, use/drop/give, registry from `items` table |
+| `v-shops` | ⬜ | 24/7, Ammu-Nation, LSC… buy from `shops` table |
+| `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys, LSC |
+| `v-jobs` | ⬜ | Jobs, grades, duty, salaries (`jobs` table) + in-game manager |
 | `v-gangs` | ⬜ | Gangs & mafias, territories (`gangs` table) |
-| `v-phone` | ⬜ | Phone NUI: messages, contacts, apps |
-| `v-radial` | ⬜ | Radial menu (context actions) |
-| `v-pausemenu` | ⬜ | Custom pause menu |
-| `v-admin` | ⬜ | In-game admin panel: manage items, prices, shops, vehicles, players |
+| `v-crafting` | ⬜ | Recipes → items, benches |
+| `v-weather` | ⬜ | Weather/time sync + in-game control |
+| `v-anticheat` | ⬜ | Server-side sanity checks, explosion/health/money guards, logged |
+| `v-pausemenu` | ⬜ | Custom pause menu (hosts settings, incl. HUD) |
+| `v-admin` | ⬜ | In-game panel: manage items, prices, shops, vehicles, jobs, players |
 
-Everything routes through `v-core` so modules stay decoupled and hot-swappable.
+**Principles:** no player chat commands (phone/radial/pause UI only); every content system is manageable **in-game via permissions**; everything routes through `v-core` so modules stay decoupled. See `RULES.md` §3.5–3.6.
+
+## Permissions, logs & status (v-core / v-status)
+```lua
+-- server
+Core.HasPermission(source, 'admin')          -- user < mod < admin < superadmin
+Core.SetPermission(source, 'mod')
+Core.Log('economy', 'message', { any = 'data' }, citizenid)   -- console + logs table
+
+-- v-status (server)
+exports['v-status']:Get(source)               -- { hunger, thirst, stress, bleed, sick }
+exports['v-status']:Add(source, 'hunger', 25) -- food/drink items call this
+exports['v-status']:SetBleed(source, 0)       -- bandage / treatment
+exports['v-status']:Heal(source)              -- EMS full cleanse
+```

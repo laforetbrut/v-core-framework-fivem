@@ -23,6 +23,8 @@ server_scripts {
     'server/functions.lua',
     'server/database.lua',
     'server/callbacks.lua',
+    'server/permissions.lua',
+    'server/logs.lua',
     'server/player.lua',
     'server/main.lua',
 }

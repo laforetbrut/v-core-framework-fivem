@@ -18,3 +18,17 @@ Config.StartingMoney = {
 
 -- Autosave every player to the database on this interval (ms).
 Config.SaveInterval = 5 * 60 * 1000
+
+-- Permission tiers (higher = more power). Used to gate in-game management.
+Config.PermissionLevels = {
+    user       = 0,
+    mod        = 1,
+    admin      = 2,
+    superadmin = 3,
+}
+
+-- Bootstrap admins by license (applied on join, before the DB value).
+-- Find your license in the server console when you connect, then add it here:
+Config.Admins = {
+    -- ['license:xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'] = 'superadmin',
+}

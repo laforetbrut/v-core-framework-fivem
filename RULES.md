@@ -59,6 +59,12 @@ All in-game UI shares **one** design language, defined once in `resources/[local
 - Line icons (stroke, `currentColor`) — **never emoji**.
 - Motion is quick and functional (120–350ms), never bouncy.
 
+## 3.6 Interaction & Management principles — MANDATORY
+
+1. **No player chat commands.** Players interact only through the phone (iFruit), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
+2. **Everything manageable in-game via permissions.** Every content system must let an authorized user create/modify/delete its data live in-game (jobs, grades, prices, shops, items, vehicles, weather…). Build management UIs, not console commands; gate them with the v-core permission tiers (`user < mod < admin < superadmin`) and surface them in `v-admin`.
+3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules may vary their accent to fit their subject while keeping the dark base (§3.5).
+
 ## 4. Project Structure
 
 ```

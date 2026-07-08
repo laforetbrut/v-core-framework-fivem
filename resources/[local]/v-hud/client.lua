@@ -1,27 +1,92 @@
 -- v-hud | client
--- Reads money from v-core and mirrors it in the NUI HUD.
+-- Feeds the NUI with money (v-core) + vitals (native + v-status), and
+-- persists per-player HUD customization via KVP.
 
-local function currentMoney()
-    local data = exports['v-core']:GetPlayerData()
-    return (data and data.money) or { cash = 0, bank = 0 }
+local loaded = false
+local settings = nil
+
+local function loadSettings()
+    local raw = GetResourceKvpString('vhud:settings')
+    if raw then
+        local ok, parsed = pcall(json.decode, raw)
+        if ok and parsed then settings = parsed end
+    end
 end
 
--- Show the HUD once the player is fully loaded.
+local function status()
+    local ok, s = pcall(function() return exports['v-status']:Get() end)
+    return (ok and s) or {}
+end
+
+-- Push settings to the NUI as soon as it's ready.
+CreateThread(function()
+    loadSettings()
+    Wait(250)
+    SendNUIMessage({ action = 'init', settings = settings or {} })
+end)
+
+-- ── Money ──
 AddEventHandler('v-core:client:onPlayerLoaded', function(data)
-    SendNUIMessage({ action = 'show', cash = data.money.cash, bank = data.money.bank })
+    loaded = true
+    SendNUIMessage({ action = 'money', cash = data.money.cash, bank = data.money.bank })
 end)
 
--- Live money updates (deposit, purchase, payday, ...).
 AddEventHandler('v-core:client:onMoneyChange', function(money)
-    SendNUIMessage({ action = 'money', cash = money.cash, bank = money.bank })
+    SendNUIMessage({ action = 'money', cash = money.cash, bank = money.bank, flash = true })
 end)
 
--- If v-hud is (re)started mid-session, restore it with the current data.
+-- ── Vitals poll ──
+CreateThread(function()
+    while true do
+        Wait(350)
+        if loaded then
+            local ped = PlayerPedId()
+            local pid = PlayerId()
+            local s = status()
+            local underwater = IsPedSwimmingUnderWater(ped)
+            SendNUIMessage({ action = 'vitals', data = {
+                health  = math.max(0, math.min(100, GetEntityHealth(ped) - 100)),
+                armor   = GetPedArmour(ped),
+                hunger  = s.hunger or 100,
+                thirst  = s.thirst or 100,
+                stress  = s.stress or 0,
+                stamina = math.max(0, math.min(100, 100 - GetPlayerSprintStaminaRemaining(pid))),
+                oxygen  = underwater and math.floor(GetPlayerUnderwaterTimeRemaining(pid) * 12) or 100,
+                underwater = underwater,
+            } })
+        end
+    end
+end)
+
+-- ── Settings (keybind, no chat command for players) ──
+RegisterCommand('vhud_settings', function()
+    if not loaded then return end
+    SetNuiFocus(true, true)
+    SendNUIMessage({ action = 'openSettings' })
+end, false)
+RegisterKeyMapping('vhud_settings', 'Open HUD settings', 'keyboard', 'F7')
+
+RegisterNuiCallback('saveSettings', function(data, cb)
+    settings = data
+    SetResourceKvpString('vhud:settings', json.encode(data))
+    SetNuiFocus(false, false)
+    cb('ok')
+end)
+
+RegisterNuiCallback('closeSettings', function(_, cb)
+    SetNuiFocus(false, false)
+    cb('ok')
+end)
+
+-- Restore on mid-session restart.
 CreateThread(function()
     Wait(800)
     local core = exports['v-core']:GetCore()
     if core and core.isLoaded then
-        local m = currentMoney()
-        SendNUIMessage({ action = 'show', cash = m.cash, bank = m.bank })
+        loaded = true
+        local pd = exports['v-core']:GetPlayerData()
+        if pd and pd.money then
+            SendNUIMessage({ action = 'money', cash = pd.money.cash, bank = pd.money.bank })
+        end
     end
 end)
