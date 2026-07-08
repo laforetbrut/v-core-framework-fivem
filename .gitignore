@@ -32,3 +32,6 @@ Desktop.ini
 .DS_Store
 .vscode/
 .idea/
+
+# ─── FiveM runtime files ───
+.replxx_history
