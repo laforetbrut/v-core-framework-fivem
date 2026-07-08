@@ -60,8 +60,19 @@ CreateThread(function()
                 stamina = math.max(0, math.min(100, 100 - GetPlayerSprintStaminaRemaining(pid))),
                 oxygen  = underwater and math.floor(GetPlayerUnderwaterTimeRemaining(pid) * 12) or 100,
                 underwater = underwater,
-                heading = GetEntityHeading(ped),
             } })
+        end
+    end
+end)
+
+-- ── Compass heading (only while the compass is enabled) ──
+CreateThread(function()
+    while true do
+        if loaded and settings.elements and settings.elements.compass then
+            SendNUIMessage({ action = 'heading', h = GetEntityHeading(PlayerPedId()) })
+            Wait(80)
+        else
+            Wait(500)
         end
     end
 end)

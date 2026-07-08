@@ -142,19 +142,32 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px;
 .v-scroll::-webkit-scrollbar-thumb { background: var(--v-bg-500); border-radius: 8px; }
 .v-scroll::-webkit-scrollbar-track { background: transparent; }
 
-/* ── Compass ── */
+/* ── Compass (scrolling tape) ── */
 .compass {
-  position: fixed; top: 18px; left: 0; right: 0; margin-left: auto; margin-right: auto; width: max-content;
+  position: fixed; top: 14px; left: 0; right: 0; margin-left: auto; margin-right: auto; width: max-content;
   display: flex; flex-direction: column; align-items: center;
-  padding: 5px 16px;
-  background: linear-gradient(180deg, rgba(23, 23, 29, .9), rgba(16, 16, 21, .92));
-  border: 1px solid var(--v-line); border-top: 2px solid var(--v-accent);
-  border-radius: 10px; backdrop-filter: blur(8px);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  padding: 7px 18px 5px;
+  background: linear-gradient(180deg, rgba(23, 23, 29, .82), rgba(16, 16, 21, .86));
+  border: 1px solid var(--v-line); border-radius: 10px;
+  backdrop-filter: blur(8px); box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
   opacity: var(--hud-opacity);
 }
-.compass .dir { font-family: var(--v-font-display); font-weight: 600; font-size: 20px; letter-spacing: .06em; color: var(--v-text); line-height: 1; }
-.compass .deg { font-family: var(--v-font-display); font-variant-numeric: tabular-nums; font-size: 10px; color: var(--v-accent-300); margin-top: 1px; }
+.compass-arrow {
+  width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 7px solid var(--v-accent); filter: drop-shadow(0 0 4px var(--v-accent)); margin-bottom: 3px;
+}
+.compass-window {
+  position: relative; width: 240px; height: 26px; overflow: hidden;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 16%, #000 84%, transparent);
+}
+.compass-tape { position: absolute; top: 0; left: 0; height: 100%; will-change: transform; }
+.tick { position: absolute; top: 0; height: 100%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+.tick .bar { width: 1px; height: 6px; background: rgba(255, 255, 255, .3); }
+.tick.card .bar { width: 2px; height: 10px; background: var(--v-accent); }
+.tick .lbl { font-family: var(--v-font-display); font-size: 11px; color: var(--v-text-faint); margin-top: 2px; line-height: 1; }
+.tick.card .lbl { color: var(--v-text); font-weight: 600; font-size: 13px; }
+.compass-deg { font-family: var(--v-font-display); font-variant-numeric: tabular-nums; font-size: 10px; color: var(--v-accent-300); margin-top: 3px; }
 
 /* ── Layout (drag) mode ── */
 .overlay.layout { background: transparent; backdrop-filter: none; pointer-events: none; }
