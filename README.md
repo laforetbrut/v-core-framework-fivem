@@ -25,9 +25,18 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 3. Add `ensure <your-resource>` in `server.cfg`.
 4. In the server console: `refresh` then `ensure <your-resource>` (or `restart <your-resource>`).
 
+## Database (on-demand)
+
+A local MariaDB instance is available but **does not run 24/7** — it is not a Windows service and never starts with Windows. Turn it on/off with the scripts:
+
+- **`start-db.bat`** — starts MariaDB in the background on `localhost:3306` (user `root`, password `root`, database `projet_r`).
+- **`stop-db.bat`** — stops it cleanly.
+
+Data lives in `database/data/` (gitignored). Only start it when a resource actually needs it.
+
 ## Dependencies
 
-- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Server commands](https://docs.fivem.net/docs/server-manual/setting-up-a-server/)
+- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Server commands](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/)
 
 ## Credits
 
@@ -62,9 +71,18 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 3. Ajoute `ensure <ta-ressource>` dans `server.cfg`.
 4. Dans la console serveur : `refresh` puis `ensure <ta-ressource>` (ou `restart <ta-ressource>`).
 
+## Base de données (à la demande)
+
+Une instance MariaDB locale est disponible mais **ne tourne pas 24/7** — ce n'est pas un service Windows et elle ne démarre jamais avec Windows. Tu l'allumes/l'éteins avec les scripts :
+
+- **`start-db.bat`** — démarre MariaDB en arrière-plan sur `localhost:3306` (user `root`, mot de passe `root`, base `projet_r`).
+- **`stop-db.bat`** — l'arrête proprement.
+
+Les données sont dans `database/data/` (gitignoré). Ne l'allume que quand une ressource en a réellement besoin.
+
 ## Dépendances
 
-- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Commandes serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/)
+- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Commandes serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/)
 
 ## Credits
 

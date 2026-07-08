@@ -12,6 +12,9 @@ license.cfg
 *.local
 .env
 
+# ─── MariaDB local data (machine-specific — never commit) ───
+database/data/
+
 # ─── Claude Code (local-only configuration) ───
 .claude/
 CLAUDE.md
