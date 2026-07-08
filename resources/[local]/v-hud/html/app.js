@@ -26,7 +26,9 @@ const VITALS = [
   { key: 'oxygen',  danger: v => v <= 30, underwaterOnly: true },
 ];
 
-const LABELS = { health:'Health', armor:'Armor', hunger:'Hunger', thirst:'Thirst', stress:'Stress', stamina:'Stamina', oxygen:'Oxygen', money:'Money' };
+let strings = {};
+const t = (k) => strings[k] || k;
+function applyStrings() { document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
 const ACCENTS = [
   { c: '#FF6A1A', c2: '#FF9354' }, // orange (default)
   { c: '#43C46A', c2: '#6FE08D' }, // green
@@ -107,7 +109,7 @@ function buildPanel() {
   Object.keys(settings.elements).forEach(key => {
     const b = document.createElement('div');
     b.className = 'toggle' + (settings.elements[key] ? ' on' : '');
-    b.innerHTML = `<span class="box"></span><span>${LABELS[key] || key}</span>`;
+    b.innerHTML = `<span class="box"></span><span>${t('el.' + key)}</span>`;
     b.onclick = () => { settings.elements[key] = !settings.elements[key]; b.classList.toggle('on'); applySettings(); };
     tg.appendChild(b);
   });
@@ -151,6 +153,10 @@ window.addEventListener('message', (event) => {
     case 'init':
       if (d.settings) settings = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), d.settings);
       applySettings();
+      break;
+    case 'strings':
+      strings = d.strings || {};
+      applyStrings();
       break;
     case 'vitals':
       renderVitals(d.data || {});

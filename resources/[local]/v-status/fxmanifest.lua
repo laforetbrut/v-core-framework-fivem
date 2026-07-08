@@ -7,6 +7,8 @@ author 'vyrriox'
 description 'v-status — hunger, thirst, stress, injuries & illness (v-core module)'
 version '0.1.0'
 
+dependency 'v-core'
+
 shared_script 'config.lua'
 client_script 'client/main.lua'
 server_script 'server/main.lua'

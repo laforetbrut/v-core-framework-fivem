@@ -101,9 +101,10 @@ function VCore.DB.SetUserPermission(license, level)
 end
 
 --- Fire-and-forget log insert (never blocks the caller).
+--- Params are always fully populated (no nil holes) so oxmysql marshals them correctly.
 function VCore.DB.InsertLog(category, message, data, citizenid)
     MySQL.insert('INSERT INTO logs (category, citizenid, message, data) VALUES (?, ?, ?, ?)',
-        { category, citizenid, message, data and json.encode(data) or nil })
+        { category, citizenid or '', message, json.encode(data or {}) })
 end
 
 --- Load every item definition keyed by name (used by inventory/shops).

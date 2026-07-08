@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="bank" class="overlay hidden">
+    <div class="bank">
+      <div class="head">
+        <div class="brand">
+          <span class="logo">F</span>
+          <h1 class="v-title" data-i18n="bank.title">Fleeca Bank</h1>
+        </div>
+        <button class="close" id="close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="cards">
+        <div class="card accent">
+          <span class="v-label" data-i18n="bank.balance">Account balance</span>
+          <span class="amt" id="bank-amt">$0</span>
+        </div>
+        <div class="card">
+          <span class="v-label" data-i18n="bank.cash">Cash on hand</span>
+          <span class="amt" id="cash-amt">$0</span>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab on" data-tab="deposit" data-i18n="bank.deposit">Deposit</button>
+        <button class="tab" data-tab="withdraw" data-i18n="bank.withdraw">Withdraw</button>
+        <button class="tab" data-tab="transfer" data-i18n="bank.transfer">Transfer</button>
+      </div>
+
+      <div class="form">
+        <div class="field">
+          <label class="v-label" data-i18n="bank.amount">Amount</label>
+          <input id="amount" type="number" min="1" placeholder="0" autocomplete="off" />
+        </div>
+        <div class="field hidden" id="target-field">
+          <label class="v-label" data-i18n="bank.target">Recipient</label>
+          <input id="target" placeholder="V0000000" autocomplete="off" />
+        </div>
+        <div class="msg" id="msg"></div>
+        <button class="v-btn v-btn--accent full" id="confirm" data-i18n="bank.confirm">Confirm</button>
+      </div>
+
+      <div class="history">
+        <span class="v-label" data-i18n="bank.history">Recent activity</span>
+        <div class="tx-list v-scroll" id="tx-list"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

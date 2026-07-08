@@ -86,13 +86,13 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | `v-spawn` | ✅ done | Language selection → character creation → appearance editor (heritage/face/hair/details/clothing) |
 | `v-status` | ✅ done | Hunger, thirst, stress, bleeding (injury), illness |
 | `v-hud` | ✅ done | Fully customizable HUD: money + vitals rings + player settings panel |
-| `v-banking` | 🔨 next | Fleeca/Maze Bank logic behind the phone bank app + ATMs |
-| `v-inventory` | ⬜ | Item grid + pose menu, weight, use/drop/give, trunk/glovebox, gang stash |
+| `v-notify` | ✅ done | Themed toast notifications (success/error/warning/info) used by `Core.Notify` |
+| `v-banking` | ✅ done | Fleeca banking: ATM interaction + deposit / withdraw / transfer + history |
+| `v-inventory` | 🔨 next | Item grid + pose menu, weight, use/drop/give, trunk/glovebox, gang stash |
 | `v-phone` | ⬜ | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
 | `v-radial` | ⬜ | Radial menu (context actions) — the other main interaction surface |
 | `v-drugs` | ⬜ | GTA-lore drug system (grow/process/deal) |
 | `v-police` | ⬜ | Police + investigation (evidence, MDT, cuffs, jail) |
-| `v-inventory` | ⬜ | Item grid, weight, use/drop/give, registry from `items` table |
 | `v-shops` | ⬜ | 24/7, Ammu-Nation, LSC… buy from `shops` table |
 | `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys, LSC |
 | `v-jobs` | ⬜ | Jobs, grades, duty, salaries (`jobs` table) + in-game manager |

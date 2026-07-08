@@ -18,16 +18,23 @@ local function status()
     return (ok and s) or {}
 end
 
--- Push settings to the NUI as soon as it's ready.
+local function sendStrings()
+    local lang = (LocalPlayer.state and LocalPlayer.state.lang) or 'fr'
+    SendNUIMessage({ action = 'strings', strings = Locales[lang] or Locales.fr or {} })
+end
+
+-- Push settings + strings to the NUI as soon as it's ready.
 CreateThread(function()
     loadSettings()
     Wait(250)
     SendNUIMessage({ action = 'init', settings = settings or {} })
+    sendStrings()
 end)
 
 -- ── Money ──
 AddEventHandler('v-core:client:onPlayerLoaded', function(data)
     loaded = true
+    sendStrings()   -- language is known now
     SendNUIMessage({ action = 'money', cash = data.money.cash, bank = data.money.bank })
 end)
 
@@ -66,14 +73,14 @@ RegisterCommand('vhud_settings', function()
 end, false)
 RegisterKeyMapping('vhud_settings', 'Open HUD settings', 'keyboard', 'F7')
 
-RegisterNuiCallback('saveSettings', function(data, cb)
+RegisterNUICallback('saveSettings', function(data, cb)
     settings = data
     SetResourceKvpString('vhud:settings', json.encode(data))
     SetNuiFocus(false, false)
     cb('ok')
 end)
 
-RegisterNuiCallback('closeSettings', function(_, cb)
+RegisterNUICallback('closeSettings', function(_, cb)
     SetNuiFocus(false, false)
     cb('ok')
 end)

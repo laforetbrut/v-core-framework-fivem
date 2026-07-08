@@ -2,9 +2,9 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'v-spawn'
+name 'v-banking'
 author 'vyrriox'
-description 'v-spawn — language selection, character creation & appearance editor (v-core module)'
+description 'v-banking — Fleeca banking: ATM + account UI (v-core module)'
 version '0.1.0'
 
 dependency 'v-core'
@@ -16,10 +16,11 @@ shared_scripts {
     'config.lua',
 }
 
-client_scripts {
-    'client/ped.lua',
-    'client/camera.lua',
-    'client/main.lua',
+client_script 'client/main.lua'
+
+server_scripts {
+    '@oxmysql/lib/MySQL.lua',
+    'server/main.lua',
 }
 
 ui_page 'html/index.html'

@@ -1,0 +1,79 @@
+/* v-notify — toasts. Tokens fall back inline. */
+:root {
+  --v-bg-700: #17171D; --v-bg-800: #101015; --v-line: #2A2A33;
+  --v-text: #ECEAE6; --v-text-dim: #9C99A2;
+  --v-accent: #FF6A1A;
+  --v-success: #43C46A; --v-danger: #E5484D; --v-warning: #F5A623; --v-info: #4AA8FF;
+  --v-font-display: 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
+  --v-font-body: 'Segoe UI', 'Inter', system-ui, sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 100%; height: 100%; background: transparent; overflow: hidden; font-family: var(--v-font-body); color: var(--v-text); }
+
+.toasts {
+  position: fixed;
+  top: 22px;
+  right: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 340px;
+}
+
+.toast {
+  --c: var(--v-accent);
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 15px 13px 14px;
+  background: linear-gradient(180deg, rgba(23, 23, 29, .96), rgba(16, 16, 21, .97));
+  border: 1px solid var(--v-line);
+  border-left: 3px solid var(--c);
+  border-radius: 11px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  backdrop-filter: blur(10px);
+  overflow: hidden;
+  transform: translateX(120%);
+  opacity: 0;
+  animation: toast-in .34s cubic-bezier(.2, .9, .25, 1) forwards;
+}
+.toast.out { animation: toast-out .28s ease forwards; }
+
+.toast.success { --c: var(--v-success); }
+.toast.error   { --c: var(--v-danger); }
+.toast.warning { --c: var(--v-warning); }
+.toast.info    { --c: var(--v-accent); }
+
+.toast .icon {
+  flex: 0 0 auto;
+  width: 30px; height: 30px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 8px;
+  color: var(--c);
+  background: color-mix(in srgb, var(--c) 16%, transparent);
+}
+.toast .icon svg { width: 18px; height: 18px; }
+
+.toast .body { flex: 1; min-width: 0; padding-top: 1px; }
+.toast .title {
+  font-family: var(--v-font-display);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--c);
+  margin-bottom: 2px;
+}
+.toast .msg { font-size: 13px; line-height: 1.35; color: var(--v-text); word-wrap: break-word; }
+
+.toast .bar {
+  position: absolute; left: 0; bottom: 0; height: 2px;
+  background: var(--c);
+  width: 100%;
+  transform-origin: left;
+  animation: toast-bar linear forwards;
+  opacity: .8;
+}
+
+@keyframes toast-in  { to { transform: translateX(0); opacity: 1; } }
+@keyframes toast-out { to { transform: translateX(120%); opacity: 0; margin-bottom: -60px; } }
+@keyframes toast-bar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
