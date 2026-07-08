@@ -1,0 +1,124 @@
+:root {
+    --font-primary: "Exo 2", sans-serif;
+    --font-weight-regular: 400;
+    --font-weight-medium: 500;
+    --md-elevation-1: 0px 1px 3px 1px rgba(0, 0, 0, 0.15);
+}
+
+* {
+    font-family: var(--font-primary);
+    font-weight: var(--font-weight-regular);
+}
+
+html::-webkit-scrollbar {
+    display: none;
+}
+
+.success {
+    --accent: #006e1c;
+}
+.primary {
+    --accent: #0061a4;
+}
+.warning {
+    --accent: #7d5800;
+}
+.error {
+    --accent: #ba1a1a;
+}
+.police {
+    --accent: #0062a1;
+}
+.ambulance {
+    --accent: #006874;
+}
+
+.success,
+.primary,
+.warning,
+.error,
+.police,
+.ambulance {
+    background-color: #211f26;
+    color: #e6e1e5;
+    padding: 12px 16px;
+    font-weight: var(--font-weight-medium);
+    box-shadow: var(--md-elevation-1);
+}
+
+.notify-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    border-radius: 0;
+    min-width: 280px;
+    max-width: 400px;
+    opacity: 0;
+    transform: translateX(16px);
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.notify-item.notify-show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.notify-item.notify-hide {
+    opacity: 0;
+    transform: translateX(16px);
+    transition:
+        opacity 0.3s ease,
+        transform 0.3s ease;
+}
+
+.notify-icon {
+    color: var(--accent);
+    flex-shrink: 0;
+    font-size: 20px;
+    margin-top: 1px;
+}
+
+.notify-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.notify-message {
+    font-size: clamp(12px, 1.1vw, 16px);
+    line-height: 1.4;
+}
+
+.notify-multiline {
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.notify-caption {
+    font-size: clamp(10px, 0.9vw, 14px);
+    margin-top: 2px;
+    opacity: 0.75;
+}
+
+.notify-progress {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    width: 100%;
+    background: var(--accent);
+    opacity: 0.35;
+    animation: notify-shrink linear forwards;
+}
+
+@keyframes notify-shrink {
+    from {
+        width: 100%;
+    }
+    to {
+        width: 0%;
+    }
+}
