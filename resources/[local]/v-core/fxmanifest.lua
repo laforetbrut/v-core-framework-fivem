@@ -9,6 +9,9 @@ version '0.2.0'
 
 shared_scripts {
     'config/config.lua',
+    'locale/shared.lua',
+    'locales/en.lua',
+    'locales/fr.lua',
     'shared/functions.lua',
 }
 

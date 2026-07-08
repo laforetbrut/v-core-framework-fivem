@@ -1,0 +1,29 @@
+fx_version 'cerulean'
+game 'gta5'
+lua54 'yes'
+
+name 'v-spawn'
+author 'vyrriox'
+description 'v-spawn — language selection, character creation & appearance editor (v-core module)'
+version '0.1.0'
+
+shared_scripts {
+    '@v-core/locale/shared.lua',
+    'locales/en.lua',
+    'locales/fr.lua',
+    'config.lua',
+}
+
+client_scripts {
+    'client/ped.lua',
+    'client/camera.lua',
+    'client/main.lua',
+}
+
+ui_page 'html/index.html'
+
+files {
+    'html/index.html',
+    'html/style.css',
+    'html/app.js',
+}

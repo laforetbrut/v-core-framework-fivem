@@ -58,6 +58,38 @@ function VCore.DB.SaveCharacter(player)
     )
 end
 
+--- Read/write an account's language.
+function VCore.DB.GetUserLanguage(license)
+    return MySQL.scalar.await('SELECT language FROM users WHERE license = ?', { license }) or 'fr'
+end
+
+function VCore.DB.SetUserLanguage(license, lang)
+    MySQL.update.await('UPDATE users SET language = ? WHERE license = ?', { lang, license })
+end
+
+--- Create a character from creator data (identity + appearance) and return the row.
+function VCore.DB.CreateCharacter(license, data)
+    local citizenid = VCore.GenerateCitizenId()
+    MySQL.insert.await(
+        [[INSERT INTO characters (citizenid, license, firstname, lastname, dob, sex, cash, bank, appearance)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)]],
+        {
+            citizenid, license,
+            data.firstname or 'John', data.lastname or 'Doe',
+            data.dob or '2000-01-01', tonumber(data.sex) or 0,
+            Config.StartingMoney.cash, Config.StartingMoney.bank,
+            json.encode(data.appearance or {}),
+        }
+    )
+    return VCore.DB.GetCharacterByCitizenId(citizenid)
+end
+
+--- Persist a character's appearance (used by the appearance editor).
+function VCore.DB.SaveAppearance(citizenid, appearance)
+    MySQL.update.await('UPDATE characters SET appearance = ? WHERE citizenid = ?',
+        { json.encode(appearance or {}), citizenid })
+end
+
 --- Read an account's permission level.
 function VCore.DB.GetUserPermission(license)
     return MySQL.scalar.await('SELECT permission FROM users WHERE license = ?', { license }) or 'user'

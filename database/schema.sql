@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `license`    VARCHAR(60) NOT NULL,
   `name`       VARCHAR(64) DEFAULT NULL,
   `permission` VARCHAR(20) NOT NULL DEFAULT 'user',   -- user / mod / admin / superadmin
+  `language`   VARCHAR(5)  NOT NULL DEFAULT 'fr',     -- fr / en
   `created_at` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `last_seen`  TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`license`)

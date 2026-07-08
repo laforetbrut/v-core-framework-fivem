@@ -16,6 +16,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Permissions & logs (v-core)** — permission tiers (`user < mod < admin < superadmin`) for in-game management, and a `Core.Log` system writing to console + the `logs` table.
 - **v-status module** — hunger, thirst, stress, bleeding (injury from damage) and illness, with time drain, health effects, screen feedback and metadata persistence; exports for food/drink/treatment items.
 - **v-hud (customizable)** — vitals rings (health, armor, hunger, thirst, stress, stamina, oxygen) + money, plus a player settings panel (toggle elements, accent, opacity, scale, dynamic hide) persisted via KVP. No player command — opened by keybind.
+- **i18n (fr/en)** — locale engine in v-core (`@v-core/locale/shared.lua`, `L()`/`LP()`), per-account language in DB + statebag; modules ship `fr` + `en`, NUI text driven by locale.
+- **v-spawn module** — first-run flow: language selection → character creation (name, dob, sex) → full appearance editor (heritage, face, hair, eyebrows/beard, eye color, clothing) with live preview + orbit camera; persists identity + appearance then spawns.
 - **Architecture guide** — `ARCHITECTURE.md` documents the v-core API and the module roadmap.
 - **Launchers** — `start.bat` and `start.ps1` to boot the server.
 - **On-demand database** — local MariaDB (not a Windows service, never 24/7) with `start-db.bat` / `stop-db.bat` toggles; data in `database/data/` (gitignored), database `projet_r` ready.
@@ -31,6 +33,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Permissions & logs (v-core)** — niveaux de permission (`user < mod < admin < superadmin`) pour la gestion in-game, et un système `Core.Log` écrivant dans la console + la table `logs`.
 - **Module v-status** — faim, soif, stress, saignements (blessure sur dégâts) et maladie, avec drain temporel, effets sur la vie, retours écran et persistance en metadata ; exports pour les items nourriture/boisson/soin.
 - **v-hud (personnalisable)** — jauges de vitals (vie, armure, faim, soif, stress, stamina, oxygène) + argent, avec un panneau de réglages joueur (activer les éléments, accent, opacité, taille, masquage dynamique) persisté via KVP. Aucune commande joueur — ouvert par raccourci clavier.
+- **i18n (fr/en)** — moteur de langue dans v-core (`@v-core/locale/shared.lua`, `L()`/`LP()`), langue par compte en base + statebag ; chaque module fournit `fr` + `en`, textes NUI pilotés par la locale.
+- **Module v-spawn** — flux de première connexion : sélection de langue → création de personnage (nom, date de naissance, sexe) → éditeur d'apparence complet (hérédité, visage, cheveux, sourcils/barbe, yeux, vêtements) avec aperçu live + caméra orbitale ; persiste identité + apparence puis fait apparaître.
 - **Guide d'architecture** — `ARCHITECTURE.md` documente l'API de v-core et la roadmap des modules.
 - **Lanceurs** — `start.bat` et `start.ps1` pour démarrer le serveur.
 - **Base de données à la demande** — MariaDB locale (pas un service Windows, jamais 24/7) avec les scripts `start-db.bat` / `stop-db.bat` ; données dans `database/data/` (gitignoré), base `projet_r` prête.
