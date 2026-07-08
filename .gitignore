@@ -1,0 +1,33 @@
+# ─── FiveM server artifacts (redownloadable binaries, ~1.5 GB) ───
+artifacts/
+
+# ─── Runtime cache & server state ───
+cache/
+*.log
+logs/
+svadhesive.log
+
+# ─── Database dumps / local env ───
+*.local
+.env
+
+# ─── Claude Code (local-only configuration) ───
+.claude/
+CLAUDE.md
+
+# ─── Test procedure artefacts (local QA only — never push) ───
+test-procedures/
+TEST_PROCEDURE_*.html
+
+# ─── Scratch / temp working files ───
+scratch_*
+tmp_*
+tmp_clone/
+tmp_files/
+
+# ─── OS / editor ───
+Thumbs.db
+Desktop.ini
+.DS_Store
+.vscode/
+.idea/

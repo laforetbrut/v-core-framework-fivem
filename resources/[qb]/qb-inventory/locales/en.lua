@@ -1,0 +1,61 @@
+local Translations = {
+    progress = {
+        ['snowballs'] = 'Collecting snowballs...',
+    },
+    notify = {
+        ['failed'] = 'Failed',
+        ['canceled'] = 'Canceled',
+        ['vlocked'] = 'Vehicle locked',
+        ['notowned'] = 'You do not own this item!',
+        ['missitem'] = 'You don\'t have this item!',
+        ['nonb'] = 'No one nearby!',
+        ['noaccess'] = 'Not accessible',
+        ['nosell'] = 'You can\'t sell this item.',
+        ['itemexist'] = 'This item doesn\'t exist.',
+        ['notencash'] = 'You don\'t have enough cash.',
+        ['noitem'] = 'You don\'t have the right items.',
+        ['gsitem'] = 'You can\'t give yourself an item?',
+        ['tftgitem'] = 'You are too far away to give items!',
+        ['infound'] = 'Item you tried giving not found!',
+        ['iifound'] = 'Incorrect item found, try again!',
+        ['gitemrec'] = 'You received ',
+        ['gitemfrom'] = ' from ',
+        ['gitemyg'] = 'You gave ',
+        ['gitinvfull'] = 'The other player\'s inventory is full!',
+        ['giymif'] = 'Your inventory is full!',
+        ['gitydhei'] = 'You do not have enough of the item',
+        ['gitydhitt'] = 'You do not have enough items to transfer',
+        ['navt'] = 'Not a valid type.',
+        ['anfoc'] = 'Arguments not filled out correctly.',
+        ['yhg'] = 'You have given ',
+        ['cgitem'] = 'Can\'t give item!',
+        ['idne'] = 'Item does not exist',
+        ['pdne'] = 'Player is not online',
+        ['nogunbag'] = 'You cannot be holding a gun and a bag!',
+        ['hasbag'] = 'You\'re already holding a bag, go drop it!',
+        ['invinuse'] = 'This inventory is currently in use',
+        ['notenoughstock'] = 'You cannot purchase more than is currently in stock',
+        ['canthold'] = 'You cannot carry this item',
+    },
+    inf_mapping = {
+        ['opn_inv'] = 'Open Inventory',
+        ['tog_slots'] = 'Toggles keybind slots',
+        ['use_item'] = 'Uses the item in slot ',
+    },
+    menu = {
+        ['vending'] = 'Vending Machine',
+        ['bin'] = 'Open Dumpster',
+        ['craft'] = 'Craft',
+        ['o_bag'] = 'Open Bag',
+        ['p_bag'] = 'Pick up bag',
+    },
+    interaction = {
+        ['craft'] = '~g~E~w~ - Craft',
+        ['drop_bag'] = 'Press [G] to drop the bag',
+    },
+}
+
+Lang = Lang or Locale:new({
+    phrases = Translations,
+    warnOnMissing = true
+})
