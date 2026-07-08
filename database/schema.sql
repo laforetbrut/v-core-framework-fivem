@@ -111,6 +111,20 @@ CREATE TABLE IF NOT EXISTS `server_config` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Bank transactions (history shown in the banking UI).
+CREATE TABLE IF NOT EXISTS `bank_transactions` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `citizenid`     VARCHAR(16) NOT NULL,
+  `type`          VARCHAR(16) NOT NULL,            -- deposit / withdraw / transfer_in / transfer_out
+  `amount`        BIGINT      NOT NULL,
+  `balance_after` BIGINT      NOT NULL,
+  `label`         VARCHAR(120) DEFAULT NULL,
+  `created_at`    TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `citizenid` (`citizenid`),
+  KEY `created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Structured logs (admin actions, economy, anti-cheat, ...).
 CREATE TABLE IF NOT EXISTS `logs` (
   `id`        BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

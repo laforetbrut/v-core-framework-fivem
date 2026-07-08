@@ -1,0 +1,26 @@
+-- v-banking | English
+Locales.en = Locales.en or {}
+local T = {
+    ['bank.help']        = 'Use ATM',
+    ['bank.title']       = 'Fleeca Bank',
+    ['bank.balance']     = 'Account balance',
+    ['bank.cash']        = 'Cash on hand',
+    ['bank.deposit']     = 'Deposit',
+    ['bank.withdraw']    = 'Withdraw',
+    ['bank.transfer']    = 'Transfer',
+    ['bank.amount']      = 'Amount',
+    ['bank.target']      = 'Recipient ID (citizen id)',
+    ['bank.history']     = 'Recent activity',
+    ['bank.confirm']     = 'Confirm',
+    ['bank.empty']       = 'No transactions yet.',
+    ['bank.err_funds']   = 'Insufficient funds.',
+    ['bank.err_target']  = 'Recipient not found.',
+    ['bank.ok_deposit']  = 'Deposited $%s.',
+    ['bank.ok_withdraw'] = 'Withdrew $%s.',
+    ['bank.ok_transfer'] = 'Transferred $%s.',
+    ['tx.deposit']       = 'Deposit',
+    ['tx.withdraw']      = 'Withdrawal',
+    ['tx.transfer_in']   = 'Transfer received',
+    ['tx.transfer_out']  = 'Transfer sent',
+}
+for k, v in pairs(T) do Locales.en[k] = v end

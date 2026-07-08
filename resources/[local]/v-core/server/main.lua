@@ -61,14 +61,26 @@ VCore.RegisterCallback('v-core:setLanguage', function(source, resolve, lang)
 end)
 
 -- Character creation (from v-spawn): identity + appearance -> create + load.
+-- `creating` is a synchronous guard set BEFORE the first await, so a second
+-- concurrent call (double-click / retry) can't race through the DB writes.
+local creating = {}
 VCore.RegisterCallback('v-core:createCharacter', function(source, resolve, data)
     local license = VCore.GetLicense(source)
-    if not license or VCore.Players[source] then resolve(false); return end
-    local row = VCore.DB.CreateCharacter(license, data or {})
-    if not row then resolve(false); return end
+    if not license or VCore.Players[source] or creating[source] then resolve(false); return end
+    creating[source] = true
+
+    local ok, row = pcall(VCore.DB.CreateCharacter, license, data or {})
+    if not ok or not row then
+        creating[source] = nil
+        resolve(false)
+        return
+    end
+
     loadPlayer(source, row, license)
+    creating[source] = nil
     resolve(true)
 end)
+VCore.Creating = creating
 
 -- Persist appearance changes (barber / clothing stores later).
 RegisterNetEvent('v-core:server:saveAppearance', function(appearance)
@@ -82,6 +94,7 @@ end)
 -- ── Player unload (save) ───────────────────────────────────────
 AddEventHandler('playerDropped', function()
     local src = source
+    if VCore.Creating then VCore.Creating[src] = nil end
     local player = VCore.Players[src]
     if not player then return end
     player.Save()

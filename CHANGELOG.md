@@ -18,6 +18,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **v-hud (customizable)** — vitals rings (health, armor, hunger, thirst, stress, stamina, oxygen) + money, plus a player settings panel (toggle elements, accent, opacity, scale, dynamic hide) persisted via KVP. No player command — opened by keybind.
 - **i18n (fr/en)** — locale engine in v-core (`@v-core/locale/shared.lua`, `L()`/`LP()`), per-account language in DB + statebag; modules ship `fr` + `en`, NUI text driven by locale.
 - **v-spawn module** — first-run flow: language selection → character creation (name, dob, sex) → full appearance editor (heritage, face, hair, eyebrows/beard, eye color, clothing) with live preview + orbit camera; persists identity + appearance then spawns.
+- **v-notify** — themed NUI toasts (success / error / warning / info) with icons, progress bar and slide animations; `Core.Notify` now routes through it (native fallback).
+- **v-banking (Fleeca)** — ATM interaction (no command), deposit / withdraw / transfer with recipient validation (online + offline), transaction history, Fleeca-green themed UI; new `bank_transactions` table.
+- **Fixes & polish** — fixed a v-hud NUI-focus softlock (`RegisterNUICallback` casing), a character-creation race condition, and a logs param-marshalling bug; v-hud is now fully fr/en localized; added `dependency` declarations to modules.
 - **Architecture guide** — `ARCHITECTURE.md` documents the v-core API and the module roadmap.
 - **Launchers** — `start.bat` and `start.ps1` to boot the server.
 - **On-demand database** — local MariaDB (not a Windows service, never 24/7) with `start-db.bat` / `stop-db.bat` toggles; data in `database/data/` (gitignored), database `projet_r` ready.
@@ -35,6 +38,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **v-hud (personnalisable)** — jauges de vitals (vie, armure, faim, soif, stress, stamina, oxygène) + argent, avec un panneau de réglages joueur (activer les éléments, accent, opacité, taille, masquage dynamique) persisté via KVP. Aucune commande joueur — ouvert par raccourci clavier.
 - **i18n (fr/en)** — moteur de langue dans v-core (`@v-core/locale/shared.lua`, `L()`/`LP()`), langue par compte en base + statebag ; chaque module fournit `fr` + `en`, textes NUI pilotés par la locale.
 - **Module v-spawn** — flux de première connexion : sélection de langue → création de personnage (nom, date de naissance, sexe) → éditeur d'apparence complet (hérédité, visage, cheveux, sourcils/barbe, yeux, vêtements) avec aperçu live + caméra orbitale ; persiste identité + apparence puis fait apparaître.
+- **v-notify** — toasts NUI stylés (succès / erreur / alerte / info) avec icônes, barre de progression et animations ; `Core.Notify` passe désormais par lui (fallback natif).
+- **v-banking (Fleeca)** — interaction ATM (sans commande), dépôt / retrait / virement avec validation du destinataire (en ligne + hors ligne), historique des transactions, UI thème Fleeca-vert ; nouvelle table `bank_transactions`.
+- **Correctifs & finitions** — softlock souris du HUD corrigé (casse de `RegisterNUICallback`), race condition à la création de personnage, bug de marshalling des params de logs ; v-hud entièrement traduit fr/en ; déclarations `dependency` ajoutées aux modules.
 - **Guide d'architecture** — `ARCHITECTURE.md` documente l'API de v-core et la roadmap des modules.
 - **Lanceurs** — `start.bat` et `start.ps1` pour démarrer le serveur.
 - **Base de données à la demande** — MariaDB locale (pas un service Windows, jamais 24/7) avec les scripts `start-db.bat` / `stop-db.bat` ; données dans `database/data/` (gitignoré), base `projet_r` prête.
