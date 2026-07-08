@@ -1,9 +1,17 @@
-// v-hud — vitals rings + money + player-customizable settings
+// v-hud — vitals rings + money + compass + fully customizable settings
 const RES = 'v-hud';
 const CIRC = 113.1;                 // 2*pi*18
 const byId = (id) => document.getElementById(id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
+const post = (name, data) => fetch(`https://${RES}/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).catch(() => {});
+
+function lighten(hex, amt) {
+  const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+  if (!m) return hex;
+  const ch = i => clamp(parseInt(m[i], 16) + amt, 0, 255).toString(16).padStart(2, '0');
+  return '#' + ch(1) + ch(2) + ch(3);
+}
 
 const ICON = {
   health: '<path d="M20.8 5.6a5 5 0 0 0-7.1 0L12 7.3l-1.7-1.7a5 5 0 1 0-7.1 7.1L12 21l8.8-8.3a5 5 0 0 0 0-7.1Z"/>',
@@ -15,7 +23,6 @@ const ICON = {
   oxygen: '<circle cx="11" cy="13" r="6"/><circle cx="18" cy="7" r="2.2"/>',
 };
 
-// key, danger(value)->bool, plus display rules
 const VITALS = [
   { key: 'health',  danger: v => v <= 20 },
   { key: 'armor',   danger: () => false, hideZero: true },
@@ -26,29 +33,29 @@ const VITALS = [
   { key: 'oxygen',  danger: v => v <= 30, underwaterOnly: true },
 ];
 
-let strings = {};
-const t = (k) => strings[k] || k;
-function applyStrings() { document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); }); }
 const ACCENTS = [
-  { c: '#FF6A1A', c2: '#FF9354' }, // orange (default)
-  { c: '#43C46A', c2: '#6FE08D' }, // green
-  { c: '#4AA8FF', c2: '#7FC1FF' }, // blue
-  { c: '#E5484D', c2: '#FF6E72' }, // red
-  { c: '#F5A623', c2: '#FFC65C' }, // gold
+  { c: '#FF6A1A', c2: '#FF9354' }, { c: '#43C46A', c2: '#6FE08D' },
+  { c: '#4AA8FF', c2: '#7FC1FF' }, { c: '#E5484D', c2: '#FF6E72' },
+  { c: '#F5A623', c2: '#FFC65C' }, { c: '#C77DFF', c2: '#DBA6FF' },
 ];
 
 const DEFAULTS = {
-  elements: { health:true, armor:true, hunger:true, thirst:true, stress:true, stamina:true, oxygen:true, money:true },
-  accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: true,
+  elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true },
+  positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: true, minimapVehicleOnly: false,
 };
 let settings = JSON.parse(JSON.stringify(DEFAULTS));
+let strings = {};
 let lastMoney = { cash: 0, bank: 0 };
+let editing = false;
+let drag = null;
 
-// ── Build rings ──
+const t = (k) => strings[k] || k;
+const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
+
+// ── Rings ──
 const rings = {};
 function buildRings() {
-  const wrap = byId('vitals');
-  wrap.innerHTML = '';
+  const wrap = byId('vitals'); wrap.innerHTML = '';
   for (const v of VITALS) {
     const el = document.createElement('div');
     el.className = 'ring';
@@ -62,8 +69,7 @@ function buildRings() {
 
 function renderVitals(data) {
   for (const v of VITALS) {
-    const r = rings[v.key];
-    if (!r) continue;
+    const r = rings[v.key]; if (!r) continue;
     const on = settings.elements[v.key];
     const val = clamp(Math.round(data[v.key] || 0), 0, 100);
     const underwaterHide = v.underwaterOnly && !data.underwater;
@@ -74,21 +80,29 @@ function renderVitals(data) {
     const dngr = v.danger(val);
     r.el.classList.toggle('low', dngr);
     const full = v.fullWhenZero ? val <= 2 : val >= 99;
-    r.el.classList.toggle('faded', settings.dynamic && full && !dngr);
+    r.el.classList.toggle('faded', settings.dynamic && full && !dngr && !editing);
   }
+  if (typeof data.heading === 'number') renderCompass(data.heading);
+}
+
+// ── Compass ──
+const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+function renderCompass(headingRaw) {
+  const h = ((360 - (headingRaw || 0)) % 360 + 360) % 360;   // clockwise, N=0
+  byId('compass-dir').textContent = DIRS[Math.round(h / 45) % 8];
+  byId('compass-deg').textContent = Math.round(h) + '°';
 }
 
 // ── Money ──
 function setMoney(cash, bank, flash) {
   const set = (id, value, delta) => {
-    const el = byId(id);
-    el.textContent = fmt(value);
-    if (flash && delta) { el.classList.remove('flash-up','flash-down'); void el.offsetWidth; el.classList.add(delta > 0 ? 'flash-up' : 'flash-down'); }
+    const el = byId(id); el.textContent = fmt(value);
+    if (flash && delta) { el.classList.remove('flash-up', 'flash-down'); void el.offsetWidth; el.classList.add(delta > 0 ? 'flash-up' : 'flash-down'); }
   };
   set('cash', cash, cash - lastMoney.cash);
   set('bank', bank, bank - lastMoney.bank);
   lastMoney = { cash, bank };
-  byId('money').classList.toggle('hidden', !settings.elements.money);
+  if (!editing) byId('money').classList.toggle('hidden', !settings.elements.money);
 }
 
 // ── Apply settings (live) ──
@@ -96,15 +110,66 @@ function applySettings() {
   const root = document.documentElement.style;
   root.setProperty('--hud-opacity', settings.opacity / 100);
   root.setProperty('--hud-scale', settings.scale / 100);
-  const a = ACCENTS.find(x => x.c === settings.accent) || ACCENTS[0];
-  root.setProperty('--v-accent', a.c);
-  root.setProperty('--v-accent-300', a.c2);
-  byId('money').classList.toggle('hidden', !settings.elements.money);
+  const preset = ACCENTS.find(x => x.c.toLowerCase() === (settings.accent || '').toLowerCase());
+  root.setProperty('--v-accent', settings.accent || '#FF6A1A');
+  root.setProperty('--v-accent-300', preset ? preset.c2 : lighten(settings.accent, 40));
+  byId('money').classList.toggle('hidden', !settings.elements.money && !editing);
+  byId('compass').classList.toggle('hidden', !settings.elements.compass);
+  applyLayout();
 }
 
-// ── Settings panel UI ──
+function applyLayout() {
+  ['vitals', 'money', 'compass'].forEach(key => {
+    const el = byId(key);
+    const p = settings.positions && settings.positions[key];
+    if (p && typeof p.x === 'number') {
+      el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
+      el.style.right = 'auto'; el.style.bottom = 'auto'; el.style.transformOrigin = 'top left';
+    } else {
+      el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.transformOrigin = '';
+    }
+  });
+}
+
+// ── Drag / layout mode ──
+['vitals', 'money', 'compass'].forEach(key => {
+  byId(key).addEventListener('mousedown', (e) => {
+    if (!editing) return;
+    e.preventDefault();
+    const r = byId(key).getBoundingClientRect();
+    drag = { key, el: byId(key), offx: e.clientX - r.left, offy: e.clientY - r.top };
+  });
+});
+document.addEventListener('mousemove', (e) => {
+  if (!drag) return;
+  const x = clamp(e.clientX - drag.offx, 0, window.innerWidth - 40);
+  const y = clamp(e.clientY - drag.offy, 0, window.innerHeight - 20);
+  drag.el.style.left = x + 'px'; drag.el.style.top = y + 'px';
+  drag.el.style.right = 'auto'; drag.el.style.bottom = 'auto'; drag.el.style.transformOrigin = 'top left';
+  if (!settings.positions) settings.positions = {};
+  settings.positions[drag.key] = { x, y };
+});
+document.addEventListener('mouseup', () => { drag = null; });
+
+function enterLayout() {
+  editing = true;
+  document.body.classList.add('editing');
+  byId('settings').classList.add('layout');
+  byId('layout-bar').classList.remove('hidden');
+  byId('money').classList.toggle('hidden', !settings.elements.money);
+  byId('compass').classList.toggle('hidden', !settings.elements.compass);
+  applySettings();
+}
+function exitLayout() {
+  editing = false;
+  document.body.classList.remove('editing');
+  byId('settings').classList.remove('layout');
+  byId('layout-bar').classList.add('hidden');
+  applySettings();
+}
+
+// ── Settings panel ──
 function buildPanel() {
-  // toggles
   const tg = byId('toggles'); tg.innerHTML = '';
   Object.keys(settings.elements).forEach(key => {
     const b = document.createElement('div');
@@ -113,63 +178,62 @@ function buildPanel() {
     b.onclick = () => { settings.elements[key] = !settings.elements[key]; b.classList.toggle('on'); applySettings(); };
     tg.appendChild(b);
   });
-  // swatches
+
   const sw = byId('swatches'); sw.innerHTML = '';
   ACCENTS.forEach(a => {
     const s = document.createElement('div');
-    s.className = 'swatch' + (a.c === settings.accent ? ' sel' : '');
+    s.className = 'swatch' + (a.c.toLowerCase() === (settings.accent || '').toLowerCase() ? ' sel' : '');
     s.style.background = a.c;
-    s.onclick = () => { settings.accent = a.c; [...sw.children].forEach(c => c.classList.remove('sel')); s.classList.add('sel'); applySettings(); };
+    s.onclick = () => { settings.accent = a.c; byId('accent-custom').value = a.c; [...sw.children].forEach(c => c.classList.remove('sel')); s.classList.add('sel'); applySettings(); };
     sw.appendChild(s);
   });
-  // sliders
+  byId('accent-custom').value = settings.accent || '#FF6A1A';
+  byId('accent-custom').oninput = (e) => { settings.accent = e.target.value; [...sw.children].forEach(c => c.classList.remove('sel')); applySettings(); };
+
   const op = byId('opacity'), sc = byId('scale');
   op.value = settings.opacity; byId('opacity-val').textContent = settings.opacity + '%';
   sc.value = settings.scale; byId('scale-val').textContent = settings.scale + '%';
   op.oninput = () => { settings.opacity = +op.value; byId('opacity-val').textContent = op.value + '%'; applySettings(); };
   sc.oninput = () => { settings.scale = +sc.value; byId('scale-val').textContent = sc.value + '%'; applySettings(); };
-  // dynamic switch
+
   byId('dynamic').classList.toggle('on', settings.dynamic);
+  byId('mapvehicle').classList.toggle('on', settings.minimapVehicleOnly);
 }
 
 function openSettings() { buildPanel(); byId('settings').classList.remove('hidden'); }
-function closeSettings() { byId('settings').classList.add('hidden'); post('closeSettings'); }
-function post(name, data) {
-  fetch(`https://${RES}/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).catch(() => {});
-}
+function closeSettings() { if (editing) exitLayout(); byId('settings').classList.add('hidden'); post('closeSettings'); }
 
-// panel buttons
 byId('btn-close').onclick = closeSettings;
+byId('btn-move').onclick = enterLayout;
+byId('btn-layout-done').onclick = exitLayout;
 byId('dynamic').onclick = () => { settings.dynamic = !settings.dynamic; byId('dynamic').classList.toggle('on'); applySettings(); };
+byId('mapvehicle').onclick = () => { settings.minimapVehicleOnly = !settings.minimapVehicleOnly; byId('mapvehicle').classList.toggle('on'); };
 byId('btn-reset').onclick = () => { settings = JSON.parse(JSON.stringify(DEFAULTS)); buildPanel(); applySettings(); };
-byId('btn-save').onclick = () => { post('saveSettings', settings); closeSettings(); };
-byId('settings').addEventListener('mousedown', (e) => { if (e.target.id === 'settings') closeSettings(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('settings').classList.contains('hidden')) closeSettings(); });
+byId('btn-save').onclick = () => { if (editing) exitLayout(); post('saveSettings', settings); byId('settings').classList.add('hidden'); post('closeSettings'); };
+byId('settings').addEventListener('mousedown', (e) => { if (e.target.id === 'settings' && !editing) closeSettings(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (editing) exitLayout();
+  else if (!byId('settings').classList.contains('hidden')) closeSettings();
+});
 
 // ── Messages from Lua ──
 window.addEventListener('message', (event) => {
   const d = event.data || {};
   switch (d.action) {
     case 'init':
-      if (d.settings) settings = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), d.settings);
+      if (d.settings) {
+        settings = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), d.settings);
+        settings.elements = Object.assign({}, DEFAULTS.elements, d.settings.elements || {});
+        settings.positions = d.settings.positions || {};
+      }
       applySettings();
       break;
-    case 'strings':
-      strings = d.strings || {};
-      applyStrings();
-      break;
-    case 'vitals':
-      renderVitals(d.data || {});
-      break;
-    case 'money':
-      setMoney(d.cash, d.bank, d.flash);
-      break;
-    case 'openSettings':
-      openSettings();
-      break;
-    case 'closeSettings':
-      byId('settings').classList.add('hidden');
-      break;
+    case 'strings': strings = d.strings || {}; applyStrings(); break;
+    case 'vitals': renderVitals(d.data || {}); break;
+    case 'money': setMoney(d.cash, d.bank, d.flash); break;
+    case 'openSettings': openSettings(); break;
+    case 'closeSettings': if (editing) exitLayout(); byId('settings').classList.add('hidden'); break;
   }
 });
 

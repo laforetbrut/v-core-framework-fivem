@@ -142,6 +142,40 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 15px;
 .v-scroll::-webkit-scrollbar-thumb { background: var(--v-bg-500); border-radius: 8px; }
 .v-scroll::-webkit-scrollbar-track { background: transparent; }
 
+/* ── Compass ── */
+.compass {
+  position: fixed; top: 18px; left: 0; right: 0; margin-left: auto; margin-right: auto; width: max-content;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 5px 16px;
+  background: linear-gradient(180deg, rgba(23, 23, 29, .9), rgba(16, 16, 21, .92));
+  border: 1px solid var(--v-line); border-top: 2px solid var(--v-accent);
+  border-radius: 10px; backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .4);
+  opacity: var(--hud-opacity);
+}
+.compass .dir { font-family: var(--v-font-display); font-weight: 600; font-size: 20px; letter-spacing: .06em; color: var(--v-text); line-height: 1; }
+.compass .deg { font-family: var(--v-font-display); font-variant-numeric: tabular-nums; font-size: 10px; color: var(--v-accent-300); margin-top: 1px; }
+
+/* ── Layout (drag) mode ── */
+.overlay.layout { background: transparent; backdrop-filter: none; pointer-events: none; }
+.overlay.layout .panel { display: none; }
+.layout-bar {
+  position: fixed; top: 22px; left: 50%; transform: translateX(-50%); z-index: 50;
+  display: flex; align-items: center; gap: 12px;
+  padding: 9px 10px 9px 15px;
+  background: linear-gradient(180deg, var(--v-bg-700), var(--v-bg-800));
+  border: 1px solid var(--v-line); border-radius: 12px; box-shadow: 0 12px 30px rgba(0, 0, 0, .5);
+  font-size: 13px; color: var(--v-text-dim); pointer-events: auto;
+}
+.layout-bar .v-btn { padding: 7px 14px; }
+body.editing [data-group] { cursor: move; outline: 1px dashed var(--v-accent); outline-offset: 5px; border-radius: 6px; }
+body.editing .ring.faded { opacity: 1; }
+
+/* ── Custom colour ── */
+.custom-color { display: flex; align-items: center; gap: 10px; margin-top: 6px; cursor: pointer; }
+.custom-color input[type=color] { width: 34px; height: 26px; border: 1px solid var(--v-line-2); border-radius: 7px; background: var(--v-bg-600); cursor: pointer; padding: 2px; }
+.custom-color span { font-size: 12px; color: var(--v-text-dim); }
+
 @keyframes v-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes v-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes v-flash-up { 0% { color: var(--v-success); } 100% { color: var(--v-text); } }
