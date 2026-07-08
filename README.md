@@ -7,8 +7,8 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 - FXServer (cfx.re) recommended build.
 - Vanilla cfx default resources only (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync enabled.
-- No framework, no database lock-in — build your own systems.
-- Starter resource `resources/[local]/hello-world` to copy from.
+- Custom roleplay core `v-core` in `resources/[local]/v-core` — our own framework.
+- On-demand local MariaDB (never runs 24/7).
 - One-click launch via `start.bat`.
 
 ## Installation
@@ -18,12 +18,20 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 3. **Run** — double-click `start.bat` (or run `./start.ps1`).
 4. **Connect** — in FiveM press `F8` and type `connect localhost:30120`.
 
-## Developing a script
+## The core: v-core
 
-1. Copy `resources/[local]/hello-world` to `resources/[local]/<your-resource>`.
-2. Edit `fxmanifest.lua`, `client.lua`, `server.lua`.
-3. Add `ensure <your-resource>` in `server.cfg`.
-4. In the server console: `refresh` then `ensure <your-resource>` (or `restart <your-resource>`).
+`resources/[local]/v-core` is our custom roleplay framework. Other resources use it via exports:
+
+```lua
+local Core = exports['v-core']:GetCore()
+```
+
+To add a feature resource:
+
+1. Create `resources/[local]/<your-resource>/` with an `fxmanifest.lua`.
+2. Grab the core with `exports['v-core']:GetCore()` and build on `Core.GetPlayer`, `Core.Notify`, etc.
+3. Add `ensure <your-resource>` in `server.cfg` **after** `v-core`.
+4. In the server console: `refresh` then `ensure <your-resource>`.
 
 ## Database (on-demand)
 
@@ -53,8 +61,8 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 - Binaires FXServer (cfx.re) build recommandé.
 - Uniquement les ressources cfx par défaut (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync activé.
-- Aucun framework, aucune base imposée — on construit nos propres systèmes.
-- Ressource de démarrage `resources/[local]/hello-world` à copier.
+- Core roleplay maison `v-core` dans `resources/[local]/v-core` — notre propre framework.
+- MariaDB locale à la demande (ne tourne jamais 24/7).
 - Lancement en un clic via `start.bat`.
 
 ## Installation
@@ -64,12 +72,20 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 3. **Lancement** — double-clique sur `start.bat` (ou lance `./start.ps1`).
 4. **Connexion** — dans FiveM, appuie sur `F8` et tape `connect localhost:30120`.
 
-## Développer un script
+## Le core : v-core
 
-1. Copie `resources/[local]/hello-world` vers `resources/[local]/<ta-ressource>`.
-2. Modifie `fxmanifest.lua`, `client.lua`, `server.lua`.
-3. Ajoute `ensure <ta-ressource>` dans `server.cfg`.
-4. Dans la console serveur : `refresh` puis `ensure <ta-ressource>` (ou `restart <ta-ressource>`).
+`resources/[local]/v-core` est notre framework roleplay maison. Les autres ressources l'utilisent via les exports :
+
+```lua
+local Core = exports['v-core']:GetCore()
+```
+
+Pour ajouter une ressource :
+
+1. Crée `resources/[local]/<ta-ressource>/` avec un `fxmanifest.lua`.
+2. Récupère le core avec `exports['v-core']:GetCore()` et bâtis sur `Core.GetPlayer`, `Core.Notify`, etc.
+3. Ajoute `ensure <ta-ressource>` dans `server.cfg` **après** `v-core`.
+4. Dans la console serveur : `refresh` puis `ensure <ta-ressource>`.
 
 ## Base de données (à la demande)
 

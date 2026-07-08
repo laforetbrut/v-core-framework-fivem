@@ -6,7 +6,7 @@
 |-------|-------|
 | Project name | FiveM Vanilla Dev Server |
 | Type | FiveM (GTA V) server — vanilla development base |
-| Framework | None (build our own) |
+| Framework | v-core (custom, in-house — `resources/[local]/v-core`) |
 | Server runtime | FXServer (cfx.re) — build 25770 (recommended) |
 | Base resources | Official cfx-server-data defaults |
 | Scripting | Lua (primary), JS/NUI for UI |
@@ -37,8 +37,8 @@ fivem/
 ├── cache/                     # runtime cache (gitignored)
 ├── resources/
 │   ├── [cfx-default]/         # official cfx default resources (the vanilla base) — do not edit
-│   └── [local]/               # ← YOUR custom development scripts live here
-│       └── hello-world/       # starter resource to copy from
+│   └── [local]/               # ← our custom development scripts live here
+│       └── v-core/            # our roleplay framework core (exports GetCore)
 ├── server.cfg                 # server configuration (license key here)
 ├── start.bat / start.ps1      # launchers
 ├── README.md · CHANGELOG.md · RULES.md · ERROR_LOG.md
@@ -48,9 +48,9 @@ fivem/
 ## 5. Adding a New Feature (Step by Step)
 
 1. `git checkout -b feat/<name>` from `develop`.
-2. Copy `resources/[local]/hello-world` to `resources/[local]/<your-resource>`.
-3. Write `fxmanifest.lua` (declare `client_script` / `server_script` / `shared_script`).
-4. Add `ensure <your-resource>` in `server.cfg`.
+2. Create `resources/[local]/<your-resource>/` with an `fxmanifest.lua`.
+3. Consume the core: `local Core = exports['v-core']:GetCore()` — build on its functions.
+4. Add `ensure <your-resource>` in `server.cfg` **after** `v-core`.
 5. Test in-game: `refresh` + `ensure <resource>` (or `restart <resource>`) from the server console.
 6. Update `CHANGELOG.md`. Commit with `feat: ...` and open a PR into `develop`.
 
