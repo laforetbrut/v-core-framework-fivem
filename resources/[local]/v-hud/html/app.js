@@ -82,15 +82,43 @@ function renderVitals(data) {
     const full = v.fullWhenZero ? val <= 2 : val >= 99;
     r.el.classList.toggle('faded', settings.dynamic && full && !dngr && !editing);
   }
-  if (typeof data.heading === 'number') renderCompass(data.heading);
 }
 
-// ── Compass ──
-const DIRS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-function renderCompass(headingRaw) {
-  const h = ((360 - (headingRaw || 0)) % 360 + 360) % 360;   // clockwise, N=0
-  byId('compass-dir').textContent = DIRS[Math.round(h / 45) % 8];
-  byId('compass-deg').textContent = Math.round(h) + '°';
+// ── Compass (scrolling tape) ──
+const PX_PER_DEG = 2.4;
+const TAPE_TURNS = 3;                 // 0..1080 so the ±window never runs off the tape
+const WIN_W = 240;
+const CARDINALS = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
+let lastHc = null;
+
+function buildCompassTape() {
+  const tape = byId('compass-tape');
+  tape.innerHTML = '';
+  for (let d = 0; d <= 360 * TAPE_TURNS; d += 15) {
+    const deg = ((d % 360) + 360) % 360;
+    const card = CARDINALS[deg] !== undefined;
+    const tick = document.createElement('div');
+    tick.className = 'tick' + (card ? ' card' : '');
+    tick.style.left = (d * PX_PER_DEG) + 'px';
+    tick.innerHTML = `<span class="bar"></span>${card ? `<span class="lbl">${CARDINALS[deg]}</span>` : ''}`;
+    tape.appendChild(tick);
+  }
+  tape.style.width = (360 * TAPE_TURNS * PX_PER_DEG) + 'px';
+}
+
+function renderCompass(rawHeading) {
+  const hc = ((360 - (rawHeading || 0)) % 360 + 360) % 360;   // clockwise, N=0
+  const tape = byId('compass-tape');
+  const tx = (WIN_W / 2) - (hc + 360) * PX_PER_DEG;           // centre on the middle turn
+  if (lastHc !== null && Math.abs(hc - lastHc) > 180) {
+    tape.style.transition = 'none';                            // don't animate across the 360→0 wrap
+    void tape.offsetWidth;
+  } else {
+    tape.style.transition = 'transform .12s linear';
+  }
+  tape.style.transform = `translateX(${tx}px)`;
+  lastHc = hc;
+  byId('compass-deg').textContent = Math.round(hc) + '°';
 }
 
 // ── Money ──
@@ -231,6 +259,7 @@ window.addEventListener('message', (event) => {
       break;
     case 'strings': strings = d.strings || {}; applyStrings(); break;
     case 'vitals': renderVitals(d.data || {}); break;
+    case 'heading': renderCompass(d.h); break;
     case 'money': setMoney(d.cash, d.bank, d.flash); break;
     case 'openSettings': openSettings(); break;
     case 'closeSettings': if (editing) exitLayout(); byId('settings').classList.add('hidden'); break;
@@ -238,4 +267,5 @@ window.addEventListener('message', (event) => {
 });
 
 buildRings();
+buildCompassTape();
 applySettings();

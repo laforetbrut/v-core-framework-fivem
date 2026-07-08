@@ -12,4 +12,6 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
+    'html/bg.webm',
+    'html/poster.jpg',
 }

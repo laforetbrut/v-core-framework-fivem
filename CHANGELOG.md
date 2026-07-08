@@ -22,6 +22,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **v-banking (Fleeca)** — ATM interaction (no command), deposit / withdraw / transfer with recipient validation (online + offline), transaction history, Fleeca-green themed UI; new `bank_transactions` table.
 - **v-loadscreen** — custom Projet R loading screen shown while players connect: dark/orange branded design, real progress bar wired to FiveM load events, and rotating bilingual tips.
 - **HUD customization+** — players can now drag to reposition each element (vitals, money, compass), pick any custom accent colour, toggle a compass, and control the minimap (show/hide, vehicle-only); all persisted per player.
+- **Loading screen video** — replaced the grid background with a cinematic WebM (crossfade of 3 GTA screenshots, VP9, ~7.5 MB) plus a poster fallback and a subtle Ken Burns zoom.
+- **Themed tape compass** — the compass is now a scrolling tape (cardinal marks + degrees, orange centre marker) matching the server theme, updated on a dedicated smooth loop only while enabled.
 - **Fixes & polish** — fixed a v-hud NUI-focus softlock (`RegisterNUICallback` casing), a character-creation race condition, and a logs param-marshalling bug; v-hud is now fully fr/en localized; added `dependency` declarations to modules.
 - **Architecture guide** — `ARCHITECTURE.md` documents the v-core API and the module roadmap.
 - **Launchers** — `start.bat` and `start.ps1` to boot the server.
@@ -44,6 +46,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **v-banking (Fleeca)** — interaction ATM (sans commande), dépôt / retrait / virement avec validation du destinataire (en ligne + hors ligne), historique des transactions, UI thème Fleeca-vert ; nouvelle table `bank_transactions`.
 - **v-loadscreen** — écran de chargement custom affiché à la connexion : design sombre/orangé « Projet R », barre de progression réelle branchée sur les events de chargement FiveM, et astuces bilingues défilantes.
 - **Personnalisation HUD+** — les joueurs peuvent désormais déplacer chaque élément (vitals, argent, boussole), choisir une couleur d'accent personnalisée, activer une boussole, et contrôler la minimap (afficher/masquer, véhicule uniquement) ; le tout persisté par joueur.
+- **Vidéo d'écran de chargement** — le fond grille est remplacé par une vidéo WebM cinématique (fondu enchaîné de 3 screenshots GTA, VP9, ~7,5 Mo) avec image poster en fallback et léger zoom Ken Burns.
+- **Boussole tape thémée** — la boussole est désormais une bande défilante (cardinaux + degrés, marqueur central orange) fidèle au thème, mise à jour via une boucle dédiée fluide uniquement quand elle est activée.
 - **Correctifs & finitions** — softlock souris du HUD corrigé (casse de `RegisterNUICallback`), race condition à la création de personnage, bug de marshalling des params de logs ; v-hud entièrement traduit fr/en ; déclarations `dependency` ajoutées aux modules.
 - **Guide d'architecture** — `ARCHITECTURE.md` documente l'API de v-core et la roadmap des modules.
 - **Lanceurs** — `start.bat` et `start.ps1` pour démarrer le serveur.
