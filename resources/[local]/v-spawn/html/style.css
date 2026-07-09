@@ -38,7 +38,7 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .lang-btn:hover .flag { color:var(--v-accent-300); }
 
 /* ── Right dock ── */
-.panel { position:fixed; top:0; right:0; width:360px; height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg,rgba(23,23,29,.96),rgba(11,11,13,.97)); border-left:1px solid var(--v-line); box-shadow:-12px 0 40px rgba(0,0,0,.5); animation:v-slide .28s ease; }
+.panel { position:fixed; top:0; right:0; z-index:5; width:360px; height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg,rgba(23,23,29,.98),rgba(11,11,13,.99)); border-left:1px solid var(--v-line); box-shadow:-12px 0 40px rgba(0,0,0,.5); animation:v-slide .28s ease; }
 .panel__head { display:flex; align-items:center; gap:10px; padding:20px; border-bottom:1px solid var(--v-line); }
 .panel__head .v-title__accent, .v-title__accent { color:var(--v-accent); }
 .screen { flex:1; display:flex; flex-direction:column; min-height:0; }
@@ -73,7 +73,18 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:15px; h
 .foot .v-btn { flex:1; }
 
 /* ── Camera controls ── */
-.cam { position:fixed; bottom:26px; left:calc(50% - 180px); transform:translateX(-50%); display:flex; align-items:center; gap:12px; padding:8px; background:rgba(16,16,21,.95); border:1px solid var(--v-line); border-radius:12px; }
+.cam { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); z-index:6; display:flex; align-items:center; gap:14px; padding:8px 14px 8px 8px; background:rgba(16,16,21,.96); border:1px solid var(--v-line); border-radius:12px; }
+.cam-hint { font-size:11px; color:var(--v-text-faint); letter-spacing:.02em; }
+
+/* Mouse-orbit capture surface (behind the panel) */
+.stage { position:fixed; inset:0; z-index:1; cursor:grab; }
+.stage:active { cursor:grabbing; }
+
+/* Colour swatch grid */
+.swatch-grid { display:grid; grid-template-columns:repeat(8, 1fr); gap:5px; }
+.sw { width:100%; aspect-ratio:1 / 1; border-radius:5px; border:1px solid rgba(255,255,255,.12); cursor:pointer; padding:0; }
+.sw:hover { border-color:rgba(255,255,255,.35); }
+.sw.sel { outline:2px solid var(--v-accent); outline-offset:1px; border-color:var(--v-accent); }
 .cam-btn { width:40px; height:40px; border-radius:9px; border:1px solid var(--v-line-2); background:var(--v-bg-600); color:var(--v-text); font-size:22px; cursor:pointer; }
 .cam-btn:hover { border-color:var(--v-accent); }
 .cam-zones { display:flex; gap:4px; }

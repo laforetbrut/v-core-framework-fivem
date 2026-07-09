@@ -18,6 +18,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **Character creator overhaul (v-spawn)** — mouse-orbit camera (drag to rotate, drag vertically to pitch, scroll to zoom) plus quick body/head/legs focus; a far more complete editor: colour-swatch grids for hair / highlight / eyebrow / beard / eye colours, more face features (nose height, brow, cheekbones, chin length…), clothing textures, a mask, and a new Accessories tab (hat, glasses). fivem-appearance-style UX, fully fr/en.
 - **v-shops module** — store clerk peds + map blips at real 24/7 locations; a buy UI listing items & prices from the `shops` table, pay by cash or bank (via v-core), items delivered through v-inventory (space + funds checked). Fully fr/en, CEF-103-safe.
 - **v-inventory module** — grid inventory with weight & slots, drag-and-drop, use/give/drop, item definitions from the `items` table, vehicle **trunk** (E at the rear) and persistent **stashes** (`stashes` table, reused for gang boxes & ground drops); server exports (`AddItem`/`RemoveItem`/`GetItemCount`/`RegisterUsableItem`) for shops/jobs/crafting. Food/water/bandage hooked to v-status. Fully fr/en, CEF-103-safe NUI.
 - **v-core inventory accessors** — `player.GetInventory()` / `player.SetInventory()` so modules mutate the canonical, persisted inventory.

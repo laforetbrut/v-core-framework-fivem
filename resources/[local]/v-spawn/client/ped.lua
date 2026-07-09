@@ -22,11 +22,16 @@ function DefaultAppearance(sex)
         },
         eyeColor   = 0,
         components = {
-            ['11'] = { drawable = (sex == 0 and 15 or 15), texture = 0 }, -- top / jacket
+            ['1']  = { drawable = 0, texture = 0 },                        -- mask (0 = none)
+            ['11'] = { drawable = 15, texture = 0 },                       -- top / jacket
             ['8']  = { drawable = 15, texture = 0 },                       -- undershirt
             ['3']  = { drawable = 15, texture = 0 },                       -- arms
             ['4']  = { drawable = (sex == 0 and 21 or 15), texture = 0 },  -- pants
             ['6']  = { drawable = (sex == 0 and 34 or 35), texture = 0 },  -- shoes
+        },
+        props = {
+            ['0'] = { drawable = -1, texture = 0 },   -- hat (-1 = none)
+            ['1'] = { drawable = -1, texture = 0 },   -- glasses
         },
     }
 end
@@ -73,5 +78,14 @@ function ApplyAppearance(a)
 
     for cid, c in pairs(a.components or {}) do
         SetPedComponentVariation(ped, tonumber(cid), math.floor(c.drawable or 0), math.floor(c.texture or 0), 0)
+    end
+
+    for pid, p in pairs(a.props or {}) do
+        local id = tonumber(pid)
+        if (p.drawable or -1) < 0 then
+            ClearPedProp(ped, id)
+        else
+            SetPedPropIndex(ped, id, math.floor(p.drawable), math.floor(p.texture or 0), true)
+        end
     end
 end
