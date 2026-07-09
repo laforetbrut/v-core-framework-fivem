@@ -1,0 +1,15 @@
+-- v-shops | Français
+Locales.fr = Locales.fr or {}
+local T = {
+    ['shop.help']    = 'Parcourir la boutique',
+    ['shop.buy']     = 'Acheter',
+    ['shop.cash']    = 'Liquide',
+    ['shop.bank']    = 'Banque',
+    ['shop.total']   = 'Total',
+    ['shop.each']    = 'l\'unité',
+    ['shop.bought']  = 'Acheté %sx %s pour $%s.',
+    ['shop.nofunds'] = 'Pas assez d\'argent.',
+    ['shop.nospace'] = 'Pas assez de place dans l\'inventaire.',
+    ['shop.blip']    = 'Boutique',
+}
+for k, v in pairs(T) do Locales.fr[k] = v end

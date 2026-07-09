@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="shop" class="shop-overlay hidden">
+    <div class="shop">
+      <button class="close" id="close" aria-label="Close">&times;</button>
+      <div class="head">
+        <div class="brand"><span class="dot"></span><h1 class="v-title" id="shop-label">Shop</h1></div>
+        <div class="wallet">
+          <button class="pay sel" id="pay-cash" data-acc="cash">
+            <span class="v-label" data-i18n="shop.cash">Cash</span><span class="amt" id="w-cash">$0</span>
+          </button>
+          <button class="pay" id="pay-bank" data-acc="bank">
+            <span class="v-label" data-i18n="shop.bank">Bank</span><span class="amt" id="w-bank">$0</span>
+          </button>
+        </div>
+      </div>
+      <div class="list v-scroll" id="list"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

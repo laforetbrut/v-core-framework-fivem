@@ -18,6 +18,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **v-shops module** — store clerk peds + map blips at real 24/7 locations; a buy UI listing items & prices from the `shops` table, pay by cash or bank (via v-core), items delivered through v-inventory (space + funds checked). Fully fr/en, CEF-103-safe.
 - **v-inventory module** — grid inventory with weight & slots, drag-and-drop, use/give/drop, item definitions from the `items` table, vehicle **trunk** (E at the rear) and persistent **stashes** (`stashes` table, reused for gang boxes & ground drops); server exports (`AddItem`/`RemoveItem`/`GetItemCount`/`RegisterUsableItem`) for shops/jobs/crafting. Food/water/bandage hooked to v-status. Fully fr/en, CEF-103-safe NUI.
 - **v-core inventory accessors** — `player.GetInventory()` / `player.SetInventory()` so modules mutate the canonical, persisted inventory.
 

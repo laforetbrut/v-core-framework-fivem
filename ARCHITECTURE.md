@@ -90,12 +90,12 @@ AddEventHandler('v-core:server:onJobChange',    function(source, job) end)
 | `v-loadscreen` | ✅ done | Custom Projet R loading screen: GTA cinematic WebM background + real progress + bilingual tips |
 | `v-banking` | ✅ done | Fleeca banking: ATM interaction + deposit / withdraw / transfer + history |
 | `v-inventory` | ✅ done | Grid inventory (weight, slots), use/drop/give, vehicle trunk, stashes, item defs from `items` |
-| `v-shops` | 🔨 next | 24/7, Ammu-Nation, LSC… buy from `shops` table (uses v-inventory) |
+| `v-shops` | ✅ done | Store peds + blips + buy UI; items/prices from `shops` table, pays via v-core, adds via v-inventory |
+| `v-vehicles` | 🔨 next | Garages, ownership (`character_vehicles`), keys, LSC |
 | `v-phone` | ⬜ | iFruit phone NUI: apps (bank, contacts, messages, …) — a primary interaction surface |
 | `v-radial` | ⬜ | Radial menu (context actions) — the other main interaction surface |
 | `v-drugs` | ⬜ | GTA-lore drug system (grow/process/deal) |
 | `v-police` | ⬜ | Police + investigation (evidence, MDT, cuffs, jail) |
-| `v-vehicles` | ⬜ | Garages, ownership (`character_vehicles`), keys, LSC |
 | `v-jobs` | ⬜ | Jobs, grades, duty, salaries (`jobs` table) + in-game manager |
 | `v-gangs` | ⬜ | Gangs & mafias, territories (`gangs` table) |
 | `v-crafting` | ⬜ | Recipes → items, benches |
