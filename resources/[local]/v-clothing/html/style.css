@@ -1,0 +1,57 @@
+/* v-clothing — CEF (Chromium 103) safe: no backdrop-filter / color-mix, explicit sizes. */
+:root {
+  --v-bg-900:#0B0B0D; --v-bg-800:#101015; --v-bg-700:#17171D; --v-bg-600:#1E1E26; --v-bg-500:#262631;
+  --v-line:#2A2A33; --v-line-2:#3B3B47;
+  --v-text:#ECEAE6; --v-text-dim:#9C99A2; --v-text-faint:#63616C;
+  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-danger:#E5484D; --v-success:#43C46A;
+  --v-font-display:'Bahnschrift','Oswald','Segoe UI',sans-serif;
+  --v-font-body:'Segoe UI','Inter',system-ui,sans-serif;
+}
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none; color:var(--v-text); font-family:var(--v-font-body); }
+.hidden { display:none !important; }
+.dot { width:8px; height:8px; border-radius:2px; background:var(--v-accent); box-shadow:0 0 10px var(--v-accent); }
+.v-title { font-family:var(--v-font-display); font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:15px; }
+.v-label { font-size:9px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--v-text-dim); }
+.v-scroll::-webkit-scrollbar { width:8px; }
+.v-scroll::-webkit-scrollbar-thumb { background:var(--v-bg-500); border-radius:8px; }
+
+/* Drag-to-rotate surface (behind the panel) */
+.stage { position:fixed; inset:0; z-index:1; cursor:grab; }
+.stage:active { cursor:grabbing; }
+
+/* Right dock */
+.cl-panel { position:fixed; top:0; right:0; z-index:5; width:380px; height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg,rgba(23,23,29,.98),rgba(11,11,13,.99)); border-left:1px solid var(--v-line); box-shadow:-12px 0 40px rgba(0,0,0,.5); animation:v-slide .28s ease; }
+.head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--v-line); }
+.brand { display:flex; align-items:center; gap:10px; }
+.right { display:flex; align-items:center; gap:14px; }
+.cash { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; font-size:15px; color:var(--v-accent-300); }
+.close { background:none; border:0; color:var(--v-text-dim); font-size:22px; cursor:pointer; }
+.close:hover { color:var(--v-text); }
+
+.tabs { display:flex; gap:6px; padding:12px 20px 0; }
+.tab { flex:1; padding:10px; border-radius:8px; border:1px solid transparent; background:var(--v-bg-600); color:var(--v-text-dim); font-family:var(--v-font-display); text-transform:uppercase; letter-spacing:.04em; font-size:12px; cursor:pointer; }
+.tab.on { color:var(--v-text); border-color:var(--v-accent); background:rgba(255,106,26,.12); }
+
+.body { flex:1; overflow-y:auto; padding:16px 20px 20px; }
+.pane { display:flex; flex-direction:column; gap:10px; }
+
+/* Store category rows */
+.crow { background:var(--v-bg-700); border:1px solid var(--v-line); border-radius:11px; padding:12px 14px; display:flex; flex-direction:column; gap:10px; }
+.cname { font-family:var(--v-font-display); font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--v-text); }
+.ctls { display:flex; gap:10px; }
+.ctl { flex:1; display:flex; flex-direction:column; gap:5px; }
+.stp { display:flex; align-items:center; justify-content:space-between; background:var(--v-bg-600); border:1px solid var(--v-line-2); border-radius:8px; padding:4px; }
+.stp .s { width:28px; height:26px; border-radius:6px; border:0; background:transparent; color:var(--v-text); font-size:12px; cursor:pointer; }
+.stp .s:hover { background:var(--v-bg-500); }
+.stp .v { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; font-size:14px; }
+.buy { font-family:var(--v-font-display); font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:#150a02; font-weight:600; background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent); border-radius:8px; padding:9px; cursor:pointer; }
+.buy:hover { box-shadow:0 0 16px rgba(255,106,26,.35); }
+
+/* Wardrobe */
+.wrow { display:flex; align-items:center; justify-content:space-between; padding:11px 13px; background:var(--v-bg-700); border:1px solid var(--v-line); border-left:3px solid var(--v-accent); border-radius:10px; }
+.wrow .wl { font-size:13px; }
+.wrow .wu { font-family:var(--v-font-display); font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--v-danger); background:transparent; border:1px solid var(--v-danger); border-radius:7px; padding:7px 12px; cursor:pointer; }
+.empty { color:var(--v-text-faint); font-size:13px; padding:12px 2px; }
+
+@keyframes v-slide { from { opacity:0; transform:translateX(30px);} to { opacity:1; transform:translateX(0);} }

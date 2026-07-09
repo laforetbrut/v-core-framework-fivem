@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <!-- Drag surface (rotate the ped) behind the panel -->
+  <div id="stage" class="stage hidden"></div>
+
+  <div id="cl" class="cl-overlay hidden">
+    <div class="cl-panel">
+      <div class="head">
+        <div class="brand"><span class="dot"></span><h1 class="v-title" data-i18n="cl.title">Clothing</h1></div>
+        <div class="right"><span class="cash" id="cash">$0</span><button class="close" id="close" aria-label="Close">&times;</button></div>
+      </div>
+      <div class="tabs">
+        <button class="tab on" data-tab="store" data-i18n="cl.tab_store">Store</button>
+        <button class="tab" data-tab="worn" data-i18n="cl.tab_worn">Wardrobe</button>
+      </div>
+      <div class="body v-scroll">
+        <div id="pane-store" class="pane"></div>
+        <div id="pane-worn" class="pane hidden"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
