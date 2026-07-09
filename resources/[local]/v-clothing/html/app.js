@@ -1,9 +1,10 @@
-// v-clothing — store UI
+// v-clothing — catalogue UI (click a tile -> preview on the ped)
 const byId = (id) => document.getElementById(id);
 const post = (n, b) => fetch(`https://v-clothing/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(r => r.json()).catch(() => false);
 const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 
-let strings = {}, cats = [], worn = [], prices = {};
+let strings = {}, cats = [], catMap = {}, worn = [];
+let curCat = null, curDraw = 0, curTex = 0, texCount = 0, filter = '';
 const t = (k) => strings[k] || k;
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
@@ -14,31 +15,74 @@ function setTab(tab) {
   if (tab === 'worn') renderWorn();
 }
 
-function renderStore() {
-  const pane = byId('pane-store'); pane.innerHTML = '';
+function renderCats() {
+  const wrap = byId('cats'); wrap.innerHTML = '';
   cats.forEach(c => {
-    prices[c.key] = c.price;
-    const row = document.createElement('div');
-    row.className = 'crow';
-    row.innerHTML =
-      `<div class="cname">${t(c.i18n)}</div>` +
-      `<div class="ctls">` +
-        `<div class="ctl"><span class="v-label" data-i18n="cl.style">Style</span><div class="stp"><button class="s" data-dir="-1" data-f="drawable">◀</button><span class="v" data-d>${c.drawable}</span><button class="s" data-dir="1" data-f="drawable">▶</button></div></div>` +
-        `<div class="ctl"><span class="v-label" data-i18n="cl.texture">Texture</span><div class="stp"><button class="s" data-dir="-1" data-f="texture">◀</button><span class="v" data-t>${c.texture}</span><button class="s" data-dir="1" data-f="texture">▶</button></div></div>` +
-      `</div>` +
-      `<button class="buy">${t('cl.buy')} · ${fmt(c.price)}</button>`;
-    row.querySelectorAll('.s').forEach(btn => btn.onclick = async () => {
-      const res = await post('cycle', { category: c.key, field: btn.getAttribute('data-f'), delta: +btn.getAttribute('data-dir') });
-      if (res && res.drawable !== undefined) { row.querySelector('[data-d]').textContent = res.drawable; row.querySelector('[data-t]').textContent = res.texture; }
-    });
-    row.querySelector('.buy').onclick = async () => {
-      const res = await post('buy', { category: c.key });
-      if (res && res.cash !== undefined) byId('cash').textContent = fmt(res.cash);
-    };
-    pane.appendChild(row);
+    const b = document.createElement('button');
+    b.className = 'chip' + (c.key === curCat ? ' on' : '');
+    b.textContent = t(c.i18n);
+    b.onclick = () => selectCategory(c.key);
+    wrap.appendChild(b);
   });
-  applyStrings();
 }
+
+async function selectCategory(key) {
+  curCat = key; filter = ''; byId('search').value = '';
+  renderCats();
+  const c = catMap[key];
+  curDraw = c.drawable;
+  renderTiles();
+  await selectDrawable(curDraw, false);
+}
+
+function renderTiles() {
+  const c = catMap[curCat];
+  const grid = byId('tiles'); grid.innerHTML = '';
+  for (let d = c.min; d < c.count; d++) {
+    if (filter && !String(d).includes(filter)) continue;
+    const tile = document.createElement('div');
+    tile.className = 'tile' + (d === curDraw ? ' sel' : '');
+    tile.dataset.d = d;
+    tile.innerHTML = d < 0 ? `<span class="none">&times;</span>` : `<span class="num">${d}</span>`;
+    tile.onclick = () => selectDrawable(d, true);
+    grid.appendChild(tile);
+  }
+}
+
+async function selectDrawable(d, scroll) {
+  curDraw = d;
+  const res = await post('select', { category: curCat, drawable: d });
+  texCount = (res && res.textureCount) || 0;
+  curTex = 0;
+  document.querySelectorAll('#tiles .tile').forEach(x => x.classList.toggle('sel', +x.dataset.d === d));
+  if (scroll) { const el = [...document.querySelectorAll('#tiles .tile')].find(x => +x.dataset.d === d); if (el) el.scrollIntoView({ block: 'nearest' }); }
+  renderTex();
+  updateBar();
+}
+
+function renderTex() {
+  const wrap = byId('tex'); wrap.innerHTML = '';
+  for (let i = 0; i < Math.max(1, texCount); i++) {
+    const b = document.createElement('button');
+    b.className = 'tx' + (i === curTex ? ' sel' : '');
+    b.textContent = i;
+    b.onclick = async () => { curTex = i; await post('selectTexture', { category: curCat, drawable: curDraw, texture: i }); renderTex(); };
+    wrap.appendChild(b);
+  }
+}
+
+function updateBar() {
+  const c = catMap[curCat];
+  byId('bsel').innerHTML = `<b>${t(c.i18n)}</b> · #${curDraw}`;
+  byId('buy').textContent = `${t('cl.buy')} · ${fmt(c.price)}`;
+}
+
+byId('buy').onclick = async () => {
+  const res = await post('buy', { category: curCat });
+  if (res && res.cash !== undefined) byId('cash').textContent = fmt(res.cash);
+};
+
+byId('search').oninput = (e) => { filter = e.target.value.trim(); renderTiles(); };
 
 function renderWorn() {
   const pane = byId('pane-worn'); pane.innerHTML = '';
@@ -47,10 +91,7 @@ function renderWorn() {
     const row = document.createElement('div');
     row.className = 'wrow';
     row.innerHTML = `<span class="wl">${t('item.' + w.item)}</span><button class="wu">${t('cl.unequip')}</button>`;
-    row.querySelector('.wu').onclick = async () => {
-      const res = await post('unequip', { category: w.cat });
-      if (Array.isArray(res)) { worn = res; renderWorn(); }
-    };
+    row.querySelector('.wu').onclick = async () => { const res = await post('unequip', { category: w.cat }); if (Array.isArray(res)) { worn = res; renderWorn(); } };
     pane.appendChild(row);
   });
 }
@@ -71,8 +112,10 @@ window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
     strings = d.strings || {}; cats = d.cats || []; worn = d.worn || [];
+    catMap = {}; cats.forEach(c => catMap[c.key] = c);
     if (d.cash !== undefined) byId('cash').textContent = fmt(d.cash);
-    setTab('store'); renderStore();
+    applyStrings(); setTab('store');
+    if (cats[0]) selectCategory(cats[0].key);
     byId('cl').classList.remove('hidden');
     byId('stage').classList.remove('hidden');
   } else if (d.action === 'close') {

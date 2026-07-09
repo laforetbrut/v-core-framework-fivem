@@ -82,12 +82,20 @@ local function openStore()
     isOpen = true
     SetNuiFocus(true, true)
     startCam()
-    -- build initial per-category values from the ped
+    -- build initial per-category data (drawable count for the tile grid) from the ped
+    local ped = PlayerPedId()
     local cats = {}
     for _, c in ipairs(Config.Categories) do
         local cur = current(c)
         preview[c.key] = cur
-        cats[#cats + 1] = { key = c.key, i18n = c.i18n, price = c.price, drawable = cur.drawable, texture = cur.texture }
+        local count = (c.kind == 'comp')
+            and GetNumberOfPedDrawableVariations(ped, c.id)
+            or GetNumberOfPedPropDrawableVariations(ped, c.id)
+        cats[#cats + 1] = {
+            key = c.key, i18n = c.i18n, price = c.price, kind = c.kind,
+            count = count, min = (c.kind == 'prop') and -1 or 0,
+            drawable = cur.drawable, texture = cur.texture,
+        }
     end
     Core.TriggerCallback('v-clothing:getWorn', function(wornList)
         SendNUIMessage({ action = 'open', cats = cats, worn = wornList or {},
@@ -106,27 +114,29 @@ local function revert()
     end
 end
 
-RegisterNUICallback('cycle', function(data, cb)
+-- Click a tile in the grid -> preview that drawable, return its texture count.
+RegisterNUICallback('select', function(data, cb)
     local cat = CatByKey[data.category]
     if not cat then cb(false); return end
     local ped = PlayerPedId()
+    local drawable = tonumber(data.drawable) or 0
+    local texCount = (cat.kind == 'comp')
+        and GetNumberOfPedTextureVariations(ped, cat.id, drawable)
+        or GetNumberOfPedPropTextureVariations(ped, cat.id, drawable)
+    preview[data.category] = { drawable = drawable, texture = 0 }
+    applyToPed({ kind = cat.kind, id = cat.id, drawable = drawable, texture = 0, off = (cat.kind == 'prop' and drawable < 0) })
+    cb({ textureCount = math.max(0, texCount) })
+end)
+
+-- Pick a texture for the currently-previewed drawable.
+RegisterNUICallback('selectTexture', function(data, cb)
+    local cat = CatByKey[data.category]
+    if not cat then cb(false); return end
     local cur = preview[data.category] or current(cat)
-    if data.field == 'texture' then
-        local maxT = (cat.kind == 'comp')
-            and GetNumberOfPedTextureVariations(ped, cat.id, cur.drawable)
-            or GetNumberOfPedPropTextureVariations(ped, cat.id, cur.drawable)
-        cur.texture = wrap((cur.texture or 0) + data.delta, 0, math.max(0, maxT - 1))
-    else
-        local maxD = (cat.kind == 'comp')
-            and GetNumberOfPedDrawableVariations(ped, cat.id)
-            or GetNumberOfPedPropDrawableVariations(ped, cat.id)
-        local lo = (cat.kind == 'prop') and -1 or 0
-        cur.drawable = wrap((cur.drawable or lo) + data.delta, lo, maxD - 1)
-        cur.texture = 0
-    end
+    cur.texture = tonumber(data.texture) or 0
     preview[data.category] = cur
     applyToPed({ kind = cat.kind, id = cat.id, drawable = cur.drawable, texture = cur.texture, off = (cat.kind == 'prop' and cur.drawable < 0) })
-    cb({ drawable = cur.drawable, texture = cur.texture })
+    cb('ok')
 end)
 
 RegisterNUICallback('buy', function(data, cb)

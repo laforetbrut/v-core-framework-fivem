@@ -15,14 +15,29 @@
         <div class="brand"><span class="dot"></span><h1 class="v-title" data-i18n="cl.title">Clothing</h1></div>
         <div class="right"><span class="cash" id="cash">$0</span><button class="close" id="close" aria-label="Close">&times;</button></div>
       </div>
+
       <div class="tabs">
         <button class="tab on" data-tab="store" data-i18n="cl.tab_store">Store</button>
         <button class="tab" data-tab="worn" data-i18n="cl.tab_worn">Wardrobe</button>
       </div>
-      <div class="body v-scroll">
-        <div id="pane-store" class="pane"></div>
-        <div id="pane-worn" class="pane hidden"></div>
+
+      <!-- Store (catalogue) -->
+      <div id="pane-store" class="pane">
+        <div class="cats" id="cats"></div>
+        <input id="search" class="search" placeholder="#" autocomplete="off" />
+        <div class="tiles v-scroll" id="tiles"></div>
+        <div class="tex-wrap">
+          <span class="v-label" data-i18n="cl.texture">Texture</span>
+          <div class="tex" id="tex"></div>
+        </div>
+        <div class="buybar">
+          <div class="bsel" id="bsel"></div>
+          <button class="buy" id="buy" data-i18n="cl.buy">Buy</button>
+        </div>
       </div>
+
+      <!-- Wardrobe -->
+      <div id="pane-worn" class="pane hidden v-scroll"></div>
     </div>
   </div>
   <script src="app.js"></script>
