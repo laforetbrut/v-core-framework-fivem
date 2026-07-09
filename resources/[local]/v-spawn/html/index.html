@@ -6,6 +6,9 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="v-root">
+  <!-- Mouse-orbit capture surface (behind the panel; drag to rotate, wheel to zoom) -->
+  <div id="stage" class="stage hidden"></div>
+
   <!-- Language selection -->
   <div id="screen-language" class="lang-overlay hidden">
     <div class="lang-card">
@@ -53,13 +56,12 @@
 
   <!-- Camera controls -->
   <div id="cam" class="cam hidden">
-    <button class="cam-btn" data-rot="-30" aria-label="rotate left">‹</button>
     <div class="cam-zones">
-      <button class="cam-zone on" data-zone="body">Body</button>
-      <button class="cam-zone" data-zone="head">Head</button>
-      <button class="cam-zone" data-zone="legs">Legs</button>
+      <button class="cam-zone on" data-zone="body" data-i18n="cam.body">Body</button>
+      <button class="cam-zone" data-zone="head" data-i18n="cam.head">Head</button>
+      <button class="cam-zone" data-zone="legs" data-i18n="cam.legs">Legs</button>
     </div>
-    <button class="cam-btn" data-rot="30" aria-label="rotate right">›</button>
+    <span class="cam-hint" data-i18n="cam.hint">Drag to rotate · scroll to zoom</span>
   </div>
 
   <script src="app.js"></script>

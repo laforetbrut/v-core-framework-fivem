@@ -106,7 +106,8 @@ RegisterNUICallback('updateAppearance', function(data, cb)
 end)
 
 RegisterNUICallback('camera', function(data, cb)
-    if data.rotate then CreatorCameraRotate((data.rotate or 0) + 0.0) end
+    if data.orbit then CreatorCameraOrbit(data.orbit.dx, data.orbit.dy) end
+    if data.zoom then CreatorCameraZoom(data.zoom) end
     if data.zone then CreatorCameraZone(data.zone) end
     cb('ok')
 end)
