@@ -40,6 +40,7 @@ local T = {
     ['inv.full']       = 'Not enough space.',
     ['inv.no_target']  = 'No one nearby.',
     ['inv.no_weapon']  = 'No weapon in hand.',
+    ['inv.no_access']  = 'Access denied.',
     ['inv.gave']       = 'Gave %sx %s.',
     ['inv.received']   = 'Received %sx %s.',
     ['inv.used']       = 'Used %s.',

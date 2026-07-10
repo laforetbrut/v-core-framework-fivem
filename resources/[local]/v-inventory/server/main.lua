@@ -187,8 +187,31 @@ local function saveStash(id)
     end
 end
 
+-- Drop position is taken from the player's SERVER-side ped coords (not a
+-- client-supplied point, which a modded client could place anywhere).
+local function dropCoords(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return nil end
+    local c = GetEntityCoords(ped)
+    return { x = c.x + 0.0, y = c.y + 0.0, z = c.z + 0.0 }
+end
+
+-- Garbage-collect an emptied ground drop (fixes the unbounded `Stashes` growth)
+-- and tell every client to remove its world prop.
+local function gcDrop(id)
+    if id and Stashes[id] and id:sub(1, 5) == 'drop:' and #Stashes[id].items == 0 then
+        Stashes[id] = nil
+        TriggerClientEvent('v-inventory:client:removeDrop', -1, id)
+        return true
+    end
+    return false
+end
+
 -- ── State sent to the NUI ──────────────────────────────────────
-local function buildState(src)
+-- `full` (only on the initial open) attaches the item catalogue (`defs`, ~170
+-- rows). Every subsequent action re-renders from the returned state WITHOUT it —
+-- the NUI caches defs from the open — so move/use/drop payloads stay small.
+local function buildState(src, full)
     local secondary = nil
     local sid = OpenStash[src]
     if sid and Stashes[sid] then
@@ -202,7 +225,7 @@ local function buildState(src)
         if ok then equipment = worn end
     end
     return {
-        defs      = ItemDefs,
+        defs      = full and ItemDefs or nil,
         maxWeight = maxWeightFor(src),
         maxSlots  = maxSlotsFor(src),
         hotbar    = Config.HotbarSlots,
@@ -223,7 +246,7 @@ local function clampCash(p, requested)
 end
 
 Core.RegisterCallback('v-inventory:getState', function(source, resolve)
-    resolve(buildState(source))
+    resolve(buildState(source, true))   -- full: attach the catalogue once
 end)
 
 -- ── Move (player <-> secondary, or rearrange) ──────────────────
@@ -317,6 +340,11 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
     end
 
     persistMove(source, data.from, data.to)
+    -- a ground drop emptied by taking its last item -> garbage-collect it
+    if data.from == 'secondary' then
+        local sid = OpenStash[source]
+        if gcDrop(sid) then OpenStash[source] = nil end
+    end
     resolve(buildState(source))
 end)
 
@@ -431,12 +459,13 @@ Core.RegisterCallback('v-inventory:drop', function(source, resolve, data)
         local amount = clampCash(p, data.amount)
         if amount <= 0 then resolve(false); return end
         if not p.RemoveMoney('cash', amount, 'drop') then resolve(false); return end
+        local at = dropCoords(source); if not at then resolve(false); return end
         dropCounter = dropCounter + 1
         local id = 'drop:' .. dropCounter
         local stash = loadStash(id, Config.Drop.slots, Config.Drop.weight, false)
-        stash.label = 'ground'
+        stash.label, stash.coords = 'ground', at
         addToContainer(stash.items, MONEY, amount, nil, Config.Drop.slots, Config.Drop.weight)
-        TriggerClientEvent('v-inventory:client:createDrop', -1, id, data.coords)
+        TriggerClientEvent('v-inventory:client:createDrop', -1, id, at)
         resolve(buildState(source)); return
     end
 
@@ -445,14 +474,15 @@ Core.RegisterCallback('v-inventory:drop', function(source, resolve, data)
     local amount = math.floor(math.min(tonumber(data.amount) or it.amount, it.amount))
     if amount <= 0 then resolve(false); return end
     maybeUnequip(source, data.slot)   -- holster if dropping the drawn weapon
+    local at = dropCoords(source); if not at then resolve(false); return end
     dropCounter = dropCounter + 1
     local id = 'drop:' .. dropCounter
     local stash = loadStash(id, Config.Drop.slots, Config.Drop.weight, false)
-    stash.label = 'ground'
+    stash.label, stash.coords = 'ground', at
     addToContainer(stash.items, it.name, amount, it.metadata, Config.Drop.slots, Config.Drop.weight)
     removeFromSlot(Inv[source], data.slot, amount)
     syncPlayer(source)
-    TriggerClientEvent('v-inventory:client:createDrop', -1, id, data.coords)
+    TriggerClientEvent('v-inventory:client:createDrop', -1, id, at)
     resolve(buildState(source))
 end)
 
@@ -522,8 +552,31 @@ RegisterNetEvent('v-inventory:server:openStash', function(payload, label, kind)
 end)
 
 RegisterNetEvent('v-inventory:server:closeStash', function()
+    gcDrop(OpenStash[source])   -- clean up an emptied ground drop on close
     OpenStash[source] = nil
 end)
+
+-- ── Shared / gang stashes (permission-gated, persistent) ───────
+-- Access is verified server-side on every open. Open from a target zone / job
+-- menu via the net event, or from another resource via the export.
+local function openShared(src, id)
+    local cfg = Config.SharedStashes and Config.SharedStashes[id]
+    local p = Core.GetPlayer(src)
+    if not cfg or not p then return false end
+    local ok = true
+    if cfg.job then ok = p.job and p.job.name == cfg.job and (p.job.grade or 0) >= (cfg.minGrade or 0) end
+    if ok and cfg.gang then ok = p.gang and p.gang.name == cfg.gang and (p.gang.grade or 0) >= (cfg.minGrade or 0) end
+    if ok and cfg.permission then ok = Core.HasPermission(src, cfg.permission) end
+    if not ok then Core.Notify(src, LP(src, 'inv.no_access'), 'error'); return false end
+    local sid = 'shared:' .. id
+    local s = loadStash(sid, cfg.slots or 50, cfg.weight or 500000, true)
+    s.label, s.kind = cfg.label or id, 'stash'
+    OpenStash[src] = sid
+    TriggerClientEvent('v-inventory:client:openSecondary', src)
+    return true
+end
+RegisterNetEvent('v-inventory:server:openSharedStash', function(id) openShared(source, tostring(id or '')) end)
+exports('OpenSharedStash', function(src, id) return openShared(src, tostring(id or '')) end)
 
 -- ── Server exports (used by shops / jobs / other modules) ──────
 exports('AddItem', function(src, name, amount, metadata, slot)
