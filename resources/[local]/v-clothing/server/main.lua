@@ -244,13 +244,13 @@ end, false)
 
 AddEventHandler('playerDropped', function() clearScanner(source) end)
 
-Core.RegisterCallback('v-clothing:unequip', function(source, resolve, catKey)
+local function doUnequip(source, catKey)
     local player = Core.GetPlayer(source)
     local cat = catByKey(catKey)
-    if not player or not cat then resolve(false); return end
+    if not player or not cat then return false end
     local w = worn(player)
     local entry = w[catKey]
-    if not entry then resolve(false); return end
+    if not entry then return false end
     exports['v-inventory']:AddItem(source, entry.item, 1, entry.meta)   -- give the piece back
     w[catKey] = nil
     player.SetMetadata('worn', w)
@@ -258,8 +258,23 @@ Core.RegisterCallback('v-clothing:unequip', function(source, resolve, catKey)
     local m = { cat = cat.key, kind = cat.kind, id = cat.id, drawable = Config.NudeDefaults[cat.id] or 0, texture = 0, off = (cat.kind == 'prop') }
     TriggerClientEvent('v-clothing:client:apply', source, m)
     Core.Notify(source, LP(source, 'cl.unequipped', LP(source, 'item.' .. entry.item)), 'info')
-    -- return the updated worn list
     local list = {}
     for c, e in pairs(worn(player)) do list[#list + 1] = { cat = c, item = e.item, drawable = e.meta.drawable, texture = e.meta.texture } end
-    resolve(list)
+    return list
+end
+
+Core.RegisterCallback('v-clothing:unequip', function(source, resolve, catKey)
+    resolve(doUnequip(source, catKey) or false)
+end)
+
+-- ── Exports for v-inventory's equipment panel ──────────────────
+exports('Unequip', function(src, catKey) return doUnequip(src, catKey) and true or false end)
+exports('GetWorn', function(src)
+    local player = Core.GetPlayer(src)
+    if not player then return {} end
+    local out = {}
+    for cat, entry in pairs(worn(player)) do
+        out[cat] = { item = entry.item, drawable = entry.meta.drawable, texture = entry.meta.texture }
+    end
+    return out
 end)
