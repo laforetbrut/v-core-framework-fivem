@@ -31,7 +31,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | — | **Fallback icons** for imageless items (clothing garment / generic box) | ✅ done |
 | — | **Hidden pocket** (1 kg concealed compartment, invisible to a police search) | ✅ done |
 | 1 | Unified player top-nav menu | ⬜ |
-| 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · attachments / on-back / draw anims ⬜ | 🔨 |
+| 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · **attachments** ✅ (5 attachment items — suppressor / flashlight / scope / grip / extended-mag — `Use` fits them to the drawn weapon via a server component map, stored on the weapon item's metadata and re-applied on every draw; craftable at the reloading bench) · on-back / draw anims ⬜ | 🔨 |
 | 3 | **Shared/gang stashes with permissions** — persistent containers gated by job / gang / permission tier, opened via `exports['v-inventory']:OpenSharedStash(src, id)` or a net event; access checked server-side on every open (`Config.SharedStashes`) | ✅ framework (needs placement/interaction points) |
 | 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
 | 5 | Advanced crafting (recipes, benches) ✅ — **`v-crafting`** module: 4 stations (workbench / reloading / kitchen / electronics), 25 recipes, server-authoritative proximity + input check + space-check with refund, Field-Case NUI (material chips have/need + progress bar), optional job/perm gates | ✅ |

@@ -10,8 +10,20 @@ RegisterNetEvent('v-inventory:client:equipWeapon', function(w)
     if equipped then RemoveWeaponFromPed(ped, equipped.hash) end
     local hash = GetHashKey(w.name)
     GiveWeaponToPed(ped, hash, math.max(0, math.floor(w.ammo or 0)), false, true)
+    -- Re-apply attachments stored on the weapon item (a map kind -> component name).
+    if type(w.attachments) == 'table' then
+        for _, comp in pairs(w.attachments) do
+            GiveWeaponComponentToPed(ped, hash, GetHashKey(comp))
+        end
+    end
     SetCurrentPedWeapon(ped, hash, true)
     equipped = { slot = w.slot, name = w.name, hash = hash }
+end)
+
+-- Fit a single component to the currently-drawn weapon (used right after crafting/using an attachment).
+RegisterNetEvent('v-inventory:client:applyAttachment', function(comp)
+    local ped = PlayerPedId()
+    if equipped and comp then GiveWeaponComponentToPed(ped, equipped.hash, GetHashKey(comp)) end
 end)
 
 RegisterNetEvent('v-inventory:client:unequipWeapon', function(slot, name)

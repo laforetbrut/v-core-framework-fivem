@@ -73,6 +73,11 @@ Config.Recipes = {
     { output = 'ammo_762',          count = 1, time = 4000, station = 'ammo',        inputs = { gunpowder = 3, brass = 2, copper = 1 } },
     { output = 'ammo_44',           count = 1, time = 3500, station = 'ammo',        inputs = { gunpowder = 3, brass = 2 } },
     { output = 'ammo_shotgun',      count = 1, time = 3500, station = 'ammo',        inputs = { gunpowder = 2, plastic = 1, brass = 1 } },
+    { output = 'attach_suppressor', count = 1, time = 9000, station = 'ammo',        inputs = { metal_scrap = 3, rubber = 2, aluminum = 1 } },
+    { output = 'attach_flashlight', count = 1, time = 6000, station = 'ammo',        inputs = { electronics = 1, plastic = 2, battery_9v = 1 } },
+    { output = 'attach_scope',      count = 1, time = 8000, station = 'ammo',        inputs = { glass = 2, aluminum = 2, electronics = 1 } },
+    { output = 'attach_grip',       count = 1, time = 5000, station = 'ammo',        inputs = { plastic = 3, aluminum = 1 } },
+    { output = 'attach_extclip',    count = 1, time = 6000, station = 'ammo',        inputs = { metal_scrap = 2, brass = 2 } },
 
     -- Kitchen: food
     { output = 'dough',             count = 1, time = 2500, station = 'cooking',     inputs = { flour = 2, eggs = 1, milk = 1 } },
