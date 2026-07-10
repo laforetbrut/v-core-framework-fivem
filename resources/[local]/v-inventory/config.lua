@@ -19,6 +19,15 @@ Config.Drop     = { slots = 30, weight = 1000000 }
 -- which reads GetSearchable / GetItems (the main inventory only) — never sees it.
 Config.Pocket   = { slots = 3, weight = 1000 }   -- 1 kg
 
+-- Carrying a backpack item raises the personal carry capacity by this much.
+Config.Backpack = { slots = 12, weight = 20000 }   -- +12 slots, +20 kg
+
+-- Body-armor items apply this much armour on use (0..100).
+Config.ArmorAmount = 100
+
+-- Rounds granted per ammo item used (added to the equipped weapon).
+Config.AmmoPerItem = 30
+
 -- Giving items to a nearby player.
 Config.GiveDistance = 3.0
 

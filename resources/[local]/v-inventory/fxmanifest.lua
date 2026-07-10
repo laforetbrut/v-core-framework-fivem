@@ -19,7 +19,10 @@ shared_scripts {
     'config.lua',
 }
 
-client_script 'client/main.lua'
+client_scripts {
+    'client/main.lua',
+    'client/weapons.lua',
+}
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
