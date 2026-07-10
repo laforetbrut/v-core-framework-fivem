@@ -55,6 +55,12 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .tile.sel .num { color:var(--v-accent-300); }
 .tile .none { font-size:18px; color:var(--v-text-faint); }
 
+/* Generated thumbnails (admin /scanclothes) */
+.tile img.thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:10px; opacity:0; transition:opacity .18s ease; background:var(--v-bg-800); }
+.tile.has.ready img.thumb { opacity:1; }
+.tile.has .num { position:absolute; bottom:3px; right:4px; font-size:10px; line-height:1; font-weight:600; padding:2px 4px; border-radius:5px; background:rgba(0,0,0,.62); color:var(--v-text); }
+.tile.has.sel .num { color:var(--v-accent-300); }
+
 /* Texture strip */
 .tex-wrap { padding:12px 20px 0; display:flex; flex-direction:column; gap:7px; }
 .tex { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }

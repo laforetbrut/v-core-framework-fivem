@@ -73,6 +73,122 @@ RegisterNetEvent('v-clothing:client:apply', function(m)
     TriggerServerEvent('v-core:server:saveAppearance', app)
 end)
 
+-- ════════════════════════════════════════════════════════════════
+--  Thumbnail scan (admin) — dress the ped in every drawable, capture it
+-- ════════════════════════════════════════════════════════════════
+local scanning = false
+
+local function placeScanCam(cam, ped, fr)
+    local at = GetPedBoneCoords(ped, fr.bone, 0.0, 0.0, 0.0)
+    local h  = math.rad(GetEntityHeading(ped))
+    local fx, fy = -math.sin(h), math.cos(h)          -- ped forward vector
+    SetCamCoord(cam, at.x + fx * fr.dist, at.y + fy * fr.dist, at.z + fr.height)
+    PointCamAtCoord(cam, at.x, at.y, at.z + fr.atZ)
+    SetCamFov(cam, fr.fov)
+end
+
+local function restoreSlots(snap)
+    for _, c in ipairs(Config.Categories) do
+        local saved = snap and (c.kind == 'comp'
+            and (snap.components or {})[tostring(c.id)]
+            or  (snap.props or {})[tostring(c.id)])
+        if saved then
+            applyToPed({ kind = c.kind, id = c.id, drawable = saved.drawable, texture = saved.texture or 0, off = (c.kind == 'prop' and (saved.drawable or -1) < 0) })
+        else
+            applyToPed({ kind = c.kind, id = c.id, drawable = Config.NudeDefaults[c.id] or 0, texture = 0, off = (c.kind == 'prop') })
+        end
+    end
+end
+
+local function capture()
+    local p, ok = promise.new()
+    ok = pcall(function()
+        exports['screenshot-basic']:requestScreenshot(
+            { encoding = Config.Thumbs.encoding, quality = Config.Thumbs.quality },
+            function(data) p:resolve(data) end)
+    end)
+    if not ok then return nil end
+    return Citizen.Await(p)
+end
+
+RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat)
+    if scanning then return end
+    if GetResourceState('screenshot-basic') ~= 'started' then
+        TriggerServerEvent('v-clothing:server:scanDone', 0)   -- capture tool missing
+        return
+    end
+    scanning = true
+    CreateThread(function()
+        local ped  = PlayerPedId()
+        local pd   = exports['v-core']:GetPlayerData()
+        local snap = pd and pd.appearance and json.decode(json.encode(pd.appearance)) or {}
+
+        -- clean scene
+        FreezeEntityPosition(ped, true)
+        ClearPedTasksImmediately(ped)
+        DisplayRadar(false)
+        local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 42.0, false, 0)
+        SetCamActive(cam, true)
+        RenderScriptCams(true, false, 0, true, false)
+        CreateThread(function() while scanning do HideHudAndRadarThisFrame(); Wait(0) end end)
+
+        -- categories to scan
+        local targets = {}
+        for _, c in ipairs(Config.Categories) do
+            if not onlyCat or onlyCat == c.key then targets[#targets + 1] = c end
+        end
+
+        -- already-generated thumbs (for 'new' mode)
+        local existing = {}
+        if mode == 'new' then
+            for _, c in ipairs(targets) do
+                local pr = promise.new()
+                Core.TriggerCallback('v-clothing:thumbIndex', function(list) pr:resolve(list or {}) end, c.key)
+                existing[c.key] = {}
+                for _, d in ipairs(Citizen.Await(pr)) do existing[c.key][d] = true end
+            end
+        end
+
+        local function wanted(cKey, d) return not (mode == 'new' and existing[cKey] and existing[cKey][d]) end
+
+        -- total (for progress)
+        local total = 0
+        for _, c in ipairs(targets) do
+            local n = (c.kind == 'comp') and GetNumberOfPedDrawableVariations(ped, c.id) or GetNumberOfPedPropDrawableVariations(ped, c.id)
+            for d = 0, n - 1 do if wanted(c.key, d) then total = total + 1 end end
+        end
+
+        local done = 0
+        for _, c in ipairs(targets) do
+            local fr = Config.Framing[Config.CatFraming[c.key] or 'body']
+            local n  = (c.kind == 'comp') and GetNumberOfPedDrawableVariations(ped, c.id) or GetNumberOfPedPropDrawableVariations(ped, c.id)
+            for d = 0, n - 1 do
+                if scanning and wanted(c.key, d) then
+                    applyToPed({ kind = c.kind, id = c.id, drawable = d, texture = 0, off = false })
+                    placeScanCam(cam, ped, fr)
+                    Wait(Config.Thumbs.streamWait)
+                    local data = capture()
+                    if data then TriggerServerEvent('v-clothing:server:saveThumb', c.key, d, data) end
+                    done = done + 1
+                    if done % Config.Thumbs.notifyEvery == 0 then
+                        TriggerServerEvent('v-clothing:server:scanProgress', done, total)
+                    end
+                    Wait(0)
+                end
+            end
+        end
+
+        -- restore
+        RenderScriptCams(false, false, 0, true, false)
+        DestroyCam(cam, false)
+        restoreSlots(snap)
+        FreezeEntityPosition(ped, false)
+        DisplayRadar(true)
+        scanning = false
+        TriggerServerEvent('v-clothing:server:scanDone', done)
+    end)
+end)
+
 -- ── Store ──────────────────────────────────────────────────────
 local function openStore()
     if isOpen then return end
@@ -137,6 +253,16 @@ RegisterNUICallback('selectTexture', function(data, cb)
     preview[data.category] = cur
     applyToPed({ kind = cat.kind, id = cat.id, drawable = cur.drawable, texture = cur.texture, off = (cat.kind == 'prop' and cur.drawable < 0) })
     cb('ok')
+end)
+
+-- Catalogue thumbnails (proxy to the server-side store).
+RegisterNUICallback('thumbsFor', function(data, cb)
+    Core.TriggerCallback('v-clothing:thumbIndex', function(list) cb(list or {}) end, data.category)
+end)
+
+RegisterNUICallback('thumb', function(data, cb)
+    Core.TriggerCallback('v-clothing:thumb', function(uri) cb(uri or false) end,
+        { category = data.category, drawable = data.drawable })
 end)
 
 RegisterNUICallback('buy', function(data, cb)

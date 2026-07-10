@@ -74,6 +74,100 @@ Core.RegisterCallback('v-clothing:getWorn', function(source, resolve)
     resolve(list)
 end)
 
+-- ════════════════════════════════════════════════════════════════
+--  Thumbnail generation (admin scan) + catalogue thumbnail serving
+-- ════════════════════════════════════════════════════════════════
+local ThumbDir   = Config.Thumbs.dir
+local ThumbIndex = {}        -- cat -> { [drawableStr] = true }
+local scanners   = {}        -- src -> true while allowed to write thumbs
+local ResName    = GetCurrentResourceName()
+
+local function indexPath()        return ThumbDir .. '/index.json' end
+local function thumbFile(cat, d)  return ('%s/%s_%d.txt'):format(ThumbDir, cat, d) end
+
+local function loadIndex()
+    local raw = LoadResourceFile(ResName, indexPath())
+    if raw and raw ~= '' then
+        local ok, t = pcall(json.decode, raw)
+        if ok and type(t) == 'table' then ThumbIndex = t end
+    end
+end
+local function saveIndex()
+    SaveResourceFile(ResName, indexPath(), json.encode(ThumbIndex), -1)
+end
+CreateThread(loadIndex)
+
+-- Receive one captured thumbnail from the scanning admin. Guarded: only a
+-- source currently flagged as a scanner (issued /scanclothes) may write.
+RegisterNetEvent('v-clothing:server:saveThumb', function(cat, drawable, dataUri)
+    local src = source
+    if not scanners[src] then return end
+    if type(cat) ~= 'string' or type(dataUri) ~= 'string' then return end
+    if not catByKey(cat) then return end
+    if #dataUri > Config.Thumbs.maxBytes then return end
+    drawable = math.floor(tonumber(drawable) or -1)
+    if drawable < 0 then return end
+    SaveResourceFile(ResName, thumbFile(cat, drawable), dataUri, -1)
+    ThumbIndex[cat] = ThumbIndex[cat] or {}
+    ThumbIndex[cat][tostring(drawable)] = true
+end)
+
+RegisterNetEvent('v-clothing:server:scanProgress', function(done, total)
+    local src = source
+    if not scanners[src] then return end
+    Core.Notify(src, LP(src, 'cl.scan_prog', tostring(done), tostring(total)), 'info')
+end)
+
+RegisterNetEvent('v-clothing:server:scanDone', function(count)
+    local src = source
+    if not scanners[src] then return end
+    scanners[src] = nil
+    saveIndex()
+    local player = Core.GetPlayer(src)
+    Core.Notify(src, LP(src, 'cl.scan_done', tostring(count or 0)), 'success')
+    Core.Log('clothing', 'scan complete', { count = count }, player and player.citizenid or '')
+end)
+
+-- Catalogue: which drawables of a category already have a thumbnail.
+Core.RegisterCallback('v-clothing:thumbIndex', function(source, resolve, cat)
+    local set, list = ThumbIndex[cat] or {}, {}
+    for k in pairs(set) do list[#list + 1] = tonumber(k) end
+    resolve(list)
+end)
+
+-- Catalogue: fetch one thumbnail (base64 data URI) on demand.
+Core.RegisterCallback('v-clothing:thumb', function(source, resolve, data)
+    local cat = data and data.category
+    local d   = math.floor(tonumber(data and data.drawable) or -1)
+    if not cat or d < 0 or not (ThumbIndex[cat] and ThumbIndex[cat][tostring(d)]) then resolve(false); return end
+    local raw = LoadResourceFile(ResName, thumbFile(cat, d))
+    resolve((raw and raw ~= '') and raw or false)
+end)
+
+-- Admin command: (re)generate thumbnails.  /scanclothes            → all
+--   /scanclothes new            → only missing (newly-added clothing)
+--   /scanclothes <category>     → a single category (masks, tops, …)
+RegisterCommand('scanclothes', function(src, args)
+    if src == 0 then print('[v-clothing] /scanclothes must be run in-game'); return end
+    local player = Core.GetPlayer(src)
+    if not player or not player.HasPermission(Config.Thumbs.permission) then
+        Core.Notify(src, LP(src, 'cl.noperm'), 'error'); return
+    end
+    if scanners[src] then Core.Notify(src, LP(src, 'cl.scan_busy'), 'error'); return end
+    local a1 = (args[1] or ''):lower()
+    local mode, onlyCat = 'all', nil
+    if a1 == 'new' then mode = 'new'
+    elseif a1 ~= '' and a1 ~= 'all' and catByKey(a1) then onlyCat = a1 end
+    scanners[src] = true
+    -- safety: auto-clear the scanner flag if the client never reports back
+    SetTimeout(600000, function() scanners[src] = nil end)
+    Core.Log('clothing', 'scan start', { mode = mode, cat = onlyCat }, player.citizenid)
+    Core.Notify(src, LP(src, 'cl.scan_start', onlyCat or mode), 'info')
+    TriggerClientEvent('v-clothing:client:startScan', src, mode, onlyCat)
+end, false)
+
+AddEventHandler('playerDropped', function() scanners[source] = nil end)
+
 Core.RegisterCallback('v-clothing:unequip', function(source, resolve, catKey)
     local player = Core.GetPlayer(source)
     local cat = catByKey(catKey)

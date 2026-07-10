@@ -29,3 +29,32 @@ Config.Categories = {
 
 -- Component ids to reset when a piece is unequipped (nude / bare defaults).
 Config.NudeDefaults = { [1] = 0, [11] = 15, [8] = 15, [3] = 15, [4] = 21, [6] = 34 }
+
+-- ── Thumbnail generation (admin scan: /scanclothes) ────────────────
+-- Captures each drawable on the admin's ped via screenshot-basic and stores
+-- the image so the catalogue shows a real preview instead of a number.
+Config.Thumbs = {
+    dir        = 'thumbs',   -- saved under the resource folder
+    encoding   = 'jpg',      -- 'jpg' (small) | 'png' | 'webp'
+    quality    = 0.80,       -- 0..1 for jpg/webp
+    streamWait = 160,        -- ms to let the drawable stream in before the shot
+    permission = 'admin',    -- permission required to run /scanclothes
+    maxBytes   = 900000,     -- server-side guard: reject blobs larger than this
+    notifyEvery = 20,        -- push a progress notification every N thumbnails
+}
+
+-- Camera framing per body zone. bone = ped bone to look at (skeleton tag,
+-- pose-independent), dist = camera distance in front, height = camera Z offset,
+-- atZ = look-at Z offset, fov = field of view. Tune in-game if needed.
+Config.Framing = {
+    head  = { bone = 31086, dist = 0.85, height = 0.03, atZ = 0.00, fov = 25.0 },  -- SKEL_Head
+    upper = { bone = 24818, dist = 1.45, height = 0.05, atZ = 0.00, fov = 32.0 },  -- SKEL_Spine3
+    lower = { bone = 11816, dist = 1.55, height = 0.00, atZ = -0.05, fov = 38.0 }, -- SKEL_Pelvis
+    body  = { bone = 24818, dist = 2.20, height = 0.00, atZ = -0.30, fov = 42.0 }, -- full body
+}
+
+-- Which framing each category uses when generating thumbnails.
+Config.CatFraming = {
+    masks = 'head',  tops = 'upper', undershirt = 'upper', arms = 'upper',
+    pants = 'lower', shoes = 'lower', hats = 'head',       glasses = 'head',
+}
