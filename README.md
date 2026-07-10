@@ -45,7 +45,7 @@ Data lives in `database/data/` (gitignored). Only start it when a resource actua
 
 ## Dependencies
 
-- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Server commands](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/)
+- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Server commands](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/) · [screenshot-basic](https://github.com/citizenfx/screenshot-basic) — clothing catalogue thumbnails (admin `/scanclothes`)
 
 ## Credits
 
@@ -100,7 +100,7 @@ Les données sont dans `database/data/` (gitignoré). Ne l'allume que quand une 
 
 ## Dépendances
 
-- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Commandes serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/)
+- [FiveM / FXServer](https://fivem.net/) · [FiveM Natives](https://docs.fivem.net/natives/) · [Commandes serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) · [MariaDB](https://mariadb.org/) · [screenshot-basic](https://github.com/citizenfx/screenshot-basic) — miniatures du catalogue de vêtements (admin `/scanclothes`)
 
 ## Credits
 

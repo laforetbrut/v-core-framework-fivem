@@ -5,6 +5,7 @@ const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 
 let strings = {}, cats = [], catMap = {}, worn = [];
 let curCat = null, curDraw = 0, curTex = 0, texCount = 0, filter = '';
+let thumbSet = new Set(), thumbObserver = null;
 const t = (k) => strings[k] || k;
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
@@ -31,19 +32,54 @@ async function selectCategory(key) {
   renderCats();
   const c = catMap[key];
   curDraw = c.drawable;
-  renderTiles();
+  thumbSet = new Set();
+  renderTiles();                       // instant grid (numbers)
   await selectDrawable(curDraw, false);
+  // then discover which drawables have a generated thumbnail and upgrade
+  const list = await post('thumbsFor', { category: key });
+  if (key !== curCat) return;
+  const set = new Set(Array.isArray(list) ? list.map(Number) : []);
+  if (set.size) { thumbSet = set; renderTiles(); }
+}
+
+// Lazy-load a tile's thumbnail (base64) only when it scrolls into view.
+function ensureObserver() {
+  if (thumbObserver) return thumbObserver;
+  thumbObserver = new IntersectionObserver((entries) => {
+    entries.forEach(async (en) => {
+      if (!en.isIntersecting) return;
+      const img = en.target;
+      thumbObserver.unobserve(img);
+      if (img.dataset.loaded) return;
+      img.dataset.loaded = '1';
+      const uri = await post('thumb', { category: img.dataset.cat, drawable: +img.dataset.d });
+      if (typeof uri === 'string' && uri) { img.src = uri; img.parentElement.classList.add('ready'); }
+    });
+  }, { root: byId('tiles'), rootMargin: '160px' });
+  return thumbObserver;
 }
 
 function renderTiles() {
   const c = catMap[curCat];
   const grid = byId('tiles'); grid.innerHTML = '';
+  const obs = ensureObserver(); obs.disconnect();
   for (let d = c.min; d < c.count; d++) {
     if (filter && !String(d).includes(filter)) continue;
+    const has = thumbSet.has(d);
     const tile = document.createElement('div');
-    tile.className = 'tile' + (d === curDraw ? ' sel' : '');
+    tile.className = 'tile' + (d === curDraw ? ' sel' : '') + (has ? ' has' : '');
     tile.dataset.d = d;
-    tile.innerHTML = d < 0 ? `<span class="none">&times;</span>` : `<span class="num">${d}</span>`;
+    if (d < 0) {
+      tile.innerHTML = `<span class="none">&times;</span>`;
+    } else if (has) {
+      const img = document.createElement('img');
+      img.className = 'thumb'; img.dataset.cat = curCat; img.dataset.d = d; img.alt = '';
+      const badge = document.createElement('span'); badge.className = 'num'; badge.textContent = d;
+      tile.append(img, badge);
+      obs.observe(img);
+    } else {
+      tile.innerHTML = `<span class="num">${d}</span>`;
+    }
     tile.onclick = () => selectDrawable(d, true);
     grid.appendChild(tile);
   }

@@ -38,3 +38,13 @@ Desktop.ini
 
 # ─── FiveM runtime files ───
 .replxx_history
+
+# ─── Generated clothing thumbnails (per-server, rebuilt via /scanclothes) ───
+# NOTE: [ ] are escaped — in gitignore they are character classes otherwise.
+resources/\[local\]/v-clothing/thumbs/*
+!resources/\[local\]/v-clothing/thumbs/.gitkeep
+
+# ─── screenshot-basic build output (generated at boot by yarn/webpack) ───
+resources/\[standalone\]/screenshot-basic/dist/
+resources/\[standalone\]/screenshot-basic/node_modules/
+resources/\[standalone\]/screenshot-basic/.yarn-cache/
