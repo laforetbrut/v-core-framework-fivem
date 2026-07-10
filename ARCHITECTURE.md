@@ -42,7 +42,13 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 
 Also outstanding on inventory (from the audit, not yet fixed): item degradation over time, weapon serial/ammo persistence, in-world drops as real entities (currently markers), and moving the direct-SQL `stashes`/`items` access behind `v-core`.
 
+### Other recent additions
+
+- **Multi-character selection** — slots per tier (user 1 / mod 2 / admin 6), Play / New / Delete (admin-gated). `v-core` GetCharactersByLicense / DeleteCharacter / selectCharacter / deleteCharacter callbacks; `characters.slot` now written on create.
+
 ### Recently fixed bugs (this session)
+
+- **Inventory/shop drag stacking & slot placement** — oxmysql TINYINT→boolean broke `stackable==1`; empty-table metadata (`{}` truthy in Lua) blocked merges; drops ignored the target slot. Fixed with flag coercion, a `noMeta` helper, and a preferred-slot arg on `AddItem`/`addToContainer`.
 
 - **No mouse in any menu** — `SetNuiFocus` is resource-scoped; `v-core` had no `ui_page`, so the shared focus helper was a silent no-op. Each owning resource now takes focus itself.
 - **Spawn fell into the void / showed a default ped** — screen held black from the first frame; ped kept frozen while collision streams + ground is found; unfrozen only after the switch-in.

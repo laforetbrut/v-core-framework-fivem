@@ -77,9 +77,57 @@ const TABS = [
 ];
 
 const t = (key) => strings[key] || key;
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const postJson = (name, data) => fetch(`https://${RES}/${name}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data || {}) }).then(r => r.json()).catch(() => null);
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
+// ── Character selection ──
+let charData = null;
+function buildCharacters(data) {
+  charData = data; strings = data.strings || strings;
+  const grid = byId('charcards'); grid.innerHTML = '';
+  const bySlot = {}; (data.characters || []).forEach(c => { bySlot[c.slot] = c; });
+  const brk = '<i class="v-brk v-brk--tr" aria-hidden="true"></i><i class="v-brk v-brk--bl" aria-hidden="true"></i>';
+  for (let s = 1; s <= (data.maxSlots || 1); s++) {
+    const c = bySlot[s];
+    const card = document.createElement('div');
+    card.className = 'char-card ' + (c ? 'filled' : 'empty'); card.style.setProperty('--i', s - 1);
+    if (c) {
+      card.innerHTML = brk +
+        `<span class="cc-slot">${t('sel.slot')} ${s}</span>` +
+        `<div class="cc-name">${esc(c.firstname)} ${esc(c.lastname)}</div>` +
+        `<div class="cc-meta"><span>${t('sel.cash')} $${(c.cash || 0).toLocaleString('en-US')}</span><span>${t('sel.bank')} $${(c.bank || 0).toLocaleString('en-US')}</span></div>` +
+        `<button class="v-btn v-btn--accent cc-play" data-i18n="sel.play">Play</button>` +
+        (data.canDelete ? `<button class="cc-del" data-i18n="sel.delete">Delete</button>` : '');
+      card.querySelector('.cc-play').onclick = () => post('selectCharacter', { citizenid: c.citizenid });
+      if (data.canDelete) {
+        const del = card.querySelector('.cc-del');
+        del.onclick = (ev) => {
+          ev.stopPropagation();
+          if (del.dataset.confirm) {
+            postJson('deleteCharacter', { citizenid: c.citizenid }).then(res => {
+              if (res && res.characters) buildCharacters(Object.assign({}, charData, { characters: res.characters }));
+            });
+          } else {
+            del.dataset.confirm = '1'; del.textContent = t('sel.delete_confirm');
+            setTimeout(() => { if (del.isConnected) { del.dataset.confirm = ''; del.textContent = t('sel.delete'); } }, 3000);
+          }
+        };
+      }
+    } else {
+      card.innerHTML = brk + `<span class="cc-slot">${t('sel.slot')} ${s}</span><div class="cc-plus" aria-hidden="true">+</div><div class="cc-new" data-i18n="sel.new">New character</div>`;
+      card.onclick = () => post('createInSlot', { slot: s });
+    }
+    grid.appendChild(card);
+  }
+  applyStrings();
+  ['screen-language', 'panel', 'cam', 'stage'].forEach(id => byId(id).classList.add('hidden'));
+  byId('screen-select').classList.remove('hidden');
+}
+
 function showScreen(screen, extra) {
+  byId('screen-select').classList.add('hidden');   // leaving the selection screen
+  byId('screen-language').classList.add('hidden');
   byId('screen-identity').classList.toggle('hidden', screen !== 'identity');
   byId('screen-appearance').classList.toggle('hidden', screen !== 'appearance');
   byId('screen-spawn').classList.toggle('hidden', screen !== 'spawnselect');
@@ -300,6 +348,7 @@ document.querySelectorAll('.cam-zone').forEach(b => b.onclick = () => {
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   switch (d.action) {
+    case 'characters': buildCharacters(d.data || {}); break;
     case 'open':
       byId('screen-language').classList.remove('hidden');
       byId('panel').classList.add('hidden');
@@ -313,11 +362,7 @@ window.addEventListener('message', (e) => {
       if (d.appearance) appearance = d.appearance;
       showScreen(d.screen, d); break;
     case 'close':
-      byId('screen-language').classList.add('hidden');
-      byId('screen-spawn').classList.add('hidden');
-      byId('panel').classList.add('hidden');
-      byId('cam').classList.add('hidden');
-      byId('stage').classList.add('hidden');
+      ['screen-select', 'screen-language', 'screen-spawn', 'panel', 'cam', 'stage'].forEach(id => byId(id).classList.add('hidden'));
       break;
   }
 });

@@ -80,39 +80,42 @@ local function finishCreator(coords)
     active = false
 end
 
-local function startCreator()
-    active = true
-    identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
-    appearance = DefaultAppearance(0)
+local selectedSlot = 1
 
+-- Put the player in the creator interior (private bucket already set server-side),
+-- freeze, give a default ped + orbit camera, and fade in. Shared by the character
+-- selection screen and the creation flow.
+local function setupScene()
     DoScreenFadeOut(400)
     Wait(450)
-
     local ped = PlayerPedId()
     local c = Config.CreatorCoords
     SetEntityCoordsNoOffset(ped, c.x, c.y, c.z, false, false, false)
     SetEntityHeading(ped, c.w)
     FreezeEntityPosition(ped, true)
     SetPlayerControl(PlayerId(), false, 0)
-
-    -- Guard the ped/model/camera setup so a native failure can never leave a black screen.
     pcall(function()
         SetSexModel(0)
-        ApplyAppearance(appearance)
+        ApplyAppearance(DefaultAppearance(0))
         CreatorCameraStart()
     end)
-
     Wait(200)
     DoScreenFadeIn(500)
-
-    SetNuiFocus(true, true)
-    SendNUIMessage({ action = 'open' })
 end
 
-RegisterNetEvent('v-core:client:needCharacter', function(info)
+-- On connect: show the character selection screen (slots per permission tier).
+RegisterNetEvent('v-core:client:characterSelect', function(info)
     if active then return end
+    active = true
     currentLang = (info and info.language) or 'fr'
-    startCreator()
+    setupScene()
+    SetNuiFocus(true, true)
+    SendNUIMessage({ action = 'characters', data = {
+        characters = (info and info.characters) or {},
+        maxSlots   = (info and info.maxSlots) or 1,
+        canDelete  = info and info.canDelete == true,
+        strings    = Locales[currentLang] or {},
+    } })
 end)
 
 -- Returning character: restore the look, then swoop down (GTA switch
@@ -139,7 +142,41 @@ AddEventHandler('v-core:client:onPlayerLoaded', function(data)
     end)
 end)
 
--- ── NUI callbacks ──
+-- ── Character selection callbacks ──
+-- Load an existing character. active is cleared FIRST so the incoming
+-- playerLoaded -> onPlayerLoaded fires and runs the spawn (it early-returns
+-- while `active`). The screen stays black through the switch.
+RegisterNUICallback('selectCharacter', function(data, cb)
+    cb('ok')
+    active = false
+    pcall(CreatorCameraStop)
+    SetNuiFocus(false, false)
+    SendNUIMessage({ action = 'close' })
+    DoScreenFadeOut(0)
+    Core.TriggerCallback('v-core:selectCharacter', function(ok)
+        if not ok then DoScreenFadeIn(400) end   -- shouldn't happen; don't strand on black
+    end, data.citizenid)
+end)
+
+-- Create a new character in an empty slot -> straight into the creator.
+RegisterNUICallback('createInSlot', function(data, cb)
+    cb('ok')
+    selectedSlot = tonumber(data.slot) or 1
+    identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
+    appearance = DefaultAppearance(0)
+    pcall(function() SetSexModel(0); ApplyAppearance(appearance) end)
+    SendNUIMessage({ action = 'strings', strings = Locales[currentLang] or {} })
+    SendNUIMessage({ action = 'screen', screen = 'identity' })
+end)
+
+-- Delete one of the player's characters (server permission-gated) -> refresh list.
+RegisterNUICallback('deleteCharacter', function(data, cb)
+    Core.TriggerCallback('v-core:deleteCharacter', function(res)
+        if res and res.ok then cb({ characters = res.characters }) else cb(false) end
+    end, data.citizenid)
+end)
+
+-- ── Creator callbacks ──
 RegisterNUICallback('selectLang', function(data, cb)
     currentLang = (data.lang == 'en') and 'en' or 'fr'
     Core.TriggerCallback('v-core:setLanguage', function() end, currentLang)
@@ -206,6 +243,7 @@ RegisterNUICallback('confirm', function(data, cb)
     end, {
         firstname = identity.firstname, lastname = identity.lastname,
         dob = identity.dob, sex = identity.sex, appearance = appearance,
+        slot = selectedSlot,
     })
     cb('ok')
 end)

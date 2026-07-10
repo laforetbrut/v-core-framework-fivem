@@ -37,8 +37,8 @@ byId('close').onclick = close;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('shop').classList.contains('hidden')) close(); });
 
 // ── Buy (shared by the button and drag-to-inventory) ──
-async function buy(name, amount) {
-  const res = await post('buy', { shopId: shop.id, item: name, amount, account });
+async function buy(name, amount, slot) {
+  const res = await post('buy', { shopId: shop.id, item: name, amount, account, slot });
   if (res && res.cash !== undefined) {
     shop.cash = res.cash; shop.bank = res.bank; setBalances(res.cash, res.bank);
     if (res.inv) { shop.inv = res.inv; renderInventory(); }
@@ -76,7 +76,7 @@ function renderInventory() {
   const inv = shop.inv || { items: [], defs: {}, maxSlots: 40 };
   const bySlot = {}; (inv.items || []).forEach(it => { bySlot[it.slot] = it; });
   for (let s = 1; s <= (inv.maxSlots || 40); s++) {
-    const cell = document.createElement('div'); cell.className = 'icell';
+    const cell = document.createElement('div'); cell.className = 'icell'; cell.dataset.slot = s;
     const it = bySlot[s];
     if (it) {
       const d = inv.defs[it.name] || {};
@@ -132,7 +132,10 @@ async function onUp(e) {
   if (d.ghost) d.ghost.remove();
   if (!d.active) return;
   const over = document.elementFromPoint(e.clientX, e.clientY);
-  if (over && over.closest('.invview')) buy(d.name, 1);   // drop on inventory = buy 1
+  if (over && over.closest('.invview')) {
+    const cell = over.closest('.icell');                  // buy into the dropped slot if any
+    buy(d.name, 1, cell ? +cell.dataset.slot : undefined);
+  }
 }
 
 window.addEventListener('message', (e) => {

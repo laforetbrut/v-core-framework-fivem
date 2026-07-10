@@ -9,6 +9,15 @@
   <!-- Mouse-orbit capture surface (behind the panel; drag to rotate, wheel to zoom) -->
   <div id="stage" class="stage hidden"></div>
 
+  <!-- Character selection -->
+  <div id="screen-select" class="select-overlay hidden">
+    <div class="select-inner">
+      <div class="lang-brand"><span class="dot" aria-hidden="true"></span> PROJET R</div>
+      <h1 class="spawn-title" data-i18n="sel.title">Your characters</h1>
+      <div class="char-grid" id="charcards"></div>
+    </div>
+  </div>
+
   <!-- Language selection -->
   <div id="screen-language" class="lang-overlay hidden">
     <div class="lang-card">

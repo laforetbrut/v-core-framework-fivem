@@ -75,7 +75,8 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
     end
 
     -- Reserve inventory space first, then charge (refund-free path).
-    if not exports['v-inventory']:AddItem(source, data.item, amount) then
+    -- data.slot: the inventory cell the player dropped on (drag-to-buy); nil = auto.
+    if not exports['v-inventory']:AddItem(source, data.item, amount, nil, tonumber(data.slot)) then
         Core.Notify(source, LP(source, 'shop.nospace'), 'error'); resolve({ error = 'space' }); return
     end
     player.RemoveMoney(account, total, 'shop-buy')

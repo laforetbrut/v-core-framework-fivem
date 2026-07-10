@@ -1,6 +1,14 @@
 -- v-spawn | English
 Locales.en = Locales.en or {}
 local T = {
+    ['sel.title']        = 'Your characters',
+    ['sel.slot']         = 'Slot',
+    ['sel.play']         = 'Play',
+    ['sel.new']          = 'New character',
+    ['sel.cash']         = 'Cash',
+    ['sel.bank']         = 'Bank',
+    ['sel.delete']       = 'Delete',
+    ['sel.delete_confirm']= 'Confirm?',
     ['lang.title']       = 'Select your language',
     ['lang.subtitle']    = 'You can change it later in the pause menu.',
     ['id.title']         = 'Create your character',

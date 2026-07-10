@@ -19,14 +19,25 @@ function VCore.DB.EnsureUser(license, name)
     )
 end
 
---- Fetch the first character for a license (multi-character selection comes later).
+--- Fetch the first character for a license.
 function VCore.DB.GetCharacterByLicense(license)
     return MySQL.single.await('SELECT * FROM characters WHERE license = ? ORDER BY slot ASC LIMIT 1', { license })
+end
+
+--- Fetch ALL characters for a license (for the selection screen).
+function VCore.DB.GetCharactersByLicense(license)
+    return MySQL.query.await('SELECT * FROM characters WHERE license = ? ORDER BY slot ASC', { license }) or {}
 end
 
 --- Fetch a character row by citizen id.
 function VCore.DB.GetCharacterByCitizenId(citizenid)
     return MySQL.single.await('SELECT * FROM characters WHERE citizenid = ?', { citizenid })
+end
+
+--- Delete a character (and its bank history) — used by the admin-gated delete.
+function VCore.DB.DeleteCharacter(citizenid)
+    MySQL.query.await('DELETE FROM bank_transactions WHERE citizenid = ?', { citizenid })
+    MySQL.query.await('DELETE FROM characters WHERE citizenid = ?', { citizenid })
 end
 
 --- Create a default character for a license and return the fresh row.
@@ -72,14 +83,15 @@ end
 function VCore.DB.CreateCharacter(license, data)
     local citizenid = VCore.GenerateCitizenId()
     MySQL.insert.await(
-        [[INSERT INTO characters (citizenid, license, firstname, lastname, dob, sex, cash, bank, appearance)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)]],
+        [[INSERT INTO characters (citizenid, license, firstname, lastname, dob, sex, cash, bank, appearance, slot)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)]],
         {
             citizenid, license,
             data.firstname or 'John', data.lastname or 'Doe',
             data.dob or '2000-01-01', tonumber(data.sex) or 0,
             Config.StartingMoney.cash, Config.StartingMoney.bank,
             json.encode(data.appearance or {}),
+            tonumber(data.slot) or 1,
         }
     )
     return VCore.DB.GetCharacterByCitizenId(citizenid)
