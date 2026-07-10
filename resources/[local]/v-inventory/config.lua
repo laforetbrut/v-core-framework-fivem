@@ -25,6 +25,13 @@ Config.Backpack = { slots = 12, weight = 20000 }   -- +12 slots, +20 kg
 -- Body-armor items apply this much armour on use (0..100).
 Config.ArmorAmount = 100
 
+-- Weapon wear: a freshly-drawn weapon starts at this durability, and loses
+-- `WeaponWearPerShot` per round fired (derived server-side from the ammo the client
+-- reports). A `cleaning_kit` restores it. 0.35 ≈ ~285 rounds from full to broken.
+Config.WeaponStartDurability = 100
+Config.WeaponWearPerShot     = 0.35
+Config.CleanRestore          = 100   -- durability restored by one cleaning_kit
+
 -- Rounds granted per ammo item used (added to the equipped weapon).
 Config.AmmoPerItem = 30
 

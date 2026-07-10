@@ -404,7 +404,15 @@ RegisterNetEvent('v-inventory:server:weaponAmmo', function(slot, ammo)
     local it = itemAt(Inv[src] or {}, slot)
     if it and ItemDefs[it.name] and ItemDefs[it.name].itype == 'weapon' then
         it.metadata = it.metadata or {}
-        it.metadata.ammo = math.max(0, math.floor(tonumber(ammo) or 0))
+        local new = math.max(0, math.floor(tonumber(ammo) or 0))
+        local old = it.metadata.ammo or new
+        -- Rounds fired since the last report wear the weapon down (derived server-side;
+        -- a higher count means the client picked up ammo, not fired — no wear).
+        local spent = old - new
+        if spent > 0 and it.metadata.durability ~= nil then
+            it.metadata.durability = math.max(0, it.metadata.durability - spent * (Config.WeaponWearPerShot or 0))
+        end
+        it.metadata.ammo = new
         syncPlayer(src)
     end
 end)
@@ -427,6 +435,7 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
             if eq then TriggerClientEvent('v-inventory:client:unequipWeapon', source, eq.slot, eq.name) end
             it.metadata = it.metadata or {}
             it.metadata.serial = it.metadata.serial or genSerial()
+            if it.metadata.durability == nil then it.metadata.durability = Config.WeaponStartDurability or 100 end
             Equipped[source] = { slot = slot, name = it.name }
             TriggerClientEvent('v-inventory:client:equipWeapon', source,
                 { slot = slot, name = it.name, ammo = it.metadata.ammo or 0, serial = it.metadata.serial,
@@ -475,6 +484,21 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
         removeFromSlot(Inv[source], slot, 1)
         syncPlayer(source)
         Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
+        resolve(buildState(source)); return
+    end
+
+    -- Cleaning kit: restore the drawn weapon's condition (durability).
+    if it.name == 'cleaning_kit' then
+        local eq = Equipped[source]
+        if not eq then Core.Notify(source, LP(source, 'inv.no_weapon'), 'error'); resolve(false); return end
+        local w = itemAt(Inv[source] or {}, eq.slot)
+        if w then
+            w.metadata = w.metadata or {}
+            w.metadata.durability = math.min(100, (w.metadata.durability or 0) + (Config.CleanRestore or 100))
+        end
+        removeFromSlot(Inv[source], slot, 1)
+        syncPlayer(source)
+        Core.Notify(source, LP(source, 'inv.cleaned'), 'success')
         resolve(buildState(source)); return
     end
 

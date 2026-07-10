@@ -67,6 +67,7 @@ Config.Recipes = {
     { output = 'nails',             count = 5, time = 2000, station = 'workbench',   inputs = { iron = 1 } },
     { output = 'repair_kit',        count = 1, time = 7000, station = 'workbench',   inputs = { metal_scrap = 3, duct_tape = 1, cable = 1 } },
     { output = 'drill',             count = 1, time = 8000, station = 'workbench',   inputs = { electronics = 1, metal_scrap = 3, lithium_battery = 1 } },
+    { output = 'cleaning_kit',      count = 1, time = 3000, station = 'workbench',   inputs = { cloth = 2, rubber = 1, plastic = 1 } },
 
     -- Reloading bench: ammunition
     { output = 'ammo_9mm',          count = 1, time = 3000, station = 'ammo',        inputs = { gunpowder = 2, brass = 1, copper = 1 } },
