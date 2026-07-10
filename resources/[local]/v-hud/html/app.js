@@ -41,8 +41,9 @@ const ACCENTS = [
 
 const DEFAULTS = {
   elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true },
-  positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: true, minimapVehicleOnly: false,
+  positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: true, minimapVehicleOnly: false, minimapSize: 100,
 };
+const MM_SIZE_MIN = 60, MM_SIZE_MAX = 200;   // minimap size range (%)
 let settings = JSON.parse(JSON.stringify(DEFAULTS));
 let strings = {};
 let lastMoney = { cash: 0, bank: 0 };
@@ -168,13 +169,14 @@ function mmPos() {
   const p = settings.positions && settings.positions.minimap;
   return (p && typeof p.x === 'number') ? p : mmFrame.def;
 }
+function mmSize() { return clamp(settings.minimapSize || 100, MM_SIZE_MIN, MM_SIZE_MAX) / 100; }
 function applyMinimapFrame() {
   const el = byId('minimap'); if (!el) return;
-  const p = mmPos();
+  const p = mmPos(), s = mmSize();
   el.style.left = (p.x * 100) + 'vw';
   el.style.top = (p.y * 100) + 'vh';
-  el.style.width = (mmFrame.w * 100) + 'vw';
-  el.style.height = (mmFrame.h * 100) + 'vh';
+  el.style.width = (mmFrame.w * s * 100) + 'vw';
+  el.style.height = (mmFrame.h * s * 100) + 'vh';
   el.classList.toggle('hidden', !settings.elements.minimap && !editing);
 }
 
@@ -208,6 +210,25 @@ document.addEventListener('mousemove', (e) => {
   settings.positions[drag.key] = { x, y };
 });
 document.addEventListener('mouseup', () => { drag = null; });
+
+// ── Minimap resize handle (drag the corner to stretch the map) ──
+let mmResizing = null, mmSizeRaf = false;
+byId('mm-resize').addEventListener('mousedown', (e) => {
+  if (!editing) return;
+  e.preventDefault(); e.stopPropagation();
+  const p = mmPos();
+  mmResizing = { originX: p.x * window.innerWidth, baseW: mmFrame.w * window.innerWidth };
+});
+document.addEventListener('mousemove', (e) => {
+  if (!mmResizing) return;
+  const widthPx = Math.max(20, e.clientX - mmResizing.originX);
+  const s = clamp(Math.round((widthPx / mmResizing.baseW) * 100), MM_SIZE_MIN, MM_SIZE_MAX);
+  settings.minimapSize = s;
+  applyMinimapFrame();
+  const sizeEl = byId('mmsize'); if (sizeEl) { sizeEl.value = s; byId('mmsize-val').textContent = s + '%'; }
+  if (!mmSizeRaf) { mmSizeRaf = true; requestAnimationFrame(() => { mmSizeRaf = false; post('minimapSize', { size: s }); }); }
+});
+document.addEventListener('mouseup', () => { mmResizing = null; });
 
 function enterLayout() {
   editing = true;
@@ -254,6 +275,15 @@ function buildPanel() {
   sc.value = settings.scale; byId('scale-val').textContent = settings.scale + '%';
   op.oninput = () => { settings.opacity = +op.value; byId('opacity-val').textContent = op.value + '%'; applySettings(); };
   sc.oninput = () => { settings.scale = +sc.value; byId('scale-val').textContent = sc.value + '%'; applySettings(); };
+
+  const ms = byId('mmsize');
+  ms.value = settings.minimapSize || 100; byId('mmsize-val').textContent = (settings.minimapSize || 100) + '%';
+  ms.oninput = () => {
+    settings.minimapSize = clamp(+ms.value, MM_SIZE_MIN, MM_SIZE_MAX);
+    byId('mmsize-val').textContent = settings.minimapSize + '%';
+    applyMinimapFrame();
+    post('minimapSize', { size: settings.minimapSize });
+  };
 
   byId('dynamic').classList.toggle('on', settings.dynamic);
   byId('mapvehicle').classList.toggle('on', settings.minimapVehicleOnly);

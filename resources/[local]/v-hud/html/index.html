@@ -11,6 +11,7 @@
     <span class="mm-corner tl"></span><span class="mm-corner tr"></span>
     <span class="mm-corner bl"></span><span class="mm-corner br"></span>
     <span class="mm-grip"><span class="dot"></span><span data-i18n="el.minimap">Minimap</span></span>
+    <span id="mm-resize" class="mm-resize" title="Resize"></span>
   </div>
 
   <!-- Compass (top-center by default) -->
@@ -96,6 +97,11 @@
         <div class="group row-between">
           <span class="v-label" style="margin:0" data-i18n="set.dynamic">Hide vitals when full</span>
           <button class="switch" id="dynamic" role="switch"><span></span></button>
+        </div>
+
+        <div class="group">
+          <span class="v-label"><span data-i18n="set.mapsize">Minimap size</span> <em id="mmsize-val">100%</em></span>
+          <input type="range" id="mmsize" min="60" max="200" value="100" />
         </div>
 
         <div class="group row-between">
