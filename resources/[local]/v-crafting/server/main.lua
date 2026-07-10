@@ -23,8 +23,19 @@ local function defOf(name)
              rarity = (meta and meta.rarity) or 'common' }
 end
 
+-- One pass over the inventory -> a name->count map (avoids an export round-trip per
+-- ingredient per recipe when building a station's list).
+local function countsOf(source)
+    local counts = {}
+    for _, it in ipairs(exports['v-inventory']:GetItems(source) or {}) do
+        counts[it.name] = (counts[it.name] or 0) + (it.amount or 0)
+    end
+    return counts
+end
+
 -- Recipes for a station, resolved with defs + the player's current input counts.
 local function recipesFor(source, stationId)
+    local counts = countsOf(source)
     local out = {}
     for i, r in ipairs(Config.Recipes) do
         if r.station == stationId then
@@ -32,7 +43,7 @@ local function recipesFor(source, stationId)
             for item, qty in pairs(r.inputs) do
                 local d = defOf(item)
                 inputs[#inputs + 1] = { item = item, need = qty, label = d.label,
-                    image = d.image, have = exports['v-inventory']:GetItemCount(source, item) or 0 }
+                    image = d.image, have = counts[item] or 0 }
             end
             table.sort(inputs, function(a, b) return a.item < b.item end)
             local d = defOf(r.output)

@@ -44,7 +44,7 @@ CreateThread(function()
               ON DUPLICATE KEY UPDATE label=VALUES(label), weight=VALUES(weight), stackable=VALUES(stackable),
                 usable=VALUES(usable), category=VALUES(category), image=VALUES(image), metadata=VALUES(metadata)]],
             { it.name, it.label, it.weight, it.stackable, it.usable, it.category, it.image,
-              json.encode({ desc = it.desc, type = it.itype, rarity = it.rarity }) })
+              json.encode({ desc = it.desc, type = it.itype, rarity = it.rarity, attach = it.attach }) })
     end
 
     local rows = MySQL.query.await('SELECT * FROM items') or {}
@@ -429,9 +429,33 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
             it.metadata.serial = it.metadata.serial or genSerial()
             Equipped[source] = { slot = slot, name = it.name }
             TriggerClientEvent('v-inventory:client:equipWeapon', source,
-                { slot = slot, name = it.name, ammo = it.metadata.ammo or 0, serial = it.metadata.serial })
+                { slot = slot, name = it.name, ammo = it.metadata.ammo or 0, serial = it.metadata.serial,
+                  attachments = it.metadata.attachments })
         end
         syncPlayer(source)
+        resolve(buildState(source)); return
+    end
+
+    -- Weapon attachment: fit it to the drawn weapon (consumed), stored on the weapon
+    -- item's metadata so it re-applies on every future draw.
+    if itype == 'attachment' then
+        local eq = Equipped[source]
+        if not eq then Core.Notify(source, LP(source, 'inv.no_weapon'), 'error'); resolve(false); return end
+        local kind = d.metadata and d.metadata.attach
+        local comp = kind and ComponentFor(eq.name, kind)
+        if not comp then Core.Notify(source, LP(source, 'inv.attach_nofit'), 'error'); resolve(false); return end
+        local w = itemAt(Inv[source] or {}, eq.slot)
+        if not w then resolve(false); return end
+        w.metadata = w.metadata or {}
+        w.metadata.attachments = w.metadata.attachments or {}
+        if w.metadata.attachments[kind] then
+            Core.Notify(source, LP(source, 'inv.attach_dupe'), 'error'); resolve(false); return
+        end
+        w.metadata.attachments[kind] = comp
+        TriggerClientEvent('v-inventory:client:applyAttachment', source, comp)
+        removeFromSlot(Inv[source], slot, 1)
+        syncPlayer(source)
+        Core.Notify(source, LP(source, 'inv.attach_ok', d.label), 'success')
         resolve(buildState(source)); return
     end
 
