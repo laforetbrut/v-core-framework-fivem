@@ -11,6 +11,7 @@ dependencies {
     'v-core',
     'v-ui',
     'v-inventory',
+    'v-appearance',
 }
 
 shared_scripts {

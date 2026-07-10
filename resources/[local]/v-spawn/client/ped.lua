@@ -1,10 +1,6 @@
--- v-spawn | ped appearance (natives)
-local OVERLAYS = {
-    eyebrows = { id = 2, colorType = 1 },
-    beard    = { id = 1, colorType = 1 },
-    makeup   = { id = 4, colorType = 2 },
-    lipstick = { id = 8, colorType = 2 },
-}
+-- v-spawn | ped appearance
+-- Rendering is delegated to the v-appearance engine (the single ped writer).
+-- This file keeps only creation-specific helpers: default appearance + model swap.
 
 --- Fresh default appearance for a sex (0 male, 1 female).
 function DefaultAppearance(sex)
@@ -48,44 +44,7 @@ function SetSexModel(sex)
     SetModelAsNoLongerNeeded(hash)
 end
 
---- Apply a full appearance table onto the local ped.
+--- Apply a full appearance table onto the local ped (delegates to the engine).
 function ApplyAppearance(a)
-    if not a then return end
-    local ped = PlayerPedId()
-    local hb = a.headBlend or {}
-    SetPedHeadBlendData(ped,
-        math.floor(hb.shapeFirst or 0), math.floor(hb.shapeSecond or 0), 0,
-        math.floor(hb.skinFirst or 0), math.floor(hb.skinSecond or 0), 0,
-        (hb.shapeMix or 0.5) + 0.0, (hb.skinMix or 0.5) + 0.0, 0.0, false)
-
-    for i, v in pairs(a.faceFeatures or {}) do
-        SetPedFaceFeature(ped, tonumber(i), (v or 0.0) + 0.0)
-    end
-
-    local hair = a.hair or {}
-    SetPedComponentVariation(ped, 2, math.floor(hair.style or 0), 0, 0)
-    SetPedHairColor(ped, math.floor(hair.color or 0), math.floor(hair.highlight or hair.color or 0))
-
-    for key, def in pairs(OVERLAYS) do
-        local o = (a.overlays or {})[key]
-        if o then
-            SetPedHeadOverlay(ped, def.id, math.floor(o.style or 0), (o.opacity or 0.0) + 0.0)
-            SetPedHeadOverlayColor(ped, def.id, def.colorType, math.floor(o.color or 0), math.floor(o.color or 0))
-        end
-    end
-
-    SetPedEyeColor(ped, math.floor(a.eyeColor or 0))
-
-    for cid, c in pairs(a.components or {}) do
-        SetPedComponentVariation(ped, tonumber(cid), math.floor(c.drawable or 0), math.floor(c.texture or 0), 0)
-    end
-
-    for pid, p in pairs(a.props or {}) do
-        local id = tonumber(pid)
-        if (p.drawable or -1) < 0 then
-            ClearPedProp(ped, id)
-        else
-            SetPedPropIndex(ped, id, math.floor(p.drawable), math.floor(p.texture or 0), true)
-        end
-    end
+    exports['v-appearance']:ApplyAppearance(a)
 end

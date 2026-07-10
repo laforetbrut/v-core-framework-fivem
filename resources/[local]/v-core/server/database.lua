@@ -44,7 +44,7 @@ function VCore.DB.SaveCharacter(player)
     MySQL.update.await(
         [[UPDATE characters SET
             cash = ?, bank = ?, job = ?, job_grade = ?, gang = ?, gang_grade = ?,
-            position = ?, metadata = ?, inventory = ?
+            position = ?, metadata = ?, inventory = ?, appearance = ?
           WHERE citizenid = ?]],
         {
             player.money.cash, player.money.bank,
@@ -53,6 +53,7 @@ function VCore.DB.SaveCharacter(player)
             json.encode(player.position or {}),
             json.encode(player.metadata or {}),
             json.encode(player.inventory or {}),
+            json.encode(player.appearance or {}),
             player.citizenid,
         }
     )
