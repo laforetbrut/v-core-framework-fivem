@@ -10,7 +10,7 @@ end
 local function closePanel()
     if not isOpen then return end
     isOpen = false
-    SetNuiFocus(false, false)
+    exports['v-core']:CloseMenu()
     SendNUIMessage({ action = 'close' })
 end
 
@@ -19,7 +19,7 @@ RegisterCommand('vadmin_panel', function()
     Core.TriggerCallback('v-admin:open', function(res)
         if not res or not res.ok then return end   -- silently ignored for non-admins
         isOpen = true
-        SetNuiFocus(true, true)
+        exports['v-core']:OpenMenu()
         SendNUIMessage({ action = 'open', strings = strings(), super = res.super, weathers = res.weathers })
     end)
 end, false)
@@ -119,5 +119,5 @@ end)
 
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
-    SetNuiFocus(false, false)
+    exports['v-core']:CloseMenu()
 end)

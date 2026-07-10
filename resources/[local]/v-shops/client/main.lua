@@ -12,7 +12,7 @@ local function openShop(shopId)
     Core.TriggerCallback('v-shops:getShop', function(data)
         if not data then return end
         isOpen = true
-        SetNuiFocus(true, true)
+        exports['v-core']:OpenMenu()
         SendNUIMessage({ action = 'open', shop = data, strings = strings() })
     end, shopId)
 end
@@ -85,12 +85,12 @@ end)
 
 RegisterNUICallback('close', function(_, cb)
     isOpen = false
-    SetNuiFocus(false, false)
+    exports['v-core']:CloseMenu()
     cb('ok')
 end)
 
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
-    SetNuiFocus(false, false)
+    exports['v-core']:CloseMenu()
     for _, p in pairs(spawned) do if DoesEntityExist(p) then DeletePed(p) end end
 end)

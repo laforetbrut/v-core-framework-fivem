@@ -18,6 +18,7 @@ shared_scripts {
 client_scripts {
     'client/callbacks.lua',
     'client/functions.lua',
+    'client/focus.lua',
     'client/main.lua',
 }
 
