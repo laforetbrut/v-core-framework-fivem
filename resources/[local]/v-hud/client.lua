@@ -15,9 +15,9 @@ local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 -- frame's extra bottom height is the cover that hides the GTA:O health/armour
 -- bars (the square texture reshapes the map but doesn't remove those bars).
 local MM = {
-    default = { x = 0.013, y = 0.75 },       -- top-left of the frame (fractions)
-    w = 0.150, h = 0.162,                     -- frame footprint sent to the NUI (= the map)
-    map = { dx = 0.004, dy = 0.004, w = 0.142, h = 0.150 },  -- native square inside
+    default = { x = 0.0125, y = 0.725 },     -- top-left of the frame (fractions)
+    w = 0.160, h = 0.178,                     -- frame footprint sent to the NUI (= the map)
+    map = { dx = 0.0, dy = 0.0, w = 0.160, h = 0.178 },  -- native map fills the frame
 }
 
 local function TL(k)
@@ -79,9 +79,16 @@ local function needAlert(key, val, titleKey, msgKey)
     end
 end
 
+local lastVitals = nil
+local function vitalsEqual(a, b)
+    if not b then return false end
+    for k, v in pairs(a) do if b[k] ~= v then return false end end
+    return true
+end
+
 CreateThread(function()
     while true do
-        Wait(350)
+        Wait(250)
         if loaded then
             local ped = PlayerPedId()
             local pid = PlayerId()
@@ -91,7 +98,7 @@ CreateThread(function()
             local thirst = s.thirst or 100
             needAlert('hunger', hunger, 'alert.hungry_t', 'alert.hungry_m')
             needAlert('thirst', thirst, 'alert.thirsty_t', 'alert.thirsty_m')
-            SendNUIMessage({ action = 'vitals', data = {
+            local data = {
                 health  = math.max(0, math.min(100, GetEntityHealth(ped) - 100)),
                 armor   = GetPedArmour(ped),
                 hunger  = hunger,
@@ -100,7 +107,12 @@ CreateThread(function()
                 stamina = math.max(0, math.min(100, 100 - GetPlayerSprintStaminaRemaining(pid))),
                 oxygen  = underwater and math.floor(GetPlayerUnderwaterTimeRemaining(pid) * 12) or 100,
                 underwater = underwater,
-            } })
+            }
+            -- only push to the NUI when something actually changed (smoother, no churn)
+            if not vitalsEqual(data, lastVitals) then
+                lastVitals = data
+                SendNUIMessage({ action = 'vitals', data = data })
+            end
         end
     end
 end)
@@ -220,6 +232,21 @@ CreateThread(function()
             BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
             ScaleformMovieMethodAddParamInt(3)
             EndScaleformMovieMethod()
+        end
+    end
+end)
+
+-- Hide the whole HUD while a fullscreen menu is up (pause/ESC map, etc.) so it
+-- doesn't stay drawn over the menu. The native radar is hidden by the game;
+-- we hide our NUI elements too.
+CreateThread(function()
+    local hidden = false
+    while true do
+        Wait(150)
+        local hide = IsPauseMenuActive() or IsFrontendFading() or IsHudHidden()
+        if hide ~= hidden then
+            hidden = hide
+            SendNUIMessage({ action = 'visible', visible = not hide })
         end
     end
 end)
