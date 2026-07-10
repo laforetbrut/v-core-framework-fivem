@@ -163,7 +163,7 @@ InventoryItems = {
   { name='duct_tape', label='Duct Tape', weight=150, stackable=1, usable=0, category='general', image='general/duct_tape.png', itype='misc', rarity='common', desc='Roll of strong duct tape.' },
   { name='contract', label='Contract', weight=10, stackable=1, usable=0, category='general', image='general/contract.png', itype='misc', rarity='common', desc='Signed legal contract.' },
   { name='gasoline', label='Gasoline', weight=1000, stackable=1, usable=0, category='general', image='general/gasoline.png', itype='material', rarity='common', desc='Container of gasoline.' },
-  { name='cleaning_kit', label='Cleaning Kit', weight=500, stackable=1, usable=0, category='general', image='general/cleaning_kit.png', itype='tool', rarity='common', desc='Weapon cleaning kit.' },
+  { name='cleaning_kit', label='Cleaning Kit', weight=500, stackable=1, usable=1, category='general', image='general/cleaning_kit.png', itype='tool', rarity='common', desc='Restores a drawn weapon\'s condition. Use it while a weapon is in hand.' },
   { name='armor', label='Body Armor', weight=2000, stackable=1, usable=1, category='general', image='general/bulletproof.png', itype='armor', rarity='common', desc='Bulletproof vest.' },
   { name='newspaper', label='Newspaper', weight=50, stackable=1, usable=0, category='misc', image='misc/newspaper.png', itype='misc', rarity='common', desc='Daily local newspaper.' },
   { name='notebook', label='Notebook', weight=100, stackable=1, usable=0, category='misc', image='misc/notebook.png', itype='misc', rarity='common', desc='Pocket notebook.' },

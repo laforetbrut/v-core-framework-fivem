@@ -42,7 +42,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 
 **Optimization:** the item catalogue (`defs`, ~170 rows) is now sent to the NUI **once** on open and cached; move/use/drop responses omit it — every action payload dropped from ~full-catalogue to just the changed state.
 
-Also outstanding on inventory (from the audit, not yet fixed): item degradation over time, weapon attachments, and moving the direct-SQL `stashes`/`items` access behind `v-core`. **Done since the audit:** weapon serial/ammo persistence ✅, in-world drops are now **real props** that are garbage-collected when emptied ✅ (also fixed the unbounded `Stashes` leak).
+Also outstanding on inventory (from the audit, not yet fixed): moving the direct-SQL `stashes`/`items` access behind `v-core`. **Done since the audit:** weapon serial/ammo persistence ✅, in-world drops are now **real props** that are garbage-collected when emptied ✅ (also fixed the unbounded `Stashes` leak), **weapon attachments** ✅, and **weapon durability/wear** ✅ (server-derived from reported ammo; a Cleaning Kit repairs it). Food/perishable time-decay still open.
 
 ### Other recent additions
 
