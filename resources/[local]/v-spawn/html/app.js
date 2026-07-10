@@ -79,13 +79,43 @@ const TABS = [
 const t = (key) => strings[key] || key;
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
-function showScreen(screen) {
+function showScreen(screen, extra) {
   byId('screen-identity').classList.toggle('hidden', screen !== 'identity');
   byId('screen-appearance').classList.toggle('hidden', screen !== 'appearance');
+  byId('screen-spawn').classList.toggle('hidden', screen !== 'spawnselect');
+  byId('panel').classList.toggle('hidden', screen === 'spawnselect');
+  byId('cam').classList.toggle('hidden', screen === 'spawnselect');
+  byId('stage').classList.toggle('hidden', screen === 'spawnselect');
+  if (screen === 'spawnselect') { buildSpawnCards((extra && extra.spawns) || []); return; }
   byId('panel-title').textContent = t(screen === 'appearance' ? 'app.title' : 'id.title');
-  byId('cam').classList.remove('hidden');
-  byId('stage').classList.remove('hidden');
   if (screen === 'appearance') buildAppearance();
+}
+
+// ── First-spawn location cards ──
+const SPAWN_ICONS = {
+  airport: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10.5 20.5 12 14l-7 -2.5v-2l7 1.5V5.5a1.5 1.5 0 0 1 3 0V11l7 -1.5v2L15 14l1.5 6.5-1.5.9-3-5.4-3 5.4z"/></svg>',
+  prison:  '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M12 4v16M16 4v16"/></svg>',
+  sandy:   '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="17" cy="7" r="2.6"/><path d="M2 17c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0M2 21c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"/></svg>',
+};
+
+function buildSpawnCards(spawns) {
+  const wrap = byId('spawncards'); wrap.innerHTML = '';
+  spawns.forEach((s, i) => {
+    const card = document.createElement('button');
+    card.className = 'spawn-card';
+    card.style.animationDelay = (i * 90) + 'ms';
+    card.innerHTML = `<span class="sicon">${SPAWN_ICONS[s.key] || ''}</span>
+      <span class="slabel">${s.label}</span><span class="ssub">${s.sub || ''}</span>`;
+    card.onclick = () => {
+      if (card.dataset.done) return;
+      card.dataset.done = '1';
+      wrap.querySelectorAll('.spawn-card').forEach(x => x.classList.add('fade'));
+      card.classList.remove('fade'); card.classList.add('picked');
+      post('spawnAt', { key: s.key });
+      setTimeout(() => byId('screen-spawn').classList.add('hidden'), 450);
+    };
+    wrap.appendChild(card);
+  });
 }
 
 let upTimer = null;
@@ -278,9 +308,10 @@ window.addEventListener('message', (e) => {
       appearance = d.data; if (!byId('screen-appearance').classList.contains('hidden')) buildControls(); break;
     case 'screen':
       if (d.appearance) appearance = d.appearance;
-      showScreen(d.screen); break;
+      showScreen(d.screen, d); break;
     case 'close':
       byId('screen-language').classList.add('hidden');
+      byId('screen-spawn').classList.add('hidden');
       byId('panel').classList.add('hidden');
       byId('cam').classList.add('hidden');
       byId('stage').classList.add('hidden');

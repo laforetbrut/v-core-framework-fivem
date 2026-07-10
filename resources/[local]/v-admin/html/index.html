@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div id="adm" class="adm hidden">
+    <div class="panel">
+      <!-- Left rail -->
+      <div class="rail">
+        <div class="brand"><span class="dot"></span><span class="btext" data-i18n="adm.title">Administration</span></div>
+        <button class="rtab on" data-tab="dash" data-i18n="adm.tab_dash">Dashboard</button>
+        <button class="rtab" data-tab="players" data-i18n="adm.tab_players">Players</button>
+        <button class="rtab" data-tab="res" data-i18n="adm.tab_res">Scripts</button>
+        <button class="rtab" data-tab="world" data-i18n="adm.tab_world">World</button>
+        <button class="rtab" data-tab="logs" data-i18n="adm.tab_logs">Logs</button>
+        <div class="railfoot">F10 · PROJET R</div>
+      </div>
+
+      <!-- Content -->
+      <div class="content">
+        <div class="chead">
+          <h1 id="ctitle" class="ctitle"></h1>
+          <div class="cactions">
+            <button class="mini" id="refresh" data-i18n="adm.refresh">Refresh</button>
+            <button class="close" id="close" aria-label="Close">&times;</button>
+          </div>
+        </div>
+
+        <!-- Dashboard -->
+        <section id="tab-dash" class="tab">
+          <div class="cards" id="dashcards"></div>
+        </section>
+
+        <!-- Players -->
+        <section id="tab-players" class="tab hidden">
+          <input id="psearch" class="search" data-i18n-ph="adm.search" autocomplete="off" />
+          <div class="list v-scroll" id="plist"></div>
+        </section>
+
+        <!-- Resources -->
+        <section id="tab-res" class="tab hidden">
+          <div class="list v-scroll" id="rlist"></div>
+        </section>
+
+        <!-- World -->
+        <section id="tab-world" class="tab hidden">
+          <div class="wgroup">
+            <span class="wlabel" data-i18n="adm.weather">Weather</span>
+            <div class="wgrid" id="weathers"></div>
+          </div>
+          <div class="wgroup">
+            <span class="wlabel"><span data-i18n="adm.time">Time</span> · <b id="hourval">12</b>h</span>
+            <div class="wrow">
+              <input type="range" id="hour" min="0" max="23" value="12" />
+              <label class="chk"><input type="checkbox" id="freezetime" /><span data-i18n="adm.freeze_time">Freeze time</span></label>
+              <button class="mini accent" id="applytime" data-i18n="adm.act_apply">Apply</button>
+            </div>
+          </div>
+          <div class="wgroup">
+            <span class="wlabel" data-i18n="adm.car">Vehicle</span>
+            <div class="wrow">
+              <input id="carmodel" class="search grow" data-i18n-ph="adm.car_ph" autocomplete="off" />
+              <button class="mini accent" id="spawncar" data-i18n="adm.spawn">Spawn</button>
+            </div>
+          </div>
+          <div class="wgroup">
+            <span class="wlabel" data-i18n="adm.announce">Announcement</span>
+            <div class="wrow">
+              <input id="announce" class="search grow" data-i18n-ph="adm.announce_ph" maxlength="220" autocomplete="off" />
+              <button class="mini accent" id="sendannounce" data-i18n="adm.send">Send</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- Logs -->
+        <section id="tab-logs" class="tab hidden">
+          <input id="logfilter" class="search" data-i18n-ph="adm.logs_filter" autocomplete="off" />
+          <div class="list v-scroll" id="loglist"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

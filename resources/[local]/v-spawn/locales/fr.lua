@@ -59,5 +59,12 @@ local T = {
     ['face.chin_len']    = 'Longueur du menton',
     ['face.lips']        = 'Lèvres',
     ['err.name']         = 'Entre un prénom et un nom.',
+    ['spawn.title']       = 'Où commence ton histoire ?',
+    ['spawn.airport']     = 'Aéroport LSIA',
+    ['spawn.airport_sub'] = 'Fraîchement débarqué à Los Santos.',
+    ['spawn.prison']      = 'Pénitencier de Bolingbroke',
+    ['spawn.prison_sub']  = 'Libéré ce matin, devant les grilles.',
+    ['spawn.sandy']       = 'Sandy Shores',
+    ['spawn.sandy_sub']   = 'Au bord de la mer d\'Alamo.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end
