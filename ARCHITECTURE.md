@@ -32,7 +32,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | — | **Hidden pocket** (1 kg concealed compartment, invisible to a police search) | ✅ done |
 | 1 | Unified player top-nav menu | ⬜ |
 | 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · attachments / on-back / draw anims ⬜ | 🔨 |
-| 3 | Shared stashes **with permissions** | ⬜ |
+| 3 | **Shared/gang stashes with permissions** — persistent containers gated by job / gang / permission tier, opened via `exports['v-inventory']:OpenSharedStash(src, id)` or a net event; access checked server-side on every open (`Config.SharedStashes`) | ✅ framework (needs placement/interaction points) |
 | 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
 | 5 | Advanced crafting (recipes, benches) | ⬜ |
 | 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
@@ -40,7 +40,9 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | 8 | Place items in the world as entities + **player search / steal** (the `GetSearchable` export is ready for it) | ⬜ |
 | 9 | Bonus: vending machines, garbage job, skill tree | ⬜ |
 
-Also outstanding on inventory (from the audit, not yet fixed): item degradation over time, weapon serial/ammo persistence, in-world drops as real entities (currently markers), and moving the direct-SQL `stashes`/`items` access behind `v-core`.
+**Optimization:** the item catalogue (`defs`, ~170 rows) is now sent to the NUI **once** on open and cached; move/use/drop responses omit it — every action payload dropped from ~full-catalogue to just the changed state.
+
+Also outstanding on inventory (from the audit, not yet fixed): item degradation over time, weapon attachments, and moving the direct-SQL `stashes`/`items` access behind `v-core`. **Done since the audit:** weapon serial/ammo persistence ✅, in-world drops are now **real props** that are garbage-collected when emptied ✅ (also fixed the unbounded `Stashes` leak).
 
 ### Other recent additions
 

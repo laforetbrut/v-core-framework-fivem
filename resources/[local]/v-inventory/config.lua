@@ -28,6 +28,16 @@ Config.ArmorAmount = 100
 -- Rounds granted per ammo item used (added to the equipped weapon).
 Config.AmmoPerItem = 30
 
+-- Shared / gang stashes: a persistent container gated by job, gang or permission.
+-- Open one with exports['v-inventory']:OpenSharedStash(src, id) (e.g. from a
+-- target zone or a job menu). Access is checked server-side on every open.
+--   job=<name> (+ minGrade), gang=<name>, or permission=<tier>.
+Config.SharedStashes = {
+    -- ['police_armory'] = { label = 'Armurerie LSPD', slots = 60, weight = 500000, job = 'police', minGrade = 0 },
+    -- ['gang_lost']     = { label = 'Planque',        slots = 50, weight = 400000, gang = 'lost' },
+    -- ['admin_store']   = { label = 'Dépôt Admin',    slots = 80, weight = 999999, permission = 'admin' },
+}
+
 -- Giving items to a nearby player.
 Config.GiveDistance = 3.0
 

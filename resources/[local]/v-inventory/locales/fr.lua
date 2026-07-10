@@ -40,6 +40,7 @@ local T = {
     ['inv.full']       = 'Pas assez de place.',
     ['inv.no_target']  = 'Personne à proximité.',
     ['inv.no_weapon']  = 'Aucune arme en main.',
+    ['inv.no_access']  = 'Accès refusé.',
     ['inv.gave']       = 'Donné %sx %s.',
     ['inv.received']   = 'Reçu %sx %s.',
     ['inv.used']       = 'Utilisé %s.',

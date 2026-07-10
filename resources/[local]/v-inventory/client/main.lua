@@ -1,7 +1,7 @@
 -- v-inventory | client
 local Core = exports['v-core']:GetCore()
 local isOpen = false
-local Drops = {}   -- id -> vector3
+local Drops = {}   -- id -> { coords = vector3, prop = handle }
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -129,9 +129,30 @@ CreateThread(function()
     end
 end)
 
--- ── Ground drops (markers + E to open the nearest) ─────────────
+-- ── Ground drops (a real world prop + E to open the nearest) ────
+local DROP_MODEL = `prop_med_bag_01b`   -- small dropped bag
+
 RegisterNetEvent('v-inventory:client:createDrop', function(id, coords)
-    Drops[id] = vector3(coords.x + 0.0, coords.y + 0.0, coords.z + 0.0)
+    local c = vector3(coords.x + 0.0, coords.y + 0.0, coords.z + 0.0)
+    local prop = 0
+    RequestModel(DROP_MODEL)
+    local t = 0; while not HasModelLoaded(DROP_MODEL) and t < 30 do Wait(10); t = t + 1 end
+    if HasModelLoaded(DROP_MODEL) then
+        prop = CreateObject(DROP_MODEL, c.x, c.y, c.z - 0.98, false, false, false)
+        PlaceObjectOnGroundProperly(prop)
+        FreezeEntityPosition(prop, true)
+        SetEntityCollision(prop, false, false)
+        SetModelAsNoLongerNeeded(DROP_MODEL)
+    end
+    Drops[id] = { coords = c, prop = prop }
+end)
+
+RegisterNetEvent('v-inventory:client:removeDrop', function(id)
+    local d = Drops[id]
+    if d then
+        if d.prop and d.prop ~= 0 and DoesEntityExist(d.prop) then DeleteObject(d.prop) end
+        Drops[id] = nil
+    end
 end)
 
 CreateThread(function()
@@ -139,14 +160,11 @@ CreateThread(function()
         local wait = 800
         if not isOpen and next(Drops) then
             local coords = GetEntityCoords(PlayerPedId())
-            local nearest, nd = nil, 1.6
-            for id, dc in pairs(Drops) do
-                local d = #(coords - dc)
-                if d < 12.0 then
-                    DrawMarker(2, dc.x, dc.y, dc.z + 0.2, 0, 0, 0, 0, 180.0, 0, 0.22, 0.22, 0.18, 255, 106, 26, 160, false, false, 2, nil, nil, false)
-                    wait = 0
-                    if d < nd then nearest, nd = id, d end
-                end
+            local nearest, nd = nil, 1.8
+            for id, d in pairs(Drops) do
+                local dist = #(coords - d.coords)
+                if dist < nd then nearest, nd = id, dist end
+                if dist < 12.0 then wait = 0 end
             end
             if nearest then
                 BeginTextCommandDisplayHelp('STRING')
@@ -165,4 +183,5 @@ AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
     SetNuiFocus(false, false)
     exports['v-core']:MenuClosed()
+    for _, d in pairs(Drops) do if d.prop and DoesEntityExist(d.prop) then DeleteObject(d.prop) end end
 end)
