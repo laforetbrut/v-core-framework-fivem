@@ -79,8 +79,22 @@ end)
 -- ════════════════════════════════════════════════════════════════
 local ThumbDir   = Config.Thumbs.dir
 local ThumbIndex = {}        -- cat -> { [drawableStr] = true }
-local scanners   = {}        -- src -> true while allowed to write thumbs
+local scanners   = {}        -- src -> { token } while a scan is running
+local tokenSrc   = {}        -- upload token -> src
 local ResName    = GetCurrentResourceName()
+
+math.randomseed(os.time())
+local function newToken()
+    local t = {}
+    for i = 1, 32 do t[i] = string.format('%x', math.random(0, 15)) end
+    return table.concat(t)
+end
+
+local function clearScanner(src)
+    local sc = scanners[src]
+    if sc and sc.token then tokenSrc[sc.token] = nil end
+    scanners[src] = nil
+end
 
 local function indexPath()        return ThumbDir .. '/index.json' end
 local function thumbFile(cat, d)  return ('%s/%s_%d.txt'):format(ThumbDir, cat, d) end
@@ -97,19 +111,36 @@ local function saveIndex()
 end
 CreateThread(loadIndex)
 
--- Receive one captured thumbnail from the scanning admin. Guarded: only a
--- source currently flagged as a scanner (issued /scanclothes) may write.
-RegisterNetEvent('v-clothing:server:saveThumb', function(cat, drawable, dataUri)
-    local src = source
-    if not scanners[src] then return end
-    if type(cat) ~= 'string' or type(dataUri) ~= 'string' then return end
-    if not catByKey(cat) then return end
-    if #dataUri > Config.Thumbs.maxBytes then return end
-    drawable = math.floor(tonumber(drawable) or -1)
-    if drawable < 0 then return end
-    SaveResourceFile(ResName, thumbFile(cat, drawable), dataUri, -1)
-    ThumbIndex[cat] = ThumbIndex[cat] or {}
-    ThumbIndex[cat][tostring(drawable)] = true
+-- Receive captured thumbnails over HTTP (NEVER over net events: large event
+-- payloads trip FiveM's reliable-event overflow protection and KICK the
+-- client). The NUI uploads each downscaled thumbnail to
+-- http://<server>/v-clothing/upload with the one-shot scan token.
+local savesSinceFlush = 0
+SetHttpHandler(function(req, res)
+    local cors = { ['Access-Control-Allow-Origin'] = '*' }
+    if req.method ~= 'POST' or req.path ~= '/upload' then
+        res.writeHead(404, cors); res.send('not found'); return
+    end
+    req.setDataHandler(function(body)
+        local ok, data = pcall(json.decode, body or '')
+        if not ok or type(data) ~= 'table' then res.writeHead(400, cors); res.send('bad json'); return end
+        local src = data.t and tokenSrc[data.t]
+        local cat = type(data.cat) == 'string' and catByKey(data.cat) or nil
+        local d   = math.floor(tonumber(data.d) or -1)
+        local uri = data.uri
+        if not src or not scanners[src] or not cat or d < 0
+            or type(uri) ~= 'string' or uri:sub(1, 11) ~= 'data:image/'
+            or #uri > Config.Thumbs.maxBytes then
+            res.writeHead(400, cors); res.send('rejected'); return
+        end
+        SaveResourceFile(ResName, thumbFile(cat.key, d), uri, -1)
+        ThumbIndex[cat.key] = ThumbIndex[cat.key] or {}
+        ThumbIndex[cat.key][tostring(d)] = true
+        savesSinceFlush = savesSinceFlush + 1
+        if savesSinceFlush >= 25 then savesSinceFlush = 0; saveIndex() end
+        res.writeHead(200, { ['Access-Control-Allow-Origin'] = '*', ['Content-Type'] = 'application/json' })
+        res.send('{"ok":true}')
+    end)
 end)
 
 RegisterNetEvent('v-clothing:server:scanProgress', function(done, total)
@@ -121,7 +152,7 @@ end)
 RegisterNetEvent('v-clothing:server:scanDone', function(count)
     local src = source
     if not scanners[src] then return end
-    scanners[src] = nil
+    clearScanner(src)
     saveIndex()
     local player = Core.GetPlayer(src)
     Core.Notify(src, LP(src, 'cl.scan_done', tostring(count or 0)), 'success')
@@ -151,12 +182,16 @@ local function beginScan(src, mode, onlyCat)
         Core.Notify(src, LP(src, 'cl.noperm'), 'error'); return
     end
     if scanners[src] then Core.Notify(src, LP(src, 'cl.scan_busy'), 'error'); return end
-    scanners[src] = true
+    local token = newToken()
+    scanners[src] = { token = token }
+    tokenSrc[token] = src
     -- safety: auto-clear the scanner flag if the client never reports back
-    SetTimeout(600000, function() scanners[src] = nil end)
+    SetTimeout(600000, function()
+        if scanners[src] and scanners[src].token == token then clearScanner(src) end
+    end)
     Core.Log('clothing', 'scan start', { mode = mode, cat = onlyCat }, player.citizenid)
     Core.Notify(src, LP(src, 'cl.scan_start', onlyCat or mode), 'info')
-    TriggerClientEvent('v-clothing:client:startScan', src, mode, onlyCat)
+    TriggerClientEvent('v-clothing:client:startScan', src, mode, onlyCat, token)
 end
 
 -- Keybind entry point (this server has no chat) — F9 twice in-game.
@@ -176,7 +211,7 @@ RegisterCommand('scanclothes', function(src, args)
     beginScan(src, mode, onlyCat)
 end, false)
 
-AddEventHandler('playerDropped', function() scanners[source] = nil end)
+AddEventHandler('playerDropped', function() clearScanner(source) end)
 
 Core.RegisterCallback('v-clothing:unequip', function(source, resolve, catKey)
     local player = Core.GetPlayer(source)

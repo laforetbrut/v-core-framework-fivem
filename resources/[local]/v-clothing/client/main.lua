@@ -104,17 +104,39 @@ local function capture()
     local p, ok = promise.new()
     ok = pcall(function()
         exports['screenshot-basic']:requestScreenshot(
-            { encoding = Config.Thumbs.encoding, quality = Config.Thumbs.quality },
+            { encoding = Config.Thumbs.encoding, quality = 0.92 },   -- high-quality source; the NUI downscales
             function(data) p:resolve(data) end)
     end)
     if not ok then return nil end
     return Citizen.Await(p)
 end
 
-RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat)
+-- Ship one capture to the server THROUGH THE NUI (canvas downscale + HTTP
+-- upload). Never TriggerServerEvent with an image: large net events trip
+-- FiveM's reliable-event overflow protection and kick the player.
+local uploadP = nil
+RegisterNUICallback('uploadDone', function(data, cb)
+    if uploadP then local p = uploadP; uploadP = nil; p:resolve(data and data.ok or false) end
+    cb('ok')
+end)
+
+local function uploadThumb(endpoint, token, catKey, d, uri)
+    uploadP = promise.new()
+    local p = uploadP
+    SetTimeout(15000, function() if uploadP == p then uploadP = nil; p:resolve(false) end end)
+    SendNUIMessage({
+        action = 'uploadThumb', endpoint = endpoint, res = GetCurrentResourceName(),
+        token = token, cat = catKey, drawable = d, uri = uri,
+        size = Config.Thumbs.size, quality = Config.Thumbs.quality,
+    })
+    return Citizen.Await(p)
+end
+
+RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
     if scanning then return end
-    if GetResourceState('screenshot-basic') ~= 'started' then
-        TriggerServerEvent('v-clothing:server:scanDone', 0)   -- capture tool missing
+    local endpoint = GetCurrentServerEndpoint()
+    if GetResourceState('screenshot-basic') ~= 'started' or not endpoint or not token then
+        TriggerServerEvent('v-clothing:server:scanDone', 0)   -- capture tool missing / no upload route
         return
     end
     scanning = true
@@ -158,7 +180,7 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat)
             for d = 0, n - 1 do if wanted(c.key, d) then total = total + 1 end end
         end
 
-        local done = 0
+        local done, fails = 0, 0
         for _, c in ipairs(targets) do
             local fr = Config.Framing[Config.CatFraming[c.key] or 'body']
             local n  = (c.kind == 'comp') and GetNumberOfPedDrawableVariations(ped, c.id) or GetNumberOfPedPropDrawableVariations(ped, c.id)
@@ -168,9 +190,13 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat)
                     placeScanCam(cam, ped, fr)
                     Wait(Config.Thumbs.streamWait)
                     local data = capture()
-                    if data then TriggerServerEvent('v-clothing:server:saveThumb', c.key, d, data) end
-                    done = done + 1
-                    if done % Config.Thumbs.notifyEvery == 0 then
+                    local sent = data and uploadThumb(endpoint, token, c.key, d, data) or false
+                    if sent then done = done + 1; fails = 0 else fails = fails + 1 end
+                    if fails >= 8 then    -- upload route is dead: bail instead of looping for nothing
+                        scanning = false
+                        Core.Notify(strings()['cl.scan_abort'] or 'Scan aborted (upload failed).', 'error')
+                    end
+                    if done > 0 and done % Config.Thumbs.notifyEvery == 0 then
                         TriggerServerEvent('v-clothing:server:scanProgress', done, total)
                     end
                     Wait(0)
