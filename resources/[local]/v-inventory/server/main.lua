@@ -405,6 +405,10 @@ end)
 
 exports('RegisterUsableItem', function(name, handler) UsableItems[name] = handler end)
 
+-- Read-only helpers for other modules (e.g. the shop's inventory-view panel).
+exports('GetLimits', function() return { maxSlots = Config.MaxSlots, maxWeight = Config.MaxWeight, hotbar = Config.HotbarSlots } end)
+exports('GetItems', function(src) return Inv[src] or {} end)
+
 -- ── Live cash mirror: refresh an open inventory when the account changes ──
 AddEventHandler('v-core:server:onMoneyChange', function(src, account, amount)
     if account == 'cash' and Inv[src] then
