@@ -27,5 +27,10 @@ local T = {
     ['el.money']     = 'Money',
     ['el.compass']   = 'Compass',
     ['el.minimap']   = 'Minimap',
+    ['alert.hungry_t'] = 'Hungry',
+    ['alert.hungry_m'] = 'You are hungry — find something to eat.',
+    ['alert.thirsty_t'] = 'Thirsty',
+    ['alert.thirsty_m'] = 'You are thirsty — find something to drink.',
+    ['set.map_hint'] = 'Drag the minimap too to place it',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

@@ -26,8 +26,8 @@ const ICON = {
 const VITALS = [
   { key: 'health',  danger: v => v <= 20 },
   { key: 'armor',   danger: () => false, hideZero: true },
-  { key: 'hunger',  danger: v => v <= 15 },
-  { key: 'thirst',  danger: v => v <= 15 },
+  { key: 'hunger',  danger: v => v <= 15, warn: v => v <= 25, keep: true },
+  { key: 'thirst',  danger: v => v <= 15, warn: v => v <= 25, keep: true },
   { key: 'stress',  danger: v => v >= 70, fullWhenZero: true },
   { key: 'stamina', danger: v => v <= 15 },
   { key: 'oxygen',  danger: v => v <= 30, underwaterOnly: true },
@@ -58,7 +58,7 @@ function buildRings() {
   const wrap = byId('vitals'); wrap.innerHTML = '';
   for (const v of VITALS) {
     const el = document.createElement('div');
-    el.className = 'ring';
+    el.className = 'ring key-' + v.key + (v.keep ? ' keep' : '');
     el.innerHTML =
       `<svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg>` +
       `<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICON[v.key]}</svg></span>`;
@@ -79,8 +79,10 @@ function renderVitals(data) {
     r.fill.style.strokeDashoffset = CIRC * (1 - val / 100);
     const dngr = v.danger(val);
     r.el.classList.toggle('low', dngr);
+    r.el.classList.toggle('warn', !dngr && !!(v.warn && v.warn(val)));
+    // hunger/thirst (keep) are never faded — always readable
     const full = v.fullWhenZero ? val <= 2 : val >= 99;
-    r.el.classList.toggle('faded', settings.dynamic && full && !dngr && !editing);
+    r.el.classList.toggle('faded', !v.keep && settings.dynamic && full && !dngr && !editing);
   }
 }
 
@@ -157,19 +159,47 @@ function applyLayout() {
       el.style.left = el.style.top = el.style.right = el.style.bottom = el.style.transformOrigin = '';
     }
   });
+  applyMinimapFrame();
+}
+
+// ── Minimap frame (positioned in SCREEN FRACTIONS so it tracks the native map) ──
+let mmFrame = { w: 0.15, h: 0.212, def: { x: 0.0135, y: 0.735 } };
+function mmPos() {
+  const p = settings.positions && settings.positions.minimap;
+  return (p && typeof p.x === 'number') ? p : mmFrame.def;
+}
+function applyMinimapFrame() {
+  const el = byId('minimap'); if (!el) return;
+  const p = mmPos();
+  el.style.left = (p.x * 100) + 'vw';
+  el.style.top = (p.y * 100) + 'vh';
+  el.style.width = (mmFrame.w * 100) + 'vw';
+  el.style.height = (mmFrame.h * 100) + 'vh';
+  el.classList.toggle('hidden', !settings.elements.minimap && !editing);
 }
 
 // ── Drag / layout mode ──
-['vitals', 'money', 'compass'].forEach(key => {
+['vitals', 'money', 'compass', 'minimap'].forEach(key => {
   byId(key).addEventListener('mousedown', (e) => {
     if (!editing) return;
     e.preventDefault();
     const r = byId(key).getBoundingClientRect();
-    drag = { key, el: byId(key), offx: e.clientX - r.left, offy: e.clientY - r.top };
+    drag = { key, el: byId(key), offx: e.clientX - r.left, offy: e.clientY - r.top, frac: key === 'minimap' };
   });
 });
+let mmRaf = false;
 document.addEventListener('mousemove', (e) => {
   if (!drag) return;
+  if (drag.frac) {
+    // minimap: store as fractions and stream to Lua so the native map follows live
+    const x = clamp((e.clientX - drag.offx) / window.innerWidth, 0, 1 - mmFrame.w);
+    const y = clamp((e.clientY - drag.offy) / window.innerHeight, 0, 1 - mmFrame.h);
+    drag.el.style.left = (x * 100) + 'vw'; drag.el.style.top = (y * 100) + 'vh';
+    if (!settings.positions) settings.positions = {};
+    settings.positions.minimap = { x, y };
+    if (!mmRaf) { mmRaf = true; requestAnimationFrame(() => { mmRaf = false; post('minimapMove', settings.positions.minimap); }); }
+    return;
+  }
   const x = clamp(e.clientX - drag.offx, 0, window.innerWidth - 40);
   const y = clamp(e.clientY - drag.offy, 0, window.innerHeight - 20);
   drag.el.style.left = x + 'px'; drag.el.style.top = y + 'px';
@@ -186,6 +216,7 @@ function enterLayout() {
   byId('layout-bar').classList.remove('hidden');
   byId('money').classList.toggle('hidden', !settings.elements.money);
   byId('compass').classList.toggle('hidden', !settings.elements.compass);
+  byId('minimap').classList.remove('hidden');   // always grabbable while editing
   applySettings();
 }
 function exitLayout() {
@@ -256,6 +287,12 @@ window.addEventListener('message', (event) => {
         settings.positions = d.settings.positions || {};
       }
       applySettings();
+      break;
+    case 'minimapFrame':
+      if (typeof d.w === 'number') mmFrame.w = d.w;
+      if (typeof d.h === 'number') mmFrame.h = d.h;
+      if (d.default) mmFrame.def = d.default;
+      applyMinimapFrame();
       break;
     case 'strings': strings = d.strings || {}; applyStrings(); break;
     case 'vitals': renderVitals(d.data || {}); break;

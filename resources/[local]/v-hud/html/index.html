@@ -6,6 +6,15 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body class="v-root">
+  <!-- Minimap frame (our own; wraps the repositionable native radar) -->
+  <div id="minimap" class="minimap-frame" data-group="minimap">
+    <!-- opaque footer that hides the GTA:O health/armour bars (no hide native) -->
+    <div class="mm-mask"></div>
+    <span class="mm-corner tl"></span><span class="mm-corner tr"></span>
+    <span class="mm-corner bl"></span><span class="mm-corner br"></span>
+    <span class="mm-grip"><span class="dot"></span><span data-i18n="el.minimap">Minimap</span></span>
+  </div>
+
   <!-- Compass (top-center by default) -->
   <div id="compass" class="compass hidden" data-group="compass">
     <div class="compass-arrow"></div>

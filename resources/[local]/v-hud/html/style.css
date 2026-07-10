@@ -49,6 +49,11 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 .ring.low .fill { stroke: var(--v-danger); }
 .ring.low { animation: v-crit 1.1s ease-in-out infinite; }
 @keyframes v-crit { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 5px var(--v-danger)); } }
+/* 25% warning (hunger / thirst) — amber pulse, clearly readable */
+.ring.warn .fill { stroke: var(--v-warning, #E7B549); }
+.ring.warn .ic { color: var(--v-warning, #E7B549); }
+.ring.warn { animation: v-warn 1.5s ease-in-out infinite; }
+@keyframes v-warn { 0%, 100% { filter: none; } 50% { filter: drop-shadow(0 0 5px var(--v-warning, #E7B549)); } }
 .ring .ic {
   position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
@@ -57,6 +62,9 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 .ring.low .ic { color: var(--v-danger); }
 .ring .ic svg { width: 17px; height: 17px; transform: none; }
 .ring.faded { opacity: 0; }
+/* hunger / thirst are always kept readable (never fade, stronger track) */
+.ring.keep { opacity: 1 !important; }
+.ring.keep .track { stroke: rgba(255, 255, 255, .18); }
 
 /* ── Money (bottom-right) ── */
 .money {
@@ -201,3 +209,50 @@ body.editing .ring.faded { opacity: 1; }
 @keyframes v-fade-in { from { opacity: 0; } to { opacity: 1; } }
 @keyframes v-flash-up { 0% { color: var(--v-success); } 100% { color: var(--v-text); } }
 @keyframes v-flash-down { 0% { color: var(--v-danger); } 100% { color: var(--v-text); } }
+
+/* ── Minimap frame (wraps the native radar; transparent centre) ── */
+.minimap-frame {
+  position: fixed;
+  pointer-events: none;
+  z-index: 3;
+  border-radius: 8px;
+  transform: scale(var(--hud-scale, 1));
+  transform-origin: center;
+  opacity: var(--hud-opacity, 1);
+}
+/* Opaque themed footer — sits ON TOP of the native radar (CEF renders above it)
+   to hide the GTA:O green/blue health & armour bars. Height ≈ bottom of frame. */
+.mm-mask {
+  position: absolute; left: -2px; right: -2px; bottom: -2px;
+  height: 23%;
+  background: linear-gradient(180deg, rgba(11,11,13,.6) 0%, var(--v-bg-900, #0B0B0D) 32%);
+  border-top: 2px solid var(--v-accent);
+  border-radius: 0 0 8px 8px;
+  pointer-events: none;
+}
+.mm-corner {
+  position: absolute; width: 16px; height: 16px;
+  border: 2px solid var(--v-accent);
+  opacity: .9;
+  filter: drop-shadow(0 0 4px rgba(0,0,0,.6));
+}
+.mm-corner.tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
+.mm-corner.tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 6px 0 0; }
+.mm-corner.bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px; }
+.mm-corner.br { bottom: -2px; right: -2px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
+.mm-grip {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  display: none; align-items: center; gap: 8px;
+  padding: 8px 14px; border-radius: 10px;
+  background: rgba(11, 11, 13, .82); border: 1px solid var(--v-accent);
+  font-family: var(--v-font-display, 'Bahnschrift'); font-size: 12px; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--v-text, #ECEAE6); white-space: nowrap;
+}
+/* Layout (edit) mode: a grabbable overlay + label so the player can drag it */
+body.editing .minimap-frame {
+  pointer-events: auto; cursor: grab;
+  background: rgba(255, 106, 26, .10);
+  border: 1px dashed var(--v-accent);
+}
+body.editing .minimap-frame:active { cursor: grabbing; }
+body.editing .mm-grip { display: flex; }

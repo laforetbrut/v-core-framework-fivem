@@ -27,5 +27,10 @@ local T = {
     ['el.money']     = 'Argent',
     ['el.compass']   = 'Boussole',
     ['el.minimap']   = 'Minimap',
+    ['alert.hungry_t'] = 'Faim',
+    ['alert.hungry_m'] = 'Tu as faim — trouve de quoi manger.',
+    ['alert.thirsty_t'] = 'Soif',
+    ['alert.thirsty_m'] = 'Tu as soif — trouve de quoi boire.',
+    ['set.map_hint'] = 'Glisse aussi la minimap pour la placer',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end
