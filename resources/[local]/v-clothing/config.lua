@@ -20,7 +20,7 @@ Config.Categories = {
     { key = 'masks',      i18n = 'cl.masks',      kind = 'comp', id = 1,  price = 50,  item = 'mask' },
     { key = 'tops',       i18n = 'cl.tops',       kind = 'comp', id = 11, price = 150, item = 'top' },
     { key = 'undershirt', i18n = 'cl.undershirt', kind = 'comp', id = 8,  price = 40,  item = 'undershirt' },
-    { key = 'arms',       i18n = 'cl.arms',       kind = 'comp', id = 3,  price = 30,  item = 'arms' },
+    { key = 'arms',       i18n = 'cl.arms',       kind = 'comp', id = 3,  price = 0,   item = 'arms' },
     { key = 'pants',      i18n = 'cl.pants',      kind = 'comp', id = 4,  price = 120, item = 'pants' },
     { key = 'shoes',      i18n = 'cl.shoes',      kind = 'comp', id = 6,  price = 90,  item = 'shoes' },
     { key = 'hats',       i18n = 'cl.hats',       kind = 'prop', id = 0,  price = 70,  item = 'hat' },
