@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="app" class="hidden">
+    <!-- drag anywhere on the stage to orbit the ped -->
+    <div class="stage" id="stage"></div>
+
+    <aside class="dock v-chamfer v-panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" id="dock-title">Editor</span>
+
+      <div class="dock-body v-scroll" id="body"></div>
+
+      <div class="dock-foot">
+        <div class="zones" id="zones">
+          <button class="zbtn on" data-zone="head" aria-label="Focus head">HEAD</button>
+          <button class="zbtn" data-zone="body" aria-label="Focus body">BODY</button>
+          <button class="zbtn" data-zone="full" aria-label="Focus full">FULL</button>
+        </div>
+        <div class="acts">
+          <button class="v-btn v-btn--ghost" id="cancel" data-i18n="app.cancel">Cancel</button>
+          <button class="v-btn v-btn--accent" id="confirm" data-i18n="app.confirm">Confirm</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

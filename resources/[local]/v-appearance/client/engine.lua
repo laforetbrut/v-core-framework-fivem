@@ -66,6 +66,19 @@ local function applyProp(ped, id, p)
     end
 end
 
+-- ── Tattoos (ped decorations) ──────────────────────────────────────
+-- Stored on the appearance as a.tattoos = { { c = collection, h = overlay }, ... }
+-- (h is the gender-resolved overlay name, chosen when the tattoo was added).
+-- MUST be applied AFTER SetPedHeadBlendData, which wipes decorations.
+local function applyTattoos(ped, list)
+    ClearPedDecorations(ped)
+    for _, t in ipairs(list or {}) do
+        if t.c and t.h then
+            AddPedDecorationFromHashes(ped, joaat(t.c), joaat(t.h))
+        end
+    end
+end
+
 -- ── Full appearance apply ──────────────────────────────────────────
 local function applyAppearance(a)
     if not a then return end
@@ -73,6 +86,7 @@ local function applyAppearance(a)
     applyHead(ped, a)
     for cid, c in pairs(a.components or {}) do applyComponent(ped, tonumber(cid), c) end
     for pid, p in pairs(a.props or {}) do applyProp(ped, tonumber(pid), p) end
+    applyTattoos(ped, a.tattoos)
 end
 
 -- ── Capture the full current appearance off the live ped (as refs) ──
@@ -130,6 +144,8 @@ exports('SetHeight', function(scale)
     heightScale = scale
     -- Phase 5 wires the SET_ENTITY_MATRIX applier here (Config.Height.enabled gate).
 end)
+
+exports('ApplyTattoos', function(list) applyTattoos(PlayerPedId(), list) end)
 
 -- Server can push a full re-apply (after a job-outfit change, an admin edit, ...)
 RegisterNetEvent('v-appearance:client:apply', function(a) applyAppearance(a) end)
