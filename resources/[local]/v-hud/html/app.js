@@ -290,7 +290,8 @@ function buildPanel() {
 }
 
 function openSettings() { buildPanel(); byId('settings').classList.remove('hidden'); }
-function closeSettings() { if (editing) exitLayout(); byId('settings').classList.add('hidden'); post('closeSettings'); }
+// Always persist on close (X / Esc / click-outside), not only via the Save button.
+function closeSettings() { if (editing) exitLayout(); post('saveSettings', settings); byId('settings').classList.add('hidden'); }
 
 byId('btn-close').onclick = closeSettings;
 byId('btn-move').onclick = enterLayout;
