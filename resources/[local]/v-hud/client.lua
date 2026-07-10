@@ -5,15 +5,14 @@
 local loaded = false
 local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 
--- Our own minimap = the native radar, reframed & repositionable. Footprint and
--- fine calibration in SCREEN FRACTIONS (nudge if the frame and the map don't
--- line up perfectly on your resolution — same values feed the NUI frame).
--- The frame's bottom strip (h - map.h - map.dy) covers the GTA:O health/armour
--- bars, which have no hide native and render at the bottom of the radar.
+-- Our own SQUARE minimap (QBCore method): the radar mask is swapped for the
+-- shipped `squaremap` texture — the map becomes a clean square and the GTA:O
+-- health/armour bars are no longer drawn at all. The whole thing is then
+-- repositionable: the player's frame top-left (fractions) becomes a delta on
+-- the tested base layout. `w`/`h` = the on-screen footprint sent to the NUI.
 local MM = {
-    default = { x = 0.0125, y = 0.723 },   -- top-left of the frame (fractions)
-    w = 0.150, h = 0.225,                   -- frame size sent to the NUI
-    map = { dx = 0.006, dy = 0.008, w = 0.138, h = 0.171 },  -- native map inside the frame
+    default = { x = 0.0125, y = 0.735 },   -- top-left of the frame (fractions)
+    w = 0.1638, h = 0.183,                  -- square map footprint (fractions)
 }
 
 local function TL(k)
@@ -123,33 +122,60 @@ CreateThread(function()
     end
 end)
 
--- ── Minimap: our own reframed, repositionable radar ──
+-- ── Minimap: square (QBCore method), repositionable ──
 local function minimapPos()
     local p = settings.positions and settings.positions.minimap
     if p and type(p.x) == 'number' then return p.x, p.y end   -- stored as fractions
     return MM.default.x, MM.default.y
 end
 
--- SetMinimapComponentPosition only takes effect after a bigmap refresh — debounce
--- one so drags/edits don't flicker the map.
+-- Aspect-ratio correction so the square stays square on ultrawide.
+local function aspectOffset()
+    local rx, ry = GetActiveScreenResolution()
+    local ar = (ry ~= 0) and (rx / ry) or (16 / 9)
+    if ar > (1920 / 1080) then return ((1920 / 1080 - ar) / 3.6) - 0.008 end
+    return 0.0
+end
+
+-- Swap the radar mask for the square texture (removes the round frame AND the
+-- GTA:O health/armour bars entirely). Done once.
+local squareReady = false
+local function loadSquareMask()
+    if squareReady then return true end
+    RequestStreamedTextureDict('squaremap', false)
+    local t = 0
+    while not HasStreamedTextureDictLoaded('squaremap') and t < 120 do Wait(50); t = t + 1 end
+    if not HasStreamedTextureDictLoaded('squaremap') then return false end
+    pcall(function() SetMinimapClipType(0) end)
+    AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'squaremap', 'radarmasksm')
+    AddReplaceTexture('platform:/textures/graphics', 'radarmask1g', 'squaremap', 'radarmasksm')
+    squareReady = true
+    return true
+end
+
+-- Apply the tested QBCore square layout, shifted by the player's frame delta.
+local function setMinimapPositions()
+    local px, py = minimapPos()
+    local off = aspectOffset()
+    local dx = px - MM.default.x     -- horizontal shift (screen fraction, same sign)
+    local dy = py - MM.default.y     -- vertical: 'B'-aligned, so moving down = smaller offset
+    pcall(function() SetMinimapClipType(0) end)
+    SetMinimapComponentPosition('minimap',      'L', 'B', 0.0   + off + dx, -0.047 - dy, 0.1638, 0.183)
+    SetMinimapComponentPosition('minimap_mask', 'L', 'B', 0.0   + off + dx,  0.0   - dy, 0.128,  0.20)
+    SetMinimapComponentPosition('minimap_blur', 'L', 'B', -0.00 + off + dx,  0.015 - dy, 0.262,  0.300)
+    SetBlipAlpha(GetNorthRadarBlip(), 0)
+end
+
 local refreshPending = false
 local function scheduleRefresh()
     if refreshPending then return end
     refreshPending = true
     SetTimeout(220, function()
         refreshPending = false
-        SetRadarBigmapEnabled(true, false)
+        SetBigmapActive(true, false)
         Wait(0)
-        SetRadarBigmapEnabled(false, false)
+        SetBigmapActive(false, false)
     end)
-end
-
-local function setMinimapPositions()
-    local x, y = minimapPos()
-    local m = MM.map
-    SetMinimapComponentPosition('minimap',      'L', 'T', x + m.dx,         y + m.dy,         m.w,        m.h)
-    SetMinimapComponentPosition('minimap_mask', 'L', 'T', x + m.dx,         y + m.dy,         m.w,        m.h)
-    SetMinimapComponentPosition('minimap_blur', 'L', 'T', x + m.dx - 0.015, y + m.dy - 0.02,  m.w + 0.03, m.h + 0.04)
 end
 
 local function applyMinimap(refresh)
@@ -163,10 +189,11 @@ local function applyMinimap(refresh)
     if refresh then scheduleRefresh() end
 end
 
--- Force the custom layout to actually apply once the HUD is loaded.
+-- Set up the square mask once loaded, then keep the layout asserted.
 CreateThread(function()
     while not loaded do Wait(200) end
-    Wait(400)
+    loadSquareMask()
+    Wait(300)
     applyMinimap(true)
     while true do
         Wait(1500)
@@ -216,4 +243,14 @@ CreateThread(function()
             SendNUIMessage({ action = 'money', cash = pd.money.cash, bank = pd.money.bank })
         end
     end
+end)
+
+-- Restore the vanilla radar mask when the resource stops (dev restarts).
+AddEventHandler('onResourceStop', function(res)
+    if res ~= GetCurrentResourceName() then return end
+    pcall(function()
+        RemoveReplaceTexture('platform:/textures/graphics', 'radarmasksm')
+        RemoveReplaceTexture('platform:/textures/graphics', 'radarmask1g')
+        SetMinimapClipType(0)
+    end)
 end)
