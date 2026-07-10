@@ -179,6 +179,46 @@ CreateThread(function()
     end
 end)
 
+-- ── Hands up (RP surrender) — keybind rebindable in GTA settings ──
+local handsUp = false
+local function setHandsUp(on)
+    handsUp = on
+    LocalPlayer.state:set('handsup', on, true)
+    local ped = PlayerPedId()
+    if on then
+        RequestAnimDict('missminuteman_1ig_2')
+        local t = 0; while not HasAnimDictLoaded('missminuteman_1ig_2') and t < 40 do Wait(10); t = t + 1 end
+        TaskPlayAnim(ped, 'missminuteman_1ig_2', 'handsup_base', 8.0, -8.0, -1, 49, 0, false, false, false)
+    else
+        ClearPedTasks(ped)
+    end
+end
+RegisterCommand('handsup', function() setHandsUp(not handsUp) end, false)
+RegisterKeyMapping('handsup', 'Hands up (surrender)', 'keyboard', 'X')
+
+-- keep the surrender pose held (movement/actions can cancel the anim)
+CreateThread(function()
+    while true do
+        Wait(900)
+        if handsUp then
+            local ped = PlayerPedId()
+            if IsEntityDead(ped) or IsPedInAnyVehicle(ped, false) then setHandsUp(false)
+            elseif not IsEntityPlayingAnim(ped, 'missminuteman_1ig_2', 'handsup_base', 3) then
+                TaskPlayAnim(ped, 'missminuteman_1ig_2', 'handsup_base', 8.0, -8.0, -1, 49, 0, false, false, false)
+            end
+        end
+    end
+end)
+
+-- ── Frisk / steal the nearest player (server gates: hands-up / downed / police) ──
+RegisterCommand('search_player', function()
+    if isOpen then return end
+    local target = closestPlayer(3.0)
+    if not target then Core.Notify(strings()['inv.no_target'], 'error'); return end
+    TriggerServerEvent('v-inventory:server:searchPlayer', target)
+end, false)
+RegisterKeyMapping('search_player', 'Search nearest player', 'keyboard', 'H')
+
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
     SetNuiFocus(false, false)

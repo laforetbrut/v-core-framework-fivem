@@ -37,7 +37,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | 5 | Advanced crafting (recipes, benches) | ⬜ |
 | 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
 | 7 | **Backpacks** (carrying one adds +12 slots / +20 kg) ✅ · **body armor** items apply armour on use ✅ · armor DLC ⬜ | 🔨 |
-| 8 | Place items in the world as entities + **player search / steal** (the `GetSearchable` export is ready for it) | ⬜ |
+| 8 | **Player search / steal** ✅ (frisk a nearby hands-up / downed player — server-validated proximity + gate, cross-player container, take **or** plant, hidden pocket never exposed) + **hands-up surrender**. In-world *placed* items (beyond ground drops) ⬜ | 🔨 |
 | 9 | Bonus: vending machines, garbage job, skill tree | ⬜ |
 
 **Optimization:** the item catalogue (`defs`, ~170 rows) is now sent to the NUI **once** on open and cached; move/use/drop responses omit it — every action payload dropped from ~full-catalogue to just the changed state.
