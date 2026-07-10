@@ -68,7 +68,7 @@ v-<module>  → feature resources (hud, banking, inventory, …).
               They consume v-core's API and events.
 ```
 
-Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-clothing → v-admin`.
+Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
 
 **Rule that is currently violated:** modules are supposed to never touch SQL — only `v-core` may.
 Five modules query the DB directly today. See `## 6. Cross-cutting debt`.
@@ -396,6 +396,22 @@ the panel refreshes owned counts live after each craft. fr+en. Reuses `v-invento
   full duration, so a crafted item can arrive up to `time` early if the client is patched. Low impact
   (inputs are still consumed atomically); move the timer server-side if it ever matters.
 - No skill/XP progression on crafts (roadmap #9).
+
+### `v-gathering` ✅ — resource nodes
+**Done.** New module. Supplies the raw materials `v-crafting` consumes, closing the economy loop.
+Three resource types (`mining`, `salvage`, `textile`) with map blips + ground markers at fixed **nodes**
+(real GTA V spots: Davis Quarry, scrap/junk yards, Grapeseed cotton fields). Interact key starts a world
+scenario for the resource's `time`; the harvest **cancels if the player walks off the node**. On completion
+the server (`v-gathering:harvest`) **re-checks proximity** (`GetPlayerPed`+`GetEntityCoords`), enforces a
+per-player cooldown, rolls a **weighted yield** (+ an optional rare bonus), and grants it via
+`exports['v-inventory']:AddItem` with a space-check. No NUI — blips, marker and `v-notify` toasts only.
+fr+en. No new DB tables.
+
+**Remaining.**
+- No tool requirement / tool durability on gathering yet (roadmap: pickaxe/axe, tool wear).
+- No gathering XP / yield scaling.
+- `gunpowder` has no gather source (only craftable/buyable) — add a chemical node or keep it shop-only.
+- Node coords are boot-static in `config.lua`.
 
 ### `v-clothing` ✅ — clothing store
 **Done.** Proximity store (5 branded locations, streamed shopkeepers), live on-ped preview with a
