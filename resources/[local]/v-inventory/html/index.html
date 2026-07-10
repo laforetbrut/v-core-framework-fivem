@@ -8,43 +8,49 @@
 <body>
   <div id="v-root" class="hidden">
     <div class="inv-wrap">
-      <!-- QUICK SLOTS (left) -->
-      <aside class="quickbar">
+      <!-- QUICK SLOTS (left rail) -->
+      <aside class="quickbar" style="--i:0">
         <span class="quick-label" data-i18n="inv.quick">Quick slots</span>
         <div class="quick-grid" id="quickbar" data-inv="player"></div>
       </aside>
 
       <!-- PLAYER -->
-      <section class="panel" id="panel-player">
+      <section class="panel" id="panel-player" style="--i:1">
+        <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
+        <span class="tab" id="player-label" data-i18n="inv.player">Inventory</span>
         <header class="panel-head">
-          <div class="ptitle"><span class="v-title" id="player-label" data-i18n="inv.player">Inventory</span>
-            <span class="wallet-chip" id="wallet" draggable="true"><span class="wc-ic">$</span><span id="wallet-amt">$0</span></span>
+          <div class="ptitle">
+            <span class="cap" data-i18n="inv.weight">Weight</span>
+            <span class="wallet-chip" id="wallet" draggable="true" role="button" aria-label="Wallet cash — drag to transfer"><span class="wc-ic" aria-hidden="true">$</span><span id="wallet-amt">$0</span></span>
           </div>
           <div class="wmeter">
-            <span class="wtxt" id="player-wtxt">0.00 / 30.00</span>
             <div class="segbar" id="player-seg"></div>
+            <span class="wtxt" id="player-wtxt"><b>0.00</b> / 30.00 KG</span>
           </div>
-          <input class="search" id="player-search" data-i18n-ph="inv.search" autocomplete="off" />
+          <input class="search" id="player-search" data-i18n-ph="inv.search" aria-label="Search inventory" autocomplete="off" />
         </header>
         <div class="grid v-scroll" id="grid-player" data-inv="player"></div>
       </section>
 
       <!-- SECONDARY -->
-      <section class="panel hidden" id="panel-secondary">
+      <section class="panel hidden" id="panel-secondary" style="--i:2">
+        <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
+        <span class="tab" id="sec-label">Stash</span>
         <header class="panel-head">
-          <div class="ptitle"><span class="v-title" id="sec-label">Stash</span></div>
+          <div class="ptitle"><span class="cap" data-i18n="inv.weight">Weight</span></div>
           <div class="wmeter">
-            <span class="wtxt" id="sec-wtxt">0.00 / 0.00</span>
             <div class="segbar" id="sec-seg"></div>
+            <span class="wtxt" id="sec-wtxt"><b>0.00</b> / 0.00 KG</span>
           </div>
-          <input class="search" id="sec-search" data-i18n-ph="inv.search" autocomplete="off" />
+          <input class="search" id="sec-search" data-i18n-ph="inv.search" aria-label="Search container" autocomplete="off" />
         </header>
         <div class="grid v-scroll" id="grid-secondary" data-inv="secondary"></div>
       </section>
 
       <!-- EQUIPMENT (body slots) -->
-      <section class="panel eqpanel hidden" id="panel-equipment">
-        <header class="panel-head"><div class="ptitle"><span class="v-title" data-i18n="inv.equipment">Equipment</span></div></header>
+      <section class="panel eqpanel hidden" id="panel-equipment" style="--i:2">
+        <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
+        <span class="tab" data-i18n="inv.equipment">Equipment</span>
         <div class="eq-body v-scroll" id="equipment"></div>
       </section>
     </div>
@@ -59,8 +65,8 @@
   <div id="amount" class="amount-overlay hidden">
     <div class="amount-box">
       <span class="v-label" id="amount-title">Amount</span>
-      <input type="number" id="amount-input" min="1" value="1" autocomplete="off" />
-      <input type="range" id="amount-range" min="1" max="1" value="1" />
+      <input type="number" id="amount-input" min="1" value="1" aria-label="Amount" autocomplete="off" />
+      <input type="range" id="amount-range" min="1" max="1" value="1" aria-label="Amount slider" />
       <div class="amount-btns">
         <button class="v-btn v-btn--ghost" id="amount-cancel" data-i18n="inv.cancel">Cancel</button>
         <button class="v-btn v-btn--accent" id="amount-ok" data-i18n="inv.confirm">Confirm</button>
@@ -72,7 +78,7 @@
   <div id="rename" class="amount-overlay hidden">
     <div class="amount-box">
       <span class="v-label" data-i18n="inv.rename">Rename</span>
-      <input type="text" id="rename-input" maxlength="30" autocomplete="off" />
+      <input type="text" id="rename-input" maxlength="30" aria-label="New item name" autocomplete="off" />
       <div class="amount-btns">
         <button class="v-btn v-btn--ghost" id="rename-cancel" data-i18n="inv.cancel">Cancel</button>
         <button class="v-btn v-btn--accent" id="rename-ok" data-i18n="inv.confirm">Confirm</button>

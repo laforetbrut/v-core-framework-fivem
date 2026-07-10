@@ -11,13 +11,15 @@ const CAT = {
   weapons: '#9C99A2', tools: '#F5A623', materials: '#B0895E', ingredients: '#7FB86B', drugs: '#C77DFF',
   smokes: '#8C8C8C', tech: '#4AA8FF', jewelry: '#F5C542', mechanic: '#F5A623', misc: '#FF6A1A',
 };
-const RARITY = { common: '#9C99A2', uncommon: '#43C46A', rare: '#4AA8FF', epic: '#C77DFF', legendary: '#F5A623', mythic: '#E5484D' };
+// Muted/earthy rarities — orange stays the only saturated hue (legendary blooms).
+const RARITY = { common: '#6B6156', uncommon: '#4E8C5A', rare: '#2F6F9E', epic: '#8A4BD1', legendary: '#FF6A1A', mythic: '#C2362F' };
+const SVG = 'viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
 const ICONS = {
-  use:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>',
-  give:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
-  split:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
-  drop:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
-  rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+  use:    `<svg ${SVG}><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>`,
+  give:   `<svg ${SVG}><path d="M5 12h14M13 6l6 6-6 6"/></svg>`,
+  split:  `<svg ${SVG}><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>`,
+  drop:   `<svg ${SVG}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>`,
+  rename: `<svg ${SVG}><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
 };
 
 // Equipment (clothing body slots) — cats match v-clothing categories.
@@ -25,15 +27,16 @@ const EQ = [
   { group: 'inv.eq.head', slots: ['masks', 'hats', 'glasses'] },
   { group: 'inv.eq.body', slots: ['tops', 'undershirt', 'arms', 'pants', 'shoes'] },
 ];
+const ESVG = 'viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6"';
 const EQ_IC = {
-  masks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8c0-2 3-3 8-3s8 1 8 3v3c0 4-4 8-8 8s-8-4-8-8Z"/><path d="M9 11h.01M15 11h.01"/></svg>',
-  hats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 16h16M6 16c0-4 1-9 6-9s6 5 6 9"/></svg>',
-  glasses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="14" r="3"/><circle cx="18" cy="14" r="3"/><path d="M9 13c1-1 5-1 6 0M3 11l2-2M21 11l-2-2"/></svg>',
-  tops: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3 4 6l2 3 1-1v12h10V8l1 1 2-3-4-3-3 2Z"/></svg>',
-  undershirt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3 5 6l2 2v13h10V8l2-2-3-3-2 2H10Z"/></svg>',
-  arms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v6a4 4 0 0 0 8 0V2M9 12v9h6v-9"/></svg>',
-  pants: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12l-1 18h-4l-1-9-1 9H6Z"/></svg>',
-  shoes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 16h13l5 2v2H2ZM5 16V9l4-1 2 3 4 1"/></svg>',
+  masks: `<svg ${ESVG}><path d="M4 8c0-2 3-3 8-3s8 1 8 3v3c0 4-4 8-8 8s-8-4-8-8Z"/><path d="M9 11h.01M15 11h.01"/></svg>`,
+  hats: `<svg ${ESVG}><path d="M4 16h16M6 16c0-4 1-9 6-9s6 5 6 9"/></svg>`,
+  glasses: `<svg ${ESVG}><circle cx="6" cy="14" r="3"/><circle cx="18" cy="14" r="3"/><path d="M9 13c1-1 5-1 6 0M3 11l2-2M21 11l-2-2"/></svg>`,
+  tops: `<svg ${ESVG}><path d="M8 3 4 6l2 3 1-1v12h10V8l1 1 2-3-4-3-3 2Z"/></svg>`,
+  undershirt: `<svg ${ESVG}><path d="M8 3 5 6l2 2v13h10V8l2-2-3-3-2 2H10Z"/></svg>`,
+  arms: `<svg ${ESVG}><path d="M8 2v6a4 4 0 0 0 8 0V2M9 12v9h6v-9"/></svg>`,
+  pants: `<svg ${ESVG}><path d="M6 3h12l-1 18h-4l-1-9-1 9H6Z"/></svg>`,
+  shoes: `<svg ${ESVG}><path d="M2 16h13l5 2v2H2ZM5 16V9l4-1 2 3 4 1"/></svg>`,
 };
 
 let state = null, strings = {}, defs = {};
@@ -59,19 +62,21 @@ const itemAt = (inv, slot) => (maps[inv] || {})[slot];
 const def = (name) => defs[name] || { label: name, weight: 0, category: 'misc', image: '', stackable: 1, usable: 0, metadata: {} };
 
 // ── Build fixed slot grids once ──
-function slotEl(inv, slot) {
+function slotEl(inv, slot, i) {
   const el = document.createElement('div');
   el.className = 'slot'; el.dataset.inv = inv; el.dataset.slot = slot;
+  el.style.setProperty('--i', i || 0);   // staggered seat-in on open
   el.innerHTML = '<span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span><i class="dura"></i>';
   return el;
 }
 function buildGrid(gridId, inv, count, start) {
   const g = byId(gridId); g.innerHTML = '';
-  for (let s = (start || 1); s <= count; s++) g.appendChild(slotEl(inv, s));
+  let i = 0;
+  for (let s = (start || 1); s <= count; s++) g.appendChild(slotEl(inv, s, i++));
 }
 function buildQuickbar(n) {
   const h = byId('quickbar'); h.innerHTML = '';
-  for (let s = 1; s <= n; s++) { const el = slotEl('player', s); el.dataset.hot = s; h.appendChild(el); }
+  for (let s = 1; s <= n; s++) { const el = slotEl('player', s, s - 1); el.dataset.hot = s; h.appendChild(el); }
 }
 function buildSegs(id, n) {
   const b = byId(id); b.innerHTML = '';
@@ -110,10 +115,10 @@ function renderGrid(inv) {
 }
 function setWeight(prefix, w, max) {
   const segs = byId(prefix + '-seg').querySelectorAll('.seg');
-  const on = max > 0 ? Math.round(Math.min(1, w / max) * segs.length) : 0;
+  const on = max > 0 ? Math.ceil(Math.min(1, w / max) * segs.length) : 0;
   segs.forEach((s, i) => s.classList.toggle('on', i < on));
-  byId(prefix + '-seg').classList.toggle('over', w > max);
-  byId(prefix + '-wtxt').textContent = (w / 1000).toFixed(2) + ' / ' + (max / 1000).toFixed(2);
+  byId(prefix + '-seg').classList.toggle('over', w > max * 0.9);
+  byId(prefix + '-wtxt').innerHTML = '<b>' + (w / 1000).toFixed(2) + '</b> / ' + (max / 1000).toFixed(2) + ' KG';
 }
 function render() {
   rebuildMaps();
@@ -139,12 +144,14 @@ function applyState(s) { if (!s || s.error) return; state = s; render(); }
 // ── Equipment (body slots) ──
 function buildEquipment() {
   const wrap = byId('equipment'); wrap.innerHTML = '';
+  let i = 0;
   EQ.forEach(g => {
     const grp = document.createElement('div'); grp.className = 'eq-group';
     grp.innerHTML = `<span class="eq-glabel">${t(g.group)}</span>`;
     const row = document.createElement('div'); row.className = 'eq-slots';
     g.slots.forEach(cat => {
       const el = document.createElement('div'); el.className = 'eqslot'; el.dataset.cat = cat;
+      el.style.setProperty('--i', i++);
       el.innerHTML = `<span class="eq-ic">${EQ_IC[cat] || ''}</span><span class="eq-name"></span>`;
       row.appendChild(el);
     });
@@ -374,7 +381,7 @@ function wire() {
   document.addEventListener('scroll', closeContext, true);
 }
 
-function close() { byId('v-root').classList.add('hidden'); hideTooltip(); closeContext(); closeAmount(); closeRename(); post('close'); }
+function close() { byId('v-root').classList.add('hidden'); byId('v-root').classList.remove('is-open'); hideTooltip(); closeContext(); closeAmount(); closeRename(); post('close'); }
 document.addEventListener('keydown', (e) => {
   if (byId('v-root').classList.contains('hidden')) return;
   if (e.key === 'Escape') {
@@ -394,13 +401,16 @@ window.addEventListener('message', (e) => {
     const hb = state.hotbar || 5;
     buildQuickbar(hb);
     buildGrid('grid-player', 'player', state.maxSlots || 40, hb + 1);   // main grid = slots after the quick slots
-    buildSegs('player-seg', 12);
-    if (state.secondary) { buildGrid('grid-secondary', 'secondary', state.secondary.maxSlots || 30, 1); buildSegs('sec-seg', 12); }
+    buildSegs('player-seg', 16);
+    if (state.secondary) { buildGrid('grid-secondary', 'secondary', state.secondary.maxSlots || 30, 1); buildSegs('sec-seg', 16); }
     byId('player-search').value = ''; byId('sec-search').value = '';
     applyStrings(); render();
-    byId('v-root').classList.remove('hidden');
+    const root = byId('v-root');
+    root.classList.remove('is-open', 'hidden');
+    void root.offsetWidth;              // reflow so the open sequence replays
+    root.classList.add('is-open');
   } else if (d.action === 'close') {
-    byId('v-root').classList.add('hidden'); closeContext(); closeAmount();
+    byId('v-root').classList.add('hidden'); byId('v-root').classList.remove('is-open'); closeContext(); closeAmount();
   } else if (d.action === 'cash') {
     if (state) { state.player.cash = d.cash; byId('wallet-amt').textContent = money(d.cash); }
   }
