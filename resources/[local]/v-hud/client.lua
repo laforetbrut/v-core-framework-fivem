@@ -14,10 +14,12 @@ local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 -- and the frame move together). map = the native square inside the frame; the
 -- frame's extra bottom height is the cover that hides the GTA:O health/armour
 -- bars (the square texture reshapes the map but doesn't remove those bars).
+-- IMPORTANT: sizeX:sizeY MUST keep the game's default minimap ratio
+-- (0.150 : 0.188888 from frontend.xml) or the map distorts and the player
+-- blip drifts off-centre. Resizing scales BOTH by the same factor.
 local MM = {
-    default = { x = 0.0125, y = 0.725 },     -- top-left of the frame (fractions)
-    w = 0.160, h = 0.178,                     -- frame footprint sent to the NUI (= the map)
-    map = { dx = 0.0, dy = 0.0, w = 0.160, h = 0.178 },  -- native map fills the frame
+    default = { x = 0.0125, y = 0.702 },     -- top-left of the map (fractions)
+    baseW = 0.150, baseH = 0.188888,          -- the correct default footprint
 }
 
 local function TL(k)
@@ -47,7 +49,7 @@ end
 CreateThread(function()
     loadSettings()
     Wait(250)
-    SendNUIMessage({ action = 'minimapFrame', w = MM.w, h = MM.h, default = MM.default })
+    SendNUIMessage({ action = 'minimapFrame', w = MM.baseW, h = MM.baseH, default = MM.default })
     SendNUIMessage({ action = 'init', settings = settings or {} })
     sendStrings()
 end)
@@ -182,12 +184,12 @@ local function setMinimapPositions()
     local px, py = minimapPos()
     local off = aspectOffset()
     local sc = minimapScale()
-    local m = MM.map
-    local w, h = m.w * sc, m.h * sc
+    local w, h = MM.baseW * sc, MM.baseH * sc      -- ratio preserved -> no distortion
+    local e = 0.013 * sc
     pcall(function() SetMinimapClipType(0) end)
-    SetMinimapComponentPosition('minimap',      'L', 'T', px + off + m.dx,        py + m.dy,        w,          h)
-    SetMinimapComponentPosition('minimap_mask', 'L', 'T', px + off + m.dx,        py + m.dy,        w,          h)
-    SetMinimapComponentPosition('minimap_blur', 'L', 'T', px + off + m.dx - 0.012, py + m.dy - 0.012, w + 0.024, h + 0.024)
+    SetMinimapComponentPosition('minimap',      'L', 'T', px + off,     py,     w,        h)
+    SetMinimapComponentPosition('minimap_mask', 'L', 'T', px + off,     py,     w,        h)
+    SetMinimapComponentPosition('minimap_blur', 'L', 'T', px + off - e, py - e, w + 2*e,  h + 2*e)
     SetBlipAlpha(GetNorthRadarBlip(), 0)
 end
 
