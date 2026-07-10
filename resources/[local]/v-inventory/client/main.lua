@@ -118,8 +118,9 @@ CreateThread(function()
                     AddTextComponentSubstringPlayerName('~INPUT_CONTEXT~ ' .. (strings()['inv.help_trunk'] or 'Open trunk'))
                     EndTextCommandDisplayHelp(0, false, true, -1)
                     if IsControlJustReleased(0, 38) then
-                        local plate = (GetVehicleNumberPlateText(veh) or ''):gsub('%s+', '')
-                        TriggerServerEvent('v-inventory:server:openStash', 'trunk:' .. plate, 'inv.trunk', 'trunk')
+                        -- send the vehicle's net id; the server resolves it, checks
+                        -- distance and reads the plate itself (never trust a client id)
+                        TriggerServerEvent('v-inventory:server:openStash', NetworkGetNetworkIdFromEntity(veh), 'inv.trunk', 'trunk')
                     end
                 end
             end

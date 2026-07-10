@@ -31,12 +31,12 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | — | **Fallback icons** for imageless items (clothing garment / generic box) | ✅ done |
 | — | **Hidden pocket** (1 kg concealed compartment, invisible to a police search) | ✅ done |
 | 1 | Unified player top-nav menu | ⬜ |
-| 2 | Weapons & attachments (serial/ammo metadata exists; attachments/on-back/draw anims don't) | ⬜ |
+| 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · attachments / on-back / draw anims ⬜ | 🔨 |
 | 3 | Shared stashes **with permissions** | ⬜ |
 | 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
 | 5 | Advanced crafting (recipes, benches) | ⬜ |
 | 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
-| 7 | Backpacks + armor DLC | ⬜ |
+| 7 | **Backpacks** (carrying one adds +12 slots / +20 kg) ✅ · **body armor** items apply armour on use ✅ · armor DLC ⬜ | 🔨 |
 | 8 | Place items in the world as entities + **player search / steal** (the `GetSearchable` export is ready for it) | ⬜ |
 | 9 | Bonus: vending machines, garbage job, skill tree | ⬜ |
 
@@ -454,7 +454,9 @@ Ordered by how much damage it can do.
    `v-shops`; the uncapped `AddMoney` in `v-core` and `v-admin`. Fix these before the server opens.
 2. **Missing server-side authorization.** `v-shops` and `v-banking` never check that the player is
    actually near the shop/ATM, and `shops.job` is loaded but never enforced. `v-status:server:onRespawn`
-   is an unvalidated self-cleanse.
+   is an unvalidated self-cleanse. ✅ **`v-inventory` openStash is now server-authoritative** (vehicle
+   trunks resolve by net id with a distance check + server-read plate; drops must be real; move/drop/give
+   amounts are floored) — the "open any trunk by plate / write arbitrary stash rows" exploit is closed.
 3. **Client-trusted writes.** `v-core:createCharacter` and `saveAppearance` take unbounded, unvalidated
    client tables straight into the DB. `v-clothing` writes client-supplied drawable ids into item
    metadata.

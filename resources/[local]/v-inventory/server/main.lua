@@ -10,6 +10,7 @@ local Pocket      = {}   -- [source] = items[]  (hidden compartment, stored in m
 local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent }
 local OpenStash   = {}   -- [source] = stash id currently open
 local UsableItems = {}   -- name -> handler(src, item)
+local Equipped    = {}   -- [source] = { slot, name }  currently-drawn weapon
 local dropCounter = 0
 local MONEY       = 'money'
 
@@ -51,6 +52,8 @@ CreateThread(function()
         -- otherwise `stackable == 1` / `usable == 1` silently fail everywhere.
         r.stackable = (r.stackable == true or r.stackable == 1) and 1 or 0
         r.usable    = (r.usable == true or r.usable == 1) and 1 or 0
+        if type(r.metadata) == 'string' then r.metadata = json.decode(r.metadata) or {} end
+        r.itype = r.metadata and r.metadata.type    -- weapon / ammo / backpack / armor / food / ...
         ItemDefs[r.name] = r
     end
 
@@ -76,6 +79,16 @@ local function weightOf(items)
     end
     return w
 end
+
+-- Carrying a backpack item raises the personal carry capacity.
+local function hasBackpack(src)
+    for _, it in ipairs(Inv[src] or {}) do
+        if ItemDefs[it.name] and ItemDefs[it.name].itype == 'backpack' then return true end
+    end
+    return false
+end
+local function maxWeightFor(src) return Config.MaxWeight + (hasBackpack(src) and Config.Backpack.weight or 0) end
+local function maxSlotsFor(src)  return Config.MaxSlots  + (hasBackpack(src) and Config.Backpack.slots  or 0) end
 
 local function usedSlots(items)
     local u = {}
@@ -151,6 +164,7 @@ AddEventHandler('playerDropped', function()
     Inv[src] = nil
     Pocket[src] = nil
     OpenStash[src] = nil
+    Equipped[src] = nil
 end)
 
 -- ── Stash loading ──────────────────────────────────────────────
@@ -189,8 +203,8 @@ local function buildState(src)
     end
     return {
         defs      = ItemDefs,
-        maxWeight = Config.MaxWeight,
-        maxSlots  = Config.MaxSlots,
+        maxWeight = maxWeightFor(src),
+        maxSlots  = maxSlotsFor(src),
         hotbar    = Config.HotbarSlots,
         player    = { items = Inv[src] or {}, weight = weightOf(Inv[src] or {}),
                       cash = (p and p.money and p.money.cash) or 0 },
@@ -214,7 +228,7 @@ end)
 
 -- ── Move (player <-> secondary, or rearrange) ──────────────────
 local function containerOf(src, key)
-    if key == 'player' then return Inv[src], Config.MaxSlots, Config.MaxWeight end
+    if key == 'player' then return Inv[src], maxSlotsFor(src), maxWeightFor(src) end
     if key == 'pocket' then return Pocket[src], Config.Pocket.slots, Config.Pocket.weight end
     local sid = OpenStash[src]
     if key == 'secondary' and sid and Stashes[sid] then
@@ -265,8 +279,11 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
 
     local it = itemAt(fromItems, data.fromSlot)
     if not it then resolve(false); return end
-    local amount = math.min(tonumber(data.amount) or it.amount, it.amount)
+    local amount = math.floor(math.min(tonumber(data.amount) or it.amount, it.amount))
     if amount <= 0 then resolve(false); return end
+
+    -- moving the drawn weapon out of its slot -> holster it first
+    if data.from == 'player' then maybeUnequip(source, data.fromSlot) end
 
     -- weight check for cross-container moves
     if data.from ~= data.to then
@@ -303,12 +320,81 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
     resolve(buildState(source))
 end)
 
+-- ── Weapons (equip / ammo / serial) ────────────────────────────
+local function genSerial()
+    local chars, s = 'ABCDEFGHJKLMNPQRSTUVWXYZ0123456789', ''
+    for _ = 1, 8 do local i = math.random(1, #chars); s = s .. chars:sub(i, i) end
+    return s
+end
+
+-- If the given slot holds the currently-drawn weapon, holster it (the client
+-- reports the remaining ammo back before removing it). Called before a weapon
+-- item is moved / dropped / given so the ped never keeps a gone weapon.
+local function maybeUnequip(src, slot)
+    local eq = Equipped[src]
+    if eq and eq.slot == slot then
+        Equipped[src] = nil
+        TriggerClientEvent('v-inventory:client:unequipWeapon', src, slot, eq.name)
+    end
+end
+
+-- Client reports a weapon's live ammo (on holster / periodically) -> persist it.
+RegisterNetEvent('v-inventory:server:weaponAmmo', function(slot, ammo)
+    local src = source
+    local it = itemAt(Inv[src] or {}, slot)
+    if it and ItemDefs[it.name] and ItemDefs[it.name].itype == 'weapon' then
+        it.metadata = it.metadata or {}
+        it.metadata.ammo = math.max(0, math.floor(tonumber(ammo) or 0))
+        syncPlayer(src)
+    end
+end)
+
 -- ── Use ────────────────────────────────────────────────────────
 Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
     local it = itemAt(Inv[source] or {}, slot)
     if not it then resolve(false); return end
     local d = ItemDefs[it.name]
     if not d or d.usable ~= 1 then resolve(false); return end
+    local itype = d.itype
+
+    -- Weapon: toggle equip/unequip (never consumed). Serial minted on first draw.
+    if itype == 'weapon' then
+        local eq = Equipped[source]
+        if eq and eq.slot == slot then
+            Equipped[source] = nil
+            TriggerClientEvent('v-inventory:client:unequipWeapon', source, slot, it.name)
+        else
+            if eq then TriggerClientEvent('v-inventory:client:unequipWeapon', source, eq.slot, eq.name) end
+            it.metadata = it.metadata or {}
+            it.metadata.serial = it.metadata.serial or genSerial()
+            Equipped[source] = { slot = slot, name = it.name }
+            TriggerClientEvent('v-inventory:client:equipWeapon', source,
+                { slot = slot, name = it.name, ammo = it.metadata.ammo or 0, serial = it.metadata.serial })
+        end
+        syncPlayer(source)
+        resolve(buildState(source)); return
+    end
+
+    -- Ammo: top up the drawn weapon (consumes one box).
+    if itype == 'ammo' then
+        local eq = Equipped[source]
+        if not eq then Core.Notify(source, LP(source, 'inv.no_weapon'), 'error'); resolve(false); return end
+        TriggerClientEvent('v-inventory:client:giveAmmo', source, eq.name, Config.AmmoPerItem or 30)
+        removeFromSlot(Inv[source], slot, 1)
+        syncPlayer(source)
+        resolve(buildState(source)); return
+    end
+
+    -- Body armor.
+    if itype == 'armor' then
+        TriggerClientEvent('v-inventory:client:applyArmor', source, Config.ArmorAmount or 100)
+        removeFromSlot(Inv[source], slot, 1)
+        syncPlayer(source)
+        Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
+        resolve(buildState(source)); return
+    end
+
+    -- Default consumable (food / drink / drug / medical / ...).
     local handler = UsableItems[it.name]
     if handler then handler(source, it) end
     removeFromSlot(Inv[source], slot, 1)
@@ -356,7 +442,9 @@ Core.RegisterCallback('v-inventory:drop', function(source, resolve, data)
 
     local it = itemAt(Inv[source] or {}, data.slot)
     if not it then resolve(false); return end
-    local amount = math.min(tonumber(data.amount) or it.amount, it.amount)
+    local amount = math.floor(math.min(tonumber(data.amount) or it.amount, it.amount))
+    if amount <= 0 then resolve(false); return end
+    maybeUnequip(source, data.slot)   -- holster if dropping the drawn weapon
     dropCounter = dropCounter + 1
     local id = 'drop:' .. dropCounter
     local stash = loadStash(id, Config.Drop.slots, Config.Drop.weight, false)
@@ -388,9 +476,11 @@ Core.RegisterCallback('v-inventory:give', function(source, resolve, data)
 
     local it = itemAt(Inv[source] or {}, data.slot)
     if not target or not it or not Inv[target] then resolve({ error = 'target' }); return end
-    local amount = math.min(tonumber(data.amount) or it.amount, it.amount)
+    local amount = math.floor(math.min(tonumber(data.amount) or it.amount, it.amount))
+    if amount <= 0 then resolve(false); return end
+    maybeUnequip(source, data.slot)   -- holster if giving away the drawn weapon
     local d = ItemDefs[it.name]
-    if not addToContainer(Inv[target], it.name, amount, it.metadata, Config.MaxSlots, Config.MaxWeight) then
+    if not addToContainer(Inv[target], it.name, amount, it.metadata, maxSlotsFor(target), maxWeightFor(target)) then
         resolve({ error = 'space' }); return
     end
     removeFromSlot(Inv[source], data.slot, amount)
@@ -400,15 +490,35 @@ Core.RegisterCallback('v-inventory:give', function(source, resolve, data)
     resolve(buildState(source))
 end)
 
--- ── Open a secondary container (trunk / glovebox / gang / ground) ──
-RegisterNetEvent('v-inventory:server:openStash', function(id, label, kind)
+-- ── Open a secondary container (trunk / glovebox / ground) ─────
+-- Server-authoritative: the client NEVER supplies a stash id for a vehicle. It
+-- sends the vehicle's net id; the server resolves the entity, checks the player
+-- is next to it, and derives the id from the plate. This closes the old exploit
+-- (open any trunk by plate from anywhere / write arbitrary `stashes` rows).
+RegisterNetEvent('v-inventory:server:openStash', function(payload, label, kind)
     local src = source
-    local cfg = ({ trunk = Config.Trunk, glovebox = Config.Glovebox, drop = Config.Drop })[kind] or Config.Trunk
-    local persistent = kind ~= 'drop'
-    local s = loadStash(id, cfg.slots, cfg.weight, persistent)
-    s.label = label or kind
-    OpenStash[src] = id
-    TriggerClientEvent('v-inventory:client:openSecondary', src)
+    if kind == 'trunk' or kind == 'glovebox' then
+        local netId = tonumber(payload)
+        if not netId then return end
+        local veh = NetworkGetEntityFromNetworkId(netId)
+        if not veh or veh == 0 or not DoesEntityExist(veh) then return end
+        local ped = GetPlayerPed(src)
+        if ped == 0 or #(GetEntityCoords(ped) - GetEntityCoords(veh)) > 5.0 then return end
+        local plate = (GetVehicleNumberPlateText(veh) or ''):gsub('%s+', '')
+        if plate == '' then return end
+        local cfg = (kind == 'glovebox') and Config.Glovebox or Config.Trunk
+        local id  = kind .. ':' .. plate
+        local s = loadStash(id, cfg.slots, cfg.weight, true)
+        s.label, s.kind = label or kind, kind
+        OpenStash[src] = id
+        TriggerClientEvent('v-inventory:client:openSecondary', src)
+    elseif kind == 'drop' then
+        local id = tostring(payload or '')
+        if not id:match('^drop:%d+$') or not Stashes[id] then return end   -- must be a real ground drop
+        Stashes[id].kind = 'drop'
+        OpenStash[src] = id
+        TriggerClientEvent('v-inventory:client:openSecondary', src)
+    end
 end)
 
 RegisterNetEvent('v-inventory:server:closeStash', function()
@@ -418,7 +528,7 @@ end)
 -- ── Server exports (used by shops / jobs / other modules) ──────
 exports('AddItem', function(src, name, amount, metadata, slot)
     if not Inv[src] then return false end
-    local ok = addToContainer(Inv[src], name, amount, metadata, Config.MaxSlots, Config.MaxWeight, slot)
+    local ok = addToContainer(Inv[src], name, amount, metadata, maxSlotsFor(src), maxWeightFor(src), slot)
     if ok then syncPlayer(src) end
     return ok
 end)
@@ -465,7 +575,7 @@ RegisterCommand('giveitem', function(source, args)
     local name = args[2]
     local amount = tonumber(args[3]) or 1
     if not name or not ItemDefs[name] or not Inv[target] then return end
-    if addToContainer(Inv[target], name, amount, nil, Config.MaxSlots, Config.MaxWeight) then
+    if addToContainer(Inv[target], name, amount, nil, maxSlotsFor(target), maxWeightFor(target)) then
         syncPlayer(target)
         Core.Notify(target, ('+%dx %s'):format(amount, ItemDefs[name].label), 'success')
     end
