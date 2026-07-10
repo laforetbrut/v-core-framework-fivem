@@ -26,7 +26,8 @@ local function openBank()
     Core.TriggerCallback('v-banking:getData', function(data)
         if not data then return end
         isOpen = true
-        exports['v-core']:OpenMenu()
+        SetNuiFocus(true, true)   -- focus is per-resource: only the page owner may take it
+        exports['v-core']:MenuOpened()
         SendNUIMessage({
             action  = 'open',
             data    = data,
@@ -50,7 +51,8 @@ end)
 
 RegisterNUICallback('close', function(_, cb)
     isOpen = false
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
     cb('ok')
 end)
 
@@ -69,5 +71,6 @@ end)
 -- Never leave a player's cursor/controls stuck if the resource is restarted mid-use.
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
 end)

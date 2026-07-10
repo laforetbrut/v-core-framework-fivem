@@ -12,7 +12,8 @@ local function openInventory()
     Core.TriggerCallback('v-inventory:getState', function(state)
         if not state then return end
         isOpen = true
-        exports['v-core']:OpenMenu()
+        SetNuiFocus(true, true)   -- focus is per-resource: only the page owner may take it
+        exports['v-core']:MenuOpened()
         SendNUIMessage({ action = 'open', state = state, strings = strings() })
     end)
 end
@@ -38,7 +39,8 @@ RegisterKeyMapping('vinv', 'Open inventory', 'keyboard', 'TAB')
 -- ── NUI callbacks ──────────────────────────────────────────────
 RegisterNUICallback('close', function(_, cb)
     isOpen = false
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
     TriggerServerEvent('v-inventory:server:closeStash')
     cb('ok')
 end)
@@ -160,5 +162,6 @@ end)
 
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
 end)

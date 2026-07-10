@@ -299,7 +299,8 @@ local function openStore()
     savedApp = pd and pd.appearance and json.decode(json.encode(pd.appearance)) or {}
     preview = {}
     isOpen = true
-    exports['v-core']:OpenMenu()
+    SetNuiFocus(true, true)   -- focus is per-resource: only the page owner may take it
+    exports['v-core']:MenuOpened()
     startCam()
     -- build initial per-category data (drawable count for the tile grid) from the ped
     local ped = PlayerPedId()
@@ -391,7 +392,8 @@ end)
 
 RegisterNUICallback('close', function(_, cb)
     isOpen = false
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
     stopCam()
     revert()
     cb('ok')
@@ -448,6 +450,7 @@ end)
 
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
-    exports['v-core']:CloseMenu()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed()
     for _, p in pairs(spawned) do if DoesEntityExist(p) then DeletePed(p) end end
 end)

@@ -1,5 +1,13 @@
 # Error Log
 
+## [2026-07-10 17:10] — No mouse cursor in inventory / admin / banking / shops / clothing
+
+**Context:** Every NUI menu routed its focus through a shared helper, `exports['v-core']:OpenMenu()`, which called `SetNuiFocus(true, true)` inside v-core.
+**Error:** The panels rendered, but the player had no cursor and no keyboard capture — the UI was impossible to use. v-hud (F7) and v-spawn were unaffected.
+**Root cause:** `SET_NUI_FOCUS` is **scoped to the calling resource**. In `code/components/nui-resources/src/ResourceUIScripting.cpp` the handler fetches the *caller's* `ResourceUI`, returns early when `resourceUI->HasFrame()` is false, and otherwise posts `{"type":"focusFrame","frameName":"<caller resource name>"}`. `v-core` declares no `ui_page`, so `HasFrame()` was false and the call was a **silent no-op** — no error, no log line. Even with a frame it would have focused v-core's own page, never the module's. The two modules that still called `SetNuiFocus` locally (v-hud, v-spawn) kept working, which is exactly the pattern that made the bug look module-specific.
+**Fix:** `v-core/client/focus.lua` no longer touches `SetNuiFocus`; it only keeps the reference-counted `LocalPlayer.state.nuiOpen` bookkeeping, renamed to `MenuOpened()` / `MenuClosed()` (+ `IsAnyMenuOpen()`). Each owning resource now calls `SetNuiFocus` itself, immediately next to its `MenuOpened()` / `MenuClosed()` report.
+**Prevention:** **Never call `SetNuiFocus`, `SendNUIMessage`, `RegisterNUICallback` or `SetNuiFocusKeepInput` from a resource that does not declare the `ui_page`.** They are all resolved against the calling resource's own NUI frame. A shared helper may own *bookkeeping* (statebags, ref-counting), never the native itself. When a native silently does nothing, check whether it is resource-scoped before assuming the arguments are wrong.
+
 ## [2026-07-08 08:29] — Expand-Archive fails on bracketed resource folders
 
 **Context:** Extracting `oxmysql.zip` / `menuv.zip` directly into `resources/[standalone]` with PowerShell `Expand-Archive`.
