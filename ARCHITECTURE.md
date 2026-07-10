@@ -34,7 +34,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · attachments / on-back / draw anims ⬜ | 🔨 |
 | 3 | **Shared/gang stashes with permissions** — persistent containers gated by job / gang / permission tier, opened via `exports['v-inventory']:OpenSharedStash(src, id)` or a net event; access checked server-side on every open (`Config.SharedStashes`) | ✅ framework (needs placement/interaction points) |
 | 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
-| 5 | Advanced crafting (recipes, benches) | ⬜ |
+| 5 | Advanced crafting (recipes, benches) ✅ — **`v-crafting`** module: 4 stations (workbench / reloading / kitchen / electronics), 25 recipes, server-authoritative proximity + input check + space-check with refund, Field-Case NUI (material chips have/need + progress bar), optional job/perm gates | ✅ |
 | 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
 | 7 | **Backpacks** (carrying one adds +12 slots / +20 kg) ✅ · **body armor** items apply armour on use ✅ · armor DLC ⬜ | 🔨 |
 | 8 | **Player search / steal** ✅ (frisk a nearby hands-up / downed player — server-validated proximity + gate, cross-player container, take **or** plant, hidden pocket never exposed) + **hands-up surrender**. In-world *placed* items (beyond ground drops) ⬜ | 🔨 |
@@ -68,7 +68,7 @@ v-<module>  → feature resources (hud, banking, inventory, …).
               They consume v-core's API and events.
 ```
 
-Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-clothing → v-admin`.
+Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-clothing → v-admin`.
 
 **Rule that is currently violated:** modules are supposed to never touch SQL — only `v-core` may.
 Five modules query the DB directly today. See `## 6. Cross-cutting debt`.
@@ -378,6 +378,25 @@ space via `AddItem`, then charges and logs. fr+en.
 - No in-game management UI (`config.lua` literally says *"editable in-game later"*).
 - The NUI silently ignores `{error='funds'|'space'}`.
 
+### `v-crafting` ✅ — workbench crafting
+**Done.** New module. Four **stations** (`workbench`, `ammo`, `cooking`, `electronics`) with map blips
+and ground markers at fixed benches; **25 recipes** defined in `config.lua` (inputs → output, produced
+count, progress time, optional `gate` = job/grade/permission). Opening a station and crafting are both
+**server-authoritative**: `getStation` / `craft` re-check the player's real distance to a bench server-side
+(`atBench`, uses `GetPlayerPed`+`GetEntityCoords`), verify every input for `qty × amount`, consume them,
+then `AddItem` the output — **refunding the inputs if the output doesn't fit**. Per-player cooldown +
+in-flight lock guard against spam/double-submit. Field-Case NUI: recipe rows show each material as a
+`have/need` chip (red when short), a quantity stepper capped to the craftable amount, and a progress bar;
+the panel refreshes owned counts live after each craft. fr+en. Reuses `v-inventory`
+`GetItemCount`/`RemoveItem`/`AddItem` exports — no new DB tables.
+
+**Remaining.**
+- Recipes are boot-static in `config.lua` — no in-game recipe editor yet.
+- The craft progress time is client-side (feel only); the server enforces order + cooldown but not the
+  full duration, so a crafted item can arrive up to `time` early if the client is patched. Low impact
+  (inputs are still consumed atomically); move the timer server-side if it ever matters.
+- No skill/XP progression on crafts (roadmap #9).
+
 ### `v-clothing` ✅ — clothing store
 **Done.** Proximity store (5 branded locations, streamed shopkeepers), live on-ped preview with a
 drag-orbit camera, per-drawable texture picker, buy-as-item, equip by using the item (swaps the worn
@@ -439,7 +458,6 @@ parameterized query). Every action validated server-side and audit-logged.
 | `v-radial` | high | Radial menu (context actions) — the other main interaction surface |
 | `v-jobs` | high | Jobs, grades, duty, salaries (`jobs` table exists) + in-game manager |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD) |
-| `v-crafting` | medium | Recipes → items, benches |
 | `v-anticheat` | medium | Server-side sanity checks; explosion / health / money guards, logged |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin) |
 | `v-gangs` | low | Gangs & mafias, territories (`gangs` table exists) |

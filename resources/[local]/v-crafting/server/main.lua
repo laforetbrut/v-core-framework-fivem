@@ -1,0 +1,132 @@
+-- v-crafting | server
+-- Authority: validates the player is really at the requested bench, owns the
+-- inputs, and has space for the output before consuming anything.
+local Core = exports['v-core']:GetCore()
+
+local ItemDefs = {}   -- name -> row (label / image / weight / category / rarity)
+local Busy     = {}   -- src -> true while a craft is resolving (anti double-submit)
+local LastAt   = {}   -- src -> os.time() of last craft (cooldown)
+
+CreateThread(function()
+    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
+    for _, r in ipairs(MySQL.query.await('SELECT name, label, image, weight, category, metadata FROM items') or {}) do
+        ItemDefs[r.name] = r
+    end
+end)
+
+local function defOf(name)
+    local d = ItemDefs[name]
+    if not d then return { label = name, image = nil, category = 'misc', rarity = 'common' } end
+    local meta = d.metadata
+    if type(meta) == 'string' then meta = json.decode(meta) or {} end
+    return { label = d.label, image = d.image, weight = d.weight, category = d.category,
+             rarity = (meta and meta.rarity) or 'common' }
+end
+
+-- Recipes for a station, resolved with defs + the player's current input counts.
+local function recipesFor(source, stationId)
+    local out = {}
+    for i, r in ipairs(Config.Recipes) do
+        if r.station == stationId then
+            local inputs = {}
+            for item, qty in pairs(r.inputs) do
+                local d = defOf(item)
+                inputs[#inputs + 1] = { item = item, need = qty, label = d.label,
+                    image = d.image, have = exports['v-inventory']:GetItemCount(source, item) or 0 }
+            end
+            table.sort(inputs, function(a, b) return a.item < b.item end)
+            local d = defOf(r.output)
+            out[#out + 1] = { idx = i, output = r.output, label = d.label, image = d.image,
+                category = d.category, rarity = d.rarity, count = r.count, time = r.time, inputs = inputs }
+        end
+    end
+    return out
+end
+
+-- Is `source` actually standing at one of the station's benches?
+local function atBench(source, stationId)
+    local st = Config.Stations[stationId]
+    if not st then return false end
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false end
+    local pos = GetEntityCoords(ped)
+    for _, b in ipairs(st.benches) do
+        if #(pos - vector3(b.x, b.y, b.z)) <= (Config.Distance + 1.5) then return true end
+    end
+    return false
+end
+
+local function canGate(source, gate)
+    if not gate then return true end
+    if gate.permission and not Core.HasPermission(source, gate.permission) then return false end
+    if gate.job then
+        local player = Core.GetPlayer(source)
+        local job = player and player.job
+        if not job or job.name ~= gate.job then return false end
+        if gate.grade and (job.grade or 0) < gate.grade then return false end
+    end
+    return true
+end
+
+Core.RegisterCallback('v-crafting:getStation', function(source, resolve, stationId)
+    local st = Config.Stations[stationId]
+    if not st or not atBench(source, stationId) then resolve(false); return end
+    resolve({ id = stationId, label = st.label, recipes = recipesFor(source, stationId) })
+end)
+
+Core.RegisterCallback('v-crafting:craft', function(source, resolve, data)
+    data = data or {}
+    local stationId = data.station
+    local recipe = Config.Recipes[tonumber(data.idx) or -1]
+    local amount = math.max(1, math.min(10, math.floor(tonumber(data.amount) or 1)))
+
+    if Busy[source] then resolve({ error = 'busy' }); return end
+    if not recipe or recipe.station ~= stationId then resolve(false); return end
+    if not atBench(source, stationId) then
+        Core.Notify(source, LP(source, 'craft.too_far'), 'error'); resolve({ error = 'far' }); return
+    end
+    if not canGate(source, recipe.gate) then
+        Core.Notify(source, LP(source, 'craft.locked'), 'error'); resolve({ error = 'gate' }); return
+    end
+    if os.time() - (LastAt[source] or 0) < Config.Cooldown then resolve({ error = 'cooldown' }); return end
+
+    Busy[source] = true
+
+    -- Verify every input is present for the requested amount before touching anything.
+    for item, qty in pairs(recipe.inputs) do
+        if (exports['v-inventory']:GetItemCount(source, item) or 0) < qty * amount then
+            Busy[source] = nil
+            Core.Notify(source, LP(source, 'craft.missing'), 'error'); resolve({ error = 'missing' }); return
+        end
+    end
+
+    -- Consume inputs, then add the output. If the output can't fit, refund the inputs.
+    local removed = {}
+    for item, qty in pairs(recipe.inputs) do
+        exports['v-inventory']:RemoveItem(source, item, qty * amount)
+        removed[item] = qty * amount
+    end
+
+    if not exports['v-inventory']:AddItem(source, recipe.output, recipe.count * amount) then
+        for item, qty in pairs(removed) do exports['v-inventory']:AddItem(source, item, qty) end
+        Busy[source] = nil
+        Core.Notify(source, LP(source, 'craft.nospace'), 'error'); resolve({ error = 'space' }); return
+    end
+
+    LastAt[source] = os.time()
+    Busy[source] = nil
+
+    local player = Core.GetPlayer(source)
+    Core.Log('crafting', ('%s crafted %dx %s'):format(
+        player and player.citizenid or source, recipe.count * amount, recipe.output), nil,
+        player and player.citizenid or nil)
+    Core.Notify(source, LP(source, 'craft.done', recipe.count * amount, defOf(recipe.output).label), 'success')
+
+    -- Return the refreshed recipe list so the panel updates owned counts live.
+    resolve({ ok = true, recipes = recipesFor(source, stationId) })
+end)
+
+AddEventHandler('playerDropped', function()
+    local src = source
+    Busy[src] = nil; LastAt[src] = nil
+end)

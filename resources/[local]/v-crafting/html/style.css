@@ -1,0 +1,112 @@
+/* v-crafting — "FIELD CASE" workbench terminal.
+   Chamfered case panel, orange stencil tab, machined L-brackets, foam-cutout rows,
+   material chips + a progress bar. Tokens + primitives come from v-ui/theme.css.
+   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+/* ── Overlay: blueprint micro-grid + vignette + grain ── */
+.craft-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(120% 100% at 50% 12%, rgba(255,106,26,.05), rgba(0,0,0,.62) 46%, rgba(0,0,0,.88) 100%),
+    repeating-linear-gradient(0deg,  rgba(255,147,84,.03) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(90deg, rgba(255,147,84,.03) 0 1px, transparent 1px 46px);
+  animation:v-fade var(--v-t-fast) ease; }
+.craft-overlay::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+
+/* ── Case panel ── */
+.craft { position:relative; z-index:var(--z-raised); width:560px; max-height:84vh;
+  display:flex; flex-direction:column; padding:26px 22px 22px; }
+
+.close { position:absolute; top:13px; right:14px; z-index:var(--z-raised);
+  width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) ease; }
+.close:hover { color:var(--v-accent-300); }
+.close svg { width:16px; height:16px; }
+
+.sub { font-family:var(--v-font-display); font-size:11px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); padding-bottom:13px; margin-bottom:12px;
+  border-bottom:1px solid var(--v-line); }
+
+/* ── Recipe list ── */
+.list { display:flex; flex-direction:column; gap:8px; padding:2px 10px 4px; overflow-y:auto; min-height:0; }
+
+/* row = recessed foam bar */
+.row { position:relative; display:flex; align-items:center; gap:12px; padding:10px 12px;
+  border-radius:var(--v-r-md); background-color:#12100D; overflow:hidden;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
+  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.row:hover { transform:translateY(-2px); background-color:#171410;
+  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
+.row.locked { opacity:.62; }
+.row.locked:hover { transform:none; background-color:#12100D;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line); }
+
+.thumb { flex:0 0 auto; width:46px; height:46px; border-radius:var(--v-r-sm);
+  background:var(--v-bg-sunk) no-repeat center / 36px;
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.7), inset 0 0 0 1px var(--cat, var(--v-line)), inset 0 0 12px -6px var(--cat, transparent);
+  display:flex; align-items:center; justify-content:center; }
+.thumb.ph { color:var(--v-text-faint); }
+.thumb.ph svg { width:26px; height:26px; opacity:.6; }
+
+.info { flex:1; min-width:0; display:flex; flex-direction:column; gap:6px; }
+.info .top { display:flex; align-items:baseline; gap:8px; }
+.info .name { font-family:var(--v-font-display); font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; font-size:13px; color:var(--v-text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.info .mk { font-family:var(--v-font-num); font-size:11px; font-weight:700; color:var(--v-accent-300); }
+
+/* material chips */
+.mats { display:flex; flex-wrap:wrap; gap:5px; }
+.mat { display:inline-flex; align-items:center; gap:5px; padding:2px 7px 2px 3px;
+  border-radius:999px; background:#0E0C0A; box-shadow:inset 0 0 0 1px var(--v-line);
+  font-family:var(--v-font-num); font-variant-numeric:tabular-nums; font-size:11px; color:var(--v-text-dim); }
+.mat b { color:var(--v-text); font-weight:700; }
+.mat.short { box-shadow:inset 0 0 0 1px rgba(194,54,47,.6); }
+.mat.short b { color:#E5484D; }
+.mat .mi { width:18px; height:18px; border-radius:3px; background:var(--v-bg-sunk) no-repeat center / 15px;
+  display:flex; align-items:center; justify-content:center; color:var(--v-text-faint); }
+.mat .mi.ph svg { width:13px; height:13px; opacity:.6; }
+
+/* action column */
+.act { flex:0 0 auto; display:flex; flex-direction:column; align-items:flex-end; gap:7px; }
+.stepper { display:flex; align-items:center; gap:5px; }
+.step { width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+  border-radius:var(--v-r-sm); border:1px solid var(--v-line-2);
+  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text);
+  font-family:var(--v-font-num); font-size:15px; line-height:1; cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.step:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+.qty { min-width:20px; text-align:center; font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
+  font-size:13px; font-weight:700; color:var(--v-text); }
+
+.mk-btn { font-family:var(--v-font-display); font-size:12px; font-weight:700; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--v-ink);
+  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent);
+  border-radius:var(--v-r-sm); padding:8px 16px; cursor:pointer;
+  box-shadow:0 5px 16px -4px var(--v-accent-600);
+  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease; }
+.mk-btn:hover { transform:translateY(-1px); box-shadow:0 7px 20px -5px var(--v-accent-600); }
+.mk-btn:active { transform:translateY(0); }
+.mk-btn:disabled { background:var(--v-bg-600); color:var(--v-text-faint); border-color:var(--v-line-2);
+  box-shadow:none; cursor:not-allowed; transform:none; }
+
+/* progress bar (fills during a craft) */
+.bar { position:absolute; left:0; right:0; bottom:0; height:3px; background:transparent; pointer-events:none; }
+.bar > i { display:block; height:100%; width:0; background:linear-gradient(90deg,var(--v-accent-300),var(--v-accent)); }
+.row.working { box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent); }
+.row.working .mk-btn { opacity:.6; pointer-events:none; }
+
+/* ── Open sequence ── */
+#craft:not(.hidden) .craft { animation:v-case-open .34s var(--v-ease) backwards; }
+#craft:not(.hidden) .row { animation:v-seat .26s var(--v-ease) backwards; animation-delay:calc(var(--i, 0) * 16ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  .row:hover, .mk-btn:hover, .step:hover { transform:none !important; }
+}
