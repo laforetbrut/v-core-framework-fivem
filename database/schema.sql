@@ -111,6 +111,38 @@ CREATE TABLE IF NOT EXISTS `server_config` (
   PRIMARY KEY (`key`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- ─── Appearance / clothing catalogue (Phase 3) ───────────────
+-- Every scanned garment, keyed by its STABLE identity (collection + local index)
+-- per gender — see resources/[local]/v-appearance (stable-identity refactor).
+CREATE TABLE IF NOT EXISTS `clothing_catalogue` (
+  `id`              INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `kind`            ENUM('comp','prop') NOT NULL,
+  `component_id`    TINYINT NOT NULL,                 -- component or prop-anchor id
+  `collection`      VARCHAR(64) NOT NULL DEFAULT '',  -- '' = base game
+  `local_index`     SMALLINT NOT NULL,
+  `gender`          ENUM('m','f','u') NOT NULL,
+  `texture_count`   TINYINT NOT NULL DEFAULT 1,
+  `name`            VARCHAR(96) NULL,                 -- shop-native resolved or admin-authored
+  `subtype`         VARCHAR(32) NULL,                 -- admin/regex tagged (never from a native)
+  `color_primary`   VARCHAR(16) NULL,                 -- CEF-extracted named colour
+  `color_secondary` VARCHAR(16) NULL,
+  `price`           INT NOT NULL DEFAULT 0,
+  `rarity`          VARCHAR(16) NOT NULL DEFAULT 'common',
+  `thumb_key`       VARCHAR(96) NULL,                 -- webp filename under the resource
+  `thumb_hash`      CHAR(16) NULL,                    -- perceptual hash (replace detection)
+  `updated_at`      TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_ident` (`kind`,`component_id`,`collection`,`local_index`,`gender`),
+  KEY `idx_slot` (`kind`,`component_id`,`gender`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Resumable scan cursor (single row).
+CREATE TABLE IF NOT EXISTS `clothing_scan_state` (
+  `id`    TINYINT NOT NULL DEFAULT 1,
+  `state` JSON NOT NULL,                              -- { model, kind, compId, collection, localIndex, ts }
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Bank transactions (history shown in the banking UI).
 CREATE TABLE IF NOT EXISTS `bank_transactions` (
   `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
