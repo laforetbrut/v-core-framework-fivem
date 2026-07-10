@@ -6,6 +6,50 @@ Last surveyed: **2026-07-10** (every module read end-to-end; see `## Per-module 
 
 ---
 
+## 0. Build progress — inventory & appearance
+
+Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progress · ⬜ not started`.
+
+### Appearance suite (rebuild — full plan in `memory/appearance-suite-plan.md`)
+
+| Phase | What it delivers | State |
+|-------|------------------|-------|
+| **1 — engine + stable identity** | `v-appearance` module = single ped writer; clothing stored as stable **(collection, local index, texture)** refs (survives addon/build changes); v1→v2 migration on load; v-spawn + v-clothing delegate rendering; `appearance` added to autosave. | ✅ **done** |
+| **2 — creator / barber / surgery / tattoos** | Re-openable editor (barber, surgeon, tattoo studio); fix the dead controls (blush overlay missing, makeup/lipstick opacity 0, unclamped ranges); tattoo apply + `character_tattoos` persistence. | ⬜ |
+| **3 — catalogue + scanner rebuild** | `clothing_catalogue` table; per-gender scan; CEF colour extraction; real `.webp` storage (not loose `.txt`); replace-clothing detection; incremental/resumable scan. | ⬜ |
+| **4 — shops + inventory integration** | Per-shop catalogues, dynamic stock, filters (colour/name/sub-type), in-game shop creation, restrictions (job/ace/id), item-metadata → ref migration. | ⬜ |
+| **5 — outfits + job outfits + height** | Wardrobe & job outfits (temporary override layer); character height (opt-in, off by default, experimental — no true GTA V native). | ⬜ |
+
+**Not achievable as the vendor markets it** (verified against the FiveM natives, see the plan): the 46 000 pre-tagged catalogue and "AI labelling"/sub-types are a shipped hand-authored dataset, not runtime-derivable; character height is visual-only and glitchy (no `SET_PED_SCALE` on GTA V). We reach parity by curation + our colour extractor, and ship height opt-in/experimental.
+
+### Inventory (Quasar-parity roadmap the owner asked for)
+
+| # | Feature | State |
+|---|---------|-------|
+| — | Core grid, weight/slots, use/give/drop, stashes, trunk, cash-as-item, equipment panel | ✅ done |
+| — | **Pointer-based drag & drop** (HTML5 DnD is unreliable in CEF) | ✅ done |
+| — | **Fallback icons** for imageless items (clothing garment / generic box) | ✅ done |
+| — | **Hidden pocket** (1 kg concealed compartment, invisible to a police search) | ✅ done |
+| 1 | Unified player top-nav menu | ⬜ |
+| 2 | Weapons & attachments (serial/ammo metadata exists; attachments/on-back/draw anims don't) | ⬜ |
+| 3 | Shared stashes **with permissions** | ⬜ |
+| 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
+| 5 | Advanced crafting (recipes, benches) | ⬜ |
+| 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
+| 7 | Backpacks + armor DLC | ⬜ |
+| 8 | Place items in the world as entities + **player search / steal** (the `GetSearchable` export is ready for it) | ⬜ |
+| 9 | Bonus: vending machines, garbage job, skill tree | ⬜ |
+
+Also outstanding on inventory (from the audit, not yet fixed): item degradation over time, weapon serial/ammo persistence, in-world drops as real entities (currently markers), and moving the direct-SQL `stashes`/`items` access behind `v-core`.
+
+### Recently fixed bugs (this session)
+
+- **No mouse in any menu** — `SetNuiFocus` is resource-scoped; `v-core` had no `ui_page`, so the shared focus helper was a silent no-op. Each owning resource now takes focus itself.
+- **Spawn fell into the void / showed a default ped** — screen held black from the first frame; ped kept frozen while collision streams + ground is found; unfrozen only after the switch-in.
+- **Inventory drag broken + imageless items** — see the two ✅ rows above.
+
+---
+
 ## 1. Layers
 
 ```
@@ -461,6 +505,10 @@ exports['v-inventory']:AddItem(src, 'water', 2)      -- true/false (weight & slo
 exports['v-inventory']:RemoveItem(src, 'water', 1)
 exports['v-inventory']:GetItemCount(src, 'water')
 exports['v-inventory']:RegisterUsableItem('water', function(src, item) end)
+exports['v-inventory']:GetItems(src)                 -- main inventory array
+exports['v-inventory']:GetSearchable(src)            -- what a police frisk/steal may see
+                                                     --   (main inventory only — NEVER the hidden pocket)
+exports['v-inventory']:GetLimits()                   -- { maxSlots, maxWeight, hotbar }
 -- open a container client-side:
 TriggerServerEvent('v-inventory:server:openStash', id, label, kind)
 
