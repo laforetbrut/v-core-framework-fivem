@@ -13,6 +13,8 @@ const CAT = {
 };
 // Muted/earthy rarities — orange stays the only saturated hue (legendary blooms).
 const RARITY = { common: '#6B6156', uncommon: '#4E8C5A', rare: '#2F6F9E', epic: '#8A4BD1', legendary: '#FF6A1A', mythic: '#C2362F' };
+// Lighter variants for the stencil badge — dark ink on top, all >= 4.5:1.
+const RARITY_LT = { common: '#A39A8D', uncommon: '#6FBF7E', rare: '#58A8DC', epic: '#B08AE0', legendary: '#FF9354', mythic: '#E0736C' };
 const SVG = 'viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"';
 const ICONS = {
   use:    `<svg ${SVG}><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>`,
@@ -117,8 +119,11 @@ function setWeight(prefix, w, max) {
   const segs = byId(prefix + '-seg').querySelectorAll('.seg');
   const on = max > 0 ? Math.ceil(Math.min(1, w / max) * segs.length) : 0;
   segs.forEach((s, i) => s.classList.toggle('on', i < on));
-  byId(prefix + '-seg').classList.toggle('over', w > max * 0.9);
-  byId(prefix + '-wtxt').innerHTML = '<b>' + (w / 1000).toFixed(2) + '</b> / ' + (max / 1000).toFixed(2) + ' KG';
+  const over = w > max * 0.9;
+  byId(prefix + '-seg').classList.toggle('over', over);
+  const txt = byId(prefix + '-wtxt');
+  txt.classList.toggle('over', over);
+  txt.innerHTML = '<b>' + (w / 1000).toFixed(2) + '</b> / ' + (max / 1000).toFixed(2) + ' KG';
 }
 function render() {
   rebuildMaps();
@@ -242,7 +247,8 @@ function onHover(e) {
   const rar = rarityOf(d);
   const row = (k, v) => `<div class="row"><span>${k}</span><b>${v}</b></div>`;
   tt.innerHTML = `<div class="tt-top" style="border-left:3px solid ${RARITY[rar] || 'var(--v-line)'}"><div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
-    + `<div><h4>${esc(itemLabel(it, d))}</h4><div class="sub">${esc(it.name)} · <em style="color:${RARITY[rar]}">${t('rar.' + rar)}</em></div></div></div>`
+    + `<div class="tt-meta"><h4>${esc(itemLabel(it, d))}</h4><div class="sub">${esc(it.name)}</div>`
+    + `<em class="rar" style="--rc:${RARITY_LT[rar] || '#A39A8D'}">${t('rar.' + rar)}</em></div></div>`
     + `<div class="tt-body">${row(t('inv.weight'), kg((d.weight || 0) * it.amount))}`
     + (it.amount > 1 ? row(t('inv.qty'), it.amount) : '')
     + (im.serial ? row(t('inv.serial'), esc(im.serial)) : '')
