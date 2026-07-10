@@ -5,27 +5,17 @@
 local loaded = false
 local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 
--- Our own SQUARE minimap (QBCore method): the radar mask is swapped for the
--- shipped `squaremap` texture — the map becomes a clean square and the GTA:O
--- health/armour bars are no longer drawn at all. The whole thing is then
--- repositionable: the player's frame top-left (fractions) becomes a delta on
--- the tested base layout. `w`/`h` = the on-screen footprint sent to the NUI.
--- All in TOP-LEFT screen fractions (same system as the NUI frame, so the map
--- and the frame move together). map = the native square inside the frame; the
--- frame's extra bottom height is the cover that hides the GTA:O health/armour
--- bars (the square texture reshapes the map but doesn't remove those bars).
--- Battle-tested qb-hud SQUARE layout. The three components have DIFFERENT sizes
--- on purpose — that exact relationship is what centres the player blip. We
--- reposition with an offset and resize by scaling ALL of them together (about
--- the screen's bottom-left), which preserves the geometry -> blip stays centred
--- and the map never distorts. 'L','B' alignment (as GTA expects).
-local BASE = {
-    { name = 'minimap',      x = 0.0,   y = -0.047, w = 0.1638, h = 0.183 },
-    { name = 'minimap_mask', x = 0.0,   y = 0.0,    w = 0.128,  h = 0.20  },
-    { name = 'minimap_blur', x = -0.01, y = 0.025,  w = 0.262,  h = 0.300 },
-}
-local MASK = BASE[2]                       -- visible map region -> drives the NUI frame
-local MM_DEFAULT = { x = 0.008, y = 0.79 } -- default top-left of the visible map
+-- ── Square minimap (draggable + resizable) ──────────────────────────────
+-- The NATIVE map is the single source of truth: it is positioned in COMPONENT
+-- space (posX/posY/scale, qb-hud square layout — blip centred). The NUI frame
+-- is then SLAVED to the map's TRUE on-screen rect, which we read back with the
+-- engine's own gfx round-trip (SetScriptGfxAlign + GetScriptGfxPosition) — that
+-- already applies GetSafeZoneSize() and the aspect transform, so the overlay is
+-- pixel-perfect on any resolution/safezone. Drag = pixel delta -> 1:1 component
+-- delta; resize = a single scale factor. (Method verified against the CFX
+-- cookbook + Dalrae1/MinimapPositionFiveM + qb-hud.)
+local map = { posX = 0.0, posY = 0.0, scale = 1.0 }   -- component-space offset + size
+local hudHidden = false
 
 local function TL(k)
     local lang = (LocalPlayer.state and LocalPlayer.state.lang) or 'fr'
@@ -36,7 +26,13 @@ local function loadSettings()
     local raw = GetResourceKvpString('vhud:settings')
     if raw then
         local ok, parsed = pcall(json.decode, raw)
-        if ok and parsed then settings = parsed end
+        if ok and type(parsed) == 'table' then settings = parsed end
+    end
+    local m = settings.map
+    if type(m) == 'table' then
+        map.posX  = tonumber(m.posX) or 0.0
+        map.posY  = tonumber(m.posY) or 0.0
+        map.scale = math.min(2.0, math.max(0.5, tonumber(m.scale) or 1.0))
     end
 end
 
@@ -54,7 +50,6 @@ end
 CreateThread(function()
     loadSettings()
     Wait(250)
-    SendNUIMessage({ action = 'minimapFrame', w = MASK.w, h = MASK.h, default = MM_DEFAULT })
     SendNUIMessage({ action = 'init', settings = settings or {} })
     sendStrings()
 end)
@@ -146,23 +141,14 @@ CreateThread(function()
     end
 end)
 
--- ── Minimap: square (QBCore method), repositionable ──
-local function minimapPos()
-    local p = settings.positions and settings.positions.minimap
-    if p and type(p.x) == 'number' then return p.x, p.y end   -- stored as fractions
-    return MM_DEFAULT.x, MM_DEFAULT.y
+-- ── Minimap: native map = source of truth, NUI frame slaved to its rect ──
+local function minimapEnabled()
+    if settings.elements and settings.elements.minimap == false then return false end
+    if settings.minimapVehicleOnly then return IsPedInAnyVehicle(PlayerPedId(), false) end
+    return true
 end
 
--- Aspect-ratio correction so the square stays square on ultrawide.
-local function aspectOffset()
-    local rx, ry = GetActiveScreenResolution()
-    local ar = (ry ~= 0) and (rx / ry) or (16 / 9)
-    if ar > (1920 / 1080) then return ((1920 / 1080 - ar) / 3.6) - 0.008 end
-    return 0.0
-end
-
--- Swap the radar mask for the square texture (removes the round frame AND the
--- GTA:O health/armour bars entirely). Done once.
+-- Swap the radar mask for the square texture (clean square shape). Done once.
 local squareReady = false
 local function loadSquareMask()
     if squareReady then return true end
@@ -177,91 +163,86 @@ local function loadSquareMask()
     return true
 end
 
--- Square map, positioned TOP-LEFT to match the NUI frame exactly (so drag goes
--- the right way and the cover strip lines up with the map).
-local function minimapScale()
-    local s = tonumber(settings.minimapSize)
-    if not s or s <= 0 then return 1.0 end
-    return math.min(2.0, math.max(0.6, s / 100.0))
+-- The map's TRUE on-screen rect (pixels) for the current component pos + scale.
+-- GetScriptGfxPosition applies the safe zone + aspect exactly, so the NUI frame
+-- placed at this rect is always pixel-aligned with the native map.
+local function getMinimapRect()
+    local resX, resY = GetActiveScreenResolution()
+    local aspect = GetAspectRatio(false)
+    local big = IsBigmapActive()
+    local w = (big and (1.0 / (2.52 * aspect)) or (1.0 / (4.0 * aspect))) * map.scale
+    local h = (big and (1.0 / 2.3374) or (1.0 / 5.674)) * map.scale
+    SetScriptGfxAlign(string.byte('L'), string.byte('B'))
+    local leftX, topY = GetScriptGfxPosition(map.posX, map.posY - h)
+    ResetScriptGfxAlign()
+    return math.floor(leftX * resX + 0.5), math.floor(topY * resY + 0.5),
+           math.floor(w * resX + 0.5), math.floor(h * resY + 0.5)
 end
 
-local function setMinimapPositions()
-    local px, py = minimapPos()
-    local s = minimapScale()
-    local off = aspectOffset()
-    -- solve the offset so the (scaled) mask's screen top-left lands on (px,py)
-    local ox = px - MASK.x * s
-    local oy = 1.0 - py - MASK.h * s - MASK.y * s
+-- Push the qb-hud square layout (blip centred) at the current pos + scale.
+local function applyMinimap()
+    local s = map.scale
     pcall(function() SetMinimapClipType(0) end)
-    for _, c in ipairs(BASE) do
-        SetMinimapComponentPosition(c.name, 'L', 'B', c.x * s + ox + off, c.y * s + oy, c.w * s, c.h * s)
-    end
+    SetMinimapComponentPosition('minimap',      'L', 'B', map.posX,            map.posY - 0.049 * s, 0.1638 * s, 0.183 * s)
+    SetMinimapComponentPosition('minimap_mask', 'L', 'B', map.posX,            map.posY,             0.128 * s,  0.20 * s)
+    SetMinimapComponentPosition('minimap_blur', 'L', 'B', map.posX - 0.01 * s, map.posY + 0.025 * s, 0.262 * s,  0.300 * s)
     SetBlipAlpha(GetNorthRadarBlip(), 0)
 end
 
-local refreshPending = false
-local function scheduleRefresh()
-    if refreshPending then return end
-    refreshPending = true
-    SetTimeout(220, function()
-        refreshPending = false
-        SetBigmapActive(true, false)
-        Wait(0)
-        SetBigmapActive(false, false)
-    end)
-end
-
-local function applyMinimap(refresh)
-    local wantMap = not (settings.elements and settings.elements.minimap == false)
-    if wantMap and settings.minimapVehicleOnly then
-        wantMap = IsPedInAnyVehicle(PlayerPedId(), false)
-    end
-    DisplayRadar(wantMap)
-    if not wantMap then return end
-    setMinimapPositions()
-    if refresh then scheduleRefresh() end
-end
-
--- Set up the square mask once loaded, then keep the layout asserted.
+-- Single minimap loop: position the native map, strip the GTA:O health/armour
+-- bars (scaleform), and slave the NUI frame to the map's true rect. Gated on
+-- pause/menu state so nothing is drawn (or forced back on) over a menu.
 CreateThread(function()
     while not loaded do Wait(200) end
     loadSquareMask()
-    Wait(300)
-    applyMinimap(true)
-    while true do
-        Wait(1500)
-        applyMinimap(false)   -- re-assert position/visibility (no flicker)
-    end
-end)
-
--- Remove the GTA:O green/blue health & armour bars at the source (verified
--- scaleform method): calling the minimap's SETUP_HEALTH_ARMOUR with GOLF mode
--- (3) draws no bars. Must run every frame while the map is shown.
-CreateThread(function()
     local mm = RequestScaleformMovie('minimap')
     local t = 0
     while not HasScaleformMovieLoaded(mm) and t < 200 do Wait(0); t = t + 1 end
+    local lastR
     while true do
-        Wait(0)
-        local wantMap = not (settings.elements and settings.elements.minimap == false)
-        if wantMap and HasScaleformMovieLoaded(mm) then
-            BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
-            ScaleformMovieMethodAddParamInt(3)
-            EndScaleformMovieMethod()
+        if hudHidden or not minimapEnabled() then
+            DisplayRadar(false)
+            if lastR ~= false then lastR = false; SendNUIMessage({ action = 'minimap', hide = true }) end
+            Wait(120)
+        else
+            DisplayRadar(true)
+            applyMinimap()
+            if HasScaleformMovieLoaded(mm) then
+                BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
+                ScaleformMovieMethodAddParamInt(3)   -- GOLF mode = no bars
+                EndScaleformMovieMethod()
+            end
+            local x, y, w, h = getMinimapRect()
+            if not lastR or lastR.x ~= x or lastR.y ~= y or lastR.w ~= w or lastR.h ~= h then
+                lastR = { x = x, y = y, w = w, h = h }
+                SendNUIMessage({ action = 'minimap', rect = lastR })
+            end
+            Wait(0)
         end
     end
 end)
 
--- Hide the whole HUD while a fullscreen menu is up (pause/ESC map, etc.) so it
--- doesn't stay drawn over the menu. The native radar is hidden by the game;
--- we hide our NUI elements too.
+-- ── Hide the whole HUD in menus (pause/ESC, map, fade, switch, our own NUIs) ──
+local function shouldHideHud()
+    return IsPauseMenuActive()
+        or GetPauseMenuState() ~= 0        -- catches the open/close transition frames
+        or IsScreenFadedOut()
+        or IsScreenFadingOut()
+        or IsPlayerSwitchInProgress()
+        or GetIsLoadingScreenActive()
+        or IsHudHidden()
+        or (LocalPlayer.state.nuiOpen == true)   -- one of our NUI menus is open (v-core focus)
+end
+
 CreateThread(function()
-    local hidden = false
+    local hidden = nil
     while true do
-        Wait(150)
-        local hide = IsPauseMenuActive() or IsFrontendFading() or IsHudHidden()
+        Wait(50)
+        local hide = shouldHideHud()
         if hide ~= hidden then
             hidden = hide
+            hudHidden = hide
+            if hide then DisplayRadar(false) end
             SendNUIMessage({ action = 'visible', visible = not hide })
         end
     end
@@ -278,21 +259,27 @@ local function persistSettings()
     end)
 end
 
--- Live update while the player drags the minimap frame in layout mode.
-RegisterNUICallback('minimapMove', function(data, cb)
-    if type(data.x) == 'number' then
-        settings.positions = settings.positions or {}
-        settings.positions.minimap = { x = data.x + 0.0, y = data.y + 0.0 }
-        applyMinimap(true)
-        persistSettings()
+local function saveMap()
+    settings.map = { posX = map.posX, posY = map.posY, scale = map.scale }
+    persistSettings()
+end
+
+-- Drag the minimap: NUI reports a PIXEL delta -> 1:1 component delta (the gfx
+-- transform is unit-slope, so this is exact). 'B' anchor flips Y.
+RegisterNUICallback('mapDrag', function(data, cb)
+    local rx, ry = GetActiveScreenResolution()
+    if rx > 0 and ry > 0 and type(data.dx) == 'number' and type(data.dy) == 'number' then
+        map.posX = map.posX + (data.dx / rx)
+        map.posY = map.posY - (data.dy / ry)
+        saveMap()
     end
     cb('ok')
 end)
 
--- Live minimap resize (corner handle / size slider).
-RegisterNUICallback('minimapSize', function(data, cb)
-    local s = tonumber(data.size)
-    if s then settings.minimapSize = s; applyMinimap(true); persistSettings() end
+-- Resize the minimap (corner handle / size slider) via a single scale factor.
+RegisterNUICallback('mapResize', function(data, cb)
+    local sc = tonumber(data.scale)
+    if sc then map.scale = math.min(2.0, math.max(0.5, sc)); saveMap() end
     cb('ok')
 end)
 
@@ -305,10 +292,12 @@ end, false)
 RegisterKeyMapping('vhud_settings', 'Open HUD settings', 'keyboard', 'F7')
 
 RegisterNUICallback('saveSettings', function(data, cb)
-    settings = data
-    SetResourceKvpString('vhud:settings', json.encode(data))
+    if type(data) == 'table' then
+        data.map = settings.map   -- preserve the Lua-owned minimap pos/scale
+        settings = data
+    end
+    SetResourceKvpString('vhud:settings', json.encode(settings))
     SetNuiFocus(false, false)
-    applyMinimap(true)
     cb('ok')
 end)
 

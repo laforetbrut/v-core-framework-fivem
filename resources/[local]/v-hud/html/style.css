@@ -216,9 +216,7 @@ body.editing .ring.faded { opacity: 1; }
   pointer-events: none;
   z-index: 3;
   border-radius: 8px;
-  transform: scale(var(--hud-scale, 1));
-  transform-origin: center;
-  opacity: var(--hud-opacity, 1);
+  opacity: var(--hud-opacity, 1);   /* size/pos come from the exact px rect (Lua) */
 }
 /* Corner brackets only appear while repositioning (Move elements). */
 .mm-corner {

@@ -163,45 +163,27 @@ function applyLayout() {
   applyMinimapFrame();
 }
 
-// ── Minimap frame (positioned in SCREEN FRACTIONS so it tracks the native map) ──
-let mmFrame = { w: 0.15, h: 0.212, def: { x: 0.0135, y: 0.735 } };
-function mmPos() {
-  const p = settings.positions && settings.positions.minimap;
-  return (p && typeof p.x === 'number') ? p : mmFrame.def;
-}
-function mmSize() { return clamp(settings.minimapSize || 100, MM_SIZE_MIN, MM_SIZE_MAX) / 100; }
+// ── Minimap frame: SLAVED to the native map's TRUE rect (pixels, from Lua) ──
+let mmRect = null;
 function applyMinimapFrame() {
   const el = byId('minimap'); if (!el) return;
-  const p = mmPos(), s = mmSize();
-  el.style.left = (p.x * 100) + 'vw';
-  el.style.top = (p.y * 100) + 'vh';
-  el.style.width = (mmFrame.w * s * 100) + 'vw';
-  el.style.height = (mmFrame.h * s * 100) + 'vh';
+  if (!mmRect) { el.classList.add('hidden'); return; }
+  el.style.left = mmRect.x + 'px'; el.style.top = mmRect.y + 'px';
+  el.style.width = mmRect.w + 'px'; el.style.height = mmRect.h + 'px';
   el.classList.toggle('hidden', !settings.elements.minimap && !editing);
 }
 
-// ── Drag / layout mode ──
-['vitals', 'money', 'compass', 'minimap'].forEach(key => {
+// ── Drag / layout mode (vitals / money / compass — stored in px) ──
+['vitals', 'money', 'compass'].forEach(key => {
   byId(key).addEventListener('mousedown', (e) => {
     if (!editing) return;
     e.preventDefault();
     const r = byId(key).getBoundingClientRect();
-    drag = { key, el: byId(key), offx: e.clientX - r.left, offy: e.clientY - r.top, frac: key === 'minimap' };
+    drag = { key, el: byId(key), offx: e.clientX - r.left, offy: e.clientY - r.top };
   });
 });
-let mmRaf = false;
 document.addEventListener('mousemove', (e) => {
   if (!drag) return;
-  if (drag.frac) {
-    // minimap: store as fractions and stream to Lua so the native map follows live
-    const x = clamp((e.clientX - drag.offx) / window.innerWidth, 0, 1 - mmFrame.w);
-    const y = clamp((e.clientY - drag.offy) / window.innerHeight, 0, 1 - mmFrame.h);
-    drag.el.style.left = (x * 100) + 'vw'; drag.el.style.top = (y * 100) + 'vh';
-    if (!settings.positions) settings.positions = {};
-    settings.positions.minimap = { x, y };
-    if (!mmRaf) { mmRaf = true; requestAnimationFrame(() => { mmRaf = false; post('minimapMove', settings.positions.minimap); }); }
-    return;
-  }
   const x = clamp(e.clientX - drag.offx, 0, window.innerWidth - 40);
   const y = clamp(e.clientY - drag.offy, 0, window.innerHeight - 20);
   drag.el.style.left = x + 'px'; drag.el.style.top = y + 'px';
@@ -211,24 +193,43 @@ document.addEventListener('mousemove', (e) => {
 });
 document.addEventListener('mouseup', () => { drag = null; });
 
-// ── Minimap resize handle (drag the corner to stretch the map) ──
-let mmResizing = null, mmSizeRaf = false;
+// ── Minimap drag: report PIXEL deltas; Lua moves the map, the frame follows ──
+let mmDrag = null, mmDragRaf = false, mmAcc = { dx: 0, dy: 0 };
+byId('minimap').addEventListener('mousedown', (e) => {
+  if (!editing || (e.target && e.target.id === 'mm-resize')) return;
+  e.preventDefault();
+  mmDrag = { lx: e.clientX, ly: e.clientY };
+});
+window.addEventListener('mousemove', (e) => {
+  if (!mmDrag) return;
+  mmAcc.dx += e.clientX - mmDrag.lx; mmAcc.dy += e.clientY - mmDrag.ly;
+  mmDrag.lx = e.clientX; mmDrag.ly = e.clientY;
+  if (!mmDragRaf) {
+    mmDragRaf = true;
+    requestAnimationFrame(() => {
+      mmDragRaf = false;
+      if (mmAcc.dx || mmAcc.dy) { post('mapDrag', { dx: mmAcc.dx, dy: mmAcc.dy }); mmAcc.dx = 0; mmAcc.dy = 0; }
+    });
+  }
+});
+window.addEventListener('mouseup', () => { mmDrag = null; });
+
+// ── Minimap resize handle: report a scale factor ──
+let mmResizing = null, mmResizeRaf = false;
 byId('mm-resize').addEventListener('mousedown', (e) => {
   if (!editing) return;
   e.preventDefault(); e.stopPropagation();
-  const p = mmPos();
-  mmResizing = { originX: p.x * window.innerWidth, baseW: mmFrame.w * window.innerWidth };
+  mmResizing = { startX: e.clientX, baseW: (mmRect ? mmRect.w : 200), baseScale: (settings.minimapSize || 100) };
 });
-document.addEventListener('mousemove', (e) => {
+window.addEventListener('mousemove', (e) => {
   if (!mmResizing) return;
-  const widthPx = Math.max(20, e.clientX - mmResizing.originX);
-  const s = clamp(Math.round((widthPx / mmResizing.baseW) * 100), MM_SIZE_MIN, MM_SIZE_MAX);
+  const newW = Math.max(20, mmResizing.baseW + (e.clientX - mmResizing.startX));
+  const s = clamp(Math.round((newW / mmResizing.baseW) * mmResizing.baseScale), MM_SIZE_MIN, MM_SIZE_MAX);
   settings.minimapSize = s;
-  applyMinimapFrame();
-  const sizeEl = byId('mmsize'); if (sizeEl) { sizeEl.value = s; byId('mmsize-val').textContent = s + '%'; }
-  if (!mmSizeRaf) { mmSizeRaf = true; requestAnimationFrame(() => { mmSizeRaf = false; post('minimapSize', { size: s }); }); }
+  const sl = byId('mmsize'); if (sl) { sl.value = s; byId('mmsize-val').textContent = s + '%'; }
+  if (!mmResizeRaf) { mmResizeRaf = true; requestAnimationFrame(() => { mmResizeRaf = false; post('mapResize', { scale: s / 100 }); }); }
 });
-document.addEventListener('mouseup', () => { mmResizing = null; });
+window.addEventListener('mouseup', () => { mmResizing = null; });
 
 function enterLayout() {
   editing = true;
@@ -281,8 +282,7 @@ function buildPanel() {
   ms.oninput = () => {
     settings.minimapSize = clamp(+ms.value, MM_SIZE_MIN, MM_SIZE_MAX);
     byId('mmsize-val').textContent = settings.minimapSize + '%';
-    applyMinimapFrame();
-    post('minimapSize', { size: settings.minimapSize });
+    post('mapResize', { scale: settings.minimapSize / 100 });   // Lua resizes; the frame follows
   };
 
   byId('dynamic').classList.toggle('on', settings.dynamic);
@@ -316,13 +316,13 @@ window.addEventListener('message', (event) => {
         settings = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), d.settings);
         settings.elements = Object.assign({}, DEFAULTS.elements, d.settings.elements || {});
         settings.positions = d.settings.positions || {};
+        // slider reflects the persisted native map scale
+        if (d.settings.map && d.settings.map.scale) settings.minimapSize = Math.round(d.settings.map.scale * 100);
       }
       applySettings();
       break;
-    case 'minimapFrame':
-      if (typeof d.w === 'number') mmFrame.w = d.w;
-      if (typeof d.h === 'number') mmFrame.h = d.h;
-      if (d.default) mmFrame.def = d.default;
+    case 'minimap':               // native map's true screen rect (px), or hide
+      mmRect = d.hide ? null : d.rect;
       applyMinimapFrame();
       break;
     case 'visible': document.body.classList.toggle('hud-hidden', d.visible === false); break;
