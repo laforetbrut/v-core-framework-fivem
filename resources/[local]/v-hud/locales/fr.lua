@@ -15,6 +15,7 @@ local T = {
     ['set.move']     = 'Déplacer les éléments',
     ['set.custom']   = 'Couleur perso',
     ['set.mapvehicle'] = 'Minimap en véhicule uniquement',
+    ['set.mapsize']  = 'Taille de la minimap',
     ['set.drag_hint'] = 'Glisse les éléments pour les repositionner',
     ['set.done']     = 'Terminé',
     ['el.health']    = 'Santé',

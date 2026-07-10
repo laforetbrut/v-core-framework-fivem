@@ -229,6 +229,16 @@ body.editing .ring.faded { opacity: 1; }
   filter: drop-shadow(0 0 4px rgba(0,0,0,.6));
 }
 body.editing .mm-corner { display: block; }
+
+/* Resize handle (drag to stretch the map) — only while repositioning */
+.mm-resize {
+  position: absolute; right: -8px; bottom: -8px;
+  width: 18px; height: 18px; border-radius: 5px;
+  background: var(--v-accent); border: 2px solid var(--v-bg-900, #0B0B0D);
+  box-shadow: 0 0 8px rgba(0,0,0,.6);
+  cursor: nwse-resize; display: none; z-index: 2;
+}
+body.editing .mm-resize { display: block; }
 .mm-corner.tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mm-corner.tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 6px 0 0; }
 .mm-corner.bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px; }

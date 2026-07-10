@@ -172,14 +172,22 @@ end
 
 -- Square map, positioned TOP-LEFT to match the NUI frame exactly (so drag goes
 -- the right way and the cover strip lines up with the map).
+local function minimapScale()
+    local s = tonumber(settings.minimapSize)
+    if not s or s <= 0 then return 1.0 end
+    return math.min(2.0, math.max(0.6, s / 100.0))
+end
+
 local function setMinimapPositions()
     local px, py = minimapPos()
     local off = aspectOffset()
+    local sc = minimapScale()
     local m = MM.map
+    local w, h = m.w * sc, m.h * sc
     pcall(function() SetMinimapClipType(0) end)
-    SetMinimapComponentPosition('minimap',      'L', 'T', px + off + m.dx,        py + m.dy,        m.w,        m.h)
-    SetMinimapComponentPosition('minimap_mask', 'L', 'T', px + off + m.dx,        py + m.dy,        m.w,        m.h)
-    SetMinimapComponentPosition('minimap_blur', 'L', 'T', px + off + m.dx - 0.012, py + m.dy - 0.012, m.w + 0.024, m.h + 0.024)
+    SetMinimapComponentPosition('minimap',      'L', 'T', px + off + m.dx,        py + m.dy,        w,          h)
+    SetMinimapComponentPosition('minimap_mask', 'L', 'T', px + off + m.dx,        py + m.dy,        w,          h)
+    SetMinimapComponentPosition('minimap_blur', 'L', 'T', px + off + m.dx - 0.012, py + m.dy - 0.012, w + 0.024, h + 0.024)
     SetBlipAlpha(GetNorthRadarBlip(), 0)
 end
 
@@ -258,6 +266,13 @@ RegisterNUICallback('minimapMove', function(data, cb)
         settings.positions.minimap = { x = data.x + 0.0, y = data.y + 0.0 }
         applyMinimap(true)
     end
+    cb('ok')
+end)
+
+-- Live minimap resize (corner handle / size slider).
+RegisterNUICallback('minimapSize', function(data, cb)
+    local s = tonumber(data.size)
+    if s then settings.minimapSize = s; applyMinimap(true) end
     cb('ok')
 end)
 
