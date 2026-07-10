@@ -7,21 +7,47 @@ local currentLang = 'fr'
 local identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
 local appearance = nil
 
-local function finishCreator()
+-- ── GTA-style "switch" spawn (camera swoops down from the sky) ──
+local function switchSpawn(x, y, z, h)
+    local ped = PlayerPedId()
+    local switched = false
+    if not IsPlayerSwitchInProgress() then
+        pcall(function() SwitchOutPlayer(ped, 0, 1) end)
+        local t = 0
+        while GetPlayerSwitchState() ~= 5 and t < 200 do Wait(25); t = t + 1 end   -- 5 = up in the clouds
+        switched = (GetPlayerSwitchState() == 5)
+    end
+    if not switched then DoScreenFadeOut(300); Wait(350) end
+    SetEntityCoordsNoOffset(ped, x, y, z, false, false, false)
+    SetEntityHeading(ped, h or 0.0)
+    RequestCollisionAtCoord(x, y, z)
+    local t = 0
+    while not HasCollisionLoadedAroundEntity(ped) and t < 100 do Wait(50); t = t + 1 end
+    local ok, gz = GetGroundZFor_3dCoord(x, y, z + 5.0, false)
+    if ok and gz and gz ~= 0.0 then SetEntityCoordsNoOffset(ped, x, y, gz + 1.0, false, false, false) end
+    FreezeEntityPosition(ped, false)
+    SetPlayerControl(PlayerId(), true, 0)
+    ClearPedTasksImmediately(ped)
+    if switched then
+        pcall(function() SwitchInPlayer(PlayerPedId()) end)
+        local t2 = 0
+        while GetPlayerSwitchState() ~= 12 and t2 < 300 do Wait(25); t2 = t2 + 1 end   -- 12 = switch complete
+    end
+    if not IsScreenFadedIn() then DoScreenFadeIn(400) end
+end
+
+local function finishCreator(coords)
     SetNuiFocus(false, false)
     SendNUIMessage({ action = 'close' })
     CreatorCameraStop()
-    DoScreenFadeOut(400)
-    Wait(450)
+    DoScreenFadeOut(300)
+    Wait(350)
     local ped = PlayerPedId()
-    local s = Config.Spawn
-    SetEntityCoordsNoOffset(ped, s.x, s.y, s.z, false, false, false)
-    SetEntityHeading(ped, s.w)
     FreezeEntityPosition(ped, false)
     SetPlayerControl(PlayerId(), true, 0)
-    Wait(300)
-    ClearPedTasksImmediately(ped)
-    DoScreenFadeIn(500)
+    DoScreenFadeIn(0)
+    local s = coords or Config.Spawn
+    switchSpawn(s.x, s.y, s.z, s.w)
     active = false
 end
 
@@ -60,16 +86,24 @@ RegisterNetEvent('v-core:client:needCharacter', function(info)
     startCreator()
 end)
 
--- Apply saved appearance for returning characters.
+-- Returning character: restore the look, then swoop down (GTA switch
+-- effect) onto the last saved position instead of the default spawn.
 AddEventHandler('v-core:client:onPlayerLoaded', function(data)
     if active then return end
-    if data.appearance and next(data.appearance) then
-        CreateThread(function()
-            Wait(500)
+    CreateThread(function()
+        Wait(400)
+        if data.appearance and next(data.appearance) then
             if data.appearance.sex then SetSexModel(data.appearance.sex); Wait(200) end
             ApplyAppearance(data.appearance)
-        end)
-    end
+        end
+        local pos = data.position
+        if pos and pos.x and pos.y and pos.z then
+            switchSpawn(pos.x + 0.0, pos.y + 0.0, pos.z + 0.5, (pos.h or 0.0) + 0.0)
+        else
+            local s = Config.Spawn
+            switchSpawn(s.x, s.y, s.z, s.w)
+        end
+    end)
 end)
 
 -- ── NUI callbacks ──
@@ -127,10 +161,25 @@ end)
 RegisterNUICallback('confirm', function(data, cb)
     if data.appearance then appearance = data.appearance end
     Core.TriggerCallback('v-core:createCharacter', function(ok)
-        if ok then finishCreator() end
+        if ok then
+            -- character saved -> let the player pick where their story begins
+            local L = Locales[currentLang] or {}
+            local spawns = {}
+            for _, p in ipairs(Config.SpawnPoints) do
+                spawns[#spawns + 1] = { key = p.key, label = L[p.i18n] or p.key, sub = L[p.sub] or '' }
+            end
+            SendNUIMessage({ action = 'screen', screen = 'spawnselect', spawns = spawns })
+        end
     end, {
         firstname = identity.firstname, lastname = identity.lastname,
         dob = identity.dob, sex = identity.sex, appearance = appearance,
     })
     cb('ok')
+end)
+
+RegisterNUICallback('spawnAt', function(data, cb)
+    local pt = Config.SpawnPoints[1]
+    for _, p in ipairs(Config.SpawnPoints) do if p.key == data.key then pt = p; break end end
+    cb('ok')
+    CreateThread(function() finishCreator(pt.coords) end)
 end)

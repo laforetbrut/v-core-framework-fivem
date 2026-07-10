@@ -59,5 +59,12 @@ local T = {
     ['face.chin_len']    = 'Chin length',
     ['face.lips']        = 'Lips',
     ['err.name']         = 'Please enter a first and last name.',
+    ['spawn.title']       = 'Where does your story begin?',
+    ['spawn.airport']     = 'LSIA Airport',
+    ['spawn.airport_sub'] = 'Fresh off the plane in Los Santos.',
+    ['spawn.prison']      = 'Bolingbroke Penitentiary',
+    ['spawn.prison_sub']  = 'Released this morning, at the gates.',
+    ['spawn.sandy']       = 'Sandy Shores',
+    ['spawn.sandy_sub']   = 'On the shore of the Alamo Sea.',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

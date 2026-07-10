@@ -117,6 +117,7 @@ function VCore.NewPlayer(source, row)
             metadata   = self.metadata,
             permission = self.permission,
             appearance = self.appearance,
+            position   = self.position,
         }
     end
 
