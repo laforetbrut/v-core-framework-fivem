@@ -18,6 +18,10 @@
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
         <div class="head">
+          <div class="modes" role="tablist">
+            <button class="mode sel" id="mode-buy" data-i18n="shop.buy_mode">Buy</button>
+            <button class="mode" id="mode-sell" data-i18n="shop.sell_mode">Sell</button>
+          </div>
           <div class="wallet">
             <button class="pay sel" id="pay-cash" data-acc="cash" aria-label="Pay with cash">
               <span class="v-label" data-i18n="shop.cash">Cash</span><span class="amt" id="w-cash">$0</span>
