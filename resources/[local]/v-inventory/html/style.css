@@ -76,6 +76,20 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 /* Quick slot tiles a touch larger + numbered corner */
 .quick-grid .slot { --slot:74px; }
 
+/* Equipment (body slots) */
+.eqpanel { width:300px; }
+.eq-body { display:flex; flex-direction:column; gap:16px; max-height:60vh; overflow-y:auto; }
+.eq-group { display:flex; flex-direction:column; gap:9px; }
+.eq-glabel { font-family:var(--v-font-display); font-weight:600; letter-spacing:.14em; text-transform:uppercase; font-size:11px; color:var(--v-text-dim); border-left:3px solid var(--v-accent); padding-left:9px; }
+.eq-slots { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+.eqslot { position:relative; height:78px; border-radius:11px; border:1px solid var(--v-line); background:linear-gradient(160deg, rgba(255,255,255,.03), rgba(0,0,0,.16)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:5px; color:var(--v-text-faint); transition:border-color .1s, background .1s; }
+.eqslot .eq-ic { width:30px; height:30px; opacity:.5; }
+.eqslot .eq-ic svg { width:30px; height:30px; }
+.eqslot .eq-name { font-family:var(--v-font-display); font-weight:600; font-size:9px; letter-spacing:.03em; text-transform:uppercase; color:var(--v-text); text-align:center; padding:0 4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:100%; }
+.eqslot.on { border-color:var(--v-accent); border-left-width:3px; background:linear-gradient(160deg, rgba(255,106,26,.1), rgba(0,0,0,.2)); color:var(--v-accent-300); cursor:pointer; }
+.eqslot.on .eq-ic { opacity:.9; }
+.eqslot.drop-hover { border-color:var(--v-accent) !important; background:var(--v-bg-600); }
+
 .hint { font-size:11px; color:var(--v-text-faint); letter-spacing:.02em; }
 
 /* Tooltip (item info card) */

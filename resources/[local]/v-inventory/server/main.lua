@@ -154,6 +154,11 @@ local function buildState(src)
                       items = Stashes[sid].items, maxWeight = Stashes[sid].maxWeight, maxSlots = Stashes[sid].maxSlots }
     end
     local p = Core.GetPlayer(src)
+    local equipment = nil
+    if GetResourceState('v-clothing') == 'started' then
+        local ok, worn = pcall(function() return exports['v-clothing']:GetWorn(src) end)
+        if ok then equipment = worn end
+    end
     return {
         defs      = ItemDefs,
         maxWeight = Config.MaxWeight,
@@ -162,6 +167,7 @@ local function buildState(src)
         player    = { items = Inv[src] or {}, weight = weightOf(Inv[src] or {}),
                       cash = (p and p.money and p.money.cash) or 0 },
         secondary = secondary,
+        equipment = equipment,
     }
 end
 
@@ -271,6 +277,13 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
     removeFromSlot(Inv[source], slot, 1)
     syncPlayer(source)
     Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
+    resolve(buildState(source))
+end)
+
+-- ── Equipment: unequip a worn clothing category (via v-clothing) ──
+Core.RegisterCallback('v-inventory:unequipCloth', function(source, resolve, cat)
+    if GetResourceState('v-clothing') ~= 'started' or type(cat) ~= 'string' then resolve(false); return end
+    pcall(function() exports['v-clothing']:Unequip(source, cat) end)
     resolve(buildState(source))
 end)
 

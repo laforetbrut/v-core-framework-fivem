@@ -20,6 +20,22 @@ const ICONS = {
   rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
 };
 
+// Equipment (clothing body slots) — cats match v-clothing categories.
+const EQ = [
+  { group: 'inv.eq.head', slots: ['masks', 'hats', 'glasses'] },
+  { group: 'inv.eq.body', slots: ['tops', 'undershirt', 'arms', 'pants', 'shoes'] },
+];
+const EQ_IC = {
+  masks: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 8c0-2 3-3 8-3s8 1 8 3v3c0 4-4 8-8 8s-8-4-8-8Z"/><path d="M9 11h.01M15 11h.01"/></svg>',
+  hats: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 16h16M6 16c0-4 1-9 6-9s6 5 6 9"/></svg>',
+  glasses: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="6" cy="14" r="3"/><circle cx="18" cy="14" r="3"/><path d="M9 13c1-1 5-1 6 0M3 11l2-2M21 11l-2-2"/></svg>',
+  tops: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3 4 6l2 3 1-1v12h10V8l1 1 2-3-4-3-3 2Z"/></svg>',
+  undershirt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3 5 6l2 2v13h10V8l2-2-3-3-2 2H10Z"/></svg>',
+  arms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v6a4 4 0 0 0 8 0V2M9 12v9h6v-9"/></svg>',
+  pants: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M6 3h12l-1 18h-4l-1-9-1 9H6Z"/></svg>',
+  shoes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 16h13l5 2v2H2ZM5 16V9l4-1 2 3 4 1"/></svg>',
+};
+
 let state = null, strings = {}, defs = {};
 let maps = { player: {}, secondary: {} };
 let drag = null;            // { inv, slot, money? }
@@ -112,10 +128,37 @@ function render() {
     let w = 0; (sec.items || []).forEach(it => { w += (def(it.name).weight || 0) * it.amount; });
     setWeight('sec', w, sec.maxWeight || 0);
   }
+  // equipment shows on the right when no container is open
+  byId('panel-equipment').classList.toggle('hidden', !!sec || !state.equipment);
+  if (!sec && state.equipment) renderEquipment();
   applyFilter('player'); applyFilter('secondary');
 }
 
 function applyState(s) { if (!s || s.error) return; state = s; render(); }
+
+// ── Equipment (body slots) ──
+function buildEquipment() {
+  const wrap = byId('equipment'); wrap.innerHTML = '';
+  EQ.forEach(g => {
+    const grp = document.createElement('div'); grp.className = 'eq-group';
+    grp.innerHTML = `<span class="eq-glabel">${t(g.group)}</span>`;
+    const row = document.createElement('div'); row.className = 'eq-slots';
+    g.slots.forEach(cat => {
+      const el = document.createElement('div'); el.className = 'eqslot'; el.dataset.cat = cat;
+      el.innerHTML = `<span class="eq-ic">${EQ_IC[cat] || ''}</span><span class="eq-name"></span>`;
+      row.appendChild(el);
+    });
+    grp.appendChild(row); wrap.appendChild(grp);
+  });
+}
+function renderEquipment() {
+  const eq = state.equipment || {};
+  byId('equipment').querySelectorAll('.eqslot').forEach(el => {
+    const worn = eq[el.dataset.cat]; const nameEl = el.querySelector('.eq-name');
+    if (worn) { el.classList.add('on'); nameEl.textContent = def(worn.item).label || worn.item; }
+    else { el.classList.remove('on'); nameEl.textContent = ''; }
+  });
+}
 
 // ── Drag & drop (delegated) ──
 function onDragStart(e) {
@@ -135,6 +178,34 @@ function onDragOver(e) {
 function onDragEnd() {
   document.querySelectorAll('.dragging,.drop-hover').forEach(el => el.classList.remove('dragging', 'drop-hover'));
   drag = null;
+}
+
+// ── Equipment drag/equip/unequip ──
+function onEqOver(e) {
+  const el = e.target.closest('.eqslot'); if (!el || !drag || drag.money || drag.inv !== 'player') return;
+  const it = itemAt('player', drag.slot); if (!it || def(it.name).category !== 'clothing') return;
+  e.preventDefault();
+  const cur = document.querySelector('.eqslot.drop-hover'); if (cur && cur !== el) cur.classList.remove('drop-hover');
+  el.classList.add('drop-hover');
+}
+async function onEqDrop(e) {
+  const el = e.target.closest('.eqslot'); if (!el || !drag) return;
+  e.preventDefault();
+  const from = drag; onDragEnd();
+  if (from.money || from.inv !== 'player') return;
+  const it = itemAt('player', from.slot); if (!it || def(it.name).category !== 'clothing') return;
+  applyState(await post('use', { slot: from.slot }));   // using a clothing item equips it (v-clothing)
+}
+function onEqContext(e) {
+  const el = e.target.closest('.eqslot'); if (!el) return;
+  e.preventDefault();
+  const cat = el.dataset.cat; const worn = (state.equipment || {})[cat]; if (!worn) return;
+  const menu = byId('context'); menu.innerHTML = '';
+  const li = document.createElement('li'); li.className = 'danger';
+  li.innerHTML = `<span class="ci">${ICONS.give}</span><span>${t('inv.unequip')}</span>`;
+  li.onclick = async () => { closeContext(); applyState(await post('unequipCloth', { cat })); };
+  menu.appendChild(li);
+  menu.classList.remove('hidden'); positionFloat(menu, e.clientX, e.clientY);
 }
 async function onDrop(e) {
   const el = e.target.closest('.slot,.wallet-chip'); if (!el || !drag) return;
@@ -295,6 +366,10 @@ function wire() {
   w.addEventListener('drop', onDrop);
   w.addEventListener('dragend', onDragEnd);
   w.addEventListener('contextmenu', onContext);
+  const eq = byId('equipment');
+  eq.addEventListener('dragover', onEqOver);
+  eq.addEventListener('drop', onEqDrop);
+  eq.addEventListener('contextmenu', onEqContext);
   document.addEventListener('mousedown', (e) => { if (!e.target.closest('#context')) closeContext(); });
   document.addEventListener('scroll', closeContext, true);
 }
@@ -315,6 +390,7 @@ window.addEventListener('message', (e) => {
   if (d.action === 'open') {
     state = d.state; strings = d.strings || {}; defs = state.defs || {};
     if (!built) { wire(); built = true; }
+    buildEquipment();
     const hb = state.hotbar || 5;
     buildQuickbar(hb);
     buildGrid('grid-player', 'player', state.maxSlots || 40, hb + 1);   // main grid = slots after the quick slots
