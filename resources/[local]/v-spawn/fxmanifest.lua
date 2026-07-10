@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-spawn — language selection, character creation & appearance editor (v-core module)'
 version '0.1.0'
 
-dependency 'v-core'
+dependencies { 'v-core', 'v-appearance' }
 
 shared_scripts {
     '@v-core/locale/shared.lua',

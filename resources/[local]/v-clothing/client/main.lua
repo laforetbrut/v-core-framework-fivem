@@ -60,15 +60,23 @@ local function current(cat)
 end
 
 -- ── Equip / unequip application (persisted) ────────────────────
+-- The server sends a global drawable/texture; we render it, then capture the
+-- STABLE (collection,index,texture) ref from the ped via the v-appearance engine
+-- and persist THAT, so worn clothing survives addon/build changes (schema v2).
 RegisterNetEvent('v-clothing:client:apply', function(m)
     applyToPed(m)
+    local kind = (m.kind == 'comp') and 'comp' or 'prop'
+    local ref = exports['v-appearance']:CaptureRef(kind, m.id)
     local pd = exports['v-core']:GetPlayerData()
     local app = (pd and pd.appearance) or {}
     app.components = app.components or {}; app.props = app.props or {}
-    if m.kind == 'comp' then
-        app.components[tostring(m.id)] = { drawable = m.drawable, texture = m.texture or 0 }
+    app.schema = 2
+    local entry = { col = ref.col, idx = ref.idx, tex = ref.tex, drawable = m.drawable, texture = m.texture or 0 }
+    if kind == 'comp' then
+        app.components[tostring(m.id)] = entry
     else
-        app.props[tostring(m.id)] = { drawable = (m.off and -1 or m.drawable), texture = m.texture or 0 }
+        if m.off then entry = { col = '', idx = -1, tex = 0, drawable = -1, texture = 0 } end
+        app.props[tostring(m.id)] = entry
     end
     TriggerServerEvent('v-core:server:saveAppearance', app)
 end)
@@ -88,16 +96,24 @@ local function placeScanCam(cam, ped, fr, skyTilt)
     SetCamFov(cam, fr.fov)
 end
 
+-- Re-apply a saved slot, preferring the stable ref via the engine and falling
+-- back to the legacy global cache for pre-migration data.
+local function applySaved(c, saved)
+    if saved and (saved.idx ~= nil or saved.col ~= nil) then
+        exports['v-appearance']:ApplyRef(c.kind, c.id, saved)
+    elseif saved then
+        applyToPed({ kind = c.kind, id = c.id, drawable = saved.drawable, texture = saved.texture or 0, off = (c.kind == 'prop' and (saved.drawable or -1) < 0) })
+    else
+        applyToPed({ kind = c.kind, id = c.id, drawable = Config.NudeDefaults[c.id] or 0, texture = 0, off = (c.kind == 'prop') })
+    end
+end
+
 local function restoreSlots(snap)
     for _, c in ipairs(Config.Categories) do
         local saved = snap and (c.kind == 'comp'
             and (snap.components or {})[tostring(c.id)]
             or  (snap.props or {})[tostring(c.id)])
-        if saved then
-            applyToPed({ kind = c.kind, id = c.id, drawable = saved.drawable, texture = saved.texture or 0, off = (c.kind == 'prop' and (saved.drawable or -1) < 0) })
-        else
-            applyToPed({ kind = c.kind, id = c.id, drawable = Config.NudeDefaults[c.id] or 0, texture = 0, off = (c.kind == 'prop') })
-        end
+        applySaved(c, saved)
     end
 end
 
@@ -324,13 +340,11 @@ local function openStore()
 end
 
 local function revert()
-    -- re-apply saved components/props to undo previews
+    -- re-apply saved components/props to undo previews (ref-aware)
     if not savedApp then return end
     for _, c in ipairs(Config.Categories) do
-        local saved = savedApp and (c.kind == 'comp' and (savedApp.components or {})[tostring(c.id)] or (savedApp.props or {})[tostring(c.id)])
-        if saved then
-            applyToPed({ kind = c.kind, id = c.id, drawable = saved.drawable, texture = saved.texture, off = (c.kind == 'prop' and (saved.drawable or -1) < 0) })
-        end
+        local saved = c.kind == 'comp' and (savedApp.components or {})[tostring(c.id)] or (savedApp.props or {})[tostring(c.id)]
+        if saved then applySaved(c, saved) end
     end
 end
 

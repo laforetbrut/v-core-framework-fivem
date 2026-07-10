@@ -7,9 +7,46 @@ local currentLang = 'fr'
 local identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
 local appearance = nil
 
+-- Hold the screen black from the very first frame so the default spawnmanager
+-- autospawn (a nude freemode ped, often above the void) is NEVER visible. Each
+-- flow (creator / switchSpawn) sets spawnReady = true and then owns the fade.
+local spawnReady = false
+CreateThread(function()
+    while not spawnReady do
+        if not IsScreenFadedOut() and not IsScreenFadingOut() then DoScreenFadeOut(0) end
+        local ped = PlayerPedId()
+        if ped and ped ~= 0 then FreezeEntityPosition(ped, true) end
+        Wait(0)
+    end
+end)
+
+-- Stream collision at the target while holding the ped there, then resolve a
+-- solid ground Z (retried — the area may still be streaming). Returns ground Z
+-- or nil. The ped stays FROZEN throughout, so it can never fall into the void.
+local function streamGround(ped, x, y, z)
+    for _ = 1, 120 do
+        RequestCollisionAtCoord(x, y, z)
+        SetEntityCoordsNoOffset(ped, x, y, z, false, false, false)
+        if HasCollisionLoadedAroundEntity(ped) then break end
+        Wait(50)
+    end
+    for _ = 1, 25 do
+        local ok, gz = GetGroundZFor_3dCoord(x, y, z + 3.0, false)
+        if ok and gz and gz > -190.0 and gz ~= 0.0 then return gz end
+        Wait(50)
+    end
+    return nil
+end
+
 -- ── GTA-style "switch" spawn (camera swoops down from the sky) ──
+-- The ped is frozen at the destination, held in place while collision streams
+-- and the ground is found, and only unfrozen AFTER the switch-in completes.
 local function switchSpawn(x, y, z, h)
     local ped = PlayerPedId()
+    FreezeEntityPosition(ped, true)
+    SetEntityCoordsNoOffset(ped, x, y, z, false, false, false)
+    SetEntityHeading(ped, h or 0.0)
+
     local switched = false
     if not IsPlayerSwitchInProgress() then
         pcall(function() SwitchOutPlayer(ped, 0, 1) end)
@@ -17,23 +54,24 @@ local function switchSpawn(x, y, z, h)
         while GetPlayerSwitchState() ~= 5 and t < 200 do Wait(25); t = t + 1 end   -- 5 = up in the clouds
         switched = (GetPlayerSwitchState() == 5)
     end
-    if not switched then DoScreenFadeOut(300); Wait(350) end
-    SetEntityCoordsNoOffset(ped, x, y, z, false, false, false)
+    if not switched and not IsScreenFadedOut() then DoScreenFadeOut(300); Wait(350) end
+
+    -- ground the ped (frozen) while it is up in the clouds / behind black
+    local gz = streamGround(ped, x, y, z)
+    SetEntityCoordsNoOffset(ped, x, y, gz and (gz + 1.0) or z, false, false, false)
     SetEntityHeading(ped, h or 0.0)
-    RequestCollisionAtCoord(x, y, z)
-    local t = 0
-    while not HasCollisionLoadedAroundEntity(ped) and t < 100 do Wait(50); t = t + 1 end
-    local ok, gz = GetGroundZFor_3dCoord(x, y, z + 5.0, false)
-    if ok and gz and gz ~= 0.0 then SetEntityCoordsNoOffset(ped, x, y, gz + 1.0, false, false, false) end
-    FreezeEntityPosition(ped, false)
-    SetPlayerControl(PlayerId(), true, 0)
-    ClearPedTasksImmediately(ped)
+
     if switched then
         pcall(function() SwitchInPlayer(PlayerPedId()) end)
         local t2 = 0
         while GetPlayerSwitchState() ~= 12 and t2 < 300 do Wait(25); t2 = t2 + 1 end   -- 12 = switch complete
     end
-    if not IsScreenFadedIn() then DoScreenFadeIn(400) end
+
+    ped = PlayerPedId()
+    FreezeEntityPosition(ped, false)   -- unfreeze only now: grounded + switched in
+    SetPlayerControl(PlayerId(), true, 0)
+    ClearPedTasksImmediately(ped)
+    if not IsScreenFadedIn() then DoScreenFadeIn(500) end
 end
 
 local function finishCreator(coords)
@@ -42,10 +80,7 @@ local function finishCreator(coords)
     CreatorCameraStop()
     DoScreenFadeOut(300)
     Wait(350)
-    local ped = PlayerPedId()
-    FreezeEntityPosition(ped, false)
-    SetPlayerControl(PlayerId(), true, 0)
-    DoScreenFadeIn(0)
+    -- stay black; switchSpawn does the swoop and fades in when grounded
     local s = coords or Config.Spawn
     switchSpawn(s.x, s.y, s.z, s.w)
     active = false
@@ -53,6 +88,7 @@ end
 
 local function startCreator()
     active = true
+    spawnReady = true   -- release the black-out guard; the creator owns the fade now
     identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
     appearance = DefaultAppearance(0)
 
@@ -91,10 +127,16 @@ end)
 AddEventHandler('v-core:client:onPlayerLoaded', function(data)
     if active then return end
     CreateThread(function()
-        Wait(400)
+        spawnReady = true              -- take over the black-out guard
+        if not IsScreenFadedOut() then DoScreenFadeOut(0) end
+        local ped = PlayerPedId()
+        FreezeEntityPosition(ped, true)
+        Wait(300)
+        -- dress the ped WHILE the screen is black, so the default look is never seen
         if data.appearance and next(data.appearance) then
-            if data.appearance.sex then SetSexModel(data.appearance.sex); Wait(200) end
+            if data.appearance.sex then SetSexModel(data.appearance.sex); Wait(250) end
             ApplyAppearance(data.appearance)
+            Wait(150)
         end
         local pos = data.position
         if pos and pos.x and pos.y and pos.z then
