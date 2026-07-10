@@ -95,7 +95,8 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .seg.on { background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); box-shadow:0 0 6px rgba(255,106,26,.35), inset 0 1px 0 rgba(255,255,255,.25); }
 .segbar.over .seg.on { background:linear-gradient(180deg,#E86A5E,var(--v-danger)); box-shadow:0 0 6px rgba(194,54,47,.5); }
 .wtxt { font-family:var(--v-font-num); font-size:13px; font-weight:600; color:var(--v-text-dim); white-space:nowrap; text-align:right; }
-.wtxt b { color:var(--v-accent-300); font-weight:700; }
+.wtxt b { color:var(--v-accent-300); font-weight:700; transition:color .18s ease; }
+.wtxt.over b { color:#E86A5E; }
 
 .search { background:#0E0C0A; border:1px solid var(--v-line); border-radius:2px; color:var(--v-text); font-family:var(--v-font-body); font-size:13px; padding:10px 12px; outline:none; box-shadow:inset 0 2px 4px rgba(0,0,0,.5); transition:border-color .18s ease, box-shadow .18s ease; }
 .search:focus { border-color:var(--v-accent); box-shadow:inset 0 2px 4px rgba(0,0,0,.5), 0 0 0 2px rgba(255,106,26,.16); }
@@ -156,9 +157,10 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .tooltip { --cw:10px; position:fixed; z-index:var(--z-tooltip); width:240px; pointer-events:none; }
 .tooltip .tt-top { display:flex; gap:12px; padding:13px 14px 11px; border-bottom:1px solid var(--v-line); }
 .tooltip .tt-img { width:48px; height:48px; border-radius:2px; background:#12100D no-repeat center / 36px; flex:0 0 auto; box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 6px rgba(0,0,0,.6); }
-.tooltip h4 { font-family:var(--v-font-display); font-weight:700; font-size:14px; color:var(--v-text); text-transform:uppercase; letter-spacing:.06em; }
-.tooltip .sub { font-family:var(--v-font-num); font-size:10px; color:var(--v-text-faint); margin-top:4px; }
-.tooltip .sub em { font-family:var(--v-font-display); font-style:normal; font-weight:700; text-transform:uppercase; letter-spacing:.12em; }
+.tooltip .tt-meta { min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:3px; }
+.tooltip h4 { font-family:var(--v-font-display); font-weight:700; font-size:14px; line-height:1.1; color:var(--v-text); text-transform:uppercase; letter-spacing:.06em; }
+.tooltip .sub { max-width:100%; font-family:var(--v-font-num); font-size:10px; color:var(--v-text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.tooltip .rar { margin-top:1px; padding:2px 8px; font-family:var(--v-font-display); font-style:normal; font-weight:700; font-size:10px; text-transform:uppercase; letter-spacing:.16em; color:#0D0B09; background:var(--rc); clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%); }
 .tooltip .tt-body { padding:11px 14px 13px; }
 .tooltip .row { display:flex; justify-content:space-between; font-family:var(--v-font-display); letter-spacing:.10em; text-transform:uppercase; font-size:11px; color:var(--v-text-dim); margin-top:5px; }
 .tooltip .row b { font-family:var(--v-font-num); letter-spacing:0; text-transform:none; color:var(--v-text); font-weight:700; }
