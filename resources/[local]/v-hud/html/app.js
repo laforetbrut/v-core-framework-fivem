@@ -294,6 +294,7 @@ window.addEventListener('message', (event) => {
       if (d.default) mmFrame.def = d.default;
       applyMinimapFrame();
       break;
+    case 'visible': document.body.classList.toggle('hud-hidden', d.visible === false); break;
     case 'strings': strings = d.strings || {}; applyStrings(); break;
     case 'vitals': renderVitals(d.data || {}); break;
     case 'heading': renderCompass(d.h); break;

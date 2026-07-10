@@ -249,3 +249,18 @@ body.editing .minimap-frame {
 }
 body.editing .minimap-frame:active { cursor: grabbing; }
 body.editing .mm-grip { display: flex; }
+
+/* ── Smooth show/hide of the whole HUD (pause menu, cutscenes) ── */
+.vitals, .money, .compass, .minimap-frame {
+  transition: opacity .28s ease, transform .28s ease;
+}
+body.hud-hidden .vitals,
+body.hud-hidden .money,
+body.hud-hidden .compass,
+body.hud-hidden .minimap-frame {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+/* Fluidity: hint the compositor + smooth the ring sweep */
+.ring .fill { will-change: stroke-dashoffset; }
+.vitals, .money, .compass, .minimap-frame { backface-visibility: hidden; }
