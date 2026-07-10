@@ -1,0 +1,82 @@
+/* v-appearance — editor (barber / surgery / tattoo). Field Case, CEF-103 safe.
+   Tokens + primitives from v-ui/theme.css. */
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+#app { position:fixed; inset:0; }
+/* invisible full-screen layer: drag to orbit the ped (ped is behind the NUI) */
+.stage { position:absolute; inset:0; cursor:grab; }
+.stage:active { cursor:grabbing; }
+
+/* right-docked editor panel */
+.dock { position:absolute; top:0; right:0; bottom:0; width:392px; --v-cw:16px;
+  display:flex; flex-direction:column; padding:30px 20px 20px;
+  animation:v-case-open .3s var(--v-ease) backwards; }
+
+.dock-body { flex:1; min-height:0; overflow-y:auto; padding-right:6px; display:flex; flex-direction:column; gap:16px; }
+
+/* control groups */
+.grp { display:flex; flex-direction:column; gap:11px; }
+.grp-h { font-family:var(--v-font-display); font-weight:600; letter-spacing:.22em; text-transform:uppercase; font-size:11px;
+  color:var(--v-text-dim); border-left:3px solid var(--v-accent); padding-left:10px; }
+
+.ctrl { display:flex; flex-direction:column; gap:7px; }
+.ctrl .top { display:flex; align-items:baseline; justify-content:space-between; }
+.ctrl .val { font-family:var(--v-font-num); font-weight:700; font-size:13px; color:var(--v-accent-300); }
+
+/* stepper with a fill bar */
+.stepper { display:flex; align-items:center; gap:8px; }
+.step { width:28px; height:28px; flex:0 0 auto; display:flex; align-items:center; justify-content:center;
+  border-radius:var(--v-r-sm); border:1px solid var(--v-line-2); background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700));
+  color:var(--v-text); font-family:var(--v-font-num); font-size:16px; line-height:1; cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.step:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+.bar { flex:1; height:8px; border-radius:1px; background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7); overflow:hidden; }
+.bar i { display:block; height:100%; background:linear-gradient(90deg,var(--v-accent-600),var(--v-accent)); transition:width var(--v-t-base) ease; }
+
+/* sliders (recessed track, square orange thumb) */
+.ctrl input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:8px; padding:0; border-radius:1px;
+  background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7); outline:none; cursor:pointer; }
+.ctrl input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:10px; height:18px; border-radius:1px;
+  border:1px solid var(--v-accent-600); background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); box-shadow:0 2px 6px -1px rgba(0,0,0,.7); }
+
+/* colour swatches */
+.sw-grid { display:grid; grid-template-columns:repeat(12, 1fr); gap:4px; }
+.sw { aspect-ratio:1; border-radius:2px; border:1px solid var(--v-line-2); cursor:pointer;
+  background:hsl(var(--h,0), 30%, 42%); transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease; }
+.sw:hover { transform:translateY(-1px); }
+.sw.on { box-shadow:0 0 0 2px var(--v-accent); border-color:var(--v-accent); }
+
+/* tattoos */
+.tzones { display:flex; flex-wrap:wrap; gap:6px; }
+.tz { padding:6px 10px; border-radius:var(--v-r-sm); border:1px solid var(--v-line-2); background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700));
+  font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.10em; text-transform:uppercase; color:var(--v-text-dim); cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.tz:hover { border-color:var(--v-accent); color:var(--v-text); }
+.tz.on { border-color:var(--v-accent); color:var(--v-accent-300); background:var(--v-accent-soft); }
+.clear-all { align-self:flex-start; padding:7px 12px; font-size:11px; }
+.tlist { display:flex; flex-direction:column; gap:6px; }
+.trow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:9px 12px;
+  border-radius:var(--v-r-md); background-color:#12100D; box-shadow:inset 0 2px 6px rgba(0,0,0,.7), inset 0 0 0 1px var(--v-line);
+  cursor:pointer; transition:box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.trow .tn { font-family:var(--v-font-display); font-size:12px; letter-spacing:.04em; text-transform:uppercase; color:var(--v-text); }
+.trow .tk { font-family:var(--v-font-num); font-weight:700; color:var(--v-text-faint); }
+.trow:hover { background-color:#171410; box-shadow:inset 0 0 0 1px var(--v-accent); }
+.trow.on { box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent); }
+.trow.on .tk { color:var(--v-accent-300); }
+.trow.on .tn { color:var(--v-accent-300); }
+
+/* footer: camera zones + actions */
+.dock-foot { display:flex; flex-direction:column; gap:12px; padding-top:14px; margin-top:12px; border-top:1px solid var(--v-line); }
+.zones { display:flex; gap:6px; }
+.zbtn { flex:1; padding:8px 0; border-radius:var(--v-r-sm); border:1px solid var(--v-line-2); background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700));
+  font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.16em; color:var(--v-text-dim); cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.zbtn:hover { border-color:var(--v-accent); color:var(--v-text); }
+.zbtn.on { border-color:var(--v-accent); color:var(--v-accent-300); background:var(--v-accent-soft); }
+.acts { display:flex; gap:10px; }
+.acts .v-btn { flex:1; }
+
+@media (prefers-reduced-motion: reduce) { .dock { animation:none !important; } .sw:hover { transform:none !important; } }

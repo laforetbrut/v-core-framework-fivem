@@ -4,8 +4,8 @@ lua54 'yes'
 
 name 'v-appearance'
 author 'vyrriox'
-version '0.1.0'
-description 'Appearance engine: single writer of ped appearance, stable (collection,index,texture) identity.'
+version '0.2.0'
+description 'Appearance engine: single writer of ped appearance, stable identity, barber/surgery/tattoo editor.'
 
 dependencies { 'v-core' }
 
@@ -13,13 +13,25 @@ shared_script '@v-core/locale/shared.lua'
 shared_script 'config.lua'
 
 client_scripts {
+    'data/tattoos.lua',
     'shared/refs.lua',
     'client/engine.lua',
     'client/migrate.lua',
+    'client/camera.lua',
+    'client/editor.lua',
+    'client/stations.lua',
 }
 
 server_scripts {
     'server/main.lua',
+}
+
+ui_page 'html/index.html'
+
+files {
+    'html/index.html',
+    'html/style.css',
+    'html/app.js',
 }
 
 locales {
