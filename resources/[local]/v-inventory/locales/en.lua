@@ -3,6 +3,7 @@ Locales.en = Locales.en or {}
 local T = {
     ['inv.title']      = 'Inventory',
     ['inv.player']     = 'Inventory',
+    ['inv.quick']      = 'Quick slots',
     ['inv.wallet']     = 'Cash',
     ['inv.search']     = 'Search…',
     ['inv.hint']       = 'Drag to move · Right-click for actions · Shift+drag to split · Esc to close',

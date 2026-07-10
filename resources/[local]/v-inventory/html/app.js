@@ -38,44 +38,51 @@ const def = (name) => defs[name] || { label: name, weight: 0, category: 'misc', 
 function slotEl(inv, slot) {
   const el = document.createElement('div');
   el.className = 'slot'; el.dataset.inv = inv; el.dataset.slot = slot;
-  el.innerHTML = '<span class="hk"></span><span class="count"></span><span class="scrim"></span><span class="label"></span>';
+  el.innerHTML = '<span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span>';
   return el;
 }
-function buildGrid(gridId, inv, count) {
+function buildGrid(gridId, inv, count, start) {
   const g = byId(gridId); g.innerHTML = '';
-  for (let s = 1; s <= count; s++) g.appendChild(slotEl(inv, s));
+  for (let s = (start || 1); s <= count; s++) g.appendChild(slotEl(inv, s));
 }
-function buildHotbar(n) {
-  const h = byId('hotbar'); h.innerHTML = '';
+function buildQuickbar(n) {
+  const h = byId('quickbar'); h.innerHTML = '';
   for (let s = 1; s <= n; s++) { const el = slotEl('player', s); el.dataset.hot = s; h.appendChild(el); }
+}
+function buildSegs(id, n) {
+  const b = byId(id); b.innerHTML = '';
+  for (let i = 0; i < n; i++) { const s = document.createElement('span'); s.className = 'seg'; b.appendChild(s); }
 }
 
 // ── Render ──
 function renderSlot(el) {
   const inv = el.dataset.inv, slot = +el.dataset.slot;
   const it = itemAt(inv, slot);
-  const count = el.querySelector('.count'); const label = el.querySelector('.label');
+  const info = el.querySelector('.info'); const label = el.querySelector('.label'); const hk = el.querySelector('.hk');
+  hk.textContent = el.dataset.hot || '';
   if (!it) {
     el.removeAttribute('data-item'); el.draggable = false; el.style.backgroundImage = ''; el.style.removeProperty('--cat');
-    count.textContent = ''; label.textContent = ''; return;
+    info.innerHTML = ''; label.textContent = ''; return;
   }
   const d = def(it.name);
   el.setAttribute('data-item', it.name); el.draggable = true;
   el.style.setProperty('--cat', CAT[d.category] || 'var(--v-accent)');
   el.style.backgroundImage = d.image ? `url("images/${d.image}")` : '';
-  count.textContent = it.amount > 1 ? it.amount : '';
+  const tot = ((d.weight || 0) * it.amount) / 1000;
+  info.innerHTML = `<b>${it.amount}</b><span>(${tot.toFixed(1)})</span>`;
   label.textContent = d.label || it.name;
 }
 function renderGrid(inv) {
   const gid = inv === 'player' ? 'grid-player' : 'grid-secondary';
   byId(gid).querySelectorAll('.slot').forEach(renderSlot);
-  if (inv === 'player') byId('hotbar').querySelectorAll('.slot').forEach(renderSlot);
+  if (inv === 'player') byId('quickbar').querySelectorAll('.slot').forEach(renderSlot);
 }
 function setWeight(prefix, w, max) {
-  const pct = max > 0 ? Math.min(100, (w / max) * 100) : 0;
-  byId(prefix + '-wfill').style.width = pct + '%';
-  byId(prefix + '-wbar').classList.toggle('over', w > max);
-  byId(prefix + '-wtxt').textContent = kg(w) + ' / ' + kg(max);
+  const segs = byId(prefix + '-seg').querySelectorAll('.seg');
+  const on = max > 0 ? Math.round(Math.min(1, w / max) * segs.length) : 0;
+  segs.forEach((s, i) => s.classList.toggle('on', i < on));
+  byId(prefix + '-seg').classList.toggle('over', w > max);
+  byId(prefix + '-wtxt').textContent = (w / 1000).toFixed(2) + ' / ' + (max / 1000).toFixed(2);
 }
 function render() {
   rebuildMaps();
@@ -90,7 +97,6 @@ function render() {
     let w = 0; (sec.items || []).forEach(it => { w += (def(it.name).weight || 0) * it.amount; });
     setWeight('sec', w, sec.maxWeight || 0);
   }
-  byId('hotbar').querySelectorAll('.slot').forEach(el => { el.querySelector('.hk').textContent = el.dataset.hot; });
   applyFilter('player'); applyFilter('secondary');
 }
 
@@ -140,10 +146,11 @@ function onHover(e) {
   if (!el || !el.hasAttribute('data-item')) return;
   const it = itemAt(el.dataset.inv, +el.dataset.slot); if (!it) return;
   const d = def(it.name); const meta = d.metadata || {};
-  tt.innerHTML = `<h4>${esc(d.label || it.name)}</h4><div class="sub">${esc(it.name)}</div>`
-    + `<div class="row">${t('inv.weight')}: ${kg((d.weight || 0) * it.amount)}</div>`
-    + (it.amount > 1 ? `<div class="row">${t('inv.qty')}: ${it.amount}</div>` : '')
-    + (meta.desc ? `<div class="desc">${esc(meta.desc)}</div>` : '');
+  tt.innerHTML = `<div class="tt-top"><div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
+    + `<div><h4>${esc(d.label || it.name)}</h4><div class="sub">${esc(it.name)}</div></div></div>`
+    + `<div class="tt-body"><div class="row"><span>${t('inv.weight')}</span><b>${kg((d.weight || 0) * it.amount)}</b></div>`
+    + (it.amount > 1 ? `<div class="row"><span>${t('inv.qty')}</span><b>${it.amount}</b></div>` : '')
+    + (meta.desc ? `<div class="desc">${esc(meta.desc)}</div>` : '') + `</div>`;
   tt.classList.remove('hidden');
   positionFloat(tt, e.clientX + 16, e.clientY + 16);
 }
@@ -238,7 +245,7 @@ function onDblClick(e) {
 
 // ── Wire delegated listeners once ──
 function wire() {
-  ['grid-player', 'grid-secondary', 'hotbar'].forEach(id => {
+  ['grid-player', 'grid-secondary', 'quickbar'].forEach(id => {
     const g = byId(id);
     g.addEventListener('dragstart', onDragStart);
     g.addEventListener('dragover', onDragOver);
@@ -271,9 +278,11 @@ window.addEventListener('message', (e) => {
   if (d.action === 'open') {
     state = d.state; strings = d.strings || {}; defs = state.defs || {};
     if (!built) { wire(); built = true; }
-    buildGrid('grid-player', 'player', state.maxSlots || 40);
-    buildHotbar(state.hotbar || 5);
-    if (state.secondary) buildGrid('grid-secondary', 'secondary', state.secondary.maxSlots || 30);
+    const hb = state.hotbar || 5;
+    buildQuickbar(hb);
+    buildGrid('grid-player', 'player', state.maxSlots || 40, hb + 1);   // main grid = slots after the quick slots
+    buildSegs('player-seg', 12);
+    if (state.secondary) { buildGrid('grid-secondary', 'secondary', state.secondary.maxSlots || 30, 1); buildSegs('sec-seg', 12); }
     byId('player-search').value = ''; byId('sec-search').value = '';
     applyStrings(); render();
     byId('v-root').classList.remove('hidden');

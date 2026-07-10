@@ -8,34 +8,40 @@
 <body>
   <div id="v-root" class="hidden">
     <div class="inv-wrap">
+      <!-- QUICK SLOTS (left) -->
+      <aside class="quickbar">
+        <span class="quick-label" data-i18n="inv.quick">Quick slots</span>
+        <div class="quick-grid" id="quickbar" data-inv="player"></div>
+      </aside>
+
       <!-- PLAYER -->
       <section class="panel" id="panel-player">
         <header class="panel-head">
-          <div class="ptitle"><span class="dot"></span><span class="v-title" id="player-label" data-i18n="inv.player">Inventory</span></div>
-          <div class="wmeter"><div class="wbar" id="player-wbar"><i id="player-wfill"></i></div><span class="wtxt" id="player-wtxt">0 / 0</span></div>
+          <div class="ptitle"><span class="v-title" id="player-label" data-i18n="inv.player">Inventory</span>
+            <span class="wallet-chip" id="wallet" draggable="true"><span class="wc-ic">$</span><span id="wallet-amt">$0</span></span>
+          </div>
+          <div class="wmeter">
+            <span class="wtxt" id="player-wtxt">0.00 / 30.00</span>
+            <div class="segbar" id="player-seg"></div>
+          </div>
           <input class="search" id="player-search" data-i18n-ph="inv.search" autocomplete="off" />
         </header>
-        <!-- Wallet (cash) tile -->
-        <div class="wallet" id="wallet" draggable="true">
-          <span class="wico">$</span>
-          <div class="wmeta"><span class="wlbl" data-i18n="inv.wallet">Cash</span><span class="wamt" id="wallet-amt">$0</span></div>
-        </div>
         <div class="grid v-scroll" id="grid-player" data-inv="player"></div>
       </section>
 
       <!-- SECONDARY -->
       <section class="panel hidden" id="panel-secondary">
         <header class="panel-head">
-          <div class="ptitle"><span class="dot"></span><span class="v-title" id="sec-label">Stash</span></div>
-          <div class="wmeter"><div class="wbar" id="sec-wbar"><i id="sec-wfill"></i></div><span class="wtxt" id="sec-wtxt">0 / 0</span></div>
+          <div class="ptitle"><span class="v-title" id="sec-label">Stash</span></div>
+          <div class="wmeter">
+            <span class="wtxt" id="sec-wtxt">0.00 / 0.00</span>
+            <div class="segbar" id="sec-seg"></div>
+          </div>
           <input class="search" id="sec-search" data-i18n-ph="inv.search" autocomplete="off" />
         </header>
         <div class="grid v-scroll" id="grid-secondary" data-inv="secondary"></div>
       </section>
     </div>
-
-    <!-- HOTBAR -->
-    <div class="hotbar" id="hotbar" data-inv="player"></div>
     <div class="hint" data-i18n="inv.hint">Drag to move · Right-click for actions · Esc to close</div>
   </div>
 
