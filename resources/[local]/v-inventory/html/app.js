@@ -40,10 +40,15 @@ const EQ_IC = {
   pants: `<svg ${ESVG}><path d="M6 3h12l-1 18h-4l-1-9-1 9H6Z"/></svg>`,
   shoes: `<svg ${ESVG}><path d="M2 16h13l5 2v2H2ZM5 16V9l4-1 2 3 4 1"/></svg>`,
 };
+// Clothing items carry no image (they are body-slot garments); fall back to the
+// matching equipment icon. Item name (singular) -> EQ_IC key (plural).
+const CLOTH_ITEM_IC = { mask: 'masks', hat: 'hats', glasses: 'glasses', top: 'tops', undershirt: 'undershirt', arms: 'arms', pants: 'pants', shoes: 'shoes' };
+// Generic placeholder for any other item that has no image.
+const ITEM_PH = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7Z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>`;
 
 let state = null, strings = {}, defs = {};
 let maps = { player: {}, secondary: {} };
-let drag = null;            // { inv, slot, money? }
+let drag = null;            // pointer-drag state (see the drag section)
 let built = false;
 
 const t = (k) => strings[k] || k;
@@ -68,7 +73,7 @@ function slotEl(inv, slot, i) {
   const el = document.createElement('div');
   el.className = 'slot'; el.dataset.inv = inv; el.dataset.slot = slot;
   el.style.setProperty('--i', i || 0);   // staggered seat-in on open
-  el.innerHTML = '<span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span><i class="dura"></i>';
+  el.innerHTML = '<span class="ph"></span><span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span><i class="dura"></i>';
   return el;
 }
 function buildGrid(gridId, inv, count, start) {
@@ -92,18 +97,20 @@ function itemLabel(it, d) { return (it.metadata && it.metadata.label) || d.label
 function renderSlot(el) {
   const inv = el.dataset.inv, slot = +el.dataset.slot;
   const it = itemAt(inv, slot);
-  const info = el.querySelector('.info'); const label = el.querySelector('.label'); const hk = el.querySelector('.hk'); const dura = el.querySelector('.dura');
+  const info = el.querySelector('.info'); const label = el.querySelector('.label'); const hk = el.querySelector('.hk'); const dura = el.querySelector('.dura'); const ph = el.querySelector('.ph');
   hk.textContent = el.dataset.hot || '';
   dura.className = 'dura';
   if (!it) {
-    el.removeAttribute('data-item'); el.removeAttribute('data-rar'); el.draggable = false;
+    el.removeAttribute('data-item'); el.removeAttribute('data-rar');
     el.style.backgroundImage = ''; el.style.removeProperty('--cat');
-    info.innerHTML = ''; label.textContent = ''; return;
+    info.innerHTML = ''; label.textContent = ''; if (ph) ph.innerHTML = ''; return;
   }
   const d = def(it.name); const rar = rarityOf(d);
-  el.setAttribute('data-item', it.name); el.setAttribute('data-rar', rar); el.draggable = true;
+  el.setAttribute('data-item', it.name); el.setAttribute('data-rar', rar);
   el.style.setProperty('--cat', RARITY[rar] || CAT[d.category] || 'var(--v-accent)');
   el.style.backgroundImage = d.image ? `url("images/${d.image}")` : '';
+  // no image -> show a fallback icon (clothing garment icon, else a generic box)
+  if (ph) ph.innerHTML = d.image ? '' : (EQ_IC[CLOTH_ITEM_IC[it.name]] || ITEM_PH);
   const tot = ((d.weight || 0) * it.amount) / 1000;
   info.innerHTML = `<b>${it.amount}</b><span>(${tot.toFixed(1)})</span>`;
   label.textContent = itemLabel(it, d);
@@ -172,42 +179,86 @@ function renderEquipment() {
   });
 }
 
-// ── Drag & drop (delegated) ──
-function onDragStart(e) {
-  const el = e.target.closest('.slot,.wallet-chip'); if (!el) return;
-  if (el.id === 'wallet') { drag = { inv: 'wallet', slot: 'money', money: true }; el.classList.add('dragging'); return; }
-  if (!el.hasAttribute('data-item')) { e.preventDefault(); return; }
-  drag = { inv: el.dataset.inv, slot: +el.dataset.slot };
-  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text', el.dataset.slot);
-  el.classList.add('dragging');
+// ── Drag & drop (pointer-based — FiveM's CEF does not reliably fire HTML5
+//    dragstart/drop, so we drive it with mousedown/mousemove/mouseup) ──
+const DRAG_THRESHOLD = 4;   // px of movement before a click becomes a drag
+
+function dragSource(el) {
+  if (!el) return null;
+  if (el.id === 'wallet') return { inv: 'wallet', slot: 'money', money: true };
+  if (el.classList.contains('slot') && el.hasAttribute('data-item')) return { inv: el.dataset.inv, slot: +el.dataset.slot };
+  return null;
 }
-function onDragOver(e) {
-  const el = e.target.closest('.slot,.wallet-chip'); if (!el || !drag) return;
-  e.preventDefault();
-  const cur = document.querySelector('.drop-hover'); if (cur && cur !== el) cur.classList.remove('drop-hover');
-  el.classList.add('drop-hover');
+function targetUnder(x, y) {
+  const el = document.elementFromPoint(x, y);
+  return el && el.closest('.slot,.wallet-chip,.eqslot');
 }
-function onDragEnd() {
-  document.querySelectorAll('.dragging,.drop-hover').forEach(el => el.classList.remove('dragging', 'drop-hover'));
-  drag = null;
+function clearDropHover() { document.querySelectorAll('.drop-hover').forEach(el => el.classList.remove('drop-hover')); }
+
+function onPointerDown(e) {
+  if (e.button !== 0) return;                       // left button only
+  const el = e.target.closest('.slot,.wallet-chip');
+  const src = dragSource(el); if (!src) return;
+  drag = Object.assign({ el, startX: e.clientX, startY: e.clientY, active: false, ghost: null }, src);
 }
 
-// ── Equipment drag/equip/unequip ──
-function onEqOver(e) {
-  const el = e.target.closest('.eqslot'); if (!el || !drag || drag.money || drag.inv !== 'player') return;
-  const it = itemAt('player', drag.slot); if (!it || def(it.name).category !== 'clothing') return;
-  e.preventDefault();
-  const cur = document.querySelector('.eqslot.drop-hover'); if (cur && cur !== el) cur.classList.remove('drop-hover');
-  el.classList.add('drop-hover');
+function beginGhost() {
+  hideTooltip();
+  drag.el.classList.add('dragging');
+  const g = document.createElement('div'); g.className = 'drag-ghost';
+  if (drag.money) { g.textContent = '$'; g.classList.add('is-cash'); }
+  else {
+    const it = itemAt(drag.inv, drag.slot); const d = it && def(it.name);
+    if (d && d.image) g.style.backgroundImage = `url("images/${d.image}")`;
+    else g.innerHTML = (it && (EQ_IC[CLOTH_ITEM_IC[it.name]] || ITEM_PH)) || ITEM_PH;
+  }
+  document.body.appendChild(g); drag.ghost = g;
 }
-async function onEqDrop(e) {
-  const el = e.target.closest('.eqslot'); if (!el || !drag) return;
-  e.preventDefault();
-  const from = drag; onDragEnd();
-  if (from.money || from.inv !== 'player') return;
-  const it = itemAt('player', from.slot); if (!it || def(it.name).category !== 'clothing') return;
-  applyState(await post('use', { slot: from.slot }));   // using a clothing item equips it (v-clothing)
+
+function onPointerMove(e) {
+  if (!drag) return;
+  if (!drag.active) {
+    if (Math.abs(e.clientX - drag.startX) + Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+    drag.active = true; beginGhost();
+  }
+  drag.ghost.style.left = e.clientX + 'px';
+  drag.ghost.style.top = e.clientY + 'px';
+  clearDropHover();
+  const tgt = targetUnder(e.clientX, e.clientY);
+  if (tgt) tgt.classList.add('drop-hover');
 }
+
+async function onPointerUp(e) {
+  const d = drag; drag = null;
+  if (!d) return;
+  d.el.classList.remove('dragging');
+  clearDropHover();
+  if (d.ghost) d.ghost.remove();
+  if (!d.active) return;                             // was a click, not a drag
+  const tgt = targetUnder(e.clientX, e.clientY);
+  if (tgt) await performDrop(d, tgt, e.shiftKey);
+}
+
+async function performDrop(from, targetEl, shift) {
+  // equipment slot -> equip the dragged clothing item (v-clothing via 'use')
+  if (targetEl.classList.contains('eqslot')) {
+    if (from.money || from.inv !== 'player') return;
+    const it = itemAt('player', from.slot); if (!it || def(it.name).category !== 'clothing') return;
+    applyState(await post('use', { slot: from.slot }));
+    return;
+  }
+  const to = targetEl.id === 'wallet' ? { inv: 'wallet', slot: 'money' } : { inv: targetEl.dataset.inv, slot: +targetEl.dataset.slot };
+  if (from.inv === to.inv && from.slot === to.slot) return;
+  // cash: wallet -> a container needs an amount
+  if (from.money) {
+    if (to.inv === 'secondary') showAmount(state.player.cash, async (amt) => applyState(await post('move', { from: 'wallet', to: 'secondary', amount: amt })));
+    return;
+  }
+  const src = itemAt(from.inv, from.slot); if (!src) return;
+  const doMove = async (amt) => applyState(await post('move', { from: from.inv, fromSlot: from.slot, to: to.inv, toSlot: to.slot, amount: amt }));
+  if (shift && src.amount > 1) showAmount(src.amount, doMove); else doMove(src.amount);
+}
+
 function onEqContext(e) {
   const el = e.target.closest('.eqslot'); if (!el) return;
   e.preventDefault();
@@ -219,27 +270,9 @@ function onEqContext(e) {
   menu.appendChild(li);
   menu.classList.remove('hidden'); positionFloat(menu, e.clientX, e.clientY);
 }
-async function onDrop(e) {
-  const el = e.target.closest('.slot,.wallet-chip'); if (!el || !drag) return;
-  e.preventDefault();
-  const from = drag;
-  const to = el.id === 'wallet' ? { inv: 'wallet', slot: 'money' } : { inv: el.dataset.inv, slot: +el.dataset.slot };
-  const shift = e.shiftKey;
-  onDragEnd();
-  if (from.inv === to.inv && from.slot === to.slot) return;
-
-  // Cash: wallet -> a container needs an amount
-  if (from.money) {
-    if (to.inv === 'secondary') showAmount(state.player.cash, async (amt) => applyState(await post('move', { from: 'wallet', to: 'secondary', amount: amt })));
-    return;
-  }
-  const src = itemAt(from.inv, from.slot); if (!src) return;
-  const doMove = async (amt) => applyState(await post('move', { from: from.inv, fromSlot: from.slot, to: to.inv, toSlot: to.slot, amount: amt }));
-  if (shift && src.amount > 1) showAmount(src.amount, doMove); else doMove(src.amount);
-}
-
 // ── Tooltip ──
 function onHover(e) {
+  if (drag) return;                                 // no tooltip while dragging
   const el = e.target.closest('.slot'); const tt = byId('tooltip');
   if (!el || !el.hasAttribute('data-item')) return;
   const it = itemAt(el.dataset.inv, +el.dataset.slot); if (!it) return;
@@ -364,25 +397,19 @@ function onDblClick(e) {
 function wire() {
   ['grid-player', 'grid-secondary', 'quickbar'].forEach(id => {
     const g = byId(id);
-    g.addEventListener('dragstart', onDragStart);
-    g.addEventListener('dragover', onDragOver);
-    g.addEventListener('drop', onDrop);
-    g.addEventListener('dragend', onDragEnd);
+    g.addEventListener('mousedown', onPointerDown);
     g.addEventListener('dblclick', onDblClick);
     g.addEventListener('contextmenu', onContext);
     g.addEventListener('mouseover', onHover);
     g.addEventListener('mouseout', hideTooltip);
   });
   const w = byId('wallet');
-  w.addEventListener('dragstart', onDragStart);
-  w.addEventListener('dragover', onDragOver);
-  w.addEventListener('drop', onDrop);
-  w.addEventListener('dragend', onDragEnd);
+  w.addEventListener('mousedown', onPointerDown);
   w.addEventListener('contextmenu', onContext);
-  const eq = byId('equipment');
-  eq.addEventListener('dragover', onEqOver);
-  eq.addEventListener('drop', onEqDrop);
-  eq.addEventListener('contextmenu', onEqContext);
+  byId('equipment').addEventListener('contextmenu', onEqContext);
+  // pointer drag is tracked at document level so the cursor can leave a slot
+  document.addEventListener('mousemove', onPointerMove);
+  document.addEventListener('mouseup', onPointerUp);
   document.addEventListener('mousedown', (e) => { if (!e.target.closest('#context')) closeContext(); });
   document.addEventListener('scroll', closeContext, true);
 }
