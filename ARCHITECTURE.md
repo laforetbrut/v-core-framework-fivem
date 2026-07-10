@@ -362,16 +362,13 @@ Known holes today:
 and cash/bank toggle. Purchase re-derives the price server-side, checks funds, reserves inventory
 space via `AddItem`, then charges and logs. fr+en.
 
+**Fixed (hardening pass).** `getShop` / `buy` now run through `canUseShop`: the server checks the player
+is **physically at a store** mapping to that shop id (coords from the shared `Config.Locations`) and, for
+job-locked stores, that the player **holds the job** — closing the buy-from-anywhere and unenforced-`job`
+holes. Purchase amount is **clamped server-side**, `ItemDefs[data.item]` is **guarded** before the label
+index, and `RemoveMoney` is now **checked with the item refunded on failure** (latent dupe closed).
+
 **Remaining.**
-- **No server-side proximity check** on `getShop` / `buy`. A client can buy any shop's catalogue from
-  anywhere on the map.
-- **`shops.job` is loaded but never enforced** — a job-locked store (a police armory) is buyable by
-  anyone. Combined with the point above, this is the module's most serious hole.
-- `RemoveMoney`'s return value is **ignored** after `AddItem` has already granted the items. Safe only
-  because nothing yields between them today — a latent free-item dupe.
-- Purchase amount is unbounded server-side (the 1-99 clamp lives only in the client stepper).
-- `ItemDefs[data.item].label` is indexed unguarded on the success path — an orphaned shop row throws
-  *after* the money is taken and the item granted.
 - Locations hardcoded in `config.lua`; the `shops.coords` column built to hold them is **dead**.
 - Data is loaded **once at boot** — any DB price edit needs a full `restart v-shops`.
 - Direct SQL against `items` and `shops`.
@@ -486,13 +483,14 @@ parameterized query). Every action validated server-side and audit-logged.
 
 Ordered by how much damage it can do.
 
-1. **Economy holes.** The offline-transfer dupe in `v-banking`; the ignored `RemoveMoney` result in
-   `v-shops`; the uncapped `AddMoney` in `v-core` and `v-admin`. Fix these before the server opens.
-2. **Missing server-side authorization.** `v-shops` and `v-banking` never check that the player is
-   actually near the shop/ATM, and `shops.job` is loaded but never enforced. `v-status:server:onRespawn`
-   is an unvalidated self-cleanse. ✅ **`v-inventory` openStash is now server-authoritative** (vehicle
-   trunks resolve by net id with a distance check + server-read plate; drops must be real; move/drop/give
-   amounts are floored) — the "open any trunk by plate / write arbitrary stash rows" exploit is closed.
+1. **Economy holes.** The offline-transfer dupe in `v-banking`; the uncapped `AddMoney` in `v-core` and
+   `v-admin`. Fix these before the server opens. ✅ **`v-shops`' ignored `RemoveMoney` is fixed** — the
+   charge is checked and the item refunded on failure.
+2. **Missing server-side authorization.** `v-banking` never checks that the player is actually near the
+   ATM. `v-status:server:onRespawn` is an unvalidated self-cleanse. ✅ **`v-inventory` openStash is now
+   server-authoritative** (vehicle trunks resolve by net id with a distance check + server-read plate;
+   drops must be real; move/drop/give amounts are floored). ✅ **`v-shops` is now server-authoritative**
+   too — `getShop`/`buy` verify the player is at a store mapping to that shop id and enforce `shops.job`.
 3. **Client-trusted writes.** `v-core:createCharacter` and `saveAppearance` take unbounded, unvalidated
    client tables straight into the DB. `v-clothing` writes client-supplied drawable ids into item
    metadata.

@@ -20,6 +20,29 @@ local function priceOf(shop, itemName)
     return nil
 end
 
+-- Server-authoritative access check: the player must be standing at a physical store
+-- that maps to this shop id, and must hold the shop's job if it is job-locked. Coords
+-- live in the shared Config.Locations, so the server can validate them (the client
+-- cannot be trusted to only send shops it is actually next to).
+local function canUseShop(source, shop)
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then return false, 'too_far' end
+    local pos = GetEntityCoords(ped)
+    local near = false
+    for _, loc in ipairs(Config.Locations or {}) do
+        if loc.shop == shop.id and #(pos - vector3(loc.coords.x, loc.coords.y, loc.coords.z)) <= (Config.Distance + 3.0) then
+            near = true; break
+        end
+    end
+    if not near then return false, 'too_far' end
+    if shop.job and shop.job ~= '' then
+        local player = Core.GetPlayer(source)
+        local job = player and player.job
+        if not job or job.name ~= shop.job then return false, 'no_job' end
+    end
+    return true
+end
+
 -- Compact item def (label/image/weight/category/rarity) for the NUI, keyed by name.
 local function defOf(name)
     local d = ItemDefs[name]
@@ -42,6 +65,8 @@ Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
     local shop = Shops[shopId]
     local player = Core.GetPlayer(source)
     if not shop or not player then resolve(false); return end
+    local ok = canUseShop(source, shop)
+    if not ok then resolve(false); return end
     local list = {}
     for _, e in ipairs(shop.items) do
         local d = ItemDefs[e.item]
@@ -64,10 +89,18 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
     local player = Core.GetPlayer(source)
     if not shop or not player then resolve(false); return end
 
+    local ok, why = canUseShop(source, shop)
+    if not ok then
+        Core.Notify(source, LP(source, why == 'no_job' and 'shop.no_job' or 'shop.too_far'), 'error')
+        resolve({ error = why }); return
+    end
+
     local price = priceOf(shop, data.item)
     local amount = math.floor(tonumber(data.amount) or 0)
     local account = (data.account == 'bank') and 'bank' or 'cash'
     if not price or amount <= 0 then resolve(false); return end
+    amount = math.min(amount, 100)   -- server-side clamp (client stepper caps at 99)
+    if not ItemDefs[data.item] then resolve(false); return end   -- guard the label index below
 
     local total = price * amount
     if (player.money[account] or 0) < total then
@@ -79,7 +112,12 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
     if not exports['v-inventory']:AddItem(source, data.item, amount, nil, tonumber(data.slot)) then
         Core.Notify(source, LP(source, 'shop.nospace'), 'error'); resolve({ error = 'space' }); return
     end
-    player.RemoveMoney(account, total, 'shop-buy')
+    -- Charge only after the item is granted; if the charge fails (race), refund the item
+    -- so the player can never keep goods they didn't pay for.
+    if not player.RemoveMoney(account, total, 'shop-buy') then
+        exports['v-inventory']:RemoveItem(source, data.item, amount)
+        Core.Notify(source, LP(source, 'shop.nofunds'), 'error'); resolve({ error = 'funds' }); return
+    end
 
     Core.Log('shop', ('%s bought %dx %s for %d'):format(player.citizenid, amount, data.item, total), nil, player.citizenid)
     Core.Notify(source, LP(source, 'shop.bought', amount, ItemDefs[data.item].label, total), 'success')
