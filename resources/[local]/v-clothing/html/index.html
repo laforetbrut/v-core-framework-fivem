@@ -12,28 +12,37 @@
   <!-- Admin scan progress overlay -->
   <div id="scanov" class="scanov hidden">
     <div class="scanbox">
-      <div class="scanhead"><span class="dot"></span><span class="scantitle" id="scantitle">Scan</span></div>
+      <div class="scanhead"><span class="dot" aria-hidden="true"></span><span class="scantitle" id="scantitle">Scan</span></div>
       <div class="scanbar"><i id="scanfill"></i></div>
       <div class="scanmeta"><span id="scanlabel"></span><span id="scancount"></span></div>
     </div>
   </div>
 
   <div id="cl" class="cl-overlay hidden">
-    <div class="cl-panel">
+    <div class="cl-panel v-chamfer">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" data-i18n="cl.title">Clothing</span>
+
       <div class="head">
-        <div class="brand"><span class="dot"></span><h1 class="v-title" data-i18n="cl.title">Clothing</h1></div>
-        <div class="right"><span class="cash" id="cash">$0</span><button class="close" id="close" aria-label="Close">&times;</button></div>
+        <div class="right">
+          <span class="dot" aria-hidden="true"></span>
+          <span class="cash v-num" id="cash">$0</span>
+          <button class="close" id="close" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
       </div>
 
       <div class="tabs">
-        <button class="tab on" data-tab="store" data-i18n="cl.tab_store">Store</button>
-        <button class="tab" data-tab="worn" data-i18n="cl.tab_worn">Wardrobe</button>
+        <button class="tab on" type="button" data-tab="store" data-i18n="cl.tab_store">Store</button>
+        <button class="tab" type="button" data-tab="worn" data-i18n="cl.tab_worn">Wardrobe</button>
       </div>
 
       <!-- Store (catalogue) -->
       <div id="pane-store" class="pane">
         <div class="cats" id="cats"></div>
-        <input id="search" class="search" placeholder="#" autocomplete="off" />
+        <input id="search" class="search v-input" placeholder="#" autocomplete="off" aria-label="Filter garments by number" />
         <div class="tiles v-scroll" id="tiles"></div>
         <div class="tex-wrap">
           <span class="v-label" data-i18n="cl.texture">Texture</span>
@@ -41,7 +50,7 @@
         </div>
         <div class="buybar">
           <div class="bsel" id="bsel"></div>
-          <button class="buy" id="buy" data-i18n="cl.buy">Buy</button>
+          <button class="buy v-btn v-btn--accent" id="buy" type="button" data-i18n="cl.buy">Buy</button>
         </div>
       </div>
 

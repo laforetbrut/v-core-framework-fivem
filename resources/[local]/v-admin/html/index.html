@@ -2,26 +2,29 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="adm" class="adm hidden">
     <div class="panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i><i class="v-brk v-brk--bl" aria-hidden="true"></i>
+
       <!-- Left rail -->
       <div class="rail">
-        <div class="brand"><span class="dot"></span><span class="btext" data-i18n="adm.title">Administration</span></div>
-        <button class="rtab on" data-tab="dash" data-i18n="adm.tab_dash">Dashboard</button>
-        <button class="rtab" data-tab="players" data-i18n="adm.tab_players">Players</button>
-        <button class="rtab" data-tab="res" data-i18n="adm.tab_res">Scripts</button>
-        <button class="rtab" data-tab="world" data-i18n="adm.tab_world">World</button>
-        <button class="rtab" data-tab="logs" data-i18n="adm.tab_logs">Logs</button>
+        <div class="brand"><span class="dot" aria-hidden="true"></span><span class="btext" data-i18n="adm.title">Administration</span></div>
+        <button class="rtab on" data-tab="dash" style="--i:0" data-i18n="adm.tab_dash">Dashboard</button>
+        <button class="rtab" data-tab="players" style="--i:1" data-i18n="adm.tab_players">Players</button>
+        <button class="rtab" data-tab="res" style="--i:2" data-i18n="adm.tab_res">Scripts</button>
+        <button class="rtab" data-tab="world" style="--i:3" data-i18n="adm.tab_world">World</button>
+        <button class="rtab" data-tab="logs" style="--i:4" data-i18n="adm.tab_logs">Logs</button>
         <div class="railfoot">F10 · PROJET R</div>
       </div>
 
       <!-- Content -->
       <div class="content">
         <div class="chead">
-          <h1 id="ctitle" class="ctitle"></h1>
+          <h1 id="ctitle" class="v-tab"></h1>
           <div class="cactions">
             <button class="mini" id="refresh" data-i18n="adm.refresh">Refresh</button>
             <button class="close" id="close" aria-label="Close">&times;</button>
@@ -35,7 +38,7 @@
 
         <!-- Players -->
         <section id="tab-players" class="tab hidden">
-          <input id="psearch" class="search" data-i18n-ph="adm.search" autocomplete="off" />
+          <input id="psearch" class="search" data-i18n-ph="adm.search" aria-label="Search players" autocomplete="off" />
           <div class="list v-scroll" id="plist"></div>
         </section>
 
@@ -53,7 +56,7 @@
           <div class="wgroup">
             <span class="wlabel"><span data-i18n="adm.time">Time</span> · <b id="hourval">12</b>h</span>
             <div class="wrow">
-              <input type="range" id="hour" min="0" max="23" value="12" />
+              <input type="range" id="hour" min="0" max="23" value="12" aria-label="Hour of day" />
               <label class="chk"><input type="checkbox" id="freezetime" /><span data-i18n="adm.freeze_time">Freeze time</span></label>
               <button class="mini accent" id="applytime" data-i18n="adm.act_apply">Apply</button>
             </div>
@@ -61,14 +64,14 @@
           <div class="wgroup">
             <span class="wlabel" data-i18n="adm.car">Vehicle</span>
             <div class="wrow">
-              <input id="carmodel" class="search grow" data-i18n-ph="adm.car_ph" autocomplete="off" />
+              <input id="carmodel" class="search grow" data-i18n-ph="adm.car_ph" aria-label="Vehicle model" autocomplete="off" />
               <button class="mini accent" id="spawncar" data-i18n="adm.spawn">Spawn</button>
             </div>
           </div>
           <div class="wgroup">
             <span class="wlabel" data-i18n="adm.announce">Announcement</span>
             <div class="wrow">
-              <input id="announce" class="search grow" data-i18n-ph="adm.announce_ph" maxlength="220" autocomplete="off" />
+              <input id="announce" class="search grow" data-i18n-ph="adm.announce_ph" aria-label="Announcement message" maxlength="220" autocomplete="off" />
               <button class="mini accent" id="sendannounce" data-i18n="adm.send">Send</button>
             </div>
           </div>
@@ -76,7 +79,7 @@
 
         <!-- Logs -->
         <section id="tab-logs" class="tab hidden">
-          <input id="logfilter" class="search" data-i18n-ph="adm.logs_filter" autocomplete="off" />
+          <input id="logfilter" class="search" data-i18n-ph="adm.logs_filter" aria-label="Filter logs" autocomplete="off" />
           <div class="list v-scroll" id="loglist"></div>
         </section>
       </div>

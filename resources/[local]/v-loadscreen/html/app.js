@@ -30,7 +30,7 @@ function setProgress(frac) {
   const p = Math.max(shown, Math.min(100, Math.round((frac || 0) * 100)));
   shown = p;
   fill.style.width = p + '%';
-  pctEl.textContent = p + '%';
+  pctEl.innerHTML = '<b>' + p + '</b>%';
 }
 function setStatus(text) { statusEl.textContent = text; }
 

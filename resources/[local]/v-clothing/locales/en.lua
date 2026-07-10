@@ -7,6 +7,7 @@ local T = {
     ['cl.tab_store']   = 'Store',
     ['cl.tab_worn']    = 'Wardrobe',
     ['cl.buy']         = 'Buy',
+    ['cl.free']        = 'Free',
     ['cl.unequip']     = 'Take off',
     ['cl.style']       = 'Style',
     ['cl.texture']     = 'Texture',

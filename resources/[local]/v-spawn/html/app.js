@@ -93,9 +93,9 @@ function showScreen(screen, extra) {
 
 // ── First-spawn location cards ──
 const SPAWN_ICONS = {
-  airport: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10.5 20.5 12 14l-7 -2.5v-2l7 1.5V5.5a1.5 1.5 0 0 1 3 0V11l7 -1.5v2L15 14l1.5 6.5-1.5.9-3-5.4-3 5.4z"/></svg>',
-  prison:  '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M12 4v16M16 4v16"/></svg>',
-  sandy:   '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="17" cy="7" r="2.6"/><path d="M2 17c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0M2 21c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"/></svg>',
+  airport: '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10.5 20.5 12 14l-7 -2.5v-2l7 1.5V5.5a1.5 1.5 0 0 1 3 0V11l7 -1.5v2L15 14l1.5 6.5-1.5.9-3-5.4-3 5.4z"/></svg>',
+  prison:  '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 4v16M12 4v16M16 4v16"/></svg>',
+  sandy:   '<svg viewBox="0 0 24 24" width="30" height="30" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="17" cy="7" r="2.6"/><path d="M2 17c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0M2 21c2-1.6 4-1.6 6 0s4 1.6 6 0 4-1.6 6 0"/></svg>',
 };
 
 function buildSpawnCards(spawns) {
@@ -103,7 +103,7 @@ function buildSpawnCards(spawns) {
   spawns.forEach((s, i) => {
     const card = document.createElement('button');
     card.className = 'spawn-card';
-    card.style.animationDelay = (i * 90) + 'ms';
+    card.style.setProperty('--i', i);
     card.innerHTML = `<span class="sicon">${SPAWN_ICONS[s.key] || ''}</span>
       <span class="slabel">${s.label}</span><span class="ssub">${s.sub || ''}</span>`;
     card.onclick = () => {
@@ -181,6 +181,7 @@ async function buildGallery(row, c) {
   list.forEach(d => {
     const cell = document.createElement('button');
     cell.className = 'tcell' + (d === cur ? ' sel' : '');
+    cell.setAttribute('aria-label', ctrlLabel(c) + ' ' + d);
     const img = document.createElement('img'); img.dataset.d = d; img.alt = '';
     const hit = CLOTH_MEM.get(c.cat + '_' + d);
     if (hit) { img.src = hit; cell.classList.add('ready'); } else obs.observe(img);
@@ -214,6 +215,7 @@ function buildControls() {
         const sw = document.createElement('button');
         sw.className = 'sw' + (i === val ? ' sel' : '');
         sw.style.background = hex;
+        sw.setAttribute('aria-label', ctrlLabel(c) + ' ' + (i + 1));
         sw.onclick = () => {
           setPath(appearance, c.path, i);
           grid.querySelectorAll('.sw').forEach(x => x.classList.remove('sel'));
@@ -227,14 +229,15 @@ function buildControls() {
       row.innerHTML = `<div class="top"><span class="v-label">${ctrlLabel(c)}</span><span class="val" data-val>${disp}</span></div>`;
       const s = document.createElement('input');
       s.type = 'range'; s.min = c.min; s.max = c.max; s.step = c.step || 0.1; s.value = val;
+      s.setAttribute('aria-label', ctrlLabel(c));
       s.oninput = () => { const v = parseFloat(s.value); setPath(appearance, c.path, v); row.querySelector('[data-val]').textContent = Math.round(v * 100); pushUpdate(); };
       row.appendChild(s);
     } else {
       row.innerHTML = `<div class="top"><span class="v-label">${ctrlLabel(c)}</span><span class="val" data-val>${Math.round(val)}</span></div>`;
       const st = document.createElement('div'); st.className = 'stepper';
-      const dec = document.createElement('button'); dec.className = 'step-btn'; dec.textContent = '−';
+      const dec = document.createElement('button'); dec.className = 'step-btn'; dec.textContent = '−'; dec.setAttribute('aria-label', ctrlLabel(c) + ' −');
       const bar = document.createElement('div'); bar.className = 'bar'; bar.innerHTML = '<i></i>';
-      const inc = document.createElement('button'); inc.className = 'step-btn'; inc.textContent = '+';
+      const inc = document.createElement('button'); inc.className = 'step-btn'; inc.textContent = '+'; inc.setAttribute('aria-label', ctrlLabel(c) + ' +');
       const fill = () => { bar.querySelector('i').style.width = (((getPath(appearance, c.path) - c.min) / (c.max - c.min)) * 100) + '%'; };
       const change = (d) => {
         let v = Math.round(getPath(appearance, c.path) ?? c.min) + d;

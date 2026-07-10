@@ -11,7 +11,7 @@
     <span class="mm-corner tl"></span><span class="mm-corner tr"></span>
     <span class="mm-corner bl"></span><span class="mm-corner br"></span>
     <span class="mm-grip"><span class="dot"></span><span data-i18n="el.minimap">Minimap</span></span>
-    <span id="mm-resize" class="mm-resize" title="Resize"></span>
+    <span id="mm-resize" class="mm-resize" title="Resize" role="button" aria-label="Resize minimap"></span>
   </div>
 
   <!-- Compass (top-center by default) -->
@@ -55,58 +55,61 @@
 
   <!-- Settings panel -->
   <div id="settings" class="overlay hidden">
-    <div class="panel v-panel">
+    <div class="panel v-panel v-chamfer">
+      <span class="v-tab">HUD</span>
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
       <div class="panel__head">
         <div class="brand">
           <span class="dot"></span>
-          <h1 class="v-title">HUD <span class="v-title__accent" data-i18n="set.title">Settings</span></h1>
+          <h1 class="v-title"><span class="v-title__accent" data-i18n="set.title">Settings</span></h1>
         </div>
         <button class="close" id="btn-close" aria-label="Close">&times;</button>
       </div>
 
       <div class="panel__body v-scroll">
-        <div class="group">
+        <div class="group" style="--i:0">
           <span class="v-label" data-i18n="set.elements">Elements</span>
           <div class="toggles" id="toggles"></div>
         </div>
 
-        <div class="group">
+        <div class="group" style="--i:1">
           <span class="v-label" data-i18n="set.layout">Layout</span>
           <button class="v-btn v-btn--ghost full" id="btn-move" data-i18n="set.move">Move elements</button>
         </div>
 
-        <div class="group">
+        <div class="group" style="--i:2">
           <span class="v-label" data-i18n="set.accent">Accent</span>
           <div class="swatches" id="swatches"></div>
           <label class="custom-color">
-            <input type="color" id="accent-custom" value="#FF6A1A" />
+            <input type="color" id="accent-custom" value="#FF6A1A" aria-label="Custom accent colour" />
             <span data-i18n="set.custom">Custom colour</span>
           </label>
         </div>
 
-        <div class="group">
+        <div class="group" style="--i:3">
           <span class="v-label"><span data-i18n="set.opacity">Opacity</span> <em id="opacity-val">100%</em></span>
-          <input type="range" id="opacity" min="30" max="100" value="100" />
+          <input type="range" id="opacity" min="30" max="100" value="100" aria-label="HUD opacity" />
         </div>
 
-        <div class="group">
+        <div class="group" style="--i:4">
           <span class="v-label"><span data-i18n="set.scale">Scale</span> <em id="scale-val">100%</em></span>
-          <input type="range" id="scale" min="70" max="130" value="100" />
+          <input type="range" id="scale" min="70" max="130" value="100" aria-label="HUD scale" />
         </div>
 
-        <div class="group row-between">
+        <div class="group row-between" style="--i:5">
           <span class="v-label" style="margin:0" data-i18n="set.dynamic">Hide vitals when full</span>
-          <button class="switch" id="dynamic" role="switch"><span></span></button>
+          <button class="switch" id="dynamic" role="switch" aria-label="Hide vitals when full"><span></span></button>
         </div>
 
-        <div class="group">
+        <div class="group" style="--i:6">
           <span class="v-label"><span data-i18n="set.mapsize">Minimap size</span> <em id="mmsize-val">100%</em></span>
-          <input type="range" id="mmsize" min="60" max="200" value="100" />
+          <input type="range" id="mmsize" min="60" max="200" value="100" aria-label="Minimap size" />
         </div>
 
-        <div class="group row-between">
+        <div class="group row-between" style="--i:7">
           <span class="v-label" style="margin:0" data-i18n="set.mapvehicle">Minimap only in vehicle</span>
-          <button class="switch" id="mapvehicle" role="switch"><span></span></button>
+          <button class="switch" id="mapvehicle" role="switch" aria-label="Minimap only in vehicle"><span></span></button>
         </div>
       </div>
 

@@ -1,121 +1,253 @@
-/* v-spawn — character creator. Tokens + components fall back inline. */
+/* v-spawn — character creator, "FIELD CASE" art direction.
+   Chamfered dock, orange stencil tabs, foam-cutout slots, recessed gauges,
+   Consolas caliper readouts. Tokens + primitives come from v-ui/theme.css.
+   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / ext fonts. */
+
+/* ── Fallback token mirror ──────────────────────────────────────
+   v-ui/theme.css is the source of truth and loads first. This block
+   mirrors only the core tokens style.css consumes, so the UI still
+   renders (not black/unstyled) if theme.css fails to load. Values
+   MUST stay identical to theme.css. */
 :root {
-  --v-bg-900:#0B0B0D; --v-bg-800:#101015; --v-bg-700:#17171D; --v-bg-600:#1E1E26; --v-bg-500:#262631;
-  --v-line:#2A2A33; --v-line-2:#3B3B47;
-  --v-text:#ECEAE6; --v-text-dim:#9C99A2; --v-text-faint:#63616C;
-  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-danger:#E5484D;
-  --v-font-display:'Bahnschrift','Oswald','Segoe UI',sans-serif;
+  --v-bg-500:#221D18; --v-bg-600:#1C1815; --v-bg-700:#16130F; --v-bg-800:#100E0C; --v-bg-sunk:#0E0C0A;
+  --v-line:#2C2620; --v-line-2:#3A332B;
+  --v-text:#EFE7DC; --v-text-dim:#A9A199; --v-text-faint:#8F877E; --v-ink:#170D05;
+  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-accent-600:#A83C0D; --v-accent-line:rgba(255,106,26,.42);
+  --v-r-sm:2px; --v-r-md:3px; --v-cw:12px;
+  --v-chamfer:polygon(0 var(--v-cw), var(--v-cw) 0, 100% 0, 100% calc(100% - var(--v-cw)), calc(100% - var(--v-cw)) 100%, 0 100%);
+  --v-font-display:'Bahnschrift Condensed','Bahnschrift','Oswald','Segoe UI',sans-serif;
   --v-font-body:'Segoe UI','Inter',system-ui,sans-serif;
+  --v-font-num:Consolas,'Courier New',monospace;
+  --v-ease:cubic-bezier(.2,.8,.2,1); --v-t-fast:.16s; --v-t-base:.18s;
+  --z-base:1; --z-raised:2; --z-sticky:100; --z-overlay:600;
+  --z-stencil:3;   /* stencil tabs ride above raised content (matches theme .v-tab) */
 }
+
 * { box-sizing:border-box; margin:0; padding:0; }
-html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none; color:var(--v-text); font-family:var(--v-font-body); }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
 .hidden { display:none !important; }
-.dot { width:8px; height:8px; border-radius:2px; background:var(--v-accent); box-shadow:0 0 10px var(--v-accent); }
 
-/* Component fallbacks (mirror v-ui) */
-.v-panel { background:linear-gradient(180deg,var(--v-bg-700),var(--v-bg-800)); border:1px solid var(--v-line); border-radius:16px; box-shadow:0 12px 34px rgba(0,0,0,.55); }
-.v-title { font-family:var(--v-font-display); font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:15px; }
-.v-label { font-size:10px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--v-text-dim); }
-.v-btn { font-family:var(--v-font-display); font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--v-text); background:var(--v-bg-600); border:1px solid var(--v-line-2); border-radius:6px; padding:10px 18px; cursor:pointer; transition:background .14s, box-shadow .14s; }
-.v-btn:hover { background:var(--v-bg-500); }
-.v-btn--accent { background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border-color:var(--v-accent); color:#150a02; font-weight:600; }
-.v-btn--accent:hover { box-shadow:0 0 22px rgba(255,106,26,.3); }
-.v-btn--ghost { background:transparent; }
-.v-scroll::-webkit-scrollbar { width:8px; }
-.v-scroll::-webkit-scrollbar-thumb { background:var(--v-bg-500); border-radius:8px; }
+/* hazard notch (decorative) */
+.dot { width:8px; height:8px; border-radius:var(--v-r-sm); background:var(--v-accent);
+  box-shadow:0 0 8px rgba(255,106,26,.55); flex:0 0 auto; }
 
-/* ── Language overlay ── */
-.lang-overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:radial-gradient(120% 120% at 50% 30%, rgba(20,12,6,.65), rgba(6,6,8,.9)); }
-.lang-card { text-align:center; padding:44px 52px; background:linear-gradient(180deg,var(--v-bg-700),var(--v-bg-800)); border:1px solid var(--v-line); border-radius:18px; box-shadow:0 20px 60px rgba(0,0,0,.6); animation:v-up .3s ease; }
-.lang-brand { font-family:var(--v-font-display); letter-spacing:.34em; font-size:12px; color:var(--v-text-dim); display:flex; align-items:center; justify-content:center; gap:9px; margin-bottom:18px; }
-.lang-title { font-family:var(--v-font-display); font-weight:600; font-size:26px; letter-spacing:.02em; margin-bottom:26px; }
-.lang-title span { display:block; font-size:13px; font-weight:400; letter-spacing:.06em; color:var(--v-text-faint); text-transform:none; margin-top:4px; }
-.lang-btns { display:flex; gap:14px; }
-.lang-btn { display:flex; flex-direction:column; align-items:center; gap:8px; width:130px; padding:20px 0; background:var(--v-bg-600); border:1px solid var(--v-line-2); border-radius:12px; color:var(--v-text); font-family:var(--v-font-display); letter-spacing:.05em; font-size:14px; cursor:pointer; transition:border-color .15s, background .15s, transform .06s; }
-.lang-btn:hover { border-color:var(--v-accent); background:var(--v-bg-500); }
-.lang-btn:active { transform:translateY(1px); }
-.lang-btn .flag { font-family:var(--v-font-display); font-size:26px; font-weight:700; letter-spacing:.06em; line-height:1; color:var(--v-accent); }
-.lang-btn:hover .flag { color:var(--v-accent-300); }
+/* panel title trimmed to fit the dock */
+.panel__head .v-title { font-size:16px; letter-spacing:.12em; line-height:1.15; }
+
+/* ── Chamfered shells (border layer + fill layer, tabs bleed off the edge) ── */
+.panel, .lang-card, .cam { position:relative; background:transparent; border:0; }
+.panel::before, .lang-card::before, .cam::before {
+  content:''; position:absolute; inset:0; z-index:0; clip-path:var(--v-chamfer);
+  background:linear-gradient(180deg, var(--v-line-2), var(--v-line));
+  filter:drop-shadow(0 18px 34px rgba(0,0,0,.72)); }
+.panel::after, .lang-card::after, .cam::after {
+  content:''; position:absolute; inset:1px; z-index:0; clip-path:var(--v-chamfer);
+  background:linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045); }
+.panel > *, .lang-card > *, .cam > * { position:relative; z-index:var(--z-raised); }
+/* machined L-brackets sit below content, above the fill */
+.panel > .v-brk, .lang-card > .v-brk { z-index:var(--z-base); }
+
+/* header stencil stamp — steel, not orange (keeps the orange budget for accents) */
+.head-tab { position:absolute; top:-11px; left:24px; z-index:var(--z-stencil); height:22px; padding:0 14px;
+  display:flex; align-items:center; font-family:var(--v-font-display); font-weight:700; font-size:11px;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--v-text-dim);
+  background:linear-gradient(180deg, var(--v-line-2), var(--v-line));
+  clip-path:polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow:0 3px 8px -3px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.05); }
+.head-tab b { color:var(--v-accent); font-weight:700; }
 
 /* ── Right dock ── */
-.panel { position:fixed; top:0; right:0; z-index:5; width:360px; height:100%; display:flex; flex-direction:column; background:linear-gradient(180deg,rgba(23,23,29,.98),rgba(11,11,13,.99)); border-left:1px solid var(--v-line); box-shadow:-12px 0 40px rgba(0,0,0,.5); animation:v-slide .28s ease; }
-.panel__head { display:flex; align-items:center; gap:10px; padding:20px; border-bottom:1px solid var(--v-line); }
-.panel__head .v-title__accent, .v-title__accent { color:var(--v-accent); }
+.panel { position:fixed; top:18px; right:18px; bottom:18px; z-index:var(--z-sticky);
+  width:366px; display:flex; flex-direction:column; animation:dockIn .3s var(--v-ease) backwards; }
+.panel__head { position:relative; display:flex; align-items:center; gap:10px; padding:22px 20px 16px;
+  border-bottom:1px solid var(--v-line); }
 .screen { flex:1; display:flex; flex-direction:column; min-height:0; }
 
-/* Identity form */
+/* ── Identity form ── */
 #screen-identity { padding:22px 20px; gap:16px; }
 .field { display:flex; flex-direction:column; gap:7px; }
-.field input { background:var(--v-bg-600); border:1px solid var(--v-line-2); border-radius:8px; color:var(--v-text); padding:10px 12px; font-family:var(--v-font-body); font-size:14px; outline:none; }
-.field input:focus { border-color:var(--v-accent); }
-.seg { display:flex; gap:8px; }
-.seg-btn { flex:1; padding:10px; border:1px solid var(--v-line-2); border-radius:8px; background:var(--v-bg-600); color:var(--v-text-dim); font-family:var(--v-font-display); letter-spacing:.04em; text-transform:uppercase; font-size:12px; cursor:pointer; }
-.seg-btn.on { border-color:var(--v-accent); color:var(--v-text); background:var(--v-accent-soft, rgba(255,106,26,.14)); }
-.err { color:var(--v-danger); font-size:12px; min-height:14px; }
+.field input { background:var(--v-bg-sunk); border:1px solid var(--v-line); border-radius:var(--v-r-sm);
+  color:var(--v-text); padding:10px 12px; font-family:var(--v-font-body); font-size:14px; outline:none;
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.5); transition:border-color var(--v-t-base) ease, box-shadow var(--v-t-base) ease; }
+.field input:focus { border-color:var(--v-accent);
+  box-shadow:inset 0 2px 4px rgba(0,0,0,.5), 0 0 0 2px rgba(255,106,26,.16); }
+.field input[type=date] { color-scheme:dark; font-family:var(--v-font-num); }
+
+/* sex segmented control — recessed group, orange active segment */
+.seg { display:flex; gap:0; padding:3px; background:var(--v-bg-sunk); border:1px solid var(--v-line);
+  border-radius:var(--v-r-sm); box-shadow:inset 0 2px 4px rgba(0,0,0,.5); }
+.seg-btn { flex:1; padding:9px; border:0; background:transparent; color:var(--v-text-dim); cursor:pointer;
+  font-family:var(--v-font-display); letter-spacing:.14em; text-transform:uppercase; font-size:12px;
+  border-radius:var(--v-r-sm); transition:color var(--v-t-base) ease, background var(--v-t-base) ease; }
+.seg-btn:hover { color:var(--v-accent-300); }
+.seg-btn.on { color:var(--v-ink); font-weight:700;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  box-shadow:0 3px 10px -3px var(--v-accent-600); }
+
+/* lighter danger tone — muted --v-danger fails contrast at body size on dark */
+.err { color:var(--v-danger-300); font-size:11px; letter-spacing:.02em; min-height:14px; }
 .full { width:100%; margin-top:auto; }
 
-/* Appearance */
-.tabs { display:flex; gap:4px; padding:12px 14px; border-bottom:1px solid var(--v-line); flex-wrap:wrap; }
-.tab { padding:7px 11px; border-radius:7px; background:transparent; border:1px solid transparent; color:var(--v-text-dim); font-family:var(--v-font-display); text-transform:uppercase; letter-spacing:.04em; font-size:11px; cursor:pointer; }
-.tab.on { color:var(--v-text); background:var(--v-bg-600); border-color:var(--v-line-2); }
-.controls { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:16px; }
-.ctrl { display:flex; flex-direction:column; gap:8px; }
-.ctrl .top { display:flex; justify-content:space-between; align-items:center; }
-.ctrl .val { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; color:var(--v-accent-300); font-size:12px; }
+/* ── Appearance: section tabs (the per-section stencil) ── */
+.tabs { display:flex; flex-wrap:wrap; gap:5px; padding:14px 16px; border-bottom:1px solid var(--v-line); }
+.tab { padding:7px 12px; border:1px solid var(--v-line); border-radius:var(--v-r-sm);
+  background:var(--v-bg-sunk); color:var(--v-text-dim); cursor:pointer;
+  font-family:var(--v-font-display); font-weight:600; text-transform:uppercase; letter-spacing:.14em; font-size:11px;
+  transition:color var(--v-t-base) ease, border-color var(--v-t-base) ease, background var(--v-t-base) ease; }
+.tab:hover { color:var(--v-accent-300); border-color:var(--v-accent-line); }
+.tab.on { color:var(--v-ink); font-weight:700; border-color:var(--v-accent);
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  clip-path:polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  box-shadow:0 3px 10px -2px var(--v-accent-600); }
+
+.controls { flex:1; overflow-y:auto; padding:18px 16px; display:flex; flex-direction:column; gap:18px; }
+.ctrl { display:flex; flex-direction:column; gap:9px; }
+.ctrl .top { display:flex; justify-content:space-between; align-items:center; gap:10px; }
+/* caliper readout — Consolas, tabular, orange */
+.ctrl .val { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; letter-spacing:0;
+  color:var(--v-accent-300); font-size:12px; font-weight:700; }
+
+/* stepper — recessed track, orange fill (JS drives .bar i width) */
 .stepper { display:flex; align-items:center; gap:8px; }
-.stepper .bar { flex:1; height:4px; border-radius:4px; background:var(--v-bg-500); position:relative; overflow:hidden; }
-.stepper .bar i { position:absolute; left:0; top:0; bottom:0; background:var(--v-accent); }
-.step-btn { width:28px; height:28px; border-radius:7px; border:1px solid var(--v-line-2); background:var(--v-bg-600); color:var(--v-text); font-size:16px; cursor:pointer; line-height:1; }
-.step-btn:hover { border-color:var(--v-accent); }
-input[type=range] { -webkit-appearance:none; width:100%; height:4px; border-radius:4px; background:var(--v-bg-500); outline:none; }
-input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:var(--v-accent); cursor:pointer; box-shadow:0 0 0 3px rgba(255,106,26,.2); }
+.stepper .bar { flex:1; height:8px; position:relative; overflow:hidden; border-radius:var(--v-r-sm);
+  background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line), inset 0 1px 3px rgba(0,0,0,.6); }
+.stepper .bar i { position:absolute; left:0; top:0; bottom:0; width:0;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); box-shadow:0 0 8px rgba(255,106,26,.4); }
+.step-btn { width:30px; height:30px; border-radius:var(--v-r-sm); border:1px solid var(--v-line-2);
+  background:linear-gradient(180deg, var(--v-bg-500), var(--v-bg-700)); color:var(--v-text);
+  font-size:16px; line-height:1; cursor:pointer; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.step-btn:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+
+/* range slider — recessed track, orange machined thumb */
+input[type=range] { -webkit-appearance:none; appearance:none; width:100%; height:8px; border-radius:var(--v-r-sm);
+  background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line), inset 0 1px 3px rgba(0,0,0,.6); outline:none; }
+input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:16px; height:16px;
+  border-radius:var(--v-r-sm); border:1px solid var(--v-accent-600); cursor:pointer;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); box-shadow:0 2px 6px -1px var(--v-accent-600); }
+
 .foot { display:flex; gap:10px; padding:14px 16px; border-top:1px solid var(--v-line); }
 .foot .v-btn { flex:1; }
 
-/* ── Camera controls ── */
-.cam { position:fixed; bottom:26px; left:50%; transform:translateX(-50%); z-index:6; display:flex; align-items:center; gap:14px; padding:8px 14px 8px 8px; background:rgba(16,16,21,.96); border:1px solid var(--v-line); border-radius:12px; }
-.cam-hint { font-size:11px; color:var(--v-text-faint); letter-spacing:.02em; }
-
-/* Mouse-orbit capture surface (behind the panel) */
-.stage { position:fixed; inset:0; z-index:1; cursor:grab; }
-.stage:active { cursor:grabbing; }
-
-/* Colour swatch grid */
+/* ── Colour swatch grid — square chips, orange selection ring (no glow) ── */
 .swatch-grid { display:grid; grid-template-columns:repeat(8, 1fr); gap:5px; }
-.sw { width:100%; aspect-ratio:1 / 1; border-radius:5px; border:1px solid rgba(255,255,255,.12); cursor:pointer; padding:0; }
-.sw:hover { border-color:rgba(255,255,255,.35); }
-.sw.sel { outline:2px solid var(--v-accent); outline-offset:1px; border-color:var(--v-accent); }
-.cam-btn { width:40px; height:40px; border-radius:9px; border:1px solid var(--v-line-2); background:var(--v-bg-600); color:var(--v-text); font-size:22px; cursor:pointer; }
-.cam-btn:hover { border-color:var(--v-accent); }
-.cam-zones { display:flex; gap:4px; }
-.cam-zone { padding:9px 14px; border-radius:8px; border:1px solid transparent; background:transparent; color:var(--v-text-dim); font-family:var(--v-font-display); text-transform:uppercase; letter-spacing:.05em; font-size:11px; cursor:pointer; }
-.cam-zone.on { color:var(--v-text); background:var(--v-bg-600); border-color:var(--v-line-2); }
+.sw { width:100%; aspect-ratio:1 / 1; border:1px solid rgba(0,0,0,.4); border-radius:var(--v-r-sm);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.06); cursor:pointer; padding:0;
+  transition:transform var(--v-t-fast) ease; }
+.sw:hover { transform:translateY(-1px); }
+.sw.sel { outline:2px solid var(--v-accent); outline-offset:1px; box-shadow:inset 0 0 0 1px rgba(0,0,0,.4); }
 
-@keyframes v-up { from { opacity:0; transform:translateY(12px);} to { opacity:1; transform:translateY(0);} }
-@keyframes v-slide { from { opacity:0; transform:translateX(30px);} to { opacity:1; transform:translateX(0);} }
-
-/* Garment thumbnail strip (images generated by the v-clothing admin scan) */
-.thumbstrip { display:flex; gap:6px; overflow-x:auto; margin-top:9px; padding-bottom:5px; }
-.thumbstrip::-webkit-scrollbar { height:7px; }
-.thumbstrip::-webkit-scrollbar-thumb { background:var(--v-bg-500); border-radius:7px; }
-.tcell { position:relative; flex:0 0 auto; width:62px; height:62px; padding:0; border-radius:9px; border:1px solid var(--v-line); background:radial-gradient(120% 120% at 50% 25%, var(--v-bg-600), var(--v-bg-800)); cursor:pointer; transition:border-color .12s, transform .06s; }
-.tcell:hover { border-color:var(--v-line-2); }
-.tcell:active { transform:scale(.95); }
-.tcell.sel { border-color:var(--v-accent); box-shadow:0 0 0 1px var(--v-accent) inset; }
-.tcell img { position:absolute; inset:6%; width:88%; height:88%; object-fit:contain; opacity:0; transition:opacity .2s ease; }
+/* ── Garment picture strip — foam-cutout slots ── */
+.thumbstrip { display:flex; gap:7px; overflow-x:auto; margin-top:10px; padding:2px 0 6px; }
+.thumbstrip::-webkit-scrollbar { height:6px; }
+.thumbstrip::-webkit-scrollbar-track { background:var(--v-bg-sunk); }
+.thumbstrip::-webkit-scrollbar-thumb { background:var(--v-line-2); }
+.thumbstrip::-webkit-scrollbar-thumb:hover { background:var(--v-accent-600); }
+.tcell { position:relative; flex:0 0 auto; width:62px; height:62px; padding:0; border:0; border-radius:var(--v-r-md);
+  background-color:#12100D; box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line); cursor:pointer;
+  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.tcell:hover { transform:translateY(-2px); background-color:#171410;
+  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
+.tcell:active { transform:scale(.96); }
+.tcell.sel { box-shadow:inset 0 0 0 2px var(--v-accent), inset 0 0 16px -6px var(--v-accent); }
+.tcell img { position:absolute; inset:6%; width:88%; height:88%; object-fit:contain; opacity:0;
+  transition:opacity var(--v-t-base) ease; }
 .tcell.ready img { opacity:1; }
-.tcell .tnum { position:absolute; bottom:2px; right:3px; font-size:9px; line-height:1; font-weight:600; padding:2px 3px; border-radius:4px; background:rgba(0,0,0,.62); color:var(--v-text); font-variant-numeric:tabular-nums; }
+.tcell .tnum { position:absolute; bottom:3px; right:4px; padding:2px 4px; border-radius:var(--v-r-sm);
+  background:rgba(0,0,0,.62); color:var(--v-text); font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
+  font-size:10px; line-height:1; font-weight:700; }
 .tcell.sel .tnum { color:var(--v-accent-300); }
 
-/* First-spawn location selection */
-.spawn-overlay { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:radial-gradient(80% 90% at 50% 50%, rgba(11,11,13,.55), rgba(11,11,13,.92)); }
-.spawn-inner { display:flex; flex-direction:column; align-items:center; gap:26px; animation:v-up .35s ease; }
-.spawn-title { font-family:var(--v-font-display); font-size:30px; font-weight:600; letter-spacing:.04em; text-transform:uppercase; text-align:center; }
-.spawn-cards { display:flex; gap:18px; }
-.spawn-card { display:flex; flex-direction:column; align-items:center; gap:10px; width:230px; padding:28px 20px 24px; border-radius:14px; border:1px solid var(--v-line-2); background:linear-gradient(180deg, rgba(30,30,38,.96), rgba(16,16,21,.98)); color:var(--v-text); cursor:pointer; transition:transform .14s ease, border-color .14s, box-shadow .14s, opacity .3s; animation:v-up .4s ease backwards; }
-.spawn-card .sicon { color:var(--v-accent); }
-.spawn-card .slabel { font-family:var(--v-font-display); font-size:16px; font-weight:600; letter-spacing:.03em; text-transform:uppercase; }
-.spawn-card .ssub { font-size:12px; color:var(--v-text-dim); text-align:center; line-height:1.4; }
-.spawn-card:hover { transform:translateY(-5px); border-color:var(--v-accent); box-shadow:0 14px 40px rgba(255,106,26,.14); }
-.spawn-card.picked { border-color:var(--v-accent); box-shadow:0 0 0 1px var(--v-accent) inset, 0 14px 44px rgba(255,106,26,.22); transform:scale(1.03); }
+/* ── Camera control cluster ── */
+.cam { --v-cw:10px; position:fixed; bottom:24px; left:50%; transform:translateX(-50%); z-index:var(--z-sticky);
+  display:flex; align-items:center; gap:14px; padding:10px 16px 10px 10px; }
+.cam-zones { display:flex; gap:0; padding:3px; background:var(--v-bg-sunk); border:1px solid var(--v-line);
+  border-radius:var(--v-r-sm); box-shadow:inset 0 2px 4px rgba(0,0,0,.5); }
+.cam-zone { padding:8px 16px; border:0; background:transparent; color:var(--v-text-dim); cursor:pointer;
+  font-family:var(--v-font-display); text-transform:uppercase; letter-spacing:.14em; font-size:11px;
+  border-radius:var(--v-r-sm); transition:color var(--v-t-base) ease, background var(--v-t-base) ease; }
+.cam-zone:hover { color:var(--v-accent-300); }
+.cam-zone.on { color:var(--v-ink); font-weight:700;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); }
+.cam-hint { font-family:var(--v-font-num); font-size:11px; letter-spacing:0; color:var(--v-text-faint); white-space:nowrap; }
+
+/* mouse-orbit capture surface (behind the dock) */
+.stage { position:fixed; inset:0; z-index:var(--z-base); cursor:grab; }
+.stage:active { cursor:grabbing; }
+
+/* ── Language overlay ── */
+.lang-overlay { position:fixed; inset:0; z-index:var(--z-overlay); display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(120% 120% at 50% 30%, rgba(20,12,6,.62), rgba(6,5,4,.9)); }
+.lang-card { --v-cw:14px; text-align:center; padding:46px 54px; animation:v-case-open .34s var(--v-ease) backwards; }
+.lang-brand { display:flex; align-items:center; justify-content:center; gap:9px; margin-bottom:18px;
+  font-family:var(--v-font-display); font-weight:600; letter-spacing:.30em; font-size:12px; color:var(--v-text-dim); }
+.lang-title { font-family:var(--v-font-display); font-weight:700; font-size:26px; letter-spacing:.10em;
+  text-transform:uppercase; margin-bottom:26px; }
+.lang-title span { display:block; font-family:var(--v-font-body); font-size:13px; font-weight:400; letter-spacing:.04em;
+  color:var(--v-text-faint); text-transform:none; margin-top:6px; }
+.lang-btns { display:flex; gap:14px; }
+.lang-btn { display:flex; flex-direction:column; align-items:center; gap:10px; width:132px; padding:22px 0;
+  background:linear-gradient(180deg, var(--v-bg-500), var(--v-bg-700)); border:1px solid var(--v-line-2);
+  border-radius:var(--v-r-md); color:var(--v-text); cursor:pointer;
+  font-family:var(--v-font-display); letter-spacing:.14em; text-transform:uppercase; font-size:13px;
+  transition:border-color var(--v-t-base) ease, transform var(--v-t-fast) ease; }
+.lang-btn:hover { border-color:var(--v-accent); transform:translateY(-2px); }
+.lang-btn .flag { font-family:var(--v-font-display); font-size:26px; font-weight:700; letter-spacing:.08em;
+  line-height:1; color:var(--v-accent); }
+.lang-btn:hover .flag { color:var(--v-accent-300); }
+
+/* ── First-spawn location cards (the hero moment) ── */
+.spawn-overlay { position:fixed; inset:0; z-index:var(--z-overlay); display:flex; align-items:center; justify-content:center;
+  background:radial-gradient(85% 95% at 50% 45%, rgba(10,9,8,.5), rgba(8,7,6,.93)); }
+.spawn-inner { display:flex; flex-direction:column; align-items:center; gap:30px; animation:v-fade .35s ease; }
+.spawn-title { font-family:var(--v-font-display); font-weight:700; font-size:30px; letter-spacing:.10em;
+  text-transform:uppercase; text-align:center; }
+.spawn-cards { display:flex; gap:22px; }
+
+/* chamfered card w/ machined L-brackets baked into the fill layer (survives innerHTML) */
+.spawn-card { --v-cw:14px; position:relative; width:278px; padding:26px 20px 22px; border:0;
+  display:flex; flex-direction:column; align-items:center; background:transparent; color:var(--v-text); cursor:pointer;
+  animation:v-case-open .4s var(--v-ease) backwards; animation-delay:calc(var(--i, 0) * 80ms);
+  transition:transform var(--v-t-base) ease, opacity .3s ease; }
+.spawn-card::before { content:''; position:absolute; inset:0; z-index:0; clip-path:var(--v-chamfer);
+  background:linear-gradient(180deg, var(--v-line-2), var(--v-line)); filter:drop-shadow(0 18px 34px rgba(0,0,0,.72)); }
+.spawn-card::after { content:''; position:absolute; inset:1px; z-index:0; clip-path:var(--v-chamfer);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M1 1H15M15 1V15' fill='none' stroke='%23FF6A1A' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") right 9px top 9px / 16px 16px no-repeat,
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Cpath d='M1 1V15M1 15H15' fill='none' stroke='%23FF6A1A' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E") left 9px bottom 9px / 16px 16px no-repeat,
+    linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045); }
+.spawn-card > * { position:relative; z-index:var(--z-raised); }
+
+/* location nameplate = the stencil tab riding the top edge */
+.spawn-card .slabel { position:absolute; top:-12px; left:50%; transform:translateX(-50%); z-index:var(--z-stencil);
+  max-width:calc(100% + 22px); height:24px; padding:0 16px; display:flex; align-items:center;
+  font-family:var(--v-font-display); font-weight:700; font-size:12px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--v-ink); background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  clip-path:polygon(9px 0, 100% 0, calc(100% - 9px) 100%, 0 100%); box-shadow:0 3px 10px -2px var(--v-accent-600);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+/* icon in a foam-cutout well */
+.spawn-card .sicon { width:76px; height:76px; margin-top:14px; display:flex; align-items:center; justify-content:center;
+  color:var(--v-text-dim); background-color:#12100D; border-radius:var(--v-r-md);
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
+  transition:color var(--v-t-base) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.spawn-card .sicon svg { width:34px; height:34px; }
+
+/* Consolas coordinate / subtitle line */
+.spawn-card .ssub { margin-top:12px; font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
+  font-size:11px; letter-spacing:0; line-height:1.5; text-align:center; color:var(--v-text-faint); max-width:100%; }
+
+.spawn-card:hover { transform:translateY(-4px); }
+.spawn-card:hover .sicon { color:var(--v-accent-300); background-color:#1A140F;
+  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent); }
+/* selected card gets the orange inner ring */
+.spawn-card.picked { transform:scale(1.02); }
+.spawn-card.picked::after { box-shadow:inset 0 1px 0 rgba(255,255,255,.045), inset 0 0 0 2px var(--v-accent),
+  inset 0 0 26px -8px var(--v-accent); }
+.spawn-card.picked .sicon { color:var(--v-accent-300); }
 .spawn-card.fade { opacity:.25; pointer-events:none; }
+
+/* ── Motion ── */
+@keyframes dockIn { from { opacity:0; transform:translateX(24px); } }

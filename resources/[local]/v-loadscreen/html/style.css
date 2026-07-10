@@ -1,81 +1,217 @@
-/* v-loadscreen — Projet R. Self-contained (loadscreen runs before other resources). */
+/* v-loadscreen — Projet R · "FIELD CASE".
+   Self-contained: the loadscreen renders before other resources are mounted,
+   so cfx-nui-v-ui/theme.css is not reliably reachable here. Field Case tokens
+   and primitives are therefore mirrored locally.
+   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
 :root {
-  --bg-900: #0A0A0C;
-  --bg-800: #0E0E12;
-  --text: #ECEAE6;
-  --text-dim: #9C99A2;
-  --text-faint: #5C5A63;
-  --accent: #FF6A1A;
-  --accent-300: #FF9354;
-  --line: rgba(255, 255, 255, .07);
-  --font-display: 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
-  --font-body: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  /* warm charcoal case body */
+  --v-bg-900:#0A0908; --v-bg-800:#100E0C; --v-bg-700:#16130F; --v-bg-600:#1C1815; --v-bg-500:#221D18;
+  --v-bg-sunk:#0E0C0A;
+  --v-line:#2C2620; --v-line-2:#3A332B;
+  /* ink — all values >= 4.5:1 on the panel body */
+  --v-text:#EFE7DC; --v-text-dim:#A9A199; --v-text-faint:#8F877E; --v-ink:#170D05;
+  /* orange is the only saturated hue on screen */
+  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-accent-600:#A83C0D;
+
+  --v-font-display:'Bahnschrift Condensed','Bahnschrift','Oswald','Segoe UI',sans-serif;
+  --v-font-body:'Segoe UI','Inter',system-ui,sans-serif;
+  --v-font-num:Consolas,'Courier New',monospace;
+
+  --v-ease:cubic-bezier(.2,.8,.2,1);
+  --v-t-base:.18s;
+
+  --v-r-sm:2px; --v-r-md:3px;
+  --v-cw:14px;
+  --v-chamfer:polygon(0 var(--v-cw), var(--v-cw) 0, 100% 0, 100% calc(100% - var(--v-cw)), calc(100% - var(--v-cw)) 100%, 0 100%);
+
+  /* z-index scale — never hardcode */
+  --z-base:1; --z-raised:2;                                             /* intra-component layers (mirror v-ui chamfer) */
+  --z-video:1; --z-overlay:2; --z-grain:3; --z-vignette:4; --z-scan:5; --z-stage:10;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg-900); color: var(--text); font-family: var(--font-body); }
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900); color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
 
-/* ── Background layers (GTA footage) ──
-   NOTE: z-index MUST be positive — a negative z-index would paint the video
-   behind the body's solid background, hiding it entirely. */
+/* ── Background footage ──
+   NOTE: z-index MUST stay positive — a negative z-index paints the video
+   behind the body's solid background and hides it. */
 .bg-video {
-  position: fixed; inset: 0; width: 100%; height: 100%;
-  object-fit: cover; z-index: 1;
-  animation: kenburns 34s ease-in-out infinite alternate;
+  position:fixed; inset:0; width:100%; height:100%;
+  object-fit:cover; z-index:var(--z-video);
+  animation:kenburns 40s ease-in-out infinite alternate;
 }
-/* Dark, warm-tinted overlay so the branding & progress stay legible over any scene */
+
+/* Warm charcoal wash + blueprint micro-grid over the footage — kept low so the
+   video still reads underneath. */
 .bg-overlay {
-  position: fixed; inset: 0; z-index: 2;
+  position:fixed; inset:0; z-index:var(--z-overlay); pointer-events:none;
   background:
-    linear-gradient(90deg, rgba(8, 7, 9, .93) 0%, rgba(8, 7, 9, .6) 42%, rgba(8, 7, 9, .28) 100%),
-    linear-gradient(180deg, rgba(8, 7, 9, .35) 0%, transparent 30%, rgba(8, 7, 9, .82) 100%),
-    radial-gradient(120% 90% at 82% 88%, rgba(255, 106, 26, .10), transparent 55%);
-  pointer-events: none;
+    linear-gradient(90deg, rgba(8,7,6,.94) 0%, rgba(8,7,6,.58) 40%, rgba(8,7,6,.20) 100%),
+    linear-gradient(180deg, rgba(8,7,6,.42) 0%, transparent 26%, rgba(8,7,6,.86) 100%),
+    radial-gradient(120% 90% at 84% 90%, rgba(255,106,26,.10), transparent 55%),
+    repeating-linear-gradient(0deg,  rgba(255,147,84,.028) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(90deg, rgba(255,147,84,.028) 0 1px, transparent 1px 46px);
 }
-.vignette { position: fixed; inset: 0; z-index: 3; background: radial-gradient(120% 120% at 50% 50%, transparent 52%, rgba(0, 0, 0, .55) 100%); pointer-events: none; }
+/* Static SVG grain — cheap in CEF, sits above the grid, below the readouts. */
+.grain {
+  position:fixed; inset:0; z-index:var(--z-grain); pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Hard vignette. */
+.vignette {
+  position:fixed; inset:0; z-index:var(--z-vignette); pointer-events:none;
+  background:radial-gradient(120% 120% at 50% 48%, transparent 42%, rgba(0,0,0,.72) 100%);
+}
+/* Orange gauge sweep. */
 .scan {
-  position: fixed; left: 0; right: 0; height: 2px; top: 0; z-index: 4;
-  background: linear-gradient(90deg, transparent, rgba(255, 106, 26, .5), transparent);
-  animation: scan 6s linear infinite;
-  opacity: .4;
+  position:fixed; left:0; right:0; top:0; height:2px; z-index:var(--z-scan); pointer-events:none;
+  background:linear-gradient(90deg, transparent, rgba(255,106,26,.5), transparent);
+  opacity:.35; animation:scan 7s linear infinite;
 }
 
-/* ── Brand + loader ── */
+/* ── Stage / branding ── */
 .stage {
-  position: fixed; inset: 0; z-index: 10;
-  display: flex; flex-direction: column; justify-content: center;
-  padding: 0 9vw;
-  animation: rise .8s cubic-bezier(.2, .9, .25, 1) both;
+  position:fixed; inset:0; z-index:var(--z-stage);
+  display:flex; flex-direction:column; justify-content:center;
+  padding:0 9vw;
 }
-.kicker { font-family: var(--font-display); font-size: 15px; letter-spacing: .55em; color: var(--text-dim); margin-bottom: 10px; }
+.brand { position:relative; }
+/* Stencil kicker with an orange parallelogram accent riding its left. */
+.kicker {
+  position:relative; display:inline-flex; align-items:center; gap:14px;
+  font-family:var(--v-font-display); font-weight:600; font-size:13px;
+  letter-spacing:.5em; text-transform:uppercase; color:var(--v-text-dim);
+  margin-bottom:16px; text-shadow:0 1px 2px #000;
+}
+.kicker::before {
+  content:''; width:36px; height:11px;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  clip-path:polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
+  box-shadow:0 2px 8px -2px var(--v-accent-600);
+}
 .mark {
-  font-family: var(--font-display); font-weight: 700;
-  font-size: clamp(64px, 11vw, 150px); line-height: .92; letter-spacing: .01em;
-  text-shadow: 0 8px 60px rgba(0, 0, 0, .6);
+  font-family:var(--v-font-display); font-weight:700;
+  font-size:clamp(64px, 11vw, 150px); line-height:.9;
+  letter-spacing:.06em; text-transform:uppercase;
+  text-shadow:0 8px 60px rgba(0,0,0,.6);
 }
-.mark span { color: var(--accent); text-shadow: 0 0 40px rgba(255, 106, 26, .55); }
+.mark span { color:var(--v-accent); text-shadow:0 0 40px rgba(255,106,26,.5); }
+/* Machined stencil rule aligning brand to the readout below. */
+.brand::after {
+  content:''; display:block; width:min(460px, 46vw); height:1px; margin-top:22px;
+  background:linear-gradient(90deg, var(--v-accent) 0 36px, var(--v-line) 36px 100%);
+}
 
-.loader { margin-top: 46px; max-width: 560px; }
-.row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
-.status { font-size: 13px; letter-spacing: .05em; color: var(--text-dim); text-transform: uppercase; font-family: var(--font-display); }
-.pct { font-family: var(--font-display); font-variant-numeric: tabular-nums; font-size: 20px; font-weight: 600; color: var(--accent-300); }
-.bar { height: 4px; border-radius: 4px; background: rgba(255, 255, 255, .07); overflow: hidden; }
+/* ── Loader: a chamfered gauge-cluster readout ── */
+.loader {
+  position:relative; width:min(460px, 46vw); margin-top:26px;
+  background:transparent; border:0;
+}
+.loader::before {
+  content:''; position:absolute; inset:0; z-index:0; clip-path:var(--v-chamfer);
+  background:linear-gradient(180deg, var(--v-line-2), var(--v-line));
+  filter:drop-shadow(0 18px 34px rgba(0,0,0,.72));
+}
+.loader::after {
+  content:''; position:absolute; inset:1px; z-index:0; clip-path:var(--v-chamfer);
+  background:linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
+}
+/* Content must clear the pseudo layers. */
+.loader-body { position:relative; z-index:var(--z-raised); padding:22px 24px 20px; }
+
+/* Stencil tab riding the top edge — the signature cue. */
+.loader .tab {
+  position:absolute; top:-11px; left:26px; z-index:3;
+  height:22px; padding:0 15px; display:flex; align-items:center;
+  font-family:var(--v-font-display); font-weight:700; font-size:11px;
+  letter-spacing:.22em; text-transform:uppercase; color:var(--v-ink);
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  clip-path:polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow:0 3px 10px -2px var(--v-accent-600);
+}
+/* Machined L-brackets on the two sharp corners. */
+.brk { position:absolute; z-index:var(--z-base); width:16px; height:16px; opacity:.5; pointer-events:none; }
+.brk-tr { top:7px; right:7px; border-top:2px solid var(--v-accent); border-right:2px solid var(--v-accent); }
+.brk-bl { bottom:7px; left:7px; border-bottom:2px solid var(--v-accent); border-left:2px solid var(--v-accent); }
+
+.row { display:flex; align-items:baseline; gap:16px; margin-bottom:12px; }
+.status {
+  flex:1; min-width:0;
+  font-family:var(--v-font-display); font-weight:600; font-size:12px;
+  letter-spacing:.2em; text-transform:uppercase; color:var(--v-text-dim);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+/* Caliper readout — Consolas, no tracking, orange significant figure. */
+.pct {
+  flex:0 0 auto;
+  font-family:var(--v-font-num); font-variant-numeric:tabular-nums; letter-spacing:0;
+  font-size:22px; font-weight:700; color:var(--v-text-dim);
+}
+.pct b { color:var(--v-accent-300); font-weight:700; }
+
+/* Segmented gauge — recessed strip; the JS drives a continuous fill width and a
+   notch overlay carves it into hard machined cells. */
+.bar {
+  position:relative; height:16px; overflow:hidden; border-radius:var(--v-r-sm);
+  background:#1A1613; box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7);
+}
 .fill {
-  height: 100%; width: 0%;
-  background: linear-gradient(90deg, var(--accent), var(--accent-300));
-  box-shadow: 0 0 16px rgba(255, 106, 26, .55);
-  border-radius: 4px;
-  transition: width .5s cubic-bezier(.2, .9, .25, 1);
+  position:relative; z-index:var(--z-base); height:100%; width:0%;
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
+  transition:width .5s cubic-bezier(.2, .9, .25, 1);
+}
+.bar::after {
+  content:''; position:absolute; inset:0; z-index:var(--z-raised); pointer-events:none;
+  background:repeating-linear-gradient(90deg, transparent 0 11px, var(--v-bg-sunk) 11px 14px);
 }
 
 /* ── Footer / tips ── */
-.foot { position: fixed; left: 0; right: 0; bottom: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 26px 9vw; }
-.tip { display: flex; align-items: center; gap: 12px; min-height: 20px; }
-.tip-tag { font-family: var(--font-display); font-size: 10px; letter-spacing: .18em; color: var(--accent); border: 1px solid rgba(255, 106, 26, .4); border-radius: 5px; padding: 4px 8px; }
-.tip-text { font-size: 14px; color: var(--text-dim); transition: opacity .4s ease; }
-.tip-text.fade { opacity: 0; }
-.sig { font-family: var(--font-display); letter-spacing: .28em; font-size: 11px; color: var(--text-faint); text-transform: uppercase; }
+.foot {
+  position:fixed; left:0; right:0; bottom:0; z-index:var(--z-stage);
+  display:flex; align-items:center; justify-content:space-between; gap:20px;
+  padding:26px 9vw;
+}
+.tip { display:flex; align-items:center; gap:12px; min-width:0; min-height:22px; }
+/* Stencil parallelogram badge. */
+.tip-tag {
+  flex:0 0 auto;
+  font-family:var(--v-font-display); font-weight:700; font-size:10px;
+  letter-spacing:.18em; text-transform:uppercase; color:var(--v-ink);
+  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  padding:3px 10px; clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
+  box-shadow:0 2px 8px -2px var(--v-accent-600);
+}
+/* .4s crossfade stays in lockstep with the JS text swap (setTimeout 400ms). */
+.tip-text {
+  font-size:14px; color:var(--v-text-dim); transition:opacity .4s ease;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 1px 2px #000;
+}
+.tip-text.fade { opacity:0; }
+.sig {
+  flex:0 0 auto;
+  font-family:var(--v-font-display); font-weight:600; font-size:11px;
+  letter-spacing:.28em; text-transform:uppercase; color:var(--v-text-faint);
+  white-space:nowrap; text-shadow:0 1px 2px #000;
+}
 
-@keyframes rise { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes kenburns { from { transform: scale(1); } to { transform: scale(1.09); } }
-@keyframes scan { 0% { top: -2%; } 100% { top: 102%; } }
+/* ── Motion: one orchestrated seat sequence, staggered by --i ── */
+@keyframes seat     { from { opacity:0; transform:translateY(14px); } }
+@keyframes caseOpen { from { opacity:0; transform:translateY(16px) scale(.985); } }
+@keyframes fadeUp   { from { opacity:0; transform:translateY(10px); } }
+@keyframes kenburns { from { transform:scale(1); } to { transform:scale(1.09); } }
+@keyframes scan     { 0% { top:-2%; } 100% { top:102%; } }
+
+/* Use animation-fill-mode:backwards, NOT both. */
+.brand  { animation:seat     .55s var(--v-ease) backwards; animation-delay:calc(var(--i, 0) * 90ms); }
+.loader { animation:caseOpen .5s  var(--v-ease) backwards; animation-delay:calc(120ms + var(--i, 0) * 90ms); }
+.foot   { animation:fadeUp   .6s  var(--v-ease) backwards; animation-delay:calc(200ms + var(--i, 0) * 90ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;
+  }
+}
