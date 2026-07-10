@@ -52,8 +52,10 @@ by value/effort. Tick items as they ship.
       server-side (closes the audit hole). Restock consumes crafted goods → player-driven economy.
 - [ ] **`v-drugs`** (high) — growing/cooking/processing chains that feed `v-crafting` (weed → joint, coke
       brick → baggies) and the drug items already in the catalogue. Sell zones + police heat.
-- [ ] **`v-gathering` / resource jobs** (high) — mining, chopping, scavenging, oil → produce the raw
+- [x] **`v-gathering` / resource jobs** ✅ (shipped) — mining / salvage / textile nodes produce raw
       materials (`iron`, `copper`, `cloth`…) crafting consumes. Closes the loop: gather → craft → sell.
+      *Next:* tool-gated gathering (pickaxe/durability), gathering XP, more node types (wood, oil, chemicals
+      for `gunpowder`), processing stations (ore → ingot).
 - [ ] **`v-phone`** (high) — iFruit NUI: primary interaction surface (marketplace to sell crafted items,
       messages, bank, job apps). The server has no chat, so this is a keystone.
 - [ ] **`v-radial`** (high) — context radial menu (the other main interaction surface): frisk, give,
