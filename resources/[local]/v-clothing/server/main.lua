@@ -144,26 +144,36 @@ Core.RegisterCallback('v-clothing:thumb', function(source, resolve, data)
     resolve((raw and raw ~= '') and raw or false)
 end)
 
--- Admin command: (re)generate thumbnails.  /scanclothes            → all
---   /scanclothes new            → only missing (newly-added clothing)
---   /scanclothes <category>     → a single category (masks, tops, …)
-RegisterCommand('scanclothes', function(src, args)
-    if src == 0 then print('[v-clothing] /scanclothes must be run in-game'); return end
+-- Start a thumbnail scan for an admin. mode: 'all' | 'new'; onlyCat optional.
+local function beginScan(src, mode, onlyCat)
     local player = Core.GetPlayer(src)
     if not player or not player.HasPermission(Config.Thumbs.permission) then
         Core.Notify(src, LP(src, 'cl.noperm'), 'error'); return
     end
     if scanners[src] then Core.Notify(src, LP(src, 'cl.scan_busy'), 'error'); return end
-    local a1 = (args[1] or ''):lower()
-    local mode, onlyCat = 'all', nil
-    if a1 == 'new' then mode = 'new'
-    elseif a1 ~= '' and a1 ~= 'all' and catByKey(a1) then onlyCat = a1 end
     scanners[src] = true
     -- safety: auto-clear the scanner flag if the client never reports back
     SetTimeout(600000, function() scanners[src] = nil end)
     Core.Log('clothing', 'scan start', { mode = mode, cat = onlyCat }, player.citizenid)
     Core.Notify(src, LP(src, 'cl.scan_start', onlyCat or mode), 'info')
     TriggerClientEvent('v-clothing:client:startScan', src, mode, onlyCat)
+end
+
+-- Keybind entry point (this server has no chat) — F9 twice in-game.
+RegisterNetEvent('v-clothing:server:requestScan', function(mode)
+    beginScan(source, (mode == 'all') and 'all' or 'new', nil)
+end)
+
+-- Chat/console command kept for setups that have a chat.  /scanclothes → all
+--   /scanclothes new            → only missing (newly-added clothing)
+--   /scanclothes <category>     → a single category (masks, tops, …)
+RegisterCommand('scanclothes', function(src, args)
+    if src == 0 then print('[v-clothing] /scanclothes must be run in-game'); return end
+    local a1 = (args[1] or ''):lower()
+    local mode, onlyCat = 'all', nil
+    if a1 == 'new' then mode = 'new'
+    elseif a1 ~= '' and a1 ~= 'all' and catByKey(a1) then onlyCat = a1 end
+    beginScan(src, mode, onlyCat)
 end, false)
 
 AddEventHandler('playerDropped', function() scanners[source] = nil end)

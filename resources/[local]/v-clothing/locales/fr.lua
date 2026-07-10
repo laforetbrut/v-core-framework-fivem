@@ -20,6 +20,7 @@ local T = {
     ['cl.scan_prog']   = 'Scan : %s/%s vignettes',
     ['cl.scan_done']   = 'Scan terminé — %s vignettes générées.',
     ['cl.scan_busy']   = 'Un scan est déjà en cours.',
+    ['cl.scan_confirm']= 'Appuie encore sur F9 pour lancer le scan des vêtements.',
     ['cl.masks']       = 'Masques',
     ['cl.tops']        = 'Hauts',
     ['cl.undershirt']  = 'Sous-vêtements',
