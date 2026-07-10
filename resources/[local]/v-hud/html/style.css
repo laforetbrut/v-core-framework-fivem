@@ -220,17 +220,6 @@ body.editing .ring.faded { opacity: 1; }
   transform-origin: center;
   opacity: var(--hud-opacity, 1);
 }
-/* Bottom fade — sits ON TOP of the native radar (CEF renders above it) to hide
-   the GTA:O green/blue health & armour bars. Wider & lower than the frame so the
-   bars never peek out at the corners; a soft gradient reads as the map fading,
-   not a black box. */
-.mm-mask {
-  position: absolute; left: -7%; right: -7%; bottom: -9%;
-  height: 34%;
-  background: linear-gradient(180deg,
-    rgba(11,11,13,0) 0%, rgba(11,11,13,.55) 38%, rgba(11,11,13,.96) 66%, var(--v-bg-900, #0B0B0D) 100%);
-  pointer-events: none;
-}
 /* Corner brackets only appear while repositioning (Move elements). */
 .mm-corner {
   position: absolute; width: 16px; height: 16px;
