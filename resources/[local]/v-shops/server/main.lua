@@ -7,6 +7,11 @@ local ItemDefs = {}   -- name -> row
 CreateThread(function()
     while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
     for _, r in ipairs(MySQL.query.await('SELECT * FROM items') or {}) do ItemDefs[r.name] = r end
+    -- Seed any missing default shops (e.g. the sell-only scrap dealer).
+    for _, s in ipairs(Config.SeedShops or {}) do
+        MySQL.insert.await('INSERT IGNORE INTO shops (id, label, type, items) VALUES (?,?,?,?)',
+            { s.id, s.label, s.type or 'general', s.items or '[]' })
+    end
     for _, s in ipairs(MySQL.query.await('SELECT * FROM shops') or {}) do
         Shops[s.id] = {
             id = s.id, label = s.label, type = s.type, job = s.job,
@@ -79,9 +84,42 @@ Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
     end
     resolve({
         id = shop.id, label = shop.label, items = list,
+        sell = Config.SellLists[shop.id] or {},
         cash = player.money.cash, bank = player.money.bank,
         inv = inventoryView(player),
     })
+end)
+
+Core.RegisterCallback('v-shops:sell', function(source, resolve, data)
+    local shop = Shops[data.shopId]
+    local player = Core.GetPlayer(source)
+    if not shop or not player then resolve(false); return end
+
+    local ok, why = canUseShop(source, shop)
+    if not ok then
+        Core.Notify(source, LP(source, why == 'no_job' and 'shop.no_job' or 'shop.too_far'), 'error')
+        resolve({ error = why }); return
+    end
+
+    local price = (Config.SellLists[shop.id] or {})[data.item]
+    local amount = math.floor(tonumber(data.amount) or 0)
+    if not price or amount <= 0 then resolve(false); return end
+    amount = math.min(amount, 1000)
+
+    -- Take the items first (authoritative count check), then pay.
+    if (exports['v-inventory']:GetItemCount(source, data.item) or 0) < amount then
+        resolve({ error = 'count' }); return
+    end
+    if not exports['v-inventory']:RemoveItem(source, data.item, amount) then resolve({ error = 'count' }); return end
+
+    local total = price * amount
+    player.AddMoney('cash', total, 'shop-sell')
+
+    Core.Log('shop', ('%s sold %dx %s for %d'):format(player.citizenid, amount, data.item, total), nil, player.citizenid)
+    Core.Notify(source, LP(source, 'shop.sold', amount, (ItemDefs[data.item] and ItemDefs[data.item].label) or data.item, total), 'success')
+
+    local p2 = Core.GetPlayer(source)
+    resolve({ cash = p2.money.cash, bank = p2.money.bank, inv = inventoryView(p2), sold = true })
 end)
 
 Core.RegisterCallback('v-shops:buy', function(source, resolve, data)

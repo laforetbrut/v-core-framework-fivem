@@ -84,6 +84,10 @@ RegisterNUICallback('buy', function(data, cb)
     Core.TriggerCallback('v-shops:buy', function(res) cb(res or false) end, data)
 end)
 
+RegisterNUICallback('sell', function(data, cb)
+    Core.TriggerCallback('v-shops:sell', function(res) cb(res or false) end, data)
+end)
+
 RegisterNUICallback('close', function(_, cb)
     isOpen = false
     SetNuiFocus(false, false)

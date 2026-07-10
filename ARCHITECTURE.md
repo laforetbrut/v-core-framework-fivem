@@ -368,8 +368,14 @@ job-locked stores, that the player **holds the job** — closing the buy-from-an
 holes. Purchase amount is **clamped server-side**, `ItemDefs[data.item]` is **guarded** before the label
 index, and `RemoveMoney` is now **checked with the item refunded on failure** (latent dupe closed).
 
+**Selling.** The NUI has a **Buy / Sell toggle**; Sell mode lists owned items the store buys (price + owned
+count + Sell button). `v-shops:sell` runs the same `canUseShop` gate, reads the price from `Config.SellLists`,
+verifies the owned amount, `RemoveItem`s then `AddMoney`. A sell-only **Scrap Dealer** shop is auto-seeded at
+boot (`Config.SeedShops`) so no manual SQL is needed. Closes the gather→craft→**sell** loop.
+
 **Remaining.**
 - Locations hardcoded in `config.lua`; the `shops.coords` column built to hold them is **dead**.
+- Sell prices are static in `Config.SellLists` (no dynamic/market pricing, no in-game editor yet).
 - Data is loaded **once at boot** — any DB price edit needs a full `restart v-shops`.
 - Direct SQL against `items` and `shops`.
 - No in-game management UI (`config.lua` literally says *"editable in-game later"*).

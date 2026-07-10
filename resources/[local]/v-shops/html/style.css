@@ -33,7 +33,19 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .close svg { width:16px; height:16px; }
 
 /* ── Header: two account toggles double as the wallet readout ── */
-.head { display:flex; padding-bottom:14px; margin-bottom:12px; border-bottom:1px solid var(--v-line); }
+.head { display:flex; flex-direction:column; gap:10px; padding-bottom:14px; margin-bottom:12px; border-bottom:1px solid var(--v-line); }
+
+/* Buy / Sell mode toggle */
+.modes { display:flex; gap:8px; }
+.mode { flex:1; padding:7px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
+  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+  font-family:var(--v-font-display); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
+  cursor:pointer; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.mode:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+.mode.sel { border-color:var(--v-accent); background:var(--v-accent-soft); color:var(--v-accent-300); }
+
+.empty-sell { padding:28px 12px; text-align:center; color:var(--v-text-faint);
+  font-family:var(--v-font-display); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
 .wallet { display:flex; flex:1; gap:8px; }
 .pay { flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
   padding:8px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
@@ -83,15 +95,15 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .qty { min-width:24px; text-align:center; font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
   letter-spacing:0; font-size:14px; font-weight:700; color:var(--v-text); }
 
-/* ── Buy = accent action ── */
-.buy { flex:0 0 auto; font-family:var(--v-font-display); font-size:12px; font-weight:700;
+/* ── Buy / Sell = accent action ── */
+.buy, .sell { flex:0 0 auto; font-family:var(--v-font-display); font-size:12px; font-weight:700;
   letter-spacing:.14em; text-transform:uppercase; color:var(--v-ink);
   background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent);
   border-radius:var(--v-r-sm); padding:9px 15px; cursor:pointer;
   box-shadow:0 5px 16px -4px var(--v-accent-600);
   transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease; }
-.buy:hover { transform:translateY(-1px); box-shadow:0 7px 20px -5px var(--v-accent-600); }
-.buy:active { transform:translateY(0); }
+.buy:hover, .sell:hover { transform:translateY(-1px); box-shadow:0 7px 20px -5px var(--v-accent-600); }
+.buy:active, .sell:active { transform:translateY(0); }
 
 /* ── Your inventory panel (drop a catalogue item here to buy) ── */
 .invview { position:relative; width:392px; display:flex; flex-direction:column; padding:26px 20px 20px; }

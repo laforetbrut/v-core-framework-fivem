@@ -19,7 +19,7 @@ function iconFor(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round">${p ? `<path d="${p}"/>` : BOX_IC}</svg>`;
 }
 
-let strings = {}, shop = null, account = 'cash';
+let strings = {}, shop = null, account = 'cash', mode = 'buy';
 const t = (k) => strings[k] || k;
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
@@ -34,16 +34,40 @@ function close() { byId('shop').classList.add('hidden'); post('close'); }
 byId('pay-cash').onclick = () => setAccount('cash');
 byId('pay-bank').onclick = () => setAccount('bank');
 byId('close').onclick = close;
+
+function setMode(m) {
+  mode = m;
+  byId('mode-buy').classList.toggle('sel', m === 'buy');
+  byId('mode-sell').classList.toggle('sel', m === 'sell');
+  byId('shop').classList.toggle('selling', m === 'sell');
+  renderList();
+}
+byId('mode-buy').onclick = () => setMode('buy');
+byId('mode-sell').onclick = () => setMode('sell');
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('shop').classList.contains('hidden')) close(); });
 
 // ── Buy (shared by the button and drag-to-inventory) ──
 async function buy(name, amount, slot) {
   const res = await post('buy', { shopId: shop.id, item: name, amount, account, slot });
+  applyResult(res);
+}
+
+// ── Sell (only in sell mode; converts owned items to cash) ──
+async function sell(name, amount) {
+  const res = await post('sell', { shopId: shop.id, item: name, amount });
+  applyResult(res);
+  if (mode === 'sell') renderList();   // owned counts changed -> refresh the sell list
+}
+
+function applyResult(res) {
   if (res && res.cash !== undefined) {
     shop.cash = res.cash; shop.bank = res.bank; setBalances(res.cash, res.bank);
     if (res.inv) { shop.inv = res.inv; renderInventory(); }
   }
 }
+
+// Dispatch the left list by mode.
+function renderList() { if (mode === 'sell') renderSellList(); else renderCatalogue(); }
 
 // ── Catalogue ──
 function renderCatalogue() {
@@ -65,6 +89,43 @@ function renderCatalogue() {
     row.querySelector('.dec').onclick = () => { qty.textContent = Math.max(1, (+qty.textContent) - 1); };
     row.querySelector('.inc').onclick = () => { qty.textContent = Math.min(99, (+qty.textContent) + 1); };
     row.querySelector('.buy').onclick = () => buy(it.name, +qty.textContent);
+    list.appendChild(row);
+  });
+  applyStrings();
+}
+
+// ── Sell list (left panel in sell mode; your owned items this shop buys) ──
+function renderSellList() {
+  const list = byId('list'); list.innerHTML = '';
+  const inv = shop.inv || { items: [], defs: {} };
+  const prices = shop.sell || {};
+  // Aggregate owned amounts per item name, keep only what this shop buys.
+  const owned = {};
+  (inv.items || []).forEach(it => { if (prices[it.name] != null) owned[it.name] = (owned[it.name] || 0) + it.amount; });
+  const names = Object.keys(owned).sort();
+  if (!names.length) {
+    list.innerHTML = `<div class="empty-sell">${esc(t('shop.nothing_sell'))}</div>`;
+    return;
+  }
+  names.forEach((name, i) => {
+    const d = inv.defs[name] || {};
+    const have = owned[name], price = prices[name];
+    const row = document.createElement('div');
+    row.className = 'row'; row.dataset.name = name;
+    row.style.setProperty('--cat', RARITY[d.rarity] || CAT[d.category] || CAT.misc);
+    row.style.setProperty('--i', i);
+    const thumb = d.image
+      ? `<div class="thumb" style="background-image:url('https://cfx-nui-v-inventory/html/images/${esc(d.image)}')"></div>`
+      : `<div class="thumb ph">${iconFor(name)}</div>`;
+    row.innerHTML =
+      thumb +
+      `<div class="info"><div class="name">${esc(d.label || name)}</div><div class="price"><b>${fmt(price)}</b> ${t('shop.each')} · ${have} ${t('shop.owned')}</div></div>` +
+      `<div class="stepper"><button class="step dec" aria-label="Decrease quantity">−</button><span class="qty">1</span><button class="step inc" aria-label="Increase quantity">+</button></div>` +
+      `<button class="sell" data-i18n="shop.sell">Sell</button>`;
+    const qty = row.querySelector('.qty');
+    row.querySelector('.dec').onclick = () => { qty.textContent = Math.max(1, (+qty.textContent) - 1); };
+    row.querySelector('.inc').onclick = () => { qty.textContent = Math.min(have, (+qty.textContent) + 1); };
+    row.querySelector('.sell').onclick = () => sell(name, +qty.textContent);
     list.appendChild(row);
   });
   applyStrings();
@@ -93,7 +154,7 @@ function renderInventory() {
 function render() {
   byId('shop-label').textContent = shop.label;
   setBalances(shop.cash, shop.bank);
-  renderCatalogue();
+  renderList();
   renderInventory();
 }
 
@@ -103,7 +164,8 @@ const THRESH = 4;
 
 function onDown(e) {
   if (e.button !== 0) return;
-  if (e.target.closest('.buy,.step')) return;         // let buttons work
+  if (mode === 'sell') return;                        // drag-to-buy is buy-mode only
+  if (e.target.closest('.buy,.sell,.step')) return;   // let buttons work
   const row = e.target.closest('.row'); if (!row) return;
   drag = { name: row.dataset.name, row, startX: e.clientX, startY: e.clientY, active: false, ghost: null };
 }
@@ -141,7 +203,9 @@ async function onUp(e) {
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
-    strings = d.strings || {}; shop = d.shop; setAccount('cash');
+    strings = d.strings || {}; shop = d.shop; setAccount('cash'); mode = 'buy';
+    byId('mode-buy').classList.add('sel'); byId('mode-sell').classList.remove('sel');
+    byId('shop').classList.remove('selling');
     render();
     byId('shop').classList.remove('hidden');
   } else if (d.action === 'close') {

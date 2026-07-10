@@ -48,8 +48,9 @@ by value/effort. Tick items as they ship.
 
 - [ ] **`v-jobs`** (high) — jobs, grades, duty, salaries + in-game manager. Unlocks job-gated benches,
       shops, stashes, and the police search permission the frisk system already stubs.
-- [ ] **`v-shops` in-game management** (high) — stock/prices editable in-game; job-locked stores enforced
-      server-side (closes the audit hole). Restock consumes crafted goods → player-driven economy.
+- [x] **`v-shops` selling + hardening** ✅ (shipped) — Buy/Sell toggle, scrap dealer buys raw materials,
+      server-authoritative proximity + job-lock enforced. *Next:* in-game stock/price editor, dynamic
+      market pricing (supply/demand), restock consuming crafted goods → fully player-driven economy.
 - [ ] **`v-drugs`** (high) — growing/cooking/processing chains that feed `v-crafting` (weed → joint, coke
       brick → baggies) and the drug items already in the catalogue. Sell zones + police heat.
 - [x] **`v-gathering` / resource jobs** ✅ (shipped) — mining / salvage / textile nodes produce raw
