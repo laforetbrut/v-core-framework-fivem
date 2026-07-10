@@ -46,7 +46,13 @@ CreateThread(function()
     end
 
     local rows = MySQL.query.await('SELECT * FROM items') or {}
-    for _, r in ipairs(rows) do ItemDefs[r.name] = r end
+    for _, r in ipairs(rows) do
+        -- oxmysql returns TINYINT(1) as a boolean, so coerce the flags to 0/1 —
+        -- otherwise `stackable == 1` / `usable == 1` silently fail everywhere.
+        r.stackable = (r.stackable == true or r.stackable == 1) and 1 or 0
+        r.usable    = (r.usable == true or r.usable == 1) and 1 or 0
+        ItemDefs[r.name] = r
+    end
 
     -- register use handlers by catalogue type
     for _, it in ipairs(InventoryItems or {}) do
@@ -58,6 +64,10 @@ CreateThread(function()
 end)
 
 -- ── Container helpers ──────────────────────────────────────────
+-- Treat nil AND an empty table as "no metadata" — in Lua `not {}` is false, so a
+-- freshly-created item with metadata = {} would otherwise block every stack merge.
+local function noMeta(m) return m == nil or (type(m) == 'table' and next(m) == nil) end
+
 local function weightOf(items)
     local w = 0
     for _, it in ipairs(items) do
@@ -85,16 +95,21 @@ local function itemAt(items, slot)
 end
 
 --- Add an item into a container (respects stacking, slots, weight). Returns success.
-local function addToContainer(items, name, amount, metadata, maxSlots, maxWeight)
+--- preferredSlot (optional): drop it there if free / stack onto a match there.
+local function addToContainer(items, name, amount, metadata, maxSlots, maxWeight, preferredSlot)
     local d = ItemDefs[name]
     if not d or amount <= 0 then return false end
     if weightOf(items) + (d.weight * amount) > maxWeight then return false end
-    if d.stackable == 1 and not metadata then
+    if d.stackable == 1 and noMeta(metadata) then
+        -- prefer stacking onto the dropped slot, else onto the first matching stack
+        local pref = preferredSlot and itemAt(items, preferredSlot)
+        if pref and pref.name == name and noMeta(pref.metadata) then pref.amount = pref.amount + amount; return true end
         for _, it in ipairs(items) do
-            if it.name == name and not it.metadata then it.amount = it.amount + amount; return true end
+            if it.name == name and noMeta(it.metadata) then it.amount = it.amount + amount; return true end
         end
     end
-    local slot = freeSlot(items, maxSlots)
+    local used = usedSlots(items)
+    local slot = (preferredSlot and preferredSlot >= 1 and preferredSlot <= maxSlots and not used[preferredSlot] and preferredSlot) or freeSlot(items, maxSlots)
     if not slot then return false end
     items[#items + 1] = { name = name, amount = amount, slot = slot, metadata = metadata }
     return true
@@ -257,7 +272,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
     if data.from ~= data.to then
         local d = ItemDefs[it.name]
         if not d or weightOf(toItems) + (d.weight * amount) > toWeight then resolve({ error = 'weight' }); return end
-        if not addToContainer(toItems, it.name, amount, it.metadata, toSlots, toWeight) then resolve({ error = 'space' }); return end
+        if not addToContainer(toItems, it.name, amount, it.metadata, toSlots, toWeight, data.toSlot) then resolve({ error = 'space' }); return end
         removeFromSlot(fromItems, data.fromSlot, amount)
     else
         -- same container: merge / swap / move / split
@@ -265,7 +280,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         local dest = data.toSlot
         local target = dest and itemAt(fromItems, dest)
         if target then
-            if target.name == it.name and d and d.stackable == 1 and not it.metadata and not target.metadata then
+            if target.name == it.name and d and d.stackable == 1 and noMeta(it.metadata) and noMeta(target.metadata) then
                 target.amount = target.amount + amount                    -- merge stacks
                 removeFromSlot(fromItems, data.fromSlot, amount)
             elseif amount == it.amount then
@@ -401,9 +416,9 @@ RegisterNetEvent('v-inventory:server:closeStash', function()
 end)
 
 -- ── Server exports (used by shops / jobs / other modules) ──────
-exports('AddItem', function(src, name, amount, metadata)
+exports('AddItem', function(src, name, amount, metadata, slot)
     if not Inv[src] then return false end
-    local ok = addToContainer(Inv[src], name, amount, metadata, Config.MaxSlots, Config.MaxWeight)
+    local ok = addToContainer(Inv[src], name, amount, metadata, Config.MaxSlots, Config.MaxWeight, slot)
     if ok then syncPlayer(src) end
     return ok
 end)

@@ -1,6 +1,14 @@
 -- v-spawn | Français
 Locales.fr = Locales.fr or {}
 local T = {
+    ['sel.title']        = 'Tes personnages',
+    ['sel.slot']         = 'Emplacement',
+    ['sel.play']         = 'Jouer',
+    ['sel.new']          = 'Nouveau personnage',
+    ['sel.cash']         = 'Liquide',
+    ['sel.bank']         = 'Banque',
+    ['sel.delete']       = 'Supprimer',
+    ['sel.delete_confirm']= 'Confirmer ?',
     ['lang.title']       = 'Choisis ta langue',
     ['lang.subtitle']    = 'Tu pourras la changer plus tard dans le menu pause.',
     ['id.title']         = 'Crée ton personnage',

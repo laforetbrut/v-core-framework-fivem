@@ -27,6 +27,17 @@ Config.PermissionLevels = {
     superadmin = 3,
 }
 
+-- How many character slots each permission tier gets on the selection screen.
+Config.CharacterSlots = {
+    user       = 1,
+    mod        = 2,
+    admin      = 6,
+    superadmin = 6,
+}
+
+-- Which tiers may delete one of their own characters from the selection screen.
+Config.CanDeleteCharacter = { admin = true, superadmin = true }
+
 -- Bootstrap admins by license (applied on join, before the DB value).
 -- Find your license in the server console when you connect, then add it here:
 Config.Admins = {

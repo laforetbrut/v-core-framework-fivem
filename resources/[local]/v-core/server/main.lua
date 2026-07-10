@@ -28,6 +28,35 @@ local function loadPlayer(src, row, license)
 end
 VCore.LoadPlayer = loadPlayer
 
+--- Resolve a license's effective permission (DB value, upgraded by config bootstrap).
+local function resolvePerm(license)
+    local perm = VCore.DB.GetUserPermission(license)
+    local bootstrap = Config.Admins[license]
+    if bootstrap and VCore.PermRank(bootstrap) > VCore.PermRank(perm) then perm = bootstrap end
+    return perm
+end
+
+--- Isolate a source in its own private routing bucket during selection/creation.
+local function isolate(src)
+    local bucket = 700000 + src
+    SetPlayerRoutingBucket(src, bucket)
+    SetRoutingBucketPopulationEnabled(bucket, false)   -- no NPCs / traffic in the instance
+    SetRoutingBucketEntityLockdownMode(bucket, 'strict')
+end
+
+--- Trimmed character rows for the selection screen.
+local function characterList(license, maxSlots)
+    local out = {}
+    for _, c in ipairs(VCore.DB.GetCharactersByLicense(license)) do
+        if not maxSlots or (c.slot or 1) <= maxSlots then
+            out[#out + 1] = { slot = c.slot or 1, citizenid = c.citizenid,
+                firstname = c.firstname, lastname = c.lastname, dob = tostring(c.dob or ''),
+                sex = c.sex or 0, cash = c.cash or 0, bank = c.bank or 0 }
+        end
+    end
+    return out
+end
+
 RegisterNetEvent('v-core:server:playerReady', function()
     local src = source
     if VCore.Players[src] then return end
@@ -42,18 +71,43 @@ RegisterNetEvent('v-core:server:playerReady', function()
     local lang = VCore.DB.GetUserLanguage(license)
     Player(src).state:set('lang', lang, true)
 
-    local row = VCore.DB.GetCharacterByLicense(license)
-    if row then
-        loadPlayer(src, row, license)
-    else
-        -- No character yet -> isolate the player in a private routing bucket so
-        -- several new players creating at once never see or collide with each other.
-        local bucket = 700000 + src
-        SetPlayerRoutingBucket(src, bucket)
-        SetRoutingBucketPopulationEnabled(bucket, false)   -- no NPCs / traffic in the creation instance
-        SetRoutingBucketEntityLockdownMode(bucket, 'strict')
-        TriggerClientEvent('v-core:client:needCharacter', src, { language = lang })
-    end
+    -- Hidden in a private bucket while the player is on the selection / creation
+    -- screen, so their default ped never appears in the live world.
+    isolate(src)
+
+    local perm = resolvePerm(license)
+    local maxSlots = Config.CharacterSlots[perm] or 1
+    TriggerClientEvent('v-core:client:characterSelect', src, {
+        language   = lang,
+        maxSlots   = maxSlots,
+        canDelete  = Config.CanDeleteCharacter[perm] == true,
+        characters = characterList(license, maxSlots),
+    })
+end)
+
+-- Load one of the player's own characters (from the selection screen).
+VCore.RegisterCallback('v-core:selectCharacter', function(source, resolve, citizenid)
+    if VCore.Players[source] then resolve(false); return end
+    local license = VCore.GetLicense(source)
+    local row = citizenid and VCore.DB.GetCharacterByCitizenId(citizenid)
+    if not license or not row or row.license ~= license then resolve(false); return end
+    loadPlayer(source, row, license)
+    SetPlayerRoutingBucket(source, 0)   -- leave the private instance -> main world
+    resolve(true)
+end)
+
+-- Delete one of the player's own characters (permission-gated). Returns the
+-- refreshed list so the selection screen can re-render.
+VCore.RegisterCallback('v-core:deleteCharacter', function(source, resolve, citizenid)
+    local license = VCore.GetLicense(source)
+    if not license or VCore.Players[source] then resolve(false); return end
+    local perm = resolvePerm(license)
+    if not Config.CanDeleteCharacter[perm] then resolve(false); return end
+    local row = citizenid and VCore.DB.GetCharacterByCitizenId(citizenid)
+    if not row or row.license ~= license then resolve(false); return end
+    VCore.DB.DeleteCharacter(citizenid)
+    VCore.Log('admin', ('deleted character %s'):format(citizenid), { by = source })
+    resolve({ ok = true, characters = characterList(license, Config.CharacterSlots[perm] or 1) })
 end)
 
 -- Language selection (from v-spawn).
@@ -72,9 +126,20 @@ local creating = {}
 VCore.RegisterCallback('v-core:createCharacter', function(source, resolve, data)
     local license = VCore.GetLicense(source)
     if not license or VCore.Players[source] or creating[source] then resolve(false); return end
-    creating[source] = true
+    data = data or {}
 
-    local ok, row = pcall(VCore.DB.CreateCharacter, license, data or {})
+    -- validate the requested slot: within the tier's allowance and not already taken
+    local perm = resolvePerm(license)
+    local maxSlots = Config.CharacterSlots[perm] or 1
+    local slot = tonumber(data.slot) or 1
+    if slot < 1 or slot > maxSlots then resolve(false); return end
+    for _, c in ipairs(VCore.DB.GetCharactersByLicense(license)) do
+        if (c.slot or 1) == slot then resolve(false); return end   -- slot already occupied
+    end
+    data.slot = slot
+
+    creating[source] = true
+    local ok, row = pcall(VCore.DB.CreateCharacter, license, data)
     if not ok or not row then
         creating[source] = nil
         resolve(false)
