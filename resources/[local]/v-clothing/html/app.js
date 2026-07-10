@@ -42,18 +42,45 @@ async function selectCategory(key) {
   if (set.size) { thumbSet = set; renderTiles(); }
 }
 
-// Lazy-load a tile's thumbnail (base64) only when it scrolls into view.
+// ── Thumbnail loading: memory cache + batched fetches (one round-trip
+//    per viewport instead of one per tile) ──
+const thumbMem = new Map();            // "cat_d" -> data URI
+let batchQueue = [], batchTimer = null;
+
+async function flushThumbBatch() {
+  batchTimer = null;
+  const imgs = batchQueue.splice(0, 24);
+  if (batchQueue.length && !batchTimer) batchTimer = setTimeout(flushThumbBatch, 60);
+  if (!imgs.length) return;
+  const out = await post('thumbsBatch', { list: imgs.map(i => ({ cat: i.dataset.cat, d: +i.dataset.d })) });
+  const map = new Map((Array.isArray(out) ? out : []).map(e => [e.cat + '_' + e.d, e.uri]));
+  imgs.forEach(img => {
+    const key = img.dataset.cat + '_' + img.dataset.d;
+    const uri = map.get(key);
+    if (uri) { thumbMem.set(key, uri); img.src = uri; img.parentElement.classList.add('ready'); }
+    else img.parentElement.classList.add('noimg');
+  });
+}
+
+function requestThumb(img) {
+  const key = img.dataset.cat + '_' + img.dataset.d;
+  const hit = thumbMem.get(key);
+  if (hit) { img.src = hit; img.parentElement.classList.add('ready'); return; }
+  batchQueue.push(img);
+  if (!batchTimer) batchTimer = setTimeout(flushThumbBatch, 60);
+}
+
+// Lazy-load a tile's thumbnail only when it scrolls into view.
 function ensureObserver() {
   if (thumbObserver) return thumbObserver;
   thumbObserver = new IntersectionObserver((entries) => {
-    entries.forEach(async (en) => {
+    entries.forEach((en) => {
       if (!en.isIntersecting) return;
       const img = en.target;
       thumbObserver.unobserve(img);
       if (img.dataset.loaded) return;
       img.dataset.loaded = '1';
-      const uri = await post('thumb', { category: img.dataset.cat, drawable: +img.dataset.d });
-      if (typeof uri === 'string' && uri) { img.src = uri; img.parentElement.classList.add('ready'); }
+      requestThumb(img);
     });
   }, { root: byId('tiles'), rootMargin: '160px' });
   return thumbObserver;
@@ -144,18 +171,74 @@ function close() { byId('cl').classList.add('hidden'); byId('stage').classList.a
 byId('close').onclick = close;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('cl').classList.contains('hidden')) close(); });
 
-// Admin scan: downscale the raw screenshot to a square thumbnail and upload
-// it to the game server over HTTP (net events would kick the player).
-async function handleThumbUpload(d) {
-  const done = (ok) => post('uploadDone', { ok });
+// ── Admin scan: isolate the garment and upload the thumbnail ──
+// Two shots arrive from Lua: the bare slot and the dressed slot. Keeping only
+// the pixels that CHANGED leaves the garment alone on a transparent
+// background (no character, no scenery), which is then cropped, squared,
+// downscaled and POSTed to the game server over HTTP (net events would kick).
+const loadImg = (uri) => new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = uri; });
+
+// Soft-ramp diff matte + block-density bounding box (kills speckle noise).
+function isolateGarment(pxI, pxB, W, H, t0, t1, pad) {
+  const a = pxI.data, b = pxB.data;
+  const B = 8, bw = Math.ceil(W / B), bh = Math.ceil(H / B);
+  const blocks = new Uint16Array(bw * bh);
+  for (let y = 0; y < H; y++) {
+    const rowB = Math.floor(y / B) * bw;
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const dl = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+      let al = 0;
+      if (dl >= t1) al = 255; else if (dl > t0) al = Math.round(((dl - t0) / (t1 - t0)) * 255);
+      a[i + 3] = al;
+      if (al > 96) blocks[rowB + Math.floor(x / B)]++;
+    }
+  }
+  let minX = W, minY = H, maxX = -1, maxY = -1;
+  for (let by = 0; by < bh; by++) for (let bx = 0; bx < bw; bx++) {
+    if (blocks[by * bw + bx] >= 10) {
+      if (bx * B < minX) minX = bx * B;
+      if (by * B < minY) minY = by * B;
+      if ((bx + 1) * B > maxX) maxX = (bx + 1) * B;
+      if ((by + 1) * B > maxY) maxY = (by + 1) * B;
+    }
+  }
+  if (maxX < 0) { minX = W / 2 - 96; minY = H / 2 - 96; maxX = W / 2 + 96; maxY = H / 2 + 96; }  // nothing changed -> transparent thumb
+  const w = maxX - minX, h = maxY - minY;
+  const padPx = Math.round(Math.max(w, h) * pad);
+  const side = Math.max(w, h) + padPx * 2;
+  const sx = Math.round((minX + maxX) / 2 - side / 2), sy = Math.round((minY + maxY) / 2 - side / 2);
+  const full = document.createElement('canvas'); full.width = W; full.height = H;
+  full.getContext('2d').putImageData(pxI, 0, 0);
+  const out = document.createElement('canvas'); out.width = side; out.height = side;
+  out.getContext('2d').drawImage(full, sx, sy, side, side, 0, 0, side, side);
+  return out;
+}
+
+async function handleThumbProcess(d) {
+  const done = (ok) => post('thumbDone', { ok });
   try {
-    const img = new Image();
-    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = d.uri; });
+    const item = await loadImg(d.item);
+    const W = item.width, H = item.height;
+    let cropped = null;
+    if (d.base) {
+      const base = await loadImg(d.base);
+      const cvI = document.createElement('canvas'); cvI.width = W; cvI.height = H;
+      const gI = cvI.getContext('2d'); gI.drawImage(item, 0, 0);
+      const cvB = document.createElement('canvas'); cvB.width = W; cvB.height = H;
+      const gB = cvB.getContext('2d'); gB.drawImage(base, 0, 0, W, H);
+      cropped = isolateGarment(gI.getImageData(0, 0, W, H), gB.getImageData(0, 0, W, H),
+        W, H, d.diffMin || 30, d.diffMax || 90, (d.pad === 0 || d.pad) ? d.pad : 0.1);
+    }
+    if (!cropped) {   // isolation disabled -> plain centered square
+      const side = Math.min(W, H);
+      cropped = document.createElement('canvas'); cropped.width = side; cropped.height = side;
+      cropped.getContext('2d').drawImage(item, (W - side) / 2, (H - side) / 2, side, side, 0, 0, side, side);
+    }
     const s = d.size || 384;
-    const cv = document.createElement('canvas'); cv.width = s; cv.height = s;
-    const side = Math.min(img.width, img.height);
-    cv.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, s, s);
-    const uri = cv.toDataURL('image/jpeg', d.quality || 0.85);
+    const fin = document.createElement('canvas'); fin.width = s; fin.height = s;
+    fin.getContext('2d').drawImage(cropped, 0, 0, s, s);
+    const uri = (d.format === 'png') ? fin.toDataURL('image/png') : fin.toDataURL('image/webp', d.quality || 0.9);
     const r = await fetch(`http://${d.endpoint}/${d.res}/upload`, {
       method: 'POST', headers: { 'Content-Type': 'text/plain' },   // simple request: no CORS preflight
       body: JSON.stringify({ t: d.token, cat: d.cat, d: d.drawable, uri }),
@@ -164,10 +247,31 @@ async function handleThumbUpload(d) {
   } catch (e) { done(false); }
 }
 
+// Scan progress overlay (driven by local Lua messages).
+function scanUI(d) {
+  const ov = byId('scanov');
+  if (d.phase === 'start') {
+    byId('scantitle').textContent = d.title || 'Scan';
+    byId('scanfill').style.width = '0%';
+    byId('scanlabel').textContent = '';
+    byId('scancount').textContent = `0 / ${d.total || 0}`;
+    ov.classList.remove('hidden');
+  } else if (d.phase === 'item') {
+    byId('scanfill').style.width = (d.total ? Math.round((d.done / d.total) * 100) : 0) + '%';
+    byId('scanlabel').textContent = d.label || '';
+    byId('scancount').textContent = `${d.done} / ${d.total}`;
+  } else if (d.phase === 'done') {
+    byId('scanfill').style.width = '100%';
+    setTimeout(() => ov.classList.add('hidden'), 1600);
+  }
+}
+
 window.addEventListener('message', (e) => {
   const d = e.data || {};
-  if (d.action === 'uploadThumb') {
-    handleThumbUpload(d);
+  if (d.action === 'processThumb') {
+    handleThumbProcess(d);
+  } else if (d.action === 'scanUI') {
+    scanUI(d);
   } else if (d.action === 'open') {
     strings = d.strings || {}; cats = d.cats || []; worn = d.worn || [];
     catMap = {}; cats.forEach(c => catMap[c.key] = c);

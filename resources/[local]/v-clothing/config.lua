@@ -35,13 +35,26 @@ Config.NudeDefaults = { [1] = 0, [11] = 15, [8] = 15, [3] = 15, [4] = 21, [6] = 
 -- the image so the catalogue shows a real preview instead of a number.
 Config.Thumbs = {
     dir        = 'thumbs',   -- saved under the resource folder
-    encoding   = 'jpg',      -- capture encoding: 'jpg' (small) | 'png' | 'webp'
     size       = 384,        -- final square thumbnail size (px), downscaled in the NUI
-    quality    = 0.85,       -- final jpeg quality (0..1) after downscale
-    streamWait = 160,        -- ms to let the drawable stream in before the shot
+    format     = 'webp',     -- final format: 'webp' (small, alpha) | 'png' (alpha)
+    quality    = 0.90,       -- final webp quality (0..1)
+    streamWait = 160,        -- ms to let the drawable stream in before each shot
     permission = 'admin',    -- permission required to launch a scan
     maxBytes   = 300000,     -- server-side guard: reject uploads larger than this
-    notifyEvery = 20,        -- push a progress notification every N thumbnails
+    notifyEvery = 100,       -- toast progress every N thumbnails (NUI overlay is the primary UI)
+
+    -- Garment isolation: each piece is shot twice (bare slot, then the piece)
+    -- and the NUI keeps only the changed pixels -> transparent background,
+    -- garment only (no character, no scenery). Disable to keep plain shots.
+    isolate    = true,
+    diffMin    = 30,         -- pixel delta (sum |dR|+|dG|+|dB|) where alpha starts
+    diffMax    = 90,         -- pixel delta of full opacity (soft ramp between)
+    pad        = 0.10,       -- crop padding around the garment (fraction of its size)
+
+    -- "Studio": the admin is teleported to an isolated sky point (static
+    -- background, no NPCs/wind/clouds, frozen noon) for the duration of the
+    -- scan, then teleported back. Set to false to scan in place.
+    studio     = vector3(0.0, -7000.0, 500.0),
 }
 
 -- Camera framing per body zone. bone = ped bone to look at (skeleton tag,

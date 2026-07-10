@@ -55,11 +55,25 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .tile.sel .num { color:var(--v-accent-300); }
 .tile .none { font-size:18px; color:var(--v-text-faint); }
 
-/* Generated thumbnails (admin /scanclothes) */
-.tile img.thumb { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; border-radius:10px; opacity:0; transition:opacity .18s ease; background:var(--v-bg-800); }
-.tile.has.ready img.thumb { opacity:1; }
+/* Generated thumbnails (admin scan) — garment only, transparent background */
+.tile img.thumb { position:absolute; inset:6%; width:88%; height:88%; object-fit:contain; opacity:0; transform:scale(.92); transition:opacity .22s ease, transform .22s ease; }
+.tile.has.ready img.thumb { opacity:1; transform:scale(1); }
+.tile.has:not(.ready):not(.noimg) { background:linear-gradient(100deg, var(--v-bg-700) 40%, var(--v-bg-500) 50%, var(--v-bg-700) 60%); background-size:220% 100%; animation:v-shimmer 1.1s linear infinite; }
 .tile.has .num { position:absolute; bottom:3px; right:4px; font-size:10px; line-height:1; font-weight:600; padding:2px 4px; border-radius:5px; background:rgba(0,0,0,.62); color:var(--v-text); }
 .tile.has.sel .num { color:var(--v-accent-300); }
+.tile.has.ready:hover img.thumb { transform:scale(1.08); }
+@keyframes v-shimmer { from { background-position:120% 0; } to { background-position:-120% 0; } }
+
+/* Admin scan progress overlay */
+.scanov { position:fixed; left:50%; bottom:6vh; transform:translateX(-50%); z-index:50; pointer-events:none; }
+.scanbox { min-width:340px; background:linear-gradient(180deg, rgba(23,23,29,.97), rgba(11,11,13,.98)); border:1px solid var(--v-line-2); border-left:3px solid var(--v-accent); border-radius:12px; padding:14px 18px; box-shadow:0 14px 44px rgba(0,0,0,.55); animation:v-rise .25s ease; }
+.scanhead { display:flex; align-items:center; gap:9px; margin-bottom:10px; }
+.scantitle { font-family:var(--v-font-display); text-transform:uppercase; letter-spacing:.06em; font-size:13px; }
+.scanbar { height:7px; border-radius:99px; background:var(--v-bg-600); overflow:hidden; }
+.scanbar i { display:block; height:100%; width:0%; border-radius:99px; background:linear-gradient(90deg, var(--v-accent), var(--v-accent-300)); transition:width .18s ease; }
+.scanmeta { display:flex; justify-content:space-between; margin-top:8px; font-size:11px; color:var(--v-text-dim); }
+.scanmeta #scancount { font-variant-numeric:tabular-nums; color:var(--v-accent-300); font-family:var(--v-font-display); }
+@keyframes v-rise { from { opacity:0; transform:translateX(-50%) translateY(14px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
 
 /* Texture strip */
 .tex-wrap { padding:12px 20px 0; display:flex; flex-direction:column; gap:7px; }

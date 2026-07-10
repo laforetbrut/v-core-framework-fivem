@@ -78,11 +78,12 @@ end)
 -- ════════════════════════════════════════════════════════════════
 local scanning = false
 
-local function placeScanCam(cam, ped, fr)
+local function placeScanCam(cam, ped, fr, skyTilt)
     local at = GetPedBoneCoords(ped, fr.bone, 0.0, 0.0, 0.0)
     local h  = math.rad(GetEntityHeading(ped))
     local fx, fy = -math.sin(h), math.cos(h)          -- ped forward vector
-    SetCamCoord(cam, at.x + fx * fr.dist, at.y + fy * fr.dist, at.z + fr.height)
+    local lift = skyTilt and (fr.dist * 0.28) or 0.0  -- shoot from slightly below -> sky-only background
+    SetCamCoord(cam, at.x + fx * fr.dist, at.y + fy * fr.dist, at.z + fr.height - lift)
     PointCamAtCoord(cam, at.x, at.y, at.z + fr.atZ)
     SetCamFov(cam, fr.fov)
 end
@@ -104,32 +105,75 @@ local function capture()
     local p, ok = promise.new()
     ok = pcall(function()
         exports['screenshot-basic']:requestScreenshot(
-            { encoding = Config.Thumbs.encoding, quality = 0.92 },   -- high-quality source; the NUI downscales
+            { encoding = 'jpg', quality = 0.92 },   -- high-quality source; the NUI isolates & downscales
             function(data) p:resolve(data) end)
     end)
     if not ok then return nil end
     return Citizen.Await(p)
 end
 
--- Ship one capture to the server THROUGH THE NUI (canvas downscale + HTTP
--- upload). Never TriggerServerEvent with an image: large net events trip
--- FiveM's reliable-event overflow protection and kick the player.
-local uploadP = nil
-RegisterNUICallback('uploadDone', function(data, cb)
-    if uploadP then local p = uploadP; uploadP = nil; p:resolve(data and data.ok or false) end
+-- Ship one piece to the server THROUGH THE NUI: it diffs the bare/dressed
+-- shots to keep only the garment (transparent background), crops it, then
+-- HTTP-uploads the result. Never TriggerServerEvent with an image: large
+-- net events trip FiveM's reliable-event overflow protection and kick.
+local processP = nil
+RegisterNUICallback('thumbDone', function(data, cb)
+    if processP then local p = processP; processP = nil; p:resolve(data and data.ok or false) end
     cb('ok')
 end)
 
-local function uploadThumb(endpoint, token, catKey, d, uri)
-    uploadP = promise.new()
-    local p = uploadP
-    SetTimeout(15000, function() if uploadP == p then uploadP = nil; p:resolve(false) end end)
+local function processThumb(endpoint, token, catKey, d, baseUri, itemUri)
+    processP = promise.new()
+    local p = processP
+    SetTimeout(20000, function() if processP == p then processP = nil; p:resolve(false) end end)
     SendNUIMessage({
-        action = 'uploadThumb', endpoint = endpoint, res = GetCurrentResourceName(),
-        token = token, cat = catKey, drawable = d, uri = uri,
-        size = Config.Thumbs.size, quality = Config.Thumbs.quality,
+        action = 'processThumb', endpoint = endpoint, res = GetCurrentResourceName(),
+        token = token, cat = catKey, drawable = d,
+        base = baseUri, item = itemUri,
+        size = Config.Thumbs.size, format = Config.Thumbs.format, quality = Config.Thumbs.quality,
+        diffMin = Config.Thumbs.diffMin, diffMax = Config.Thumbs.diffMax, pad = Config.Thumbs.pad,
     })
     return Citizen.Await(p)
+end
+
+-- Bare (nude/empty) state for one slot — the isolation baseline.
+local function applyBare(c)
+    applyToPed({ kind = c.kind, id = c.id, drawable = Config.NudeDefaults[c.id] or 0, texture = 0, off = (c.kind == 'prop') })
+end
+
+-- "Studio": frozen noon, no clouds/wind/fidgets, isolated sky point — the two
+-- shots of a pair then differ ONLY by the garment. Returns a restore closure.
+local function enterStudio(ped)
+    local pos, heading = GetEntityCoords(ped), GetEntityHeading(ped)
+    local h, m, s = GetClockHours(), GetClockMinutes(), GetClockSeconds()
+    local clouds = 0.0
+    pcall(function() clouds = GetCloudHatOpacity() end)
+    FreezeEntityPosition(ped, true)
+    ClearPedTasksImmediately(ped)
+    pcall(function() SetPedCanPlayAmbientAnims(ped, false) end)
+    if Config.Thumbs.studio then
+        SetEntityCoordsNoOffset(ped, Config.Thumbs.studio.x, Config.Thumbs.studio.y, Config.Thumbs.studio.z, false, false, false)
+        SetEntityHeading(ped, 180.0)
+    end
+    NetworkOverrideClockTime(12, 0, 0)
+    PauseClock(true)
+    pcall(function() SetOverrideWeather('EXTRASUNNY') end)
+    pcall(function() SetWind(0.0) end)
+    pcall(function() SetCloudHatOpacity(0.0) end)
+    Wait(400)   -- let streaming / lighting settle
+    return function()
+        if Config.Thumbs.studio then
+            SetEntityCoordsNoOffset(ped, pos.x, pos.y, pos.z, false, false, false)
+            SetEntityHeading(ped, heading)
+        end
+        PauseClock(false)
+        NetworkOverrideClockTime(h, m, s)
+        pcall(function() NetworkClearClockTimeOverride() end)
+        pcall(function() ClearOverrideWeather() end)
+        pcall(function() SetCloudHatOpacity(clouds) end)
+        pcall(function() SetPedCanPlayAmbientAnims(ped, true) end)
+        FreezeEntityPosition(ped, false)
+    end
 end
 
 RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
@@ -144,11 +188,13 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
         local ped  = PlayerPedId()
         local pd   = exports['v-core']:GetPlayerData()
         local snap = pd and pd.appearance and json.decode(json.encode(pd.appearance)) or {}
+        local isolate = Config.Thumbs.isolate
 
         -- clean scene
-        FreezeEntityPosition(ped, true)
-        ClearPedTasksImmediately(ped)
         DisplayRadar(false)
+        local leaveStudio = enterStudio(ped)
+        -- strip every slot: each piece is shot on a bare body
+        if isolate then for _, c in ipairs(Config.Categories) do applyBare(c) end end
         local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 42.0, false, 0)
         SetCamActive(cam, true)
         RenderScriptCams(true, false, 0, true, false)
@@ -180,18 +226,31 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
             for d = 0, n - 1 do if wanted(c.key, d) then total = total + 1 end end
         end
 
+        SendNUIMessage({ action = 'scanUI', phase = 'start',
+            title = strings()['cl.scan_title'] or 'Clothing scan', total = total })
+
         local done, fails = 0, 0
         for _, c in ipairs(targets) do
             local fr = Config.Framing[Config.CatFraming[c.key] or 'body']
             local n  = (c.kind == 'comp') and GetNumberOfPedDrawableVariations(ped, c.id) or GetNumberOfPedPropDrawableVariations(ped, c.id)
             for d = 0, n - 1 do
                 if scanning and wanted(c.key, d) then
+                    placeScanCam(cam, ped, fr, Config.Thumbs.studio ~= false)
+                    -- shot A: bare slot (isolation baseline)
+                    local baseUri = nil
+                    if isolate then
+                        applyBare(c)
+                        Wait(Config.Thumbs.streamWait)
+                        baseUri = capture()
+                    end
+                    -- shot B: the piece
                     applyToPed({ kind = c.kind, id = c.id, drawable = d, texture = 0, off = false })
-                    placeScanCam(cam, ped, fr)
                     Wait(Config.Thumbs.streamWait)
-                    local data = capture()
-                    local sent = data and uploadThumb(endpoint, token, c.key, d, data) or false
+                    local itemUri = capture()
+                    local sent = itemUri and processThumb(endpoint, token, c.key, d, baseUri, itemUri) or false
                     if sent then done = done + 1; fails = 0 else fails = fails + 1 end
+                    SendNUIMessage({ action = 'scanUI', phase = 'item',
+                        label = strings()[c.i18n] or c.key, done = done, total = total, ok = sent })
                     if fails >= 8 then    -- upload route is dead: bail instead of looping for nothing
                         scanning = false
                         Core.Notify(strings()['cl.scan_abort'] or 'Scan aborted (upload failed).', 'error')
@@ -202,13 +261,15 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
                     Wait(0)
                 end
             end
+            if isolate then applyBare(c) end   -- strip this category before the next one
         end
 
         -- restore
+        SendNUIMessage({ action = 'scanUI', phase = 'done', done = done, total = total })
         RenderScriptCams(false, false, 0, true, false)
         DestroyCam(cam, false)
         restoreSlots(snap)
-        FreezeEntityPosition(ped, false)
+        leaveStudio()
         DisplayRadar(true)
         scanning = false
         TriggerServerEvent('v-clothing:server:scanDone', done)
@@ -305,6 +366,11 @@ end)
 RegisterNUICallback('thumb', function(data, cb)
     Core.TriggerCallback('v-clothing:thumb', function(uri) cb(uri or false) end,
         { category = data.category, drawable = data.drawable })
+end)
+
+-- Batched fetch: one round-trip for a whole viewport of tiles.
+RegisterNUICallback('thumbsBatch', function(data, cb)
+    Core.TriggerCallback('v-clothing:thumbs', function(out) cb(out or {}) end, data.list)
 end)
 
 RegisterNUICallback('buy', function(data, cb)

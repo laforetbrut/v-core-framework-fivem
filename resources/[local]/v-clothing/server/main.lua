@@ -82,6 +82,7 @@ local ThumbIndex = {}        -- cat -> { [drawableStr] = true }
 local scanners   = {}        -- src -> { token } while a scan is running
 local tokenSrc   = {}        -- upload token -> src
 local ResName    = GetCurrentResourceName()
+local thumbCache, thumbCacheN = {}, 0   -- in-memory data-URI cache (disk saver)
 
 math.randomseed(os.time())
 local function newToken()
@@ -136,6 +137,7 @@ SetHttpHandler(function(req, res)
         SaveResourceFile(ResName, thumbFile(cat.key, d), uri, -1)
         ThumbIndex[cat.key] = ThumbIndex[cat.key] or {}
         ThumbIndex[cat.key][tostring(d)] = true
+        thumbCache[cat.key .. '_' .. d] = uri   -- keep the cache fresh
         savesSinceFlush = savesSinceFlush + 1
         if savesSinceFlush >= 25 then savesSinceFlush = 0; saveIndex() end
         res.writeHead(200, { ['Access-Control-Allow-Origin'] = '*', ['Content-Type'] = 'application/json' })
@@ -166,13 +168,41 @@ Core.RegisterCallback('v-clothing:thumbIndex', function(source, resolve, cat)
     resolve(list)
 end)
 
+-- Small in-memory cache so repeated catalogue browsing doesn't hit the disk.
+local function getThumb(cat, d)
+    if not (ThumbIndex[cat] and ThumbIndex[cat][tostring(d)]) then return false end
+    local k = cat .. '_' .. d
+    local v = thumbCache[k]
+    if v ~= nil then return v end
+    local raw = LoadResourceFile(ResName, thumbFile(cat, d))
+    v = (raw and raw ~= '') and raw or false
+    if thumbCacheN > 400 then thumbCache, thumbCacheN = {}, 0 end   -- crude cap: reset when full
+    thumbCache[k] = v; thumbCacheN = thumbCacheN + 1
+    return v
+end
+
 -- Catalogue: fetch one thumbnail (base64 data URI) on demand.
 Core.RegisterCallback('v-clothing:thumb', function(source, resolve, data)
     local cat = data and data.category
     local d   = math.floor(tonumber(data and data.drawable) or -1)
-    if not cat or d < 0 or not (ThumbIndex[cat] and ThumbIndex[cat][tostring(d)]) then resolve(false); return end
-    local raw = LoadResourceFile(ResName, thumbFile(cat, d))
-    resolve((raw and raw ~= '') and raw or false)
+    if type(cat) ~= 'string' or d < 0 then resolve(false); return end
+    resolve(getThumb(cat, d))
+end)
+
+-- Catalogue: fetch a batch of thumbnails (one round-trip per viewport).
+Core.RegisterCallback('v-clothing:thumbs', function(source, resolve, list)
+    if type(list) ~= 'table' then resolve({}); return end
+    local out = {}
+    for i = 1, math.min(#list, 32) do
+        local e = list[i]
+        local cat = e and e.cat
+        local d   = e and math.floor(tonumber(e.d) or -1) or -1
+        if type(cat) == 'string' and d >= 0 then
+            local uri = getThumb(cat, d)
+            if uri then out[#out + 1] = { cat = cat, d = d, uri = uri } end
+        end
+    end
+    resolve(out)
 end)
 
 -- Start a thumbnail scan for an admin. mode: 'all' | 'new'; onlyCat optional.
@@ -186,7 +216,8 @@ local function beginScan(src, mode, onlyCat)
     scanners[src] = { token = token }
     tokenSrc[token] = src
     -- safety: auto-clear the scanner flag if the client never reports back
-    SetTimeout(600000, function()
+    -- (isolation shoots every piece twice: a full scan can take ~15 min)
+    SetTimeout(1800000, function()
         if scanners[src] and scanners[src].token == token then clearScanner(src) end
     end)
     Core.Log('clothing', 'scan start', { mode = mode, cat = onlyCat }, player.citizenid)
