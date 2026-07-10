@@ -11,5 +11,7 @@ local T = {
     ['shop.nofunds'] = 'Pas assez d\'argent.',
     ['shop.nospace'] = 'Pas assez de place dans l\'inventaire.',
     ['shop.blip']    = 'Boutique',
+    ['shop.inventory'] = 'Inventaire',
+    ['shop.drag_hint'] = 'Glissez un article ici pour l\'acheter',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

@@ -20,6 +20,24 @@ local function priceOf(shop, itemName)
     return nil
 end
 
+-- Compact item def (label/image/weight/category/rarity) for the NUI, keyed by name.
+local function defOf(name)
+    local d = ItemDefs[name]
+    if not d then return nil end
+    local meta = d.metadata
+    if type(meta) == 'string' then meta = json.decode(meta) or {} end
+    return { label = d.label, image = d.image, weight = d.weight, category = d.category, rarity = (meta and meta.rarity) or 'common' }
+end
+
+-- The player's inventory as a view for the shop panel: items + the defs they need.
+local function inventoryView(player)
+    local items = exports['v-inventory']:GetItems(player.source) or {}
+    local limits = exports['v-inventory']:GetLimits() or { maxSlots = 40, hotbar = 5 }
+    local defs = {}
+    for _, it in ipairs(items) do defs[it.name] = defs[it.name] or defOf(it.name) end
+    return { items = items, defs = defs, maxSlots = limits.maxSlots or 40, hotbar = limits.hotbar or 5 }
+end
+
 Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
     local shop = Shops[shopId]
     local player = Core.GetPlayer(source)
@@ -28,10 +46,17 @@ Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
     for _, e in ipairs(shop.items) do
         local d = ItemDefs[e.item]
         if d then
-            list[#list + 1] = { name = d.name, label = d.label, price = e.price, weight = d.weight, category = d.category }
+            local meta = d.metadata
+            if type(meta) == 'string' then meta = json.decode(meta) or {} end
+            list[#list + 1] = { name = d.name, label = d.label, price = e.price, weight = d.weight,
+                category = d.category, image = d.image, rarity = (meta and meta.rarity) or 'common' }
         end
     end
-    resolve({ id = shop.id, label = shop.label, items = list, cash = player.money.cash, bank = player.money.bank })
+    resolve({
+        id = shop.id, label = shop.label, items = list,
+        cash = player.money.cash, bank = player.money.bank,
+        inv = inventoryView(player),
+    })
 end)
 
 Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
@@ -58,6 +83,6 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
     Core.Log('shop', ('%s bought %dx %s for %d'):format(player.citizenid, amount, data.item, total), nil, player.citizenid)
     Core.Notify(source, LP(source, 'shop.bought', amount, ItemDefs[data.item].label, total), 'success')
 
-    local p2 = Core.GetPlayer(source)   -- re-read for the post-purchase balances
-    resolve({ cash = p2.money.cash, bank = p2.money.bank })
+    local p2 = Core.GetPlayer(source)   -- re-read for the post-purchase balances + inventory
+    resolve({ cash = p2.money.cash, bank = p2.money.bank, inv = inventoryView(p2) })
 end)
