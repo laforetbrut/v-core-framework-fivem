@@ -21,6 +21,7 @@ local T = {
     ['cl.scan_done']   = 'Scan complete — %s thumbnails generated.',
     ['cl.scan_busy']   = 'A scan is already running.',
     ['cl.scan_confirm']= 'Press F9 again to start the clothing scan.',
+    ['cl.scan_abort']  = 'Scan aborted — image upload failed.',
     ['cl.masks']       = 'Masks',
     ['cl.tops']        = 'Tops',
     ['cl.undershirt']  = 'Undershirts',

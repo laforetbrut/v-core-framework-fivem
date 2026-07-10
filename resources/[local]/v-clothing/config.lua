@@ -35,11 +35,12 @@ Config.NudeDefaults = { [1] = 0, [11] = 15, [8] = 15, [3] = 15, [4] = 21, [6] = 
 -- the image so the catalogue shows a real preview instead of a number.
 Config.Thumbs = {
     dir        = 'thumbs',   -- saved under the resource folder
-    encoding   = 'jpg',      -- 'jpg' (small) | 'png' | 'webp'
-    quality    = 0.80,       -- 0..1 for jpg/webp
+    encoding   = 'jpg',      -- capture encoding: 'jpg' (small) | 'png' | 'webp'
+    size       = 384,        -- final square thumbnail size (px), downscaled in the NUI
+    quality    = 0.85,       -- final jpeg quality (0..1) after downscale
     streamWait = 160,        -- ms to let the drawable stream in before the shot
-    permission = 'admin',    -- permission required to run /scanclothes
-    maxBytes   = 900000,     -- server-side guard: reject blobs larger than this
+    permission = 'admin',    -- permission required to launch a scan
+    maxBytes   = 300000,     -- server-side guard: reject uploads larger than this
     notifyEvery = 20,        -- push a progress notification every N thumbnails
 }
 

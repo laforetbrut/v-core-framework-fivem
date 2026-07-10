@@ -8,6 +8,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Fixed (in-game interface pass)
 
+- **Clothing-scan kick** — the thumbnail scan kicked the admin (reliable net-event overflow: each screenshot was sent as a ~200-500 KB base64 blob over `TriggerServerEvent`). Captures now go through an HTTP pipeline: the NUI downscales each shot to a 384px square jpeg (~4-40 KB) and POSTs it to the resource's `SetHttpHandler` endpoint, authenticated by a one-shot scan token; the scan also aborts cleanly after 8 consecutive upload failures instead of looping.
+
 - **CEF black-box bug** — removed every `backdrop-filter: blur()` (renders as opaque black on FiveM's Chromium 103 CEF) across v-hud, v-spawn, v-banking, v-notify.
 - **Compass box + clicks** — explicit compass width + `overflow:hidden` (kills the oversized black box) and `pointer-events:none` on decorative HUD widgets so they no longer swallow the character-creator's clicks.
 - **color-mix()** — replaced (unsupported before Chromium 111) with static tints in v-notify.
@@ -46,6 +48,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Launchers** — `start.bat` and `start.ps1` to boot the server.
 - **On-demand database** — local MariaDB (not a Windows service, never 24/7) with `start-db.bat` / `stop-db.bat` toggles; data in `database/data/` (gitignored), database `projet_r` ready.
 - **Project docs** — `README.md`, `RULES.md`, `.gitignore` tailored to a vanilla FiveM workflow.
+
+### Correctifs (miroir français)
+
+- **Kick pendant le scan de vêtements** — le scan de vignettes kickait l'admin (dépassement des events réseau fiables : chaque screenshot partait en blob base64 de ~200-500 Ko via `TriggerServerEvent`). Les captures passent désormais par un pipeline HTTP : le NUI réduit chaque photo en jpeg carré 384px (~4-40 Ko) et la POST vers l'endpoint `SetHttpHandler` de la ressource, authentifié par un jeton de scan à usage unique ; le scan s'interrompt aussi proprement après 8 échecs d'envoi consécutifs au lieu de boucler.
 
 ### Ajouts (French mirror)
 

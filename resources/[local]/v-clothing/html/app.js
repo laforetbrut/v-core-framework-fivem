@@ -144,9 +144,31 @@ function close() { byId('cl').classList.add('hidden'); byId('stage').classList.a
 byId('close').onclick = close;
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('cl').classList.contains('hidden')) close(); });
 
+// Admin scan: downscale the raw screenshot to a square thumbnail and upload
+// it to the game server over HTTP (net events would kick the player).
+async function handleThumbUpload(d) {
+  const done = (ok) => post('uploadDone', { ok });
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = d.uri; });
+    const s = d.size || 384;
+    const cv = document.createElement('canvas'); cv.width = s; cv.height = s;
+    const side = Math.min(img.width, img.height);
+    cv.getContext('2d').drawImage(img, (img.width - side) / 2, (img.height - side) / 2, side, side, 0, 0, s, s);
+    const uri = cv.toDataURL('image/jpeg', d.quality || 0.85);
+    const r = await fetch(`http://${d.endpoint}/${d.res}/upload`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' },   // simple request: no CORS preflight
+      body: JSON.stringify({ t: d.token, cat: d.cat, d: d.drawable, uri }),
+    });
+    done(r.ok);
+  } catch (e) { done(false); }
+}
+
 window.addEventListener('message', (e) => {
   const d = e.data || {};
-  if (d.action === 'open') {
+  if (d.action === 'uploadThumb') {
+    handleThumbUpload(d);
+  } else if (d.action === 'open') {
     strings = d.strings || {}; cats = d.cats || []; worn = d.worn || [];
     catMap = {}; cats.forEach(c => catMap[c.key] = c);
     if (d.cash !== undefined) byId('cash').textContent = fmt(d.cash);
