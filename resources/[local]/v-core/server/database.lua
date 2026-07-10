@@ -129,3 +129,60 @@ function VCore.DB.GetItems()
     end
     return items
 end
+
+-- ── Clothing catalogue (Phase 3) ───────────────────────────────
+--- All catalogue rows for a component/gender (the store & creator grids).
+function VCore.DB.GetCatalogue(kind, componentId, gender)
+    return MySQL.query.await(
+        'SELECT * FROM clothing_catalogue WHERE kind = ? AND component_id = ? AND gender IN (?, ?) ORDER BY local_index ASC',
+        { kind, componentId, gender, 'u' }) or {}
+end
+
+--- One catalogue entry by id.
+function VCore.DB.GetCatalogueEntry(id)
+    return MySQL.single.await('SELECT * FROM clothing_catalogue WHERE id = ?', { id })
+end
+
+--- Look up an entry by its stable identity (used by the scanner to upsert).
+function VCore.DB.GetCatalogueByIdent(kind, componentId, collection, localIndex, gender)
+    return MySQL.single.await(
+        'SELECT * FROM clothing_catalogue WHERE kind=? AND component_id=? AND collection=? AND local_index=? AND gender=?',
+        { kind, componentId, collection or '', localIndex, gender })
+end
+
+--- Insert/update a scanned garment (identity is the unique key).
+function VCore.DB.UpsertCatalogueEntry(e)
+    MySQL.insert.await([[INSERT INTO clothing_catalogue
+        (kind, component_id, collection, local_index, gender, texture_count, name, subtype,
+         color_primary, color_secondary, price, rarity, thumb_key, thumb_hash)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE texture_count=VALUES(texture_count), name=COALESCE(VALUES(name),name),
+         subtype=COALESCE(VALUES(subtype),subtype), color_primary=VALUES(color_primary),
+         color_secondary=VALUES(color_secondary), thumb_key=VALUES(thumb_key), thumb_hash=VALUES(thumb_hash)]],
+        { e.kind, e.component_id, e.collection or '', e.local_index, e.gender, e.texture_count or 1,
+          e.name, e.subtype, e.color_primary, e.color_secondary, e.price or 0, e.rarity or 'common',
+          e.thumb_key, e.thumb_hash })
+end
+
+--- Admin metadata edit (name / subtype / price / rarity / colours).
+function VCore.DB.SetCatalogueMeta(id, m)
+    MySQL.update.await(
+        'UPDATE clothing_catalogue SET name=?, subtype=?, price=?, rarity=?, color_primary=?, color_secondary=? WHERE id=?',
+        { m.name, m.subtype, m.price or 0, m.rarity or 'common', m.color_primary, m.color_secondary, id })
+end
+
+function VCore.DB.CountCatalogue()
+    return MySQL.scalar.await('SELECT COUNT(*) FROM clothing_catalogue') or 0
+end
+
+--- Resumable scan cursor.
+function VCore.DB.GetScanState()
+    local row = MySQL.single.await('SELECT state FROM clothing_scan_state WHERE id = 1')
+    if not row then return nil end
+    return (type(row.state) == 'table') and row.state or (json.decode(row.state or 'null'))
+end
+
+function VCore.DB.SaveScanState(state)
+    MySQL.insert('INSERT INTO clothing_scan_state (id, state) VALUES (1, ?) ON DUPLICATE KEY UPDATE state = ?',
+        { json.encode(state or {}), json.encode(state or {}) })
+end
