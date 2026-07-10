@@ -23,14 +23,18 @@ const ICON = {
   oxygen: '<circle cx="11" cy="13" r="6"/><circle cx="18" cy="7" r="2.2"/>',
 };
 
+// All 7 vitals are visible by default (settings.dynamic "Hide when full" is OFF
+// by default). Armor is shown even at 0 and oxygen is shown out of water too,
+// so no ring ever disappears unless the player opts in. hunger/thirst are
+// `keep` (never fade even if the player later enables "Hide when full").
 const VITALS = [
   { key: 'health',  danger: v => v <= 20 },
-  { key: 'armor',   danger: () => false, hideZero: true },
+  { key: 'armor',   danger: () => false },
   { key: 'hunger',  danger: v => v <= 15, warn: v => v <= 25, keep: true },
   { key: 'thirst',  danger: v => v <= 15, warn: v => v <= 25, keep: true },
   { key: 'stress',  danger: v => v >= 70, fullWhenZero: true },
   { key: 'stamina', danger: v => v <= 15 },
-  { key: 'oxygen',  danger: v => v <= 30, underwaterOnly: true },
+  { key: 'oxygen',  danger: v => v <= 30 },
 ];
 
 const ACCENTS = [
@@ -41,7 +45,7 @@ const ACCENTS = [
 
 const DEFAULTS = {
   elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true },
-  positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: true, minimapVehicleOnly: false, minimapSize: 100,
+  positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: false, minimapVehicleOnly: false, minimapSize: 100,
 };
 const MM_SIZE_MIN = 60, MM_SIZE_MAX = 200;   // minimap size range (%)
 let settings = JSON.parse(JSON.stringify(DEFAULTS));
