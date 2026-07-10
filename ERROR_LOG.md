@@ -39,3 +39,10 @@
   `local mm = RequestScaleformMovie('minimap'); BeginScaleformMovieMethod(mm,'SETUP_HEALTH_ARMOUR'); ScaleformMovieMethodAddParamInt(3); EndScaleformMovieMethod()`
   Also unify native map + NUI frame on the SAME top-left coordinate space so drag direction and any overlay line up.
 **Prevention:** For minimap/HUD scaleform elements, look for the scaleform METHOD that controls them (SETUP_HEALTH_ARMOUR, etc.) instead of trying to mask/clip. When overlaying CEF on a native element, use ONE coordinate system for both. Verify the technique against a known source before shipping instead of guessing offsets blind.
+
+## [2026-07-10 — session] — Minimap distorted / player blip off-centre after resize
+**Context:** Added a resizable minimap. Enlarging it distorted the map (stretched imagery) and the player blip drifted off-centre.
+**Error:** The minimap `sizeX`/`sizeY` used a wrong aspect ratio (0.160 x 0.178) and were scaled from there; the game renders the map assuming a fixed ratio, so any other ratio stretches the content and de-centres the blip.
+**Root cause:** GTA's minimap expects the frontend.xml default ratio sizeX:sizeY = 0.150 : 0.188888. Deviating from it distorts the map; the effect grows with size.
+**Fix:** Use baseW=0.150, baseH=0.188888 as the base and scale BOTH by the same size factor (ratio preserved) -> undistorted, blip centred at any size. Verified default from frontend.xml via CFX docs.
+**Prevention:** When resizing the native minimap, always preserve the 0.150:0.188888 ratio (scale uniformly). Never set sizeX/sizeY independently.
