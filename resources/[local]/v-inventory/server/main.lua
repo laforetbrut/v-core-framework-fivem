@@ -6,6 +6,7 @@ local Core = exports['v-core']:GetCore()
 
 local ItemDefs    = {}   -- name -> row
 local Inv         = {}   -- [source] = items[]
+local Pocket      = {}   -- [source] = items[]  (hidden compartment, stored in metadata)
 local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent }
 local OpenStash   = {}   -- [source] = stash id currently open
 local UsableItems = {}   -- name -> handler(src, item)
@@ -112,16 +113,28 @@ local function syncPlayer(src)
     if player then player.SetInventory(Inv[src]) end
 end
 
+-- The hidden pocket persists in the character's metadata, NOT the main inventory
+-- array, so nothing that reads GetSearchable/GetItems (a police search, the shop
+-- view, give/steal) can ever see it.
+local function syncPocket(src)
+    local player = Core.GetPlayer(src)
+    if player then player.SetMetadata('pocket', Pocket[src] or {}) end
+end
+
 AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
     local saved = player.GetInventory()
     Inv[src] = (type(saved) == 'table' and saved[1] ~= nil or type(saved) == 'table') and saved or {}
     if type(Inv[src]) ~= 'table' then Inv[src] = {} end
+    local pk = player.GetMetadata('pocket')
+    Pocket[src] = (type(pk) == 'table') and pk or {}
 end)
 
 AddEventHandler('playerDropped', function()
     local src = source
     if Inv[src] then syncPlayer(src) end
+    if Pocket[src] then syncPocket(src) end
     Inv[src] = nil
+    Pocket[src] = nil
     OpenStash[src] = nil
 end)
 
@@ -166,6 +179,8 @@ local function buildState(src)
         hotbar    = Config.HotbarSlots,
         player    = { items = Inv[src] or {}, weight = weightOf(Inv[src] or {}),
                       cash = (p and p.money and p.money.cash) or 0 },
+        pocket    = { items = Pocket[src] or {}, weight = weightOf(Pocket[src] or {}),
+                      maxWeight = Config.Pocket.weight, maxSlots = Config.Pocket.slots },
         secondary = secondary,
         equipment = equipment,
     }
@@ -185,11 +200,19 @@ end)
 -- ── Move (player <-> secondary, or rearrange) ──────────────────
 local function containerOf(src, key)
     if key == 'player' then return Inv[src], Config.MaxSlots, Config.MaxWeight end
+    if key == 'pocket' then return Pocket[src], Config.Pocket.slots, Config.Pocket.weight end
     local sid = OpenStash[src]
     if key == 'secondary' and sid and Stashes[sid] then
         return Stashes[sid].items, Stashes[sid].maxSlots, Stashes[sid].maxWeight
     end
     return nil
+end
+
+-- Persist whichever of player / pocket / secondary a move touched.
+local function persistMove(src, from, to)
+    if from == 'player' or to == 'player' then syncPlayer(src) end
+    if from == 'pocket' or to == 'pocket' then syncPocket(src) end
+    if from == 'secondary' or to == 'secondary' then saveStash(OpenStash[src]) end
 end
 
 Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
@@ -202,7 +225,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         if amount <= 0 then resolve(false); return end
         if not addToContainer(toItems, MONEY, amount, nil, toSlots, toWeight) then resolve({ error = 'space' }); return end
         p.RemoveMoney('cash', amount, 'inv-move')
-        if data.to == 'secondary' then saveStash(OpenStash[source]) end
+        persistMove(source, 'wallet', data.to)
         resolve(buildState(source)); return
     end
 
@@ -220,7 +243,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
             if amount <= 0 then resolve(false); return end
             removeFromSlot(fromItems, data.fromSlot, amount)
             p.AddMoney('cash', amount, 'inv-move')
-            if data.from == 'secondary' then saveStash(OpenStash[source]) end
+            persistMove(source, data.from, 'wallet')
             resolve(buildState(source)); return
         end
     end
@@ -261,8 +284,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         end
     end
 
-    if data.from == 'player' or data.to == 'player' then syncPlayer(source) end
-    if data.from == 'secondary' or data.to == 'secondary' then saveStash(OpenStash[source]) end
+    persistMove(source, data.from, data.to)
     resolve(buildState(source))
 end)
 
@@ -408,6 +430,11 @@ exports('RegisterUsableItem', function(name, handler) UsableItems[name] = handle
 -- Read-only helpers for other modules (e.g. the shop's inventory-view panel).
 exports('GetLimits', function() return { maxSlots = Config.MaxSlots, maxWeight = Config.MaxWeight, hotbar = Config.HotbarSlots } end)
 exports('GetItems', function(src) return Inv[src] or {} end)
+
+-- What a police search / steal is allowed to see: the MAIN inventory only.
+-- The hidden pocket lives in metadata and is deliberately excluded here, so no
+-- search feature can reveal it. Use this (not GetItems) from any frisk/steal code.
+exports('GetSearchable', function(src) return Inv[src] or {} end)
 
 -- ── Live cash mirror: refresh an open inventory when the account changes ──
 AddEventHandler('v-core:server:onMoneyChange', function(src, account, amount)

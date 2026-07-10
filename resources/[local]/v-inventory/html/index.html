@@ -47,12 +47,28 @@
         <div class="grid v-scroll" id="grid-secondary" data-inv="secondary"></div>
       </section>
 
-      <!-- EQUIPMENT (body slots) -->
-      <section class="panel eqpanel hidden" id="panel-equipment" style="--i:2">
-        <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
-        <span class="tab" data-i18n="inv.equipment">Equipment</span>
-        <div class="eq-body v-scroll" id="equipment"></div>
-      </section>
+      <!-- RIGHT COLUMN: equipment (body slots) + hidden pocket -->
+      <div class="right-col" id="right-col" style="--i:3">
+        <section class="panel eqpanel hidden" id="panel-equipment">
+          <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
+          <span class="tab" data-i18n="inv.equipment">Equipment</span>
+          <div class="eq-body v-scroll" id="equipment"></div>
+        </section>
+
+        <!-- HIDDEN POCKET — concealed compartment; a police search can't see it -->
+        <section class="panel pocketpanel" id="panel-pocket">
+          <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
+          <span class="tab tab-lock" data-i18n="inv.pocket">Hidden pocket</span>
+          <header class="panel-head pocket-head">
+            <span class="lock-note" data-i18n="inv.pocket_note">Not visible on a search</span>
+            <div class="wmeter">
+              <div class="segbar" id="pocket-seg"></div>
+              <span class="wtxt" id="pocket-wtxt"><b>0.00</b> / 1.00 KG</span>
+            </div>
+          </header>
+          <div class="grid pocket-grid" id="grid-pocket" data-inv="pocket"></div>
+        </section>
+      </div>
     </div>
     <div class="hint" data-i18n="inv.hint">Drag to move · Right-click for actions · Esc to close</div>
   </div>

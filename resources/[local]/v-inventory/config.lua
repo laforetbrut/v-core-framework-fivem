@@ -14,6 +14,11 @@ Config.Glovebox = { slots = 5,  weight = 12000 }
 -- Ground drops.
 Config.Drop     = { slots = 30, weight = 1000000 }
 
+-- Hidden pocket: a small concealed compartment on the player. Stored in the
+-- character's metadata (separate from the main inventory), so a police search —
+-- which reads GetSearchable / GetItems (the main inventory only) — never sees it.
+Config.Pocket   = { slots = 3, weight = 1000 }   -- 1 kg
+
 -- Giving items to a nearby player.
 Config.GiveDistance = 3.0
 

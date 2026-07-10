@@ -47,7 +47,7 @@ const CLOTH_ITEM_IC = { mask: 'masks', hat: 'hats', glasses: 'glasses', top: 'to
 const ITEM_PH = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M3 7l9-4 9 4v10l-9 4-9-4V7Z"/><path d="M3 7l9 4 9-4M12 11v10"/></svg>`;
 
 let state = null, strings = {}, defs = {};
-let maps = { player: {}, secondary: {} };
+let maps = { player: {}, secondary: {}, pocket: {} };
 let drag = null;            // pointer-drag state (see the drag section)
 let built = false;
 
@@ -61,9 +61,10 @@ function applyStrings() {
 
 // ── State → slot maps ──
 function rebuildMaps() {
-  maps = { player: {}, secondary: {} };
+  maps = { player: {}, secondary: {}, pocket: {} };
   (state.player.items || []).forEach(it => { maps.player[it.slot] = it; });
   if (state.secondary) (state.secondary.items || []).forEach(it => { maps.secondary[it.slot] = it; });
+  if (state.pocket) (state.pocket.items || []).forEach(it => { maps.pocket[it.slot] = it; });
 }
 const itemAt = (inv, slot) => (maps[inv] || {})[slot];
 const def = (name) => defs[name] || { label: name, weight: 0, category: 'misc', image: '', stackable: 1, usable: 0, metadata: {} };
@@ -118,7 +119,7 @@ function renderSlot(el) {
   if (dur != null) { dura.classList.add('on'); dura.style.width = Math.max(0, Math.min(100, dur)) + '%'; dura.style.background = dur > 55 ? 'var(--v-success)' : dur > 25 ? 'var(--v-accent)' : 'var(--v-danger)'; }
 }
 function renderGrid(inv) {
-  const gid = inv === 'player' ? 'grid-player' : 'grid-secondary';
+  const gid = inv === 'player' ? 'grid-player' : (inv === 'pocket' ? 'grid-pocket' : 'grid-secondary');
   byId(gid).querySelectorAll('.slot').forEach(renderSlot);
   if (inv === 'player') byId('quickbar').querySelectorAll('.slot').forEach(renderSlot);
 }
@@ -137,6 +138,7 @@ function render() {
   renderGrid('player');
   byId('wallet-amt').textContent = money(state.player.cash);
   setWeight('player', state.player.weight, state.maxWeight);
+  if (state.pocket) { renderGrid('pocket'); setWeight('pocket', state.pocket.weight, state.pocket.maxWeight); }
   const sec = state.secondary;
   byId('panel-secondary').classList.toggle('hidden', !sec);
   if (sec) {
@@ -395,7 +397,7 @@ function onDblClick(e) {
 
 // ── Wire delegated listeners once ──
 function wire() {
-  ['grid-player', 'grid-secondary', 'quickbar'].forEach(id => {
+  ['grid-player', 'grid-secondary', 'grid-pocket', 'quickbar'].forEach(id => {
     const g = byId(id);
     g.addEventListener('mousedown', onPointerDown);
     g.addEventListener('dblclick', onDblClick);
@@ -435,6 +437,7 @@ window.addEventListener('message', (e) => {
     buildQuickbar(hb);
     buildGrid('grid-player', 'player', state.maxSlots || 40, hb + 1);   // main grid = slots after the quick slots
     buildSegs('player-seg', 16);
+    if (state.pocket) { buildGrid('grid-pocket', 'pocket', state.pocket.maxSlots || 3, 1); buildSegs('pocket-seg', 8); }
     if (state.secondary) { buildGrid('grid-secondary', 'secondary', state.secondary.maxSlots || 30, 1); buildSegs('sec-seg', 16); }
     byId('player-search').value = ''; byId('sec-search').value = '';
     applyStrings(); render();
