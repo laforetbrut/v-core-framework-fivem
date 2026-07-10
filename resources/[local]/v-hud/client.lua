@@ -15,8 +15,8 @@ local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 -- frame's extra bottom height is the cover that hides the GTA:O health/armour
 -- bars (the square texture reshapes the map but doesn't remove those bars).
 local MM = {
-    default = { x = 0.013, y = 0.74 },      -- top-left of the frame (fractions)
-    w = 0.150, h = 0.205,                    -- frame footprint sent to the NUI
+    default = { x = 0.013, y = 0.75 },       -- top-left of the frame (fractions)
+    w = 0.150, h = 0.162,                     -- frame footprint sent to the NUI (= the map)
     map = { dx = 0.004, dy = 0.004, w = 0.142, h = 0.150 },  -- native square inside
 }
 
@@ -203,6 +203,24 @@ CreateThread(function()
     while true do
         Wait(1500)
         applyMinimap(false)   -- re-assert position/visibility (no flicker)
+    end
+end)
+
+-- Remove the GTA:O green/blue health & armour bars at the source (verified
+-- scaleform method): calling the minimap's SETUP_HEALTH_ARMOUR with GOLF mode
+-- (3) draws no bars. Must run every frame while the map is shown.
+CreateThread(function()
+    local mm = RequestScaleformMovie('minimap')
+    local t = 0
+    while not HasScaleformMovieLoaded(mm) and t < 200 do Wait(0); t = t + 1 end
+    while true do
+        Wait(0)
+        local wantMap = not (settings.elements and settings.elements.minimap == false)
+        if wantMap and HasScaleformMovieLoaded(mm) then
+            BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
+            ScaleformMovieMethodAddParamInt(3)
+            EndScaleformMovieMethod()
+        end
     end
 end)
 
