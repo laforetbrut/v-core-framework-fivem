@@ -44,6 +44,7 @@ local T = {
     ['inv.attach_nofit'] = 'This attachment does not fit the drawn weapon.',
     ['inv.attach_dupe']  = 'That attachment is already fitted.',
     ['inv.cleaned']      = 'Weapon cleaned — condition restored.',
+    ['inv.jam']          = 'Weapon jammed — it needs cleaning!',
     ['inv.no_access']  = 'Access denied.',
     ['inv.search_title'] = 'Search',
     ['inv.cant_search']  = 'They must have their hands up or be down.',

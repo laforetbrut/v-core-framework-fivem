@@ -32,6 +32,12 @@ Config.WeaponStartDurability = 100
 Config.WeaponWearPerShot     = 0.35
 Config.CleanRestore          = 100   -- durability restored by one cleaning_kit
 
+-- Jamming: a worn weapon (durability <= JamThreshold) can jam on firing, blocking
+-- it briefly. Chance scales up the more worn it is, capped at JamMaxChance.
+Config.JamThreshold = 25     -- condition (%) at or below which jams can happen
+Config.JamMaxChance = 0.18   -- jam probability per shot at 0% condition
+Config.JamBlockMs   = 1300   -- how long the weapon is blocked after a jam
+
 -- Rounds granted per ammo item used (added to the equipped weapon).
 Config.AmmoPerItem = 30
 

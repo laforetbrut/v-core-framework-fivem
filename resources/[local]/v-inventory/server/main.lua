@@ -411,6 +411,11 @@ RegisterNetEvent('v-inventory:server:weaponAmmo', function(slot, ammo)
         local spent = old - new
         if spent > 0 and it.metadata.durability ~= nil then
             it.metadata.durability = math.max(0, it.metadata.durability - spent * (Config.WeaponWearPerShot or 0))
+            -- Keep the client's cached condition current so its jam odds stay accurate.
+            local eq = Equipped[src]
+            if eq and eq.slot == slot then
+                TriggerClientEvent('v-inventory:client:weaponCondition', src, slot, it.metadata.durability)
+            end
         end
         it.metadata.ammo = new
         syncPlayer(src)
@@ -439,7 +444,7 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
             Equipped[source] = { slot = slot, name = it.name }
             TriggerClientEvent('v-inventory:client:equipWeapon', source,
                 { slot = slot, name = it.name, ammo = it.metadata.ammo or 0, serial = it.metadata.serial,
-                  attachments = it.metadata.attachments })
+                  attachments = it.metadata.attachments, durability = it.metadata.durability })
         end
         syncPlayer(source)
         resolve(buildState(source)); return
@@ -495,6 +500,7 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
         if w then
             w.metadata = w.metadata or {}
             w.metadata.durability = math.min(100, (w.metadata.durability or 0) + (Config.CleanRestore or 100))
+            TriggerClientEvent('v-inventory:client:weaponCondition', source, eq.slot, w.metadata.durability)
         end
         removeFromSlot(Inv[source], slot, 1)
         syncPlayer(source)
