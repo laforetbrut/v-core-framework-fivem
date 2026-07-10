@@ -3,8 +3,8 @@ Config = {}
 
 Config.Debug = false
 
--- Personal inventory.
-Config.MaxWeight = 120000     -- grams (120 kg)
+-- Personal inventory (realistic: 30 kg carry limit).
+Config.MaxWeight = 30000      -- grams (30 kg)
 Config.MaxSlots  = 40
 
 -- Vehicle storage (capacity scales a little with vehicle class server-side).

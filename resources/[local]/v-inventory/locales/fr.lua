@@ -3,6 +3,7 @@ Locales.fr = Locales.fr or {}
 local T = {
     ['inv.title']      = 'Inventaire',
     ['inv.player']     = 'Inventaire',
+    ['inv.quick']      = 'Accès rapide',
     ['inv.wallet']     = 'Argent',
     ['inv.search']     = 'Rechercher…',
     ['inv.hint']       = 'Glisser pour déplacer · Clic droit pour les actions · Maj+glisser pour diviser · Échap pour fermer',
