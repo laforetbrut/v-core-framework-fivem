@@ -23,6 +23,7 @@ client_script 'client/main.lua'
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
+    'data/items.lua',
     'server/main.lua',
 }
 
@@ -32,4 +33,5 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
+    'html/images/**/*.png',
 }

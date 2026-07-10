@@ -10,8 +10,22 @@ local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent 
 local OpenStash   = {}   -- [source] = stash id currently open
 local UsableItems = {}   -- name -> handler(src, item)
 local dropCounter = 0
+local MONEY       = 'money'
 
--- ── Item definitions ───────────────────────────────────────────
+-- Use effects by item type (hooks v-status). Registered per usable item.
+local function status(src, key, delta) pcall(function() exports['v-status']:Add(src, key, delta) end) end
+local UseByType = {
+    food    = function(src) status(src, 'hunger', 30) end,
+    drink   = function(src) status(src, 'thirst', 30) end,
+    drug    = function(src) status(src, 'stress', -25) end,
+    medical = function(src, item, def)
+        pcall(function() exports['v-status']:SetBleed(src, 0) end)
+        local heal = (def and (def.name == 'medikit' or def.name == 'firstaid')) and 60 or 25
+        TriggerClientEvent('v-inventory:client:heal', src, heal)
+    end,
+}
+
+-- ── Item catalogue: seed the DB (INSERT IGNORE) then load defs ──
 CreateThread(function()
     while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS stashes (
@@ -19,8 +33,23 @@ CreateThread(function()
         items JSON NOT NULL,
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    for _, it in ipairs(InventoryItems or {}) do
+        MySQL.insert.await(
+            'INSERT IGNORE INTO items (name, label, weight, stackable, usable, category, image, metadata) VALUES (?,?,?,?,?,?,?,?)',
+            { it.name, it.label, it.weight, it.stackable, it.usable, it.category, it.image, json.encode({ desc = it.desc, type = it.itype }) })
+    end
+
     local rows = MySQL.query.await('SELECT * FROM items') or {}
     for _, r in ipairs(rows) do ItemDefs[r.name] = r end
+
+    -- register use handlers by catalogue type
+    for _, it in ipairs(InventoryItems or {}) do
+        if it.usable == 1 and UseByType[it.itype] then
+            local fn = UseByType[it.itype]
+            UsableItems[it.name] = function(src, item) fn(src, item, ItemDefs[it.name]) end
+        end
+    end
 end)
 
 -- ── Container helpers ──────────────────────────────────────────
@@ -117,16 +146,26 @@ local function buildState(src)
     local secondary = nil
     local sid = OpenStash[src]
     if sid and Stashes[sid] then
-        secondary = { id = sid, label = Stashes[sid].label or 'stash',
-                      items = Stashes[sid].items, maxWeight = Stashes[sid].maxWeight }
+        secondary = { id = sid, label = Stashes[sid].label or 'stash', kind = Stashes[sid].kind,
+                      items = Stashes[sid].items, maxWeight = Stashes[sid].maxWeight, maxSlots = Stashes[sid].maxSlots }
     end
+    local p = Core.GetPlayer(src)
     return {
         defs      = ItemDefs,
         maxWeight = Config.MaxWeight,
         maxSlots  = Config.MaxSlots,
-        player    = { items = Inv[src] or {}, weight = weightOf(Inv[src] or {}) },
+        hotbar    = Config.HotbarSlots,
+        player    = { items = Inv[src] or {}, weight = weightOf(Inv[src] or {}),
+                      cash = (p and p.money and p.money.cash) or 0 },
         secondary = secondary,
     }
+end
+
+-- Never trust NUI amounts for cash: clamp to what the account actually holds.
+local function clampCash(p, requested)
+    if not p then return 0 end
+    local n = math.floor(tonumber(requested) or 0)
+    return math.max(0, math.min(n, p.money.cash))
 end
 
 Core.RegisterCallback('v-inventory:getState', function(source, resolve)
@@ -144,9 +183,37 @@ local function containerOf(src, key)
 end
 
 Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
+    -- (A) Wallet cash -> a real container (drop/trunk/stash): withdraw + spawn item.
+    if data.from == 'wallet' then
+        local p = Core.GetPlayer(source)
+        local toItems, toSlots, toWeight = containerOf(source, data.to)
+        if not p or not toItems or data.to == 'wallet' or data.to == 'player' then resolve(false); return end
+        local amount = clampCash(p, data.amount)
+        if amount <= 0 then resolve(false); return end
+        if not addToContainer(toItems, MONEY, amount, nil, toSlots, toWeight) then resolve({ error = 'space' }); return end
+        p.RemoveMoney('cash', amount, 'inv-move')
+        if data.to == 'secondary' then saveStash(OpenStash[source]) end
+        resolve(buildState(source)); return
+    end
+
     local fromItems, _, _ = containerOf(source, data.from)
     local toItems, toSlots, toWeight = containerOf(source, data.to)
     if not fromItems or not toItems then resolve(false); return end
+
+    -- (B) A real money item -> the player wallet: deposit into the account, destroy item.
+    do
+        local mit = itemAt(fromItems, data.fromSlot)
+        if mit and mit.name == MONEY and (data.to == 'wallet' or data.to == 'player') then
+            local p = Core.GetPlayer(source)
+            if not p then resolve(false); return end
+            local amount = math.min(math.floor(tonumber(data.amount) or mit.amount), mit.amount)
+            if amount <= 0 then resolve(false); return end
+            removeFromSlot(fromItems, data.fromSlot, amount)
+            p.AddMoney('cash', amount, 'inv-move')
+            if data.from == 'secondary' then saveStash(OpenStash[source]) end
+            resolve(buildState(source)); return
+        end
+    end
 
     local it = itemAt(fromItems, data.fromSlot)
     if not it then resolve(false); return end
@@ -160,13 +227,27 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         if not addToContainer(toItems, it.name, amount, it.metadata, toSlots, toWeight) then resolve({ error = 'space' }); return end
         removeFromSlot(fromItems, data.fromSlot, amount)
     else
-        -- same container: place onto target slot (swap/merge) or a specific slot
-        local target = data.toSlot and itemAt(fromItems, data.toSlot)
-        if target and target.name == it.name and (ItemDefs[it.name] and ItemDefs[it.name].stackable == 1) and not it.metadata and not target.metadata then
-            target.amount = target.amount + amount
-            removeFromSlot(fromItems, data.fromSlot, amount)
-        elseif data.toSlot and not target and amount == it.amount then
-            it.slot = data.toSlot
+        -- same container: merge / swap / move / split
+        local d = ItemDefs[it.name]
+        local dest = data.toSlot
+        local target = dest and itemAt(fromItems, dest)
+        if target then
+            if target.name == it.name and d and d.stackable == 1 and not it.metadata and not target.metadata then
+                target.amount = target.amount + amount                    -- merge stacks
+                removeFromSlot(fromItems, data.fromSlot, amount)
+            elseif amount == it.amount then
+                it.slot, target.slot = target.slot, it.slot               -- swap two items
+            end
+        else
+            dest = dest or freeSlot(fromItems, toSlots)
+            if dest then
+                if amount >= it.amount then
+                    it.slot = dest                                        -- move whole stack
+                else
+                    removeFromSlot(fromItems, data.fromSlot, amount)      -- split off a new stack
+                    fromItems[#fromItems + 1] = { name = it.name, amount = amount, slot = dest, metadata = it.metadata }
+                end
+            end
         end
     end
 
@@ -191,6 +272,21 @@ end)
 
 -- ── Drop (create / add to a ground stash near the player) ──────
 Core.RegisterCallback('v-inventory:drop', function(source, resolve, data)
+    -- Dropping cash from the wallet: charge the account first, then spawn a real item.
+    if data.money then
+        local p = Core.GetPlayer(source)
+        local amount = clampCash(p, data.amount)
+        if amount <= 0 then resolve(false); return end
+        if not p.RemoveMoney('cash', amount, 'drop') then resolve(false); return end
+        dropCounter = dropCounter + 1
+        local id = 'drop:' .. dropCounter
+        local stash = loadStash(id, Config.Drop.slots, Config.Drop.weight, false)
+        stash.label = 'ground'
+        addToContainer(stash.items, MONEY, amount, nil, Config.Drop.slots, Config.Drop.weight)
+        TriggerClientEvent('v-inventory:client:createDrop', -1, id, data.coords)
+        resolve(buildState(source)); return
+    end
+
     local it = itemAt(Inv[source] or {}, data.slot)
     if not it then resolve(false); return end
     local amount = math.min(tonumber(data.amount) or it.amount, it.amount)
@@ -208,6 +304,21 @@ end)
 -- ── Give (to nearest player) ───────────────────────────────────
 Core.RegisterCallback('v-inventory:give', function(source, resolve, data)
     local target = tonumber(data.target)
+
+    -- Giving cash from the wallet: account -> account (never touches the arrays).
+    if data.money then
+        local p  = Core.GetPlayer(source)
+        local tp = target and Core.GetPlayer(target)
+        if not tp then resolve({ error = 'target' }); return end
+        local amount = clampCash(p, data.amount)
+        if amount <= 0 then resolve(false); return end
+        if not p.RemoveMoney('cash', amount, 'give') then resolve(false); return end
+        tp.AddMoney('cash', amount, 'give')
+        Core.Notify(source, LP(source, 'inv.gave', amount, 'Cash'), 'success')
+        Core.Notify(target, LP(target, 'inv.received', amount, 'Cash'), 'info')
+        resolve(buildState(source)); return
+    end
+
     local it = itemAt(Inv[source] or {}, data.slot)
     if not target or not it or not Inv[target] then resolve({ error = 'target' }); return end
     local amount = math.min(tonumber(data.amount) or it.amount, it.amount)
@@ -264,15 +375,12 @@ end)
 
 exports('RegisterUsableItem', function(name, handler) UsableItems[name] = handler end)
 
--- ── Default usable items (hook to v-status) ────────────────────
-local function status(src, key, delta)
-    pcall(function() exports['v-status']:Add(src, key, delta) end)
-end
-UsableItems['water']   = function(src) status(src, 'thirst', 35) end
-UsableItems['bread']   = function(src) status(src, 'hunger', 35) end
-UsableItems['bandage'] = function(src)
-    pcall(function() local s = exports['v-status']:Get(src); if s then exports['v-status']:SetBleed(src, math.max(0, (s.bleed or 0) - 1)) end end)
-end
+-- ── Live cash mirror: refresh an open inventory when the account changes ──
+AddEventHandler('v-core:server:onMoneyChange', function(src, account, amount)
+    if account == 'cash' and Inv[src] then
+        TriggerClientEvent('v-inventory:client:cash', src, amount)
+    end
+end)
 
 -- ── Admin: /giveitem <id> <name> <amount> (permission-gated; players use no commands) ──
 RegisterCommand('giveitem', function(source, args)

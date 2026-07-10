@@ -2,6 +2,12 @@
 Locales.fr = Locales.fr or {}
 local T = {
     ['inv.title']      = 'Inventaire',
+    ['inv.player']     = 'Inventaire',
+    ['inv.wallet']     = 'Argent',
+    ['inv.search']     = 'Rechercher…',
+    ['inv.hint']       = 'Glisser pour déplacer · Clic droit pour les actions · Maj+glisser pour diviser · Échap pour fermer',
+    ['inv.qty']        = 'Quantité',
+    ['inv.split']      = 'Diviser',
     ['inv.weight']     = 'Poids',
     ['inv.use']        = 'Utiliser',
     ['inv.give']       = 'Donner',

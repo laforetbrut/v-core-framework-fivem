@@ -31,9 +31,9 @@ local function closestPlayer(maxDist)
     return best and GetPlayerServerId(best) or nil
 end
 
--- ── Keybind ────────────────────────────────────────────────────
+-- ── Keybind (TAB by default; rebindable in GTA key settings) ───
 RegisterCommand('vinv', function() openInventory() end, false)
-RegisterKeyMapping('vinv', 'Open inventory', 'keyboard', 'F2')
+RegisterKeyMapping('vinv', 'Open inventory', 'keyboard', 'TAB')
 
 -- ── NUI callbacks ──────────────────────────────────────────────
 RegisterNUICallback('close', function(_, cb)
@@ -63,6 +63,28 @@ RegisterNUICallback('give', function(data, cb)
     data.target = target
     Core.TriggerCallback('v-inventory:give', function(state) cb(state or false) end, data)
 end)
+
+-- ── Live cash mirror (banking/shops changed cash while inventory open) ──
+RegisterNetEvent('v-inventory:client:cash', function(cash)
+    if isOpen then SendNUIMessage({ action = 'cash', cash = cash }) end
+end)
+
+-- ── Heal from a medical item use (server-driven) ───────────────
+RegisterNetEvent('v-inventory:client:heal', function(amount)
+    local ped = PlayerPedId()
+    local hp = GetEntityHealth(ped)
+    SetEntityHealth(ped, math.min(GetEntityMaxHealth(ped), hp + math.floor((amount or 25) * 2)))
+    ClearPedBloodDamage(ped)
+end)
+
+-- ── Hotbar quick-use (1..5) — uses player slots 1-5 when inventory is closed ──
+for i = 1, 5 do
+    RegisterCommand('vhotbar' .. i, function()
+        if isOpen then return end
+        Core.TriggerCallback('v-inventory:use', function() end, i)
+    end, false)
+    RegisterKeyMapping('vhotbar' .. i, 'Use item slot ' .. i, 'keyboard', tostring(i))
+end
 
 -- ── Secondary container opened by the server ───────────────────
 RegisterNetEvent('v-inventory:client:openSecondary', function()
