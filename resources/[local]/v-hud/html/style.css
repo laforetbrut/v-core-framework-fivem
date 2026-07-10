@@ -220,22 +220,26 @@ body.editing .ring.faded { opacity: 1; }
   transform-origin: center;
   opacity: var(--hud-opacity, 1);
 }
-/* Opaque themed footer — sits ON TOP of the native radar (CEF renders above it)
-   to hide the GTA:O green/blue health & armour bars. Height ≈ bottom of frame. */
+/* Bottom fade — sits ON TOP of the native radar (CEF renders above it) to hide
+   the GTA:O green/blue health & armour bars. Wider & lower than the frame so the
+   bars never peek out at the corners; a soft gradient reads as the map fading,
+   not a black box. */
 .mm-mask {
-  position: absolute; left: -2px; right: -2px; bottom: -2px;
-  height: 23%;
-  background: linear-gradient(180deg, rgba(11,11,13,.6) 0%, var(--v-bg-900, #0B0B0D) 32%);
-  border-top: 2px solid var(--v-accent);
-  border-radius: 0 0 8px 8px;
+  position: absolute; left: -7%; right: -7%; bottom: -9%;
+  height: 34%;
+  background: linear-gradient(180deg,
+    rgba(11,11,13,0) 0%, rgba(11,11,13,.55) 38%, rgba(11,11,13,.96) 66%, var(--v-bg-900, #0B0B0D) 100%);
   pointer-events: none;
 }
+/* Corner brackets only appear while repositioning (Move elements). */
 .mm-corner {
   position: absolute; width: 16px; height: 16px;
   border: 2px solid var(--v-accent);
   opacity: .9;
+  display: none;
   filter: drop-shadow(0 0 4px rgba(0,0,0,.6));
 }
+body.editing .mm-corner { display: block; }
 .mm-corner.tl { top: -2px; left: -2px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mm-corner.tr { top: -2px; right: -2px; border-left: 0; border-bottom: 0; border-radius: 0 6px 0 0; }
 .mm-corner.bl { bottom: -2px; left: -2px; border-right: 0; border-top: 0; border-radius: 0 0 0 6px; }
