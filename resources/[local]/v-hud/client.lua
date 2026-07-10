@@ -14,13 +14,18 @@ local settings = { elements = { minimap = true }, minimapVehicleOnly = false }
 -- and the frame move together). map = the native square inside the frame; the
 -- frame's extra bottom height is the cover that hides the GTA:O health/armour
 -- bars (the square texture reshapes the map but doesn't remove those bars).
--- IMPORTANT: sizeX:sizeY MUST keep the game's default minimap ratio
--- (0.150 : 0.188888 from frontend.xml) or the map distorts and the player
--- blip drifts off-centre. Resizing scales BOTH by the same factor.
-local MM = {
-    default = { x = 0.0125, y = 0.702 },     -- top-left of the map (fractions)
-    baseW = 0.150, baseH = 0.188888,          -- the correct default footprint
+-- Battle-tested qb-hud SQUARE layout. The three components have DIFFERENT sizes
+-- on purpose — that exact relationship is what centres the player blip. We
+-- reposition with an offset and resize by scaling ALL of them together (about
+-- the screen's bottom-left), which preserves the geometry -> blip stays centred
+-- and the map never distorts. 'L','B' alignment (as GTA expects).
+local BASE = {
+    { name = 'minimap',      x = 0.0,   y = -0.047, w = 0.1638, h = 0.183 },
+    { name = 'minimap_mask', x = 0.0,   y = 0.0,    w = 0.128,  h = 0.20  },
+    { name = 'minimap_blur', x = -0.01, y = 0.025,  w = 0.262,  h = 0.300 },
 }
+local MASK = BASE[2]                       -- visible map region -> drives the NUI frame
+local MM_DEFAULT = { x = 0.008, y = 0.79 } -- default top-left of the visible map
 
 local function TL(k)
     local lang = (LocalPlayer.state and LocalPlayer.state.lang) or 'fr'
@@ -49,7 +54,7 @@ end
 CreateThread(function()
     loadSettings()
     Wait(250)
-    SendNUIMessage({ action = 'minimapFrame', w = MM.baseW, h = MM.baseH, default = MM.default })
+    SendNUIMessage({ action = 'minimapFrame', w = MASK.w, h = MASK.h, default = MM_DEFAULT })
     SendNUIMessage({ action = 'init', settings = settings or {} })
     sendStrings()
 end)
@@ -145,7 +150,7 @@ end)
 local function minimapPos()
     local p = settings.positions and settings.positions.minimap
     if p and type(p.x) == 'number' then return p.x, p.y end   -- stored as fractions
-    return MM.default.x, MM.default.y
+    return MM_DEFAULT.x, MM_DEFAULT.y
 end
 
 -- Aspect-ratio correction so the square stays square on ultrawide.
@@ -182,14 +187,15 @@ end
 
 local function setMinimapPositions()
     local px, py = minimapPos()
+    local s = minimapScale()
     local off = aspectOffset()
-    local sc = minimapScale()
-    local w, h = MM.baseW * sc, MM.baseH * sc      -- ratio preserved -> no distortion
-    local e = 0.013 * sc
+    -- solve the offset so the (scaled) mask's screen top-left lands on (px,py)
+    local ox = px - MASK.x * s
+    local oy = 1.0 - py - MASK.h * s - MASK.y * s
     pcall(function() SetMinimapClipType(0) end)
-    SetMinimapComponentPosition('minimap',      'L', 'T', px + off,     py,     w,        h)
-    SetMinimapComponentPosition('minimap_mask', 'L', 'T', px + off,     py,     w,        h)
-    SetMinimapComponentPosition('minimap_blur', 'L', 'T', px + off - e, py - e, w + 2*e,  h + 2*e)
+    for _, c in ipairs(BASE) do
+        SetMinimapComponentPosition(c.name, 'L', 'B', c.x * s + ox + off, c.y * s + oy, c.w * s, c.h * s)
+    end
     SetBlipAlpha(GetNorthRadarBlip(), 0)
 end
 
@@ -261,12 +267,24 @@ CreateThread(function()
     end
 end)
 
+-- Debounced KVP persist so minimap tweaks survive a relog even without Save.
+local persistPending = false
+local function persistSettings()
+    if persistPending then return end
+    persistPending = true
+    SetTimeout(600, function()
+        persistPending = false
+        SetResourceKvpString('vhud:settings', json.encode(settings))
+    end)
+end
+
 -- Live update while the player drags the minimap frame in layout mode.
 RegisterNUICallback('minimapMove', function(data, cb)
     if type(data.x) == 'number' then
         settings.positions = settings.positions or {}
         settings.positions.minimap = { x = data.x + 0.0, y = data.y + 0.0 }
         applyMinimap(true)
+        persistSettings()
     end
     cb('ok')
 end)
@@ -274,7 +292,7 @@ end)
 -- Live minimap resize (corner handle / size slider).
 RegisterNUICallback('minimapSize', function(data, cb)
     local s = tonumber(data.size)
-    if s then settings.minimapSize = s; applyMinimap(true) end
+    if s then settings.minimapSize = s; applyMinimap(true); persistSettings() end
     cb('ok')
 end)
 
