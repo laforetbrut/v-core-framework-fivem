@@ -44,6 +44,7 @@ local T = {
     ['inv.attach_nofit'] = 'Cette pièce ne va pas sur l\'arme en main.',
     ['inv.attach_dupe']  = 'Cette pièce est déjà installée.',
     ['inv.cleaned']      = 'Arme nettoyée — condition restaurée.',
+    ['inv.jam']          = 'Arme enrayée — elle a besoin d\'un nettoyage !',
     ['inv.no_access']  = 'Accès refusé.',
     ['inv.search_title'] = 'Fouille',
     ['inv.cant_search']  = 'La personne doit avoir les mains en l\'air ou être à terre.',
