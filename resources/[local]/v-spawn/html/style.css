@@ -47,7 +47,9 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
   box-shadow:inset 0 1px 0 rgba(255,255,255,.045); }
 .panel > *, .lang-card > *, .cam > * { position:relative; z-index:var(--z-raised); }
 /* machined L-brackets sit below content, above the fill */
-.panel > .v-brk, .lang-card > .v-brk { z-index:var(--z-base); }
+/* keep the L-brackets absolutely positioned — the `> *` rule above would make
+   them inline (dropping their width/height) and they'd show as two stray lines */
+.panel > .v-brk, .lang-card > .v-brk, .cam > .v-brk { position:absolute; z-index:var(--z-base); }
 
 /* header stencil stamp — steel, not orange (keeps the orange budget for accents) */
 .head-tab { position:absolute; top:-11px; left:24px; z-index:var(--z-stencil); height:22px; padding:0 14px;

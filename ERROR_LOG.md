@@ -1,5 +1,13 @@
 # Error Log
 
+## [2026-07-10 19:05] — Infinite loading / stuck black screen after the spawn rework
+
+**Context:** v-spawn ran a "black-out guard" thread at resource start — `while not spawnReady do DoScreenFadeOut(0) ... end` — to hide the default spawnmanager ped before the custom spawn took over.
+**Error:** On connect the player got infinite loading, then (after a partial fix) saw the default world for a frame and got stuck on a black screen. The server log showed the join but never `playerReady`/`needCharacter`.
+**Root cause:** The default **spawnmanager waits for `IsScreenFadedIn()` before firing `playerSpawned`** (its `spawnPlayer` coroutine fades in and loops until the screen is in). The guard re-faded-OUT every frame, so `IsScreenFadedIn()` was never true → spawnmanager hung → `playerSpawned` never fired → v-core never got `playerReady` → `needCharacter` never sent → the creator never opened → the native loadscreen never dismissed. An earlier variant of the guard also `FreezeEntityPosition`'d the pre-spawn ped, which independently blocked the spawn.
+**Fix:** Removed the black-out guard entirely. The spawnmanager now completes its fade-in and fires `playerSpawned` normally; `startCreator` / the `onPlayerLoaded` handler fade out and take over immediately after. The brief flash of the default spawn point is accepted; the real bug (falling into the void) stays fixed in `switchSpawn` (freeze + stream collision + ground-Z before unfreeze).
+**Prevention:** **Never hold the screen faded-out (or freeze the player ped) before the first `playerSpawned`.** The default spawn flow needs `IsScreenFadedIn()` to be reachable. Do all custom fading/freezing AFTER `playerSpawned` (i.e. inside `needCharacter` / `onPlayerLoaded`), never in a pre-spawn loop.
+
 ## [2026-07-10 17:10] — No mouse cursor in inventory / admin / banking / shops / clothing
 
 **Context:** Every NUI menu routed its focus through a shared helper, `exports['v-core']:OpenMenu()`, which called `SetNuiFocus(true, true)` inside v-core.

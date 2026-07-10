@@ -7,18 +7,12 @@ local currentLang = 'fr'
 local identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
 local appearance = nil
 
--- Hold the screen black from the very first frame so the default spawnmanager
--- autospawn (a nude freemode ped, often above the void) is NEVER visible. Each
--- flow (creator / switchSpawn) sets spawnReady = true and then owns the fade.
-local spawnReady = false
-CreateThread(function()
-    while not spawnReady do
-        if not IsScreenFadedOut() and not IsScreenFadingOut() then DoScreenFadeOut(0) end
-        local ped = PlayerPedId()
-        if ped and ped ~= 0 then FreezeEntityPosition(ped, true) end
-        Wait(0)
-    end
-end)
+-- NOTE: we deliberately do NOT hold the screen black before the first spawn.
+-- The default spawnmanager waits for IsScreenFadedIn() before firing
+-- `playerSpawned` (which starts the whole load chain), so any pre-spawn fade-out
+-- deadlocks the spawn -> infinite black screen. The brief flash of the default
+-- spawn point is acceptable; each flow (startCreator / onPlayerLoaded) fades out
+-- and takes over immediately after.
 
 -- Stream collision at the target while holding the ped there, then resolve a
 -- solid ground Z (retried — the area may still be streaming). Returns ground Z
@@ -88,7 +82,6 @@ end
 
 local function startCreator()
     active = true
-    spawnReady = true   -- release the black-out guard; the creator owns the fade now
     identity = { firstname = '', lastname = '', dob = '2000-01-01', sex = 0 }
     appearance = DefaultAppearance(0)
 
@@ -127,11 +120,9 @@ end)
 AddEventHandler('v-core:client:onPlayerLoaded', function(data)
     if active then return end
     CreateThread(function()
-        spawnReady = true              -- take over the black-out guard
-        if not IsScreenFadedOut() then DoScreenFadeOut(0) end
+        DoScreenFadeOut(300); Wait(320)   -- black out before we restyle + switch
         local ped = PlayerPedId()
         FreezeEntityPosition(ped, true)
-        Wait(300)
         -- dress the ped WHILE the screen is black, so the default look is never seen
         if data.appearance and next(data.appearance) then
             if data.appearance.sex then SetSexModel(data.appearance.sex); Wait(250) end
