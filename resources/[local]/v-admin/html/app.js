@@ -69,24 +69,24 @@ function renderPlayers() {
           </div>
           <div class="agroup">
             <span class="alabel">${t('adm.give_money')}</span>
-            <select class="sel" data-f="account"><option value="cash">${t('adm.cash')}</option><option value="bank">${t('adm.bank')}</option></select>
-            <input class="ain" data-f="amount" placeholder="${t('adm.amount')}" />
+            <select class="sel" data-f="account" aria-label="${t('adm.give_money')}"><option value="cash">${t('adm.cash')}</option><option value="bank">${t('adm.bank')}</option></select>
+            <input class="ain" data-f="amount" placeholder="${t('adm.amount')}" aria-label="${t('adm.amount')}" />
             <button class="mini accent" data-a="money">${t('adm.act_apply')}</button>
           </div>
           <div class="agroup">
             <span class="alabel">${t('adm.give_item')}</span>
-            <input class="ain" data-f="item" placeholder="${t('adm.item')}" />
-            <input class="ain sm" data-f="count" placeholder="${t('adm.count')}" value="1" />
+            <input class="ain" data-f="item" placeholder="${t('adm.item')}" aria-label="${t('adm.item')}" />
+            <input class="ain sm" data-f="count" placeholder="${t('adm.count')}" value="1" aria-label="${t('adm.count')}" />
             <button class="mini accent" data-a="giveitem">${t('adm.act_apply')}</button>
           </div>
           <div class="agroup">
             <span class="alabel">${t('adm.set_perm')}</span>
-            <select class="sel" data-f="level">
+            <select class="sel" data-f="level" aria-label="${t('adm.set_perm')}">
               <option>user</option><option>mod</option><option>admin</option><option>superadmin</option>
             </select>
             <button class="mini accent" data-a="setperm" ${isSuper ? '' : 'disabled'}>${t('adm.act_apply')}</button>
             <span class="spacer"></span>
-            <input class="ain" data-f="reason" placeholder="${t('adm.reason')}" />
+            <input class="ain" data-f="reason" placeholder="${t('adm.reason')}" aria-label="${t('adm.reason')}" />
             <button class="mini danger" data-a="kick">${t('adm.act_kick')}</button>
           </div>
         </div>`;

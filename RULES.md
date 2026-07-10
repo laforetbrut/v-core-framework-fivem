@@ -29,41 +29,94 @@
 - **Structure:** one resource = one folder in `resources/[local]/`; declare everything in `fxmanifest.lua`.
 - **Do NOT:** edit vendored `[cfx-default]` resources (override in `[local]`), hardcode secrets, leave `print` spam in shipped code.
 
-## 3.5 Visual Identity (v-ui) — MANDATORY
+## 3.5 Visual Identity — "FIELD CASE" design system — MANDATORY
 
-All in-game UI shares **one** design language, defined once in `resources/[local]/v-ui/theme.css` and reused via `<link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">`.
+**Every** NUI page in this project uses one design language, defined once in
+`resources/[local]/v-ui/theme.css` and loaded with
+`<link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">`.
+Reuse its tokens and primitives. Only override a token locally when the value genuinely differs
+for that module. **Never fork the palette.**
 
-**Mood:** dark, warm-orange, condensed-industrial, high-legibility — tactical RP, not corporate. **Deliberately avoids the generic "AI" look**: no purple/blue gradients, no heavy glassmorphism, no centered emoji cards, no pastel rounded everything.
+**Concept:** a ruggedized equipment flight-case cracked open on a workbench — foam-cutout slots,
+stenciled hazard labels, riveted corner brackets, gauge-cluster readouts. It must read like a
+Pelican case in a lock-up garage, **not** like a web UI. Reference implementation:
+`resources/[local]/v-inventory/html/`.
 
-**Palette (CSS variables):**
+**Deliberately avoids the generic "AI" look**: no purple/blue gradients, no glassmorphism, no
+centered emoji cards, no pastel rounded everything, no evenly-distributed warm wash.
+
+### The four signature cues — repeat them in every module
+
+1. **Chamfered panel** (`.v-chamfer`) — top-left / bottom-right corners cut. Implemented as a 1px
+   border pseudo-layer + a fill pseudo-layer, both `clip-path`'d, so tabs can bleed off the edge
+   and the drop-shadow sits on a cheap solid layer instead of repainting the children on hover.
+   Set `--v-cw` per element (14px panels, 10px small floats).
+2. **Orange stencil tab** (`.v-tab`) — a parallelogram riding the top edge of every panel header,
+   carrying the section name in tracked uppercase.
+3. **Machined L-brackets** (`.v-brk--tr` / `.v-brk--bl`) on the two sharp corners.
+4. **Consolas caliper readouts** — every number in `var(--v-font-num)`, tight, right-aligned,
+   the significant figure wrapped in `<b>` (orange).
+
+### Palette (CSS variables — the file is the source of truth)
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `--v-bg-900` | `#0B0B0D` | app background (near-black) |
-| `--v-bg-800` / `--v-bg-700` / `--v-bg-600` | `#101015` / `#17171D` / `#1E1E26` | panel · raised · input |
-| `--v-line` / `--v-line-2` | `#2A2A33` / `#3B3B47` | borders |
-| `--v-text` / `--v-text-dim` / `--v-text-faint` | `#ECEAE6` / `#9C99A2` / `#63616C` | text hierarchy |
-| `--v-accent` | `#FF6A1A` | **primary orange (brand)** |
-| `--v-accent-600` / `--v-accent-300` | `#E8560C` / `#FF9354` | pressed / hover |
-| `--v-success` / `--v-danger` / `--v-warning` / `--v-info` | `#43C46A` / `#E5484D` / `#F5A623` / `#4AA8FF` | status |
+| `--v-bg-900` … `--v-bg-500` | `#0A0908` → `#221D18` | warm charcoal surfaces (never neutral black) |
+| `--v-bg-sunk` | `#0E0C0A` | recessed wells: inputs, gauges, slots |
+| `--v-line` / `--v-line-2` | `#2C2620` / `#3A332B` | borders |
+| `--v-text` / `--v-text-dim` / `--v-text-faint` | `#EFE7DC` / `#A9A199` / `#8F877E` | text hierarchy (all ≥ 4.5:1) |
+| `--v-ink` | `#170D05` | dark ink on orange/light fills |
+| `--v-accent` / `--v-accent-300` / `--v-accent-600` | `#FF6A1A` / `#FF9354` / `#A83C0D` | **brand orange** / hover / pressed |
+| `--v-success` / `--v-danger` / `--v-warning` / `--v-info` | `#5FA36A` / `#C2362F` / `#C98A2B` / `#2F6F9E` | status — muted on purpose |
+| `--v-rar-common` … `--v-rar-mythic` | earthy | item rarity |
 
-**Typography:**
-- Display & numbers: `Bahnschrift` (condensed, industrial) — titles, money, stats.
-- Body: `Segoe UI`. Mono: `Consolas` for ids/codes.
-- Numbers always `font-variant-numeric: tabular-nums`.
+### Hard rules
 
-**Rules:**
-- One accent only (orange). No second brand color.
-- Labels: UPPERCASE + letter-spacing. Body: sentence case.
-- Sharp & restrained: 6–16px radii, thin borders, subtle shadows. No glow except accent-on-hover.
-- Line icons (stroke, `currentColor`) — **never emoji**.
-- Motion is quick and functional (120–350ms), never bouncy.
+- **Orange is the only saturated hue on screen**, and it stays under ~10% of pixels: accents, one
+  tab per header, fills, hover. Charcoal dominates; orange punches. Status colours are muted and
+  must never out-shout it. Only *legendary* and *mythic* rarity are allowed to bloom.
+- **No blur, no translucency for depth.** Depth is inset shadow. `backdrop-filter` renders as an
+  opaque black box in CEF 103 anyway.
+- **Don't round everything.** Radii ≤ 3px (`--v-r-sm` 2px, `--v-r-md` 3px). The identity is
+  chamfers and hard notches, not pills.
+- **Letters get tracking, numbers get none.** Display = Bahnschrift Condensed uppercase,
+  `.12em`–`.24em`. Numbers = Consolas, `letter-spacing: 0`, tabular. Never letter-space a figure.
+- Recessed wells use `--v-bg-sunk` + inset shadows. Smooth progress bars become segmented
+  `.v-gauge` notch strips wherever a discrete reading makes sense.
+- **Line icons only** (stroke, `currentColor`, `aria-hidden="true"`). Never emoji.
+- One tasteful drop-shadow per surface. One `0 1px 2px #000` text-shadow for legibility over
+  images — no stacked glows.
+- **Motion:** one orchestrated open sequence. Panels seat 70ms apart, then slots/rows ripple
+  12–18ms apart, driven by an `--i` custom property. Micro-interactions 150–200ms.
+  **Always `animation-fill-mode: backwards`, never `both`** — `both` keeps forcing the final
+  keyframe's opacity and silently overrides later state classes (hidden, filtered-out, dimmed).
+
+### Accessibility — non-negotiable
+
+- Minimum font-size for real text: **10px**. `--v-text-faint` is the contrast floor (≈5:1).
+- Never hardcode a `z-index` — use `--z-base` / `--z-raised` / `--z-sticky` / `--z-tooltip` /
+  `--z-context` / `--z-overlay` / `--z-toast`.
+- `aria-label` on every input and icon-only control; `aria-hidden="true"` on decorative SVGs.
+- The theme ships a global `:focus-visible` ring and a `prefers-reduced-motion` block.
+  Don't duplicate them, don't fight them.
+
+### CEF 103 constraints (FiveM's Chromium — violating these ships a broken UI)
+
+**Forbidden:** `backdrop-filter`, `color-mix()`, `:has()`, container queries, CSS nesting,
+`mask-image`, `@import`, any external font/CDN/network fetch.
+**Allowed and used:** `clip-path: polygon()` with `calc()`, `:focus-visible`,
+`prefers-reduced-motion`, custom properties, `aspect-ratio`, `gap` on flex.
+
+### Change discipline for UI
+
+Any new NUI page starts by linking `theme.css` and composing its primitives. If a module needs a
+new shared primitive, add it to `theme.css` — never copy-paste it into a module's `style.css`.
 
 ## 3.6 Interaction & Management principles — MANDATORY
 
 1. **No player chat commands.** Players interact only through the phone (iFruit), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
 2. **Everything manageable in-game via permissions.** Every content system must let an authorized user create/modify/delete its data live in-game (jobs, grades, prices, shops, items, vehicles, weather…). Build management UIs, not console commands; gate them with the v-core permission tiers (`user < mod < admin < superadmin`) and surface them in `v-admin`.
-3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules may vary their accent to fit their subject while keeping the dark base (§3.5).
+3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules keep the single orange accent and the Field Case language (§3.5) — subject-specific variation happens in iconography and copy, not in the palette.
 
 ## 3.7 Change discipline — MANDATORY
 
@@ -124,3 +177,5 @@ fivem/
 6. Do not bump versions unless explicitly asked.
 7. Log every error encountered to `ERROR_LOG.md` with a prevention rule.
 8. Only add a database (oxmysql + MariaDB) when a feature actually needs persistence — keep the base lean.
+9. **Every NUI page must follow the Field Case design system (§3.5).** Link `v-ui/theme.css`, compose its primitives, and carry the four signature cues. A UI that merely uses the right colours but drops the chamfer / stencil tab / brackets / Consolas readouts is a regression, not a restyle.
+10. Before touching a module's NUI, read its `app.js` in full and list every id / class / dataset it reads. Restyle existing hooks — never rename or delete one. Pseudo-elements survive `innerHTML` rewrites; wrapper elements do not.

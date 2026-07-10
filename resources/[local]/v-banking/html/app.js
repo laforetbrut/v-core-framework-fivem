@@ -25,10 +25,11 @@ function render(data) {
   list.innerHTML = '';
   const txs = data.transactions || [];
   if (!txs.length) { list.innerHTML = `<div class="tx-empty">${t('bank.empty')}</div>`; return; }
-  txs.forEach(tx => {
+  txs.forEach((tx, i) => {
     const positive = tx.type === 'deposit' || tx.type === 'transfer_in';
     const row = document.createElement('div');
     row.className = 'tx';
+    row.style.setProperty('--i', i);
     const date = (tx.created_at || '').toString().replace('T', ' ').slice(0, 16);
     row.innerHTML =
       `<div class="l"><span class="k">${t('tx.' + tx.type)}</span><span class="d">${date}${tx.label ? ' · ' + escapeHtml(tx.label) : ''}</span></div>` +

@@ -15,12 +15,18 @@ function addToast(data) {
   const el = document.createElement('div');
   el.className = 'toast ' + type;
   el.innerHTML =
-    `<div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[type]}</svg></div>` +
+    `<div class="icon"><svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[type]}</svg></div>` +
     `<div class="body">${data.title ? `<div class="title">${esc(data.title)}</div>` : ''}<div class="msg">${esc(data.message)}</div></div>` +
-    `<div class="bar" style="animation-duration:${duration}ms"></div>`;
+    `<div class="bar" style="animation-duration:${duration}ms"></div>` +
+    `<i class="v-brk v-brk--tr" aria-hidden="true"></i><i class="v-brk v-brk--bl" aria-hidden="true"></i>`;
   container.appendChild(el);
 
-  const remove = () => { el.classList.add('out'); setTimeout(() => el.remove(), 300); };
+  // Collapse exactly this row's height + the 10px stack gap so the stack never nudges on exit.
+  const remove = () => {
+    el.style.setProperty('--collapse', -(el.offsetHeight + 10) + 'px');
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 300);
+  };
   const timer = setTimeout(remove, duration);
   el.addEventListener('click', () => { clearTimeout(timer); remove(); });
 }

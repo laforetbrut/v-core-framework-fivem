@@ -1,53 +1,85 @@
 /* ============================================================
-   v-ui — Projet R design system
-   Identity: near-black surfaces, warm-orange accent, condensed
-   industrial type, high legibility. Deliberately NOT the generic
-   purple-gradient / glass "AI" look.
+   v-ui — Projet R design system · "FIELD CASE"
+   Concept: a ruggedized equipment flight-case cracked open on a
+   workbench. Chamfered panels, orange stencil tabs, machined
+   L-brackets, foam-cutout slots, Consolas caliper readouts.
+   Deliberately NOT the generic purple-gradient / glass "AI" look.
+
    Load in any NUI page with:
      <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">
+
+   CEF 103 (FiveM Chromium) safe: no backdrop-filter, no color-mix(),
+   no :has(), no container queries, no CSS nesting, no external fonts.
    ============================================================ */
 
 :root {
-  /* ── Surfaces (near-black with a faint warmth) ── */
-  --v-bg-900: #0B0B0D;
-  --v-bg-800: #101015;
-  --v-bg-700: #17171D;
-  --v-bg-600: #1E1E26;
-  --v-bg-500: #262631;
+  /* ── Surfaces (warm charcoal, never neutral black) ── */
+  --v-bg-900: #0A0908;
+  --v-bg-800: #100E0C;
+  --v-bg-700: #16130F;
+  --v-bg-600: #1C1815;
+  --v-bg-500: #221D18;
+  --v-bg-sunk:#0E0C0A;          /* recessed wells: inputs, gauges, slots */
 
   /* ── Lines ── */
-  --v-line:   #2A2A33;
-  --v-line-2: #3B3B47;
+  --v-line:   #2C2620;
+  --v-line-2: #3A332B;
 
-  /* ── Text ── */
-  --v-text:       #ECEAE6;
-  --v-text-dim:   #9C99A2;
-  --v-text-faint: #63616C;
+  /* ── Text (every value >= 4.5:1 on --v-bg-600) ── */
+  --v-text:       #EFE7DC;
+  --v-text-dim:   #A9A199;
+  --v-text-faint: #8F877E;      /* floor — never use below 10px */
+  --v-ink:        #170D05;      /* dark ink for orange/light fills */
 
-  /* ── Brand orange ── */
+  /* ── Brand orange — the ONLY saturated hue on screen ── */
   --v-accent:      #FF6A1A;
-  --v-accent-600:  #E8560C;
   --v-accent-300:  #FF9354;
-  --v-accent-soft: rgba(255, 106, 26, .14);
+  --v-accent-600:  #A83C0D;
+  --v-accent-soft: rgba(255, 106, 26, .13);
   --v-accent-line: rgba(255, 106, 26, .42);
-  --v-accent-glow: 0 0 22px rgba(255, 106, 26, .30);
+  --v-accent-glow: 0 0 18px -4px rgba(255, 106, 26, .55);
 
-  /* ── Status ── */
-  --v-success: #43C46A;
-  --v-danger:  #E5484D;
-  --v-warning: #F5A623;
-  --v-info:    #4AA8FF;
+  /* ── Status (muted / earthy — they must never out-shout orange) ── */
+  --v-success: #5FA36A;
+  --v-danger:  #C2362F;
+  --v-warning: #C98A2B;
+  --v-info:    #2F6F9E;
+  /* -300 variants: the base hues drop below 4.5:1 as small text on the case body.
+     Use these for text/icons, the base tokens for fills and borders. */
+  --v-success-300: #8FCB98;
+  --v-danger-300:  #E86A5E;
+  --v-warning-300: #E0B061;
+  --v-info-300:    #6FB0D9;
 
-  /* ── Radii & shadow ── */
-  --v-r-sm: 6px;
-  --v-r-md: 10px;
-  --v-r-lg: 16px;
-  --v-shadow: 0 12px 34px rgba(0, 0, 0, .55);
+  /* ── Rarity (muted; only legendary/mythic may bloom) ── */
+  --v-rar-common:    #6B6156;
+  --v-rar-uncommon:  #4E8C5A;
+  --v-rar-rare:      #2F6F9E;
+  --v-rar-epic:      #8A4BD1;
+  --v-rar-legendary: #FF6A1A;
+  --v-rar-mythic:    #C2362F;
 
-  /* ── Type ── */
-  --v-font-display: 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
+  /* ── Geometry — chamfers and hard notches, never pills ── */
+  --v-r-sm: 2px;
+  --v-r-md: 3px;
+  --v-cw:   12px;               /* chamfer cut, per element */
+  --v-chamfer: polygon(0 var(--v-cw), var(--v-cw) 0, 100% 0, 100% calc(100% - var(--v-cw)), calc(100% - var(--v-cw)) 100%, 0 100%);
+  --v-shadow: drop-shadow(0 18px 34px rgba(0, 0, 0, .72));
+
+  /* ── Type — letters get tracking, numbers get none ── */
+  --v-font-display: 'Bahnschrift Condensed', 'Bahnschrift', 'Oswald', 'Segoe UI', sans-serif;
   --v-font-body:    'Segoe UI', 'Inter', system-ui, sans-serif;
-  --v-font-mono:    'JetBrains Mono', 'Consolas', monospace;
+  --v-font-num:     Consolas, 'Courier New', monospace;
+  --v-font-mono:    Consolas, 'Courier New', monospace;   /* alias */
+
+  /* ── Motion (150–350ms, functional, never bouncy) ── */
+  --v-ease: cubic-bezier(.2, .8, .2, 1);
+  --v-t-fast: .16s;
+  --v-t-base: .18s;
+
+  /* ── z-index scale — never hardcode a z-index ── */
+  --z-base:1; --z-raised:2; --z-sticky:100;
+  --z-tooltip:400; --z-context:500; --z-overlay:600; --z-toast:700;
 }
 
 /* ── Reset / base ── */
@@ -59,103 +91,167 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* ── Panel ── */
-.v-panel {
-  background: linear-gradient(180deg, var(--v-bg-700), var(--v-bg-800));
-  border: 1px solid var(--v-line);
-  border-radius: var(--v-r-lg);
-  box-shadow: var(--v-shadow);
+/* ── Backdrop: blueprint micro-grid + vignette. Pair with .v-grain. ── */
+.v-backdrop {
+  background:
+    radial-gradient(130% 110% at 50% 14%, rgba(255,106,26,.05), rgba(0,0,0,.56) 46%, rgba(0,0,0,.87) 100%),
+    repeating-linear-gradient(0deg,  rgba(255,147,84,.030) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(90deg, rgba(255,147,84,.030) 0 1px, transparent 1px 46px);
+}
+/* Static SVG noise tile — cheap in CEF. Put on a ::before-style overlay child. */
+.v-grain {
+  position: absolute; inset: 0; pointer-events: none; opacity: .05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.v-panel__header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--v-line);
+/* ── Chamfered shell ──────────────────────────────────────────
+   A 1px border layer + a fill layer, both clipped. Drawn as
+   pseudo-elements so tabs/brackets can bleed off the edge and so
+   the drop-shadow lives on a cheap solid layer (it does not repaint
+   the children on hover). Children must sit above them.
+   Set --v-cw per element to resize the cut.
+   NOTE: innerHTML rewrites do not destroy pseudo-elements, so this
+   is safe on nodes your JS re-renders.
+   ──────────────────────────────────────────────────────────── */
+.v-chamfer { position: relative; background: transparent; border: 0; }
+.v-chamfer::before {
+  content: ''; position: absolute; inset: 0; z-index: 0;
+  clip-path: var(--v-chamfer);
+  background: linear-gradient(180deg, var(--v-line-2), var(--v-line));
+  filter: var(--v-shadow);
+}
+.v-chamfer::after {
+  content: ''; position: absolute; inset: 1px; z-index: 0;
+  clip-path: var(--v-chamfer);
+  background: linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+.v-chamfer > * { position: relative; z-index: var(--z-raised); }
+
+.v-panel { --v-cw: 14px; }
+.v-panel__header { display: flex; align-items: center; gap: 10px; padding: 16px 20px; border-bottom: 1px solid var(--v-line); }
+
+/* Stencil label tab riding the top edge — the signature cue.
+   Put one on every panel header. */
+.v-tab {
+  position: absolute; top: -11px; left: 28px; z-index: 3;
+  height: 22px; padding: 0 15px; display: flex; align-items: center;
+  font-family: var(--v-font-display); font-weight: 700; font-size: 11px;
+  letter-spacing: .22em; text-transform: uppercase; color: var(--v-ink);
+  background: linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
+  clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
+  box-shadow: 0 3px 10px -2px var(--v-accent-600);
 }
 
-.v-title {
-  font-family: var(--v-font-display);
-  font-weight: 600;
-  letter-spacing: .04em;
-  text-transform: uppercase;
-  font-size: 15px;
-}
+/* Machined L-brackets on the two sharp corners. */
+.v-brk { position: absolute; z-index: var(--z-base); width: 16px; height: 16px; opacity: .5; pointer-events: none; }
+.v-brk--tr { top: 7px; right: 7px; border-top: 2px solid var(--v-accent); border-right: 2px solid var(--v-accent); }
+.v-brk--bl { bottom: 7px; left: 7px; border-bottom: 2px solid var(--v-accent); border-left: 2px solid var(--v-accent); }
 
+/* ── Typography ── */
+.v-title  { font-family: var(--v-font-display); font-weight: 700; letter-spacing: .18em; text-transform: uppercase; font-size: 22px; }
 .v-title__accent { color: var(--v-accent); }
-
-/* Section label (small, spaced, muted) */
-.v-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: .14em;
-  text-transform: uppercase;
-  color: var(--v-text-dim);
-}
+.v-header { font-family: var(--v-font-display); font-weight: 600; letter-spacing: .24em; text-transform: uppercase; font-size: 13px; color: var(--v-text-dim); }
+.v-label  { font-family: var(--v-font-display); font-weight: 600; letter-spacing: .20em; text-transform: uppercase; font-size: 11px; color: var(--v-text-dim); }
+/* Numeric readout — Consolas, tight, right-aligned like a caliper. */
+.v-num    { font-family: var(--v-font-num); font-weight: 600; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+.v-num b  { color: var(--v-accent-300); font-weight: 700; }
 
 /* ── Buttons ── */
 .v-btn {
-  font-family: var(--v-font-display);
-  font-size: 13px;
-  letter-spacing: .05em;
-  text-transform: uppercase;
-  color: var(--v-text);
-  background: var(--v-bg-600);
-  border: 1px solid var(--v-line-2);
-  border-radius: var(--v-r-sm);
-  padding: 9px 16px;
-  cursor: pointer;
-  transition: background .14s ease, border-color .14s ease, transform .06s ease;
+  font-family: var(--v-font-display); font-size: 12px; font-weight: 600;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--v-text); background: linear-gradient(180deg, var(--v-bg-500), var(--v-bg-700));
+  border: 1px solid var(--v-line-2); border-radius: var(--v-r-sm);
+  padding: 11px 18px; cursor: pointer;
+  transition: border-color var(--v-t-base) ease, color var(--v-t-base) ease, transform var(--v-t-fast) ease;
 }
-.v-btn:hover  { background: var(--v-bg-500); border-color: var(--v-line-2); }
-.v-btn:active { transform: translateY(1px); }
+.v-btn:hover  { border-color: var(--v-accent); color: var(--v-accent-300); transform: translateY(-1px); }
+.v-btn:active { transform: translateY(0); }
+.v-btn--accent { background: linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); border-color: var(--v-accent); color: var(--v-ink); font-weight: 700; box-shadow: 0 5px 16px -4px var(--v-accent-600); }
+.v-btn--accent:hover { color: var(--v-ink); }
+.v-btn--ghost  { background: transparent; }
+.v-btn--danger { background: transparent; border-color: var(--v-danger); color: var(--v-danger); }
+.v-btn--danger:hover { border-color: var(--v-danger); color: var(--v-danger-300); }
 
-.v-btn--accent {
-  background: linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
-  border-color: var(--v-accent-600);
-  color: #150a02;
-  font-weight: 600;
-}
-.v-btn--accent:hover { box-shadow: var(--v-accent-glow); }
-
-.v-btn--ghost { background: transparent; }
-.v-btn--danger { border-color: var(--v-danger); color: var(--v-danger); background: transparent; }
-
-/* ── Chip / badge ── */
+/* ── Chip / stencil badge ── */
 .v-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  letter-spacing: .05em;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--v-accent-soft);
-  border: 1px solid var(--v-accent-line);
-  color: var(--v-accent-300);
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--v-font-display); font-size: 11px; font-weight: 600;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 10px; border-radius: var(--v-r-sm);
+  background: var(--v-accent-soft); border: 1px solid var(--v-accent-line); color: var(--v-accent-300);
+}
+/* Filled parallelogram badge — dark ink on a light fill (set --v-fill). */
+.v-stencil {
+  display: inline-block; padding: 2px 8px;
+  font-family: var(--v-font-display); font-style: normal; font-weight: 700; font-size: 10px;
+  letter-spacing: .16em; text-transform: uppercase;
+  color: var(--v-ink); background: var(--v-fill, var(--v-accent));
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
 }
 
-/* ── Numeric value (tabular, condensed) ── */
-.v-num {
-  font-family: var(--v-font-display);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: .01em;
+/* ── Inputs ── */
+.v-input {
+  background: var(--v-bg-sunk); border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  color: var(--v-text); font-family: var(--v-font-body); font-size: 13px; padding: 10px 12px;
+  outline: none; box-shadow: inset 0 2px 4px rgba(0, 0, 0, .5);
+  transition: border-color var(--v-t-base) ease, box-shadow var(--v-t-base) ease;
 }
+.v-input:focus { border-color: var(--v-accent); box-shadow: inset 0 2px 4px rgba(0,0,0,.5), 0 0 0 2px rgba(255,106,26,.16); }
+.v-input::placeholder { color: var(--v-text-faint); }
+
+/* ── Foam-cutout slot — depth is inset shadow, never translucency ── */
+.v-slot {
+  position: relative; border-radius: var(--v-r-md); background-color: #12100D;
+  box-shadow: inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
+  transition: transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease;
+}
+.v-slot:hover { transform: translateY(-2px); background-color: #171410;
+  box-shadow: inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
+
+/* ── Segmented gauge — recessed strip, hard machined notches ── */
+.v-gauge { display: flex; gap: 2px; height: 15px; padding: 2px; border-radius: var(--v-r-sm);
+  background: var(--v-bg-sunk); box-shadow: inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7); }
+.v-gauge__seg { flex: 1; border-radius: 1px; background: #1A1613; transition: background var(--v-t-base) ease, box-shadow var(--v-t-base) ease; }
+.v-gauge__seg.is-on { background: linear-gradient(180deg, var(--v-accent-300), var(--v-accent)); box-shadow: 0 0 6px rgba(255,106,26,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+.v-gauge.is-over .v-gauge__seg.is-on { background: linear-gradient(180deg, var(--v-danger-300), var(--v-danger)); box-shadow: 0 0 6px rgba(194,54,47,.5); }
 
 /* ── Divider ── */
 .v-divider { height: 1px; background: var(--v-line); border: 0; }
 
-/* ── Custom scrollbar ── */
-.v-scroll::-webkit-scrollbar { width: 8px; }
-.v-scroll::-webkit-scrollbar-thumb { background: var(--v-bg-500); border-radius: 8px; }
-.v-scroll::-webkit-scrollbar-thumb:hover { background: var(--v-line-2); }
-.v-scroll::-webkit-scrollbar-track { background: transparent; }
+/* ── Scrollbar ── */
+.v-scroll::-webkit-scrollbar { width: 6px; }
+.v-scroll::-webkit-scrollbar-track { background: var(--v-bg-sunk); }
+.v-scroll::-webkit-scrollbar-thumb { background: var(--v-line-2); }
+.v-scroll::-webkit-scrollbar-thumb:hover { background: var(--v-accent-600); }
 
-/* ── Motion ── */
-@keyframes v-fade-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+/* ── Keyboard focus (CEF 103 supports :focus-visible) ── */
+.v-btn:focus-visible, .v-input:focus-visible, [tabindex]:focus-visible,
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--v-accent); outline-offset: 2px;
 }
+
+/* ── Motion — one orchestrated open sequence. Stagger with --i. ── */
+@keyframes v-case-open { from { opacity: 0; transform: translateY(10px) scale(.985); } }
+@keyframes v-seat      { from { opacity: 0; transform: translateY(6px) scale(.92); } }
+@keyframes v-pop       { from { opacity: 0; transform: scale(.96); } }
+@keyframes v-fade      { from { opacity: 0; } }
+@keyframes v-fade-up   { from { opacity: 0; transform: translateY(8px); } }
 @keyframes v-flash-up   { 0% { color: var(--v-success); } 100% { color: var(--v-text); } }
 @keyframes v-flash-down { 0% { color: var(--v-danger); }  100% { color: var(--v-text); } }
+
+/* Use animation-fill-mode:backwards, NOT both — `both` keeps forcing the
+   final keyframe's opacity and would override .is-hidden / filter states. */
+.is-open .v-panel { animation: v-case-open .34s var(--v-ease) backwards; animation-delay: calc(var(--i, 0) * 70ms); }
+.is-open .v-slot  { animation: v-seat .26s var(--v-ease) backwards; animation-delay: calc(180ms + var(--i, 0) * 12ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .v-slot:hover, .v-btn:hover { transform: none !important; }
+}

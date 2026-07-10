@@ -1,7 +1,9 @@
 // v-shops — store UI
 const byId = (id) => document.getElementById(id);
 const post = (n, b) => fetch(`https://v-shops/${n}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}) }).then(r => r.json()).catch(() => false);
-const CAT = { food: '#43C46A', medical: '#E5484D', weapon: '#9C99A2', tool: '#F5A623', gadget: '#4AA8FF', money: '#43C46A', misc: '#FF6A1A' };
+// Muted/earthy category rings — orange stays the only saturated hue on screen.
+const CAT = { food: '#4E8C5A', drinks: '#2F6F9E', medical: '#C2362F', weapon: '#6B6156', tool: '#C98A2B',
+  gadget: '#2F6F9E', tech: '#2F6F9E', smokes: '#6B6156', money: '#5FA36A', misc: '#FF6A1A' };
 const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 
 let strings = {}, shop = null, account = 'cash';
@@ -25,14 +27,15 @@ function render() {
   byId('shop-label').textContent = shop.label;
   setBalances(shop.cash, shop.bank);
   const list = byId('list'); list.innerHTML = '';
-  shop.items.forEach(it => {
+  shop.items.forEach((it, i) => {
     const cat = CAT[it.category] || CAT.misc;
     const row = document.createElement('div');
     row.className = 'row';
     row.style.setProperty('--cat', cat);
+    row.style.setProperty('--i', i);
     row.innerHTML =
-      `<div class="info"><div class="name">${it.label}</div><div class="price">${fmt(it.price)} ${t('shop.each')}</div></div>` +
-      `<div class="stepper"><button class="step dec">−</button><span class="qty">1</span><button class="step inc">+</button></div>` +
+      `<div class="info"><div class="name">${it.label}</div><div class="price"><b>${fmt(it.price)}</b> ${t('shop.each')}</div></div>` +
+      `<div class="stepper"><button class="step dec" aria-label="Decrease quantity">−</button><span class="qty">1</span><button class="step inc" aria-label="Increase quantity">+</button></div>` +
       `<button class="buy" data-i18n="shop.buy">Buy</button>`;
     const qty = row.querySelector('.qty');
     row.querySelector('.dec').onclick = () => { qty.textContent = Math.max(1, (+qty.textContent) - 1); };

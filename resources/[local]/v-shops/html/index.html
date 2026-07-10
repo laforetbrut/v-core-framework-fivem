@@ -7,15 +7,19 @@
 </head>
 <body class="v-root">
   <div id="shop" class="shop-overlay hidden">
-    <div class="shop">
-      <button class="close" id="close" aria-label="Close">&times;</button>
+    <div class="shop v-chamfer v-panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" id="shop-label">Shop</span>
+      <button class="close" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
       <div class="head">
-        <div class="brand"><span class="dot"></span><h1 class="v-title" id="shop-label">Shop</h1></div>
         <div class="wallet">
-          <button class="pay sel" id="pay-cash" data-acc="cash">
+          <button class="pay sel" id="pay-cash" data-acc="cash" aria-label="Pay with cash">
             <span class="v-label" data-i18n="shop.cash">Cash</span><span class="amt" id="w-cash">$0</span>
           </button>
-          <button class="pay" id="pay-bank" data-acc="bank">
+          <button class="pay" id="pay-bank" data-acc="bank" aria-label="Pay with bank">
             <span class="v-label" data-i18n="shop.bank">Bank</span><span class="amt" id="w-bank">$0</span>
           </button>
         </div>

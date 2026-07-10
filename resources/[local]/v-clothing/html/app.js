@@ -136,8 +136,10 @@ function renderTex() {
 
 function updateBar() {
   const c = catMap[curCat];
-  byId('bsel').innerHTML = `<b>${t(c.i18n)}</b> · #${curDraw}`;
-  byId('buy').textContent = `${t('cl.buy')} · ${fmt(c.price)}`;
+  byId('bsel').innerHTML = `<b>${t(c.i18n)}</b> · <span class="bnum">#<b>${curDraw}</b></span>`;
+  byId('buy').innerHTML = c.price > 0
+    ? `${t('cl.buy')} · <b>${fmt(c.price)}</b>`
+    : `${t('cl.buy')} · <em class="freetag">${t('cl.free')}</em>`;
 }
 
 byId('buy').onclick = async () => {

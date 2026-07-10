@@ -1,45 +1,97 @@
-/* v-shops — CEF (Chromium 103) safe: no backdrop-filter / color-mix, explicit sizes. */
-:root {
-  --v-bg-900:#0B0B0D; --v-bg-800:#101015; --v-bg-700:#17171D; --v-bg-600:#1E1E26; --v-bg-500:#262631;
-  --v-line:#2A2A33; --v-line-2:#3B3B47;
-  --v-text:#ECEAE6; --v-text-dim:#9C99A2; --v-text-faint:#63616C;
-  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-danger:#E5484D; --v-success:#43C46A;
-  --v-font-display:'Bahnschrift','Oswald','Segoe UI',sans-serif;
-  --v-font-body:'Segoe UI','Inter',system-ui,sans-serif;
-}
+/* v-shops — "FIELD CASE" store terminal.
+   Chamfered case panel, orange stencil tab, machined L-brackets, foam-cutout rows,
+   Consolas caliper prices. Tokens + primitives come from v-ui/theme.css.
+   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
 * { box-sizing:border-box; margin:0; padding:0; }
-html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none; color:var(--v-text); font-family:var(--v-font-body); }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
 .hidden { display:none !important; }
-.dot { width:8px; height:8px; border-radius:2px; background:var(--v-accent); box-shadow:0 0 10px var(--v-accent); }
-.v-title { font-family:var(--v-font-display); font-weight:600; letter-spacing:.04em; text-transform:uppercase; font-size:16px; }
-.v-label { font-size:9px; font-weight:600; letter-spacing:.14em; text-transform:uppercase; color:var(--v-text-dim); }
-.v-scroll::-webkit-scrollbar { width:8px; }
-.v-scroll::-webkit-scrollbar-thumb { background:var(--v-bg-500); border-radius:8px; }
 
-.shop-overlay { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(6,6,8,.72); animation:v-fade .16s ease; }
-.shop { position:relative; width:440px; max-height:80vh; display:flex; flex-direction:column; background:linear-gradient(180deg,var(--v-bg-700),var(--v-bg-800)); border:1px solid var(--v-line); border-radius:16px; box-shadow:0 22px 60px rgba(0,0,0,.6); overflow:hidden; animation:v-up .22s ease; }
-.close { position:absolute; top:14px; right:16px; background:none; border:0; color:var(--v-text-dim); font-size:22px; cursor:pointer; z-index:2; }
-.close:hover { color:var(--v-text); }
+/* ── Overlay: blueprint micro-grid + vignette + grain ── */
+.shop-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(120% 100% at 50% 12%, rgba(255,106,26,.05), rgba(0,0,0,.62) 46%, rgba(0,0,0,.88) 100%),
+    repeating-linear-gradient(0deg,  rgba(255,147,84,.03) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(90deg, rgba(255,147,84,.03) 0 1px, transparent 1px 46px);
+  animation:v-fade var(--v-t-fast) ease; }
+.shop-overlay::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.05;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 
-.head { display:flex; align-items:center; justify-content:space-between; padding:18px 20px; border-bottom:1px solid var(--v-line); }
-.brand { display:flex; align-items:center; gap:10px; }
-.wallet { display:flex; gap:8px; }
-.pay { display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:6px 12px; border:1px solid var(--v-line-2); border-radius:8px; background:var(--v-bg-600); cursor:pointer; }
-.pay .amt { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; font-size:14px; color:var(--v-text); }
-.pay.sel { border-color:var(--v-accent); background:rgba(255,106,26,.12); }
+/* ── Case panel (chamfer + brackets + tab come from theme primitives) ── */
+.shop { position:relative; z-index:var(--z-raised); width:530px; max-height:82vh;
+  display:flex; flex-direction:column; padding:26px 22px 22px; }
+
+.close { position:absolute; top:13px; right:14px; z-index:var(--z-raised);
+  width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+  background:none; border:0; color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) ease; }
+.close:hover { color:var(--v-accent-300); }
+.close svg { width:16px; height:16px; }
+
+/* ── Header: two account toggles double as the wallet readout ── */
+.head { display:flex; padding-bottom:14px; margin-bottom:12px; border-bottom:1px solid var(--v-line); }
+.wallet { display:flex; flex:1; gap:8px; }
+.pay { flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
+  padding:8px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
+  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); cursor:pointer;
+  transition:border-color var(--v-t-base) ease, background-color var(--v-t-base) ease, transform var(--v-t-fast) ease; }
+.pay:hover { border-color:var(--v-accent); transform:translateY(-1px); }
+.pay .amt { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; letter-spacing:0;
+  font-size:15px; font-weight:700; color:var(--v-text); }
+.pay.sel { border-color:var(--v-accent); background:var(--v-accent-soft); }
 .pay.sel .amt { color:var(--v-accent-300); }
 
-.list { padding:12px 20px 20px; overflow-y:auto; display:flex; flex-direction:column; gap:8px; }
-.row { display:flex; align-items:center; gap:12px; padding:11px 12px; background:var(--v-bg-700); border:1px solid var(--v-line); border-left:3px solid var(--cat, var(--v-accent)); border-radius:10px; }
-.row .info { flex:1; min-width:0; }
-.row .name { font-size:14px; color:var(--v-text); }
-.row .price { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; font-size:11px; color:var(--v-text-dim); margin-top:1px; }
-.stepper { display:flex; align-items:center; gap:6px; }
-.step { width:26px; height:26px; border-radius:7px; border:1px solid var(--v-line-2); background:var(--v-bg-600); color:var(--v-text); font-size:15px; cursor:pointer; line-height:1; }
-.step:hover { border-color:var(--v-accent); }
-.qty { font-family:var(--v-font-display); font-variant-numeric:tabular-nums; font-size:14px; min-width:22px; text-align:center; }
-.buy { font-family:var(--v-font-display); font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:#150a02; font-weight:600; background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent); border-radius:7px; padding:8px 14px; cursor:pointer; }
-.buy:hover { box-shadow:0 0 16px rgba(255,106,26,.35); }
+/* ── Item list ── */
+.list { display:flex; flex-direction:column; gap:8px; padding:2px 10px 4px;
+  overflow-y:auto; min-height:0; }
 
-@keyframes v-up { from { opacity:0; transform:translateY(12px);} to { opacity:1; transform:translateY(0);} }
-@keyframes v-fade { from { opacity:0;} to { opacity:1;} }
+/* row = recessed foam bar; ::before is the foam-cutout thumbnail (survives innerHTML). */
+.row { position:relative; display:flex; align-items:center; gap:12px; padding:10px 12px;
+  border-radius:var(--v-r-md); background-color:#12100D;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
+  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.row::before { content:''; flex:0 0 auto; width:44px; height:44px; border-radius:var(--v-r-sm);
+  background:var(--v-bg-sunk);
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.7), inset 0 0 0 1px var(--cat, var(--v-line)), inset 0 0 12px -6px var(--cat, transparent); }
+.row:hover { transform:translateY(-2px); background-color:#171410;
+  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
+
+.row .info { flex:1; min-width:0; display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+.row .name { flex:1 1 auto; min-width:0; font-family:var(--v-font-display); font-weight:600; letter-spacing:.08em;
+  text-transform:uppercase; font-size:13px; color:var(--v-text);
+  white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.row .price { flex:0 0 auto; text-align:right; font-family:var(--v-font-num);
+  font-variant-numeric:tabular-nums; letter-spacing:0; font-size:11px; color:var(--v-text-faint); }
+.row .price b { color:var(--v-accent-300); font-weight:700; }
+
+/* ── Quantity stepper ── */
+.stepper { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+.step { width:26px; height:26px; display:flex; align-items:center; justify-content:center;
+  border-radius:var(--v-r-sm); border:1px solid var(--v-line-2);
+  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text);
+  font-family:var(--v-font-num); font-size:16px; line-height:1; cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
+.step:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+.qty { min-width:24px; text-align:center; font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
+  letter-spacing:0; font-size:14px; font-weight:700; color:var(--v-text); }
+
+/* ── Buy = accent action ── */
+.buy { flex:0 0 auto; font-family:var(--v-font-display); font-size:12px; font-weight:700;
+  letter-spacing:.14em; text-transform:uppercase; color:var(--v-ink);
+  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent);
+  border-radius:var(--v-r-sm); padding:9px 15px; cursor:pointer;
+  box-shadow:0 5px 16px -4px var(--v-accent-600);
+  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease; }
+.buy:hover { transform:translateY(-1px); box-shadow:0 7px 20px -5px var(--v-accent-600); }
+.buy:active { transform:translateY(0); }
+
+/* ── Open sequence: panel seats, rows ripple with --i (backwards, never both) ── */
+#shop:not(.hidden) .shop { animation:v-case-open .34s var(--v-ease) backwards; }
+#shop:not(.hidden) .row  { animation:v-seat .26s var(--v-ease) backwards;
+  animation-delay:calc(var(--i, 0) * 16ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  .row:hover, .buy:hover, .pay:hover, .step:hover { transform:none !important; }
+}

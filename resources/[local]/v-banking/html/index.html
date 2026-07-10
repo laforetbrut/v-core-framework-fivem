@@ -7,46 +7,43 @@
 </head>
 <body class="v-root">
   <div id="bank" class="overlay hidden">
-    <div class="bank">
-      <div class="head">
-        <div class="brand">
-          <span class="logo">F</span>
-          <h1 class="v-title" data-i18n="bank.title">Fleeca Bank</h1>
-        </div>
-        <button class="close" id="close" aria-label="Close">&times;</button>
-      </div>
+    <div class="bank v-chamfer">
+      <span class="v-tab" data-i18n="bank.title">Fleeca Bank</span>
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <button class="close" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6 18 18M18 6 6 18"/></svg>
+      </button>
 
-      <div class="cards">
-        <div class="card accent">
-          <span class="v-label" data-i18n="bank.balance">Account balance</span>
-          <span class="amt" id="bank-amt">$0</span>
-        </div>
-        <div class="card">
+      <div class="hero" style="--i:0">
+        <span class="v-label" data-i18n="bank.balance">Account balance</span>
+        <span class="amt" id="bank-amt">$0</span>
+        <div class="cashrow">
           <span class="v-label" data-i18n="bank.cash">Cash on hand</span>
           <span class="amt" id="cash-amt">$0</span>
         </div>
       </div>
 
-      <div class="tabs">
+      <div class="tabs" style="--i:1">
         <button class="tab on" data-tab="deposit" data-i18n="bank.deposit">Deposit</button>
         <button class="tab" data-tab="withdraw" data-i18n="bank.withdraw">Withdraw</button>
         <button class="tab" data-tab="transfer" data-i18n="bank.transfer">Transfer</button>
       </div>
 
-      <div class="form">
+      <div class="form" style="--i:2">
         <div class="field">
-          <label class="v-label" data-i18n="bank.amount">Amount</label>
-          <input id="amount" type="number" min="1" placeholder="0" autocomplete="off" />
+          <label class="v-label" for="amount" data-i18n="bank.amount">Amount</label>
+          <input class="v-input" id="amount" type="number" min="1" placeholder="0" autocomplete="off" aria-label="Amount" />
         </div>
         <div class="field hidden" id="target-field">
-          <label class="v-label" data-i18n="bank.target">Recipient</label>
-          <input id="target" placeholder="V0000000" autocomplete="off" />
+          <label class="v-label" for="target" data-i18n="bank.target">Recipient</label>
+          <input class="v-input" id="target" placeholder="V0000000" autocomplete="off" aria-label="Recipient" />
         </div>
-        <div class="msg" id="msg"></div>
+        <div class="msg" id="msg" role="status" aria-live="polite"></div>
         <button class="v-btn v-btn--accent full" id="confirm" data-i18n="bank.confirm">Confirm</button>
       </div>
 
-      <div class="history">
+      <div class="history" style="--i:3">
         <span class="v-label" data-i18n="bank.history">Recent activity</span>
         <div class="tx-list v-scroll" id="tx-list"></div>
       </div>

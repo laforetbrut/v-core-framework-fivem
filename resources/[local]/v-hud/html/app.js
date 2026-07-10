@@ -66,7 +66,7 @@ function buildRings() {
     el.className = 'ring key-' + v.key + (v.keep ? ' keep' : '');
     el.innerHTML =
       `<svg viewBox="0 0 44 44"><circle class="track" cx="22" cy="22" r="18"/><circle class="fill" cx="22" cy="22" r="18"/></svg>` +
-      `<span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICON[v.key]}</svg></span>`;
+      `<span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${ICON[v.key]}</svg></span>`;
     wrap.appendChild(el);
     rings[v.key] = { el, fill: el.querySelector('.fill') };
   }
@@ -121,7 +121,7 @@ function renderCompass(rawHeading) {
     tape.style.transition = 'none';                            // don't animate across the 360→0 wrap
     void tape.offsetWidth;
   } else {
-    tape.style.transition = 'transform .12s linear';
+    tape.style.transition = 'transform var(--v-t-fast) linear';
   }
   tape.style.transform = `translateX(${tx}px)`;
   lastHc = hc;

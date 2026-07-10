@@ -12,7 +12,8 @@
   <!-- Language selection -->
   <div id="screen-language" class="lang-overlay hidden">
     <div class="lang-card">
-      <div class="lang-brand"><span class="dot"></span> PROJET R</div>
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i><i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <div class="lang-brand"><span class="dot" aria-hidden="true"></span> PROJET R</div>
       <h1 class="lang-title">Choisis ta langue<span>Select your language</span></h1>
       <div class="lang-btns">
         <button class="lang-btn" data-lang="fr"><span class="flag">FR</span><span>Français</span></button>
@@ -23,16 +24,18 @@
 
   <!-- Right dock -->
   <div id="panel" class="panel hidden">
+    <i class="v-brk v-brk--tr" aria-hidden="true"></i><i class="v-brk v-brk--bl" aria-hidden="true"></i>
     <div class="panel__head">
-      <span class="dot"></span>
+      <span class="head-tab">PROJET <b>R</b></span>
+      <span class="dot" aria-hidden="true"></span>
       <h1 class="v-title" id="panel-title" data-i18n="id.title">Create your character</h1>
     </div>
 
     <!-- Identity -->
     <div id="screen-identity" class="screen">
-      <div class="field"><label class="v-label" data-i18n="id.firstname">First name</label><input id="firstname" maxlength="24" autocomplete="off" /></div>
-      <div class="field"><label class="v-label" data-i18n="id.lastname">Last name</label><input id="lastname" maxlength="24" autocomplete="off" /></div>
-      <div class="field"><label class="v-label" data-i18n="id.dob">Date of birth</label><input id="dob" type="date" value="2000-01-01" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.firstname">First name</label><input id="firstname" maxlength="24" autocomplete="off" aria-label="First name" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.lastname">Last name</label><input id="lastname" maxlength="24" autocomplete="off" aria-label="Last name" /></div>
+      <div class="field"><label class="v-label" data-i18n="id.dob">Date of birth</label><input id="dob" type="date" value="2000-01-01" aria-label="Date of birth" /></div>
       <div class="field"><label class="v-label" data-i18n="id.sex">Sex</label>
         <div class="seg">
           <button class="seg-btn on" data-sex="0" data-i18n="id.male">Male</button>
@@ -57,7 +60,7 @@
   <!-- Spawn location selection (after creation) -->
   <div id="screen-spawn" class="spawn-overlay hidden">
     <div class="spawn-inner">
-      <div class="lang-brand"><span class="dot"></span> PROJET R</div>
+      <div class="lang-brand"><span class="dot" aria-hidden="true"></span> PROJET R</div>
       <h1 class="spawn-title" data-i18n="spawn.title">Where does your story begin?</h1>
       <div class="spawn-cards" id="spawncards"></div>
     </div>
