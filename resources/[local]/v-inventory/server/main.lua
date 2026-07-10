@@ -8,11 +8,12 @@ local ItemDefs    = {}   -- name -> row
 local Inv         = {}   -- [source] = items[]
 local Pocket      = {}   -- [source] = items[]  (hidden compartment, stored in metadata)
 local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent }
-local OpenStash   = {}   -- [source] = stash id currently open
-local UsableItems = {}   -- name -> handler(src, item)
-local Equipped    = {}   -- [source] = { slot, name }  currently-drawn weapon
-local dropCounter = 0
-local MONEY       = 'money'
+local OpenStash    = {}   -- [source] = stash id currently open ('search' = frisking a player)
+local SearchTarget = {}   -- [searcher src] = target src (frisk/steal target)
+local UsableItems  = {}   -- name -> handler(src, item)
+local Equipped     = {}   -- [source] = { slot, name }  currently-drawn weapon
+local dropCounter  = 0
+local MONEY        = 'money'
 
 -- Use effects by item type (hooks v-status). Registered per usable item.
 local function status(src, key, delta) pcall(function() exports['v-status']:Add(src, key, delta) end) end
@@ -165,6 +166,9 @@ AddEventHandler('playerDropped', function()
     Pocket[src] = nil
     OpenStash[src] = nil
     Equipped[src] = nil
+    SearchTarget[src] = nil
+    -- anyone frisking this player must stop
+    for s, t in pairs(SearchTarget) do if t == src then SearchTarget[s] = nil; OpenStash[s] = nil end end
 end)
 
 -- ── Stash loading ──────────────────────────────────────────────
@@ -214,7 +218,11 @@ end
 local function buildState(src, full)
     local secondary = nil
     local sid = OpenStash[src]
-    if sid and Stashes[sid] then
+    if sid == 'search' and SearchTarget[src] and Inv[SearchTarget[src]] then
+        local st = SearchTarget[src]
+        secondary = { id = 'search', label = 'inv.search_title', kind = 'search',
+                      items = Inv[st], maxWeight = maxWeightFor(st), maxSlots = maxSlotsFor(st) }
+    elseif sid and Stashes[sid] then
         secondary = { id = sid, label = Stashes[sid].label or 'stash', kind = Stashes[sid].kind,
                       items = Stashes[sid].items, maxWeight = Stashes[sid].maxWeight, maxSlots = Stashes[sid].maxSlots }
     end
@@ -253,9 +261,15 @@ end)
 local function containerOf(src, key)
     if key == 'player' then return Inv[src], maxSlotsFor(src), maxWeightFor(src) end
     if key == 'pocket' then return Pocket[src], Config.Pocket.slots, Config.Pocket.weight end
-    local sid = OpenStash[src]
-    if key == 'secondary' and sid and Stashes[sid] then
-        return Stashes[sid].items, Stashes[sid].maxSlots, Stashes[sid].maxWeight
+    if key == 'secondary' then
+        -- frisking another player: the "secondary" is the target's live inventory
+        if OpenStash[src] == 'search' then
+            local st = SearchTarget[src]
+            if st and Inv[st] then return Inv[st], maxSlotsFor(st), maxWeightFor(st) end
+            return nil
+        end
+        local sid = OpenStash[src]
+        if sid and Stashes[sid] then return Stashes[sid].items, Stashes[sid].maxSlots, Stashes[sid].maxWeight end
     end
     return nil
 end
@@ -264,10 +278,28 @@ end
 local function persistMove(src, from, to)
     if from == 'player' or to == 'player' then syncPlayer(src) end
     if from == 'pocket' or to == 'pocket' then syncPocket(src) end
-    if from == 'secondary' or to == 'secondary' then saveStash(OpenStash[src]) end
+    if from == 'secondary' or to == 'secondary' then
+        if OpenStash[src] == 'search' and SearchTarget[src] then
+            syncPlayer(SearchTarget[src])   -- persist the frisked player's inventory
+        else
+            saveStash(OpenStash[src])
+        end
+    end
 end
 
 Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
+    -- While frisking a player, re-check they are still valid and nearby on every
+    -- move, so you can't keep looting after walking away.
+    if OpenStash[source] == 'search' then
+        local st = SearchTarget[source]
+        local ped, tped = GetPlayerPed(source), st and GetPlayerPed(st)
+        if not st or not Inv[st] or not tped or tped == 0
+           or #(GetEntityCoords(ped) - GetEntityCoords(tped)) > 3.5 then
+            SearchTarget[source] = nil; OpenStash[source] = nil
+            resolve(buildState(source)); return
+        end
+    end
+
     -- (A) Wallet cash -> a real container (drop/trunk/stash): withdraw + spawn item.
     if data.from == 'wallet' then
         local p = Core.GetPlayer(source)
@@ -554,6 +586,31 @@ end)
 RegisterNetEvent('v-inventory:server:closeStash', function()
     gcDrop(OpenStash[source])   -- clean up an emptied ground drop on close
     OpenStash[source] = nil
+    SearchTarget[source] = nil
+end)
+
+-- ── Frisk / steal a nearby player (RP) ─────────────────────────
+-- Only a target who is HANDS-UP, downed, or being searched by police/admin can
+-- be frisked. Proximity is validated server-side; only the SEARCHABLE inventory
+-- (main items — never the hidden pocket) is exposed.
+RegisterNetEvent('v-inventory:server:searchPlayer', function(targetSrc)
+    local src = source
+    targetSrc = tonumber(targetSrc)
+    if not targetSrc or targetSrc == src or not Inv[targetSrc] then return end
+    local ped, tped = GetPlayerPed(src), GetPlayerPed(targetSrc)
+    if ped == 0 or tped == 0 or #(GetEntityCoords(ped) - GetEntityCoords(tped)) > 3.0 then return end
+
+    local downed  = GetEntityHealth(tped) <= 101
+    local handsUp = Player(targetSrc).state.handsup == true
+    local police  = Core.HasPermission(src, 'admin')   -- TODO: police job when v-jobs lands
+    if not (downed or handsUp or police) then
+        Core.Notify(src, LP(src, 'inv.cant_search'), 'error'); return
+    end
+
+    SearchTarget[src] = targetSrc
+    OpenStash[src] = 'search'
+    Core.Notify(targetSrc, LP(targetSrc, 'inv.being_searched'), 'warning')
+    TriggerClientEvent('v-inventory:client:openSecondary', src)
 end)
 
 -- ── Shared / gang stashes (permission-gated, persistent) ───────
