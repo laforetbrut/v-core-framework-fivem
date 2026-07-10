@@ -51,6 +51,10 @@ RegisterNUICallback('use', function(data, cb)
     Core.TriggerCallback('v-inventory:use', function(state) cb(state or false) end, data.slot)
 end)
 
+RegisterNUICallback('rename', function(data, cb)
+    Core.TriggerCallback('v-inventory:rename', function(state) cb(state or false) end, data)
+end)
+
 RegisterNUICallback('drop', function(data, cb)
     local c = GetEntityCoords(PlayerPedId())
     data.coords = { x = c.x, y = c.y, z = c.z - 0.9 }

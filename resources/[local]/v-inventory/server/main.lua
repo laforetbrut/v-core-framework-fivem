@@ -36,8 +36,12 @@ CreateThread(function()
 
     for _, it in ipairs(InventoryItems or {}) do
         MySQL.insert.await(
-            'INSERT IGNORE INTO items (name, label, weight, stackable, usable, category, image, metadata) VALUES (?,?,?,?,?,?,?,?)',
-            { it.name, it.label, it.weight, it.stackable, it.usable, it.category, it.image, json.encode({ desc = it.desc, type = it.itype }) })
+            [[INSERT INTO items (name, label, weight, stackable, usable, category, image, metadata)
+              VALUES (?,?,?,?,?,?,?,?)
+              ON DUPLICATE KEY UPDATE label=VALUES(label), weight=VALUES(weight), stackable=VALUES(stackable),
+                usable=VALUES(usable), category=VALUES(category), image=VALUES(image), metadata=VALUES(metadata)]],
+            { it.name, it.label, it.weight, it.stackable, it.usable, it.category, it.image,
+              json.encode({ desc = it.desc, type = it.itype, rarity = it.rarity }) })
     end
 
     local rows = MySQL.query.await('SELECT * FROM items') or {}
@@ -267,6 +271,19 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
     removeFromSlot(Inv[source], slot, 1)
     syncPlayer(source)
     Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
+    resolve(buildState(source))
+end)
+
+-- ── Rename an item (custom label stored in its metadata) ───────
+Core.RegisterCallback('v-inventory:rename', function(source, resolve, data)
+    local items = containerOf(source, data.inv or 'player')
+    if not items then resolve(false); return end
+    local it = itemAt(items, data.slot)
+    if not it or it.name == MONEY then resolve(false); return end
+    local name = tostring(data.name or ''):gsub('[\r\n\t]', ''):sub(1, 30)
+    it.metadata = it.metadata or {}
+    it.metadata.label = (name ~= '' and name) or nil
+    if (data.inv or 'player') == 'secondary' then saveStash(OpenStash[source]) else syncPlayer(source) end
     resolve(buildState(source))
 end)
 

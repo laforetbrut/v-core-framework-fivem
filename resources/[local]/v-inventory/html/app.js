@@ -11,6 +11,14 @@ const CAT = {
   weapons: '#9C99A2', tools: '#F5A623', materials: '#B0895E', ingredients: '#7FB86B', drugs: '#C77DFF',
   smokes: '#8C8C8C', tech: '#4AA8FF', jewelry: '#F5C542', mechanic: '#F5A623', misc: '#FF6A1A',
 };
+const RARITY = { common: '#9C99A2', uncommon: '#43C46A', rare: '#4AA8FF', epic: '#C77DFF', legendary: '#F5A623', mythic: '#E5484D' };
+const ICONS = {
+  use:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg>',
+  give:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  split:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88M14.47 14.48 20 20M8.12 8.12 12 12"/></svg>',
+  drop:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+  rename: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>',
+};
 
 let state = null, strings = {}, defs = {};
 let maps = { player: {}, secondary: {} };
@@ -38,7 +46,7 @@ const def = (name) => defs[name] || { label: name, weight: 0, category: 'misc', 
 function slotEl(inv, slot) {
   const el = document.createElement('div');
   el.className = 'slot'; el.dataset.inv = inv; el.dataset.slot = slot;
-  el.innerHTML = '<span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span>';
+  el.innerHTML = '<span class="info"></span><span class="hk"></span><span class="scrim"></span><span class="label"></span><i class="dura"></i>';
   return el;
 }
 function buildGrid(gridId, inv, count, start) {
@@ -55,22 +63,29 @@ function buildSegs(id, n) {
 }
 
 // ── Render ──
+function rarityOf(d) { return (d.metadata && d.metadata.rarity) || 'common'; }
+function itemLabel(it, d) { return (it.metadata && it.metadata.label) || d.label || it.name; }
+
 function renderSlot(el) {
   const inv = el.dataset.inv, slot = +el.dataset.slot;
   const it = itemAt(inv, slot);
-  const info = el.querySelector('.info'); const label = el.querySelector('.label'); const hk = el.querySelector('.hk');
+  const info = el.querySelector('.info'); const label = el.querySelector('.label'); const hk = el.querySelector('.hk'); const dura = el.querySelector('.dura');
   hk.textContent = el.dataset.hot || '';
+  dura.className = 'dura';
   if (!it) {
-    el.removeAttribute('data-item'); el.draggable = false; el.style.backgroundImage = ''; el.style.removeProperty('--cat');
+    el.removeAttribute('data-item'); el.removeAttribute('data-rar'); el.draggable = false;
+    el.style.backgroundImage = ''; el.style.removeProperty('--cat');
     info.innerHTML = ''; label.textContent = ''; return;
   }
-  const d = def(it.name);
-  el.setAttribute('data-item', it.name); el.draggable = true;
-  el.style.setProperty('--cat', CAT[d.category] || 'var(--v-accent)');
+  const d = def(it.name); const rar = rarityOf(d);
+  el.setAttribute('data-item', it.name); el.setAttribute('data-rar', rar); el.draggable = true;
+  el.style.setProperty('--cat', RARITY[rar] || CAT[d.category] || 'var(--v-accent)');
   el.style.backgroundImage = d.image ? `url("images/${d.image}")` : '';
   const tot = ((d.weight || 0) * it.amount) / 1000;
   info.innerHTML = `<b>${it.amount}</b><span>(${tot.toFixed(1)})</span>`;
-  label.textContent = d.label || it.name;
+  label.textContent = itemLabel(it, d);
+  const dur = it.metadata && it.metadata.durability;
+  if (dur != null) { dura.classList.add('on'); dura.style.width = Math.max(0, Math.min(100, dur)) + '%'; dura.style.background = dur > 55 ? 'var(--v-success)' : dur > 25 ? 'var(--v-accent)' : 'var(--v-danger)'; }
 }
 function renderGrid(inv) {
   const gid = inv === 'player' ? 'grid-player' : 'grid-secondary';
@@ -104,7 +119,7 @@ function applyState(s) { if (!s || s.error) return; state = s; render(); }
 
 // ── Drag & drop (delegated) ──
 function onDragStart(e) {
-  const el = e.target.closest('.slot,.wallet'); if (!el) return;
+  const el = e.target.closest('.slot,.wallet-chip'); if (!el) return;
   if (el.id === 'wallet') { drag = { inv: 'wallet', slot: 'money', money: true }; el.classList.add('dragging'); return; }
   if (!el.hasAttribute('data-item')) { e.preventDefault(); return; }
   drag = { inv: el.dataset.inv, slot: +el.dataset.slot };
@@ -112,7 +127,7 @@ function onDragStart(e) {
   el.classList.add('dragging');
 }
 function onDragOver(e) {
-  const el = e.target.closest('.slot,.wallet'); if (!el || !drag) return;
+  const el = e.target.closest('.slot,.wallet-chip'); if (!el || !drag) return;
   e.preventDefault();
   const cur = document.querySelector('.drop-hover'); if (cur && cur !== el) cur.classList.remove('drop-hover');
   el.classList.add('drop-hover');
@@ -122,7 +137,7 @@ function onDragEnd() {
   drag = null;
 }
 async function onDrop(e) {
-  const el = e.target.closest('.slot,.wallet'); if (!el || !drag) return;
+  const el = e.target.closest('.slot,.wallet-chip'); if (!el || !drag) return;
   e.preventDefault();
   const from = drag;
   const to = el.id === 'wallet' ? { inv: 'wallet', slot: 'money' } : { inv: el.dataset.inv, slot: +el.dataset.slot };
@@ -145,12 +160,17 @@ function onHover(e) {
   const el = e.target.closest('.slot'); const tt = byId('tooltip');
   if (!el || !el.hasAttribute('data-item')) return;
   const it = itemAt(el.dataset.inv, +el.dataset.slot); if (!it) return;
-  const d = def(it.name); const meta = d.metadata || {};
-  tt.innerHTML = `<div class="tt-top"><div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
-    + `<div><h4>${esc(d.label || it.name)}</h4><div class="sub">${esc(it.name)}</div></div></div>`
-    + `<div class="tt-body"><div class="row"><span>${t('inv.weight')}</span><b>${kg((d.weight || 0) * it.amount)}</b></div>`
-    + (it.amount > 1 ? `<div class="row"><span>${t('inv.qty')}</span><b>${it.amount}</b></div>` : '')
-    + (meta.desc ? `<div class="desc">${esc(meta.desc)}</div>` : '') + `</div>`;
+  const d = def(it.name); const dm = d.metadata || {}; const im = it.metadata || {};
+  const rar = rarityOf(d);
+  const row = (k, v) => `<div class="row"><span>${k}</span><b>${v}</b></div>`;
+  tt.innerHTML = `<div class="tt-top" style="border-left:3px solid ${RARITY[rar] || 'var(--v-line)'}"><div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
+    + `<div><h4>${esc(itemLabel(it, d))}</h4><div class="sub">${esc(it.name)} · <em style="color:${RARITY[rar]}">${t('rar.' + rar)}</em></div></div></div>`
+    + `<div class="tt-body">${row(t('inv.weight'), kg((d.weight || 0) * it.amount))}`
+    + (it.amount > 1 ? row(t('inv.qty'), it.amount) : '')
+    + (im.serial ? row(t('inv.serial'), esc(im.serial)) : '')
+    + (im.ammo != null ? row(t('inv.ammo'), im.ammo) : '')
+    + (im.durability != null ? row(t('inv.durability'), Math.round(im.durability) + '%') : '')
+    + (dm.desc ? `<div class="desc">${esc(dm.desc)}</div>` : '') + `</div>`;
   tt.classList.remove('hidden');
   positionFloat(tt, e.clientX + 16, e.clientY + 16);
 }
@@ -167,27 +187,28 @@ function hideTooltip() { byId('tooltip').classList.add('hidden'); }
 
 // ── Context menu ──
 function onContext(e) {
-  const el = e.target.closest('.slot,.wallet'); if (!el) return;
+  const el = e.target.closest('.slot,.wallet-chip'); if (!el) return;
   e.preventDefault();
   hideTooltip();
   const menu = byId('context'); menu.innerHTML = '';
-  const add = (label, fn, danger) => {
+  const add = (icon, label, fn, danger) => {
     const li = document.createElement('li'); if (danger) li.className = 'danger';
-    li.innerHTML = `<span>${esc(label)}</span>`;
+    li.innerHTML = `<span class="ci">${ICONS[icon] || ''}</span><span>${esc(label)}</span>`;
     li.onclick = () => { closeContext(); fn(); }; menu.appendChild(li);
   };
   if (el.id === 'wallet') {
     if ((state.player.cash || 0) <= 0) return;
-    add(t('inv.give'), giveMoney);
-    add(t('inv.drop'), dropMoney, true);
+    add('give', t('inv.give'), giveMoney);
+    add('drop', t('inv.drop'), dropMoney, true);
   } else {
     if (!el.hasAttribute('data-item')) return;
     const inv = el.dataset.inv, slot = +el.dataset.slot;
     const it = itemAt(inv, slot); if (!it) return; const d = def(it.name);
-    if (inv === 'player' && d.usable == 1) add(t('inv.use'), async () => applyState(await post('use', { slot })));
-    if (inv === 'player') add(t('inv.give'), () => giveItem(slot, it.amount));
-    if (inv === 'player') add(t('inv.drop'), () => dropItem(inv, slot, it.amount), true);
-    if (it.amount > 1) add(t('inv.split'), () => showAmount(it.amount, async (amt) => applyState(await post('move', { from: inv, fromSlot: slot, to: inv, amount: amt }))));
+    if (inv === 'player' && d.usable == 1) add('use', t('inv.use'), async () => applyState(await post('use', { slot })));
+    if (inv === 'player') add('give', t('inv.give'), () => giveItem(slot, it.amount));
+    if (it.amount > 1) add('split', t('inv.split'), () => showAmount(it.amount, async (amt) => applyState(await post('move', { from: inv, fromSlot: slot, to: inv, amount: amt }))));
+    if (it.name !== 'money') add('rename', t('inv.rename'), () => showRename(itemLabel(it, d), inv, slot));
+    if (inv === 'player') add('drop', t('inv.drop'), () => dropItem(inv, slot, it.amount), true);
   }
   menu.classList.remove('hidden');
   positionFloat(menu, e.clientX, e.clientY);
@@ -220,6 +241,18 @@ byId('amount-input').oninput = () => { byId('amount-range').value = byId('amount
 byId('amount-range').oninput = () => { byId('amount-input').value = byId('amount-range').value; };
 byId('amount-ok').onclick = () => { const v = Math.max(1, Math.min(+byId('amount-input').max, parseInt(byId('amount-input').value, 10) || 1)); const cb = amountCb; closeAmount(); if (cb) cb(v); };
 byId('amount-cancel').onclick = closeAmount;
+
+// ── Rename ──
+let renameCtx = null;
+function showRename(current, inv, slot) {
+  renameCtx = { inv, slot };
+  const inp = byId('rename-input'); inp.value = current || '';
+  byId('rename').classList.remove('hidden'); inp.focus(); inp.select();
+}
+function closeRename() { byId('rename').classList.add('hidden'); renameCtx = null; }
+byId('rename-ok').onclick = async () => { const name = byId('rename-input').value.trim(); const ctx = renameCtx; closeRename(); if (ctx) applyState(await post('rename', { inv: ctx.inv, slot: ctx.slot, name })); };
+byId('rename-cancel').onclick = closeRename;
+byId('rename-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') byId('rename-ok').click(); });
 
 // ── Search filter ──
 function applyFilter(inv) {
@@ -266,10 +299,14 @@ function wire() {
   document.addEventListener('scroll', closeContext, true);
 }
 
-function close() { byId('v-root').classList.add('hidden'); hideTooltip(); closeContext(); closeAmount(); post('close'); }
+function close() { byId('v-root').classList.add('hidden'); hideTooltip(); closeContext(); closeAmount(); closeRename(); post('close'); }
 document.addEventListener('keydown', (e) => {
   if (byId('v-root').classList.contains('hidden')) return;
-  if (e.key === 'Escape') { if (!byId('amount').classList.contains('hidden')) closeAmount(); else close(); }
+  if (e.key === 'Escape') {
+    if (!byId('amount').classList.contains('hidden')) closeAmount();
+    else if (!byId('rename').classList.contains('hidden')) closeRename();
+    else close();
+  }
 });
 
 // ── Messages from Lua ──

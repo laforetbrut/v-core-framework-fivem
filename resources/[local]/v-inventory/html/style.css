@@ -51,6 +51,14 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .grid { display:grid; grid-template-columns:repeat(5, var(--slot)); gap:7px; max-height:60vh; overflow-y:auto; overflow-x:hidden; align-content:start; }
 .slot { position:relative; width:var(--slot); height:var(--slot); border-radius:11px; border:1px solid var(--v-line); background-color:var(--v-bg-800); background-image:linear-gradient(150deg, rgba(255,255,255,.03), rgba(0,0,0,.16)); background-repeat:no-repeat; background-position:center; background-size:auto, 50px; box-shadow:inset 0 1px 0 rgba(255,255,255,.03); transition:border-color .1s, transform .06s, box-shadow .1s; }
 .slot[data-item] { cursor:grab; border-left:3px solid var(--cat, var(--v-line)); }
+/* Rarity glow (epic and above) */
+.slot[data-rar="rare"][data-item] { box-shadow:inset 0 1px 0 rgba(255,255,255,.04), inset 0 0 0 1px rgba(74,168,255,.16); }
+.slot[data-rar="epic"][data-item] { box-shadow:inset 0 1px 0 rgba(255,255,255,.04), inset 0 0 0 1px rgba(199,125,255,.32); }
+.slot[data-rar="legendary"][data-item] { box-shadow:inset 0 0 0 1px rgba(245,166,35,.45), 0 0 14px rgba(245,166,35,.16); }
+.slot[data-rar="mythic"][data-item] { box-shadow:inset 0 0 0 1px rgba(229,72,77,.5), 0 0 16px rgba(229,72,77,.2); }
+/* Durability bar */
+.slot .dura { position:absolute; left:0; bottom:0; height:3px; width:0; border-radius:0 0 0 10px; z-index:3; display:none; transition:width .2s ease; }
+.slot .dura.on { display:block; }
 .slot[data-item]:hover { border-color:var(--v-accent); box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 0 0 1px rgba(255,106,26,.3), 0 8px 20px rgba(0,0,0,.4); transform:translateY(-1px); }
 .slot.dragging { opacity:.38; }
 .slot.drop-hover { border-color:var(--v-accent) !important; background-color:var(--v-bg-600); }
@@ -83,9 +91,12 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 
 /* Context menu */
 .context { position:fixed; z-index:90; min-width:162px; list-style:none; background:linear-gradient(160deg,var(--v-bg-700),var(--v-bg-900)); border:1px solid var(--v-line-2); border-radius:11px; padding:6px; box-shadow:0 14px 34px rgba(0,0,0,.65); }
-.context li { font-size:12px; color:var(--v-text); padding:9px 11px; border-radius:7px; cursor:pointer; }
+.context li { display:flex; align-items:center; gap:10px; font-size:12px; font-family:var(--v-font-display); letter-spacing:.03em; text-transform:uppercase; color:var(--v-text); padding:9px 11px; border-radius:7px; cursor:pointer; }
 .context li:hover { background:var(--v-bg-600); }
 .context li.danger:hover { background:rgba(229,72,77,.15); color:var(--v-danger); }
+.context li .ci { width:16px; height:16px; color:var(--v-accent-300); flex:0 0 auto; display:flex; }
+.context li .ci svg { width:16px; height:16px; }
+.context li.danger .ci { color:var(--v-danger); }
 
 /* Amount picker */
 .amount-overlay { position:fixed; inset:0; z-index:95; display:flex; align-items:center; justify-content:center; background:rgba(6,6,8,.66); }
