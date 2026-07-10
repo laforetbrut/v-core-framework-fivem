@@ -22,6 +22,7 @@ local T = {
     ['cl.scan_busy']   = 'Un scan est déjà en cours.',
     ['cl.scan_confirm']= 'Appuie encore sur F9 pour lancer le scan des vêtements.',
     ['cl.scan_abort']  = 'Scan interrompu — l\'envoi des images a échoué.',
+    ['cl.scan_title']  = 'Scan des vêtements',
     ['cl.masks']       = 'Masques',
     ['cl.tops']        = 'Hauts',
     ['cl.undershirt']  = 'Sous-vêtements',
