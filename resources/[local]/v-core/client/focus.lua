@@ -1,11 +1,24 @@
--- v-core | client NUI-focus manager
--- Menus MUST take/release focus through these exports (not raw SetNuiFocus) so
--- the HUD and any other resource can observe "a menu is open" via the shared
--- statebag LocalPlayer.state.nuiOpen. Reference-counted -> safe with several
--- menus open at once, and self-healing if a menu resource stops while focused.
---   exports['v-core']:OpenMenu()                 -- cursor + input focus
---   exports['v-core']:OpenMenu(name, cursor, input)
---   exports['v-core']:CloseMenu()                -- release
+-- v-core | client NUI-focus bookkeeping
+--
+-- SET_NUI_FOCUS is scoped to the CALLING resource: the native looks up the
+-- caller's own ResourceUI, bails out when it has no frame, and posts
+-- focusFrame/blurFrame for `resource->GetName()`
+-- (code/components/nui-resources/src/ResourceUIScripting.cpp).
+-- v-core declares no ui_page, so a SetNuiFocus() call made here is a silent
+-- no-op and can never hand focus to another resource's page.
+--
+-- Therefore: the resource that owns the NUI page calls SetNuiFocus itself and
+-- reports the transition here, so the HUD (and anything else) can observe
+-- "a menu is open" through the shared statebag LocalPlayer.state.nuiOpen.
+-- Reference-counted -> safe with several menus open, self-healing if a menu
+-- resource stops while it is still registered.
+--
+--   -- in the resource that owns the NUI page:
+--   SetNuiFocus(true, true)
+--   exports['v-core']:MenuOpened()
+--   ...
+--   SetNuiFocus(false, false)
+--   exports['v-core']:MenuClosed()
 local openMenus = {}
 
 local function recount()
@@ -15,23 +28,25 @@ local function recount()
     return n
 end
 
-exports('OpenMenu', function(name, cursor, input)
+exports('MenuOpened', function(name)
     name = name or GetInvokingResource() or 'menu'
     openMenus[name] = true
     recount()
-    SetNuiFocus(cursor ~= false, input ~= false)
 end)
 
-exports('CloseMenu', function(name)
+exports('MenuClosed', function(name)
     name = name or GetInvokingResource() or 'menu'
     openMenus[name] = nil
-    if recount() == 0 then SetNuiFocus(false, false) end
+    recount()
 end)
 
--- Release focus if a menu resource stops while it still holds focus.
+exports('IsAnyMenuOpen', function() return next(openMenus) ~= nil end)
+
+-- Clear bookkeeping if a menu resource stops while still registered. Its frame
+-- dies with it, so there is nothing to blur from here.
 AddEventHandler('onClientResourceStop', function(res)
     if openMenus[res] then
         openMenus[res] = nil
-        if recount() == 0 then SetNuiFocus(false, false) end
+        recount()
     end
 end)

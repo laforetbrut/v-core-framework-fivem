@@ -112,6 +112,22 @@ centered emoji cards, no pastel rounded everything, no evenly-distributed warm w
 Any new NUI page starts by linking `theme.css` and composing its primitives. If a module needs a
 new shared primitive, add it to `theme.css` — never copy-paste it into a module's `style.css`.
 
+### NUI natives are resource-scoped — MANDATORY
+
+`SetNuiFocus`, `SetNuiFocusKeepInput`, `SendNUIMessage` and `RegisterNUICallback` all resolve
+against **the calling resource's own NUI frame**. `SET_NUI_FOCUS` returns early when the caller has
+no frame (`resourceUI->HasFrame()`), so calling it from a resource without a `ui_page` is a **silent
+no-op** — no error, no log.
+
+- Only the resource that declares the `ui_page` may call them. Never proxy them through a helper
+  resource; a shared helper may own *bookkeeping* (statebags, ref-counting), never the native.
+- Take and release focus next to the bookkeeping call:
+  ```lua
+  SetNuiFocus(true, true)            -- in the resource that owns the page
+  exports['v-core']:MenuOpened()     -- v-core only maintains LocalPlayer.state.nuiOpen
+  ```
+- Always release focus in `onResourceStop`, or a restart leaves the player's cursor stuck.
+
 ## 3.6 Interaction & Management principles — MANDATORY
 
 1. **No player chat commands.** Players interact only through the phone (iFruit), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
