@@ -1,5 +1,17 @@
 # Error Log
 
+## [2026-07-11 — session] — Ground drops lootable from anywhere (SECURITY)
+**Context:** Ground drops opened as secondary containers; adversarial review of v-inventory.
+**Error:** The `openStash` `drop` branch checked only that the id matched `^drop:%d+$` and existed — no proximity check (the trunk/glovebox branch had a 5 m gate). Drop ids come from an incrementing counter, so a modded client could fire `openStash('drop:1',…)`, `drop:2`, … and drain every ground drop on the map remotely; the per-move re-check only runs for `search`, so it wasn't distance-gated on move either.
+**Fix:** The `drop` branch now checks the player's ped is within 5 m of the drop's server-stored `coords` before opening.
+**Prevention:** Every openable container branch must apply the same server-side proximity gate; never rely on an id being "unguessable" (sequential ids are trivially enumerable).
+
+## [2026-07-11 — session] — Weapon wear was client-authoritative
+**Context:** Durability derived from the client-reported ammo delta.
+**Error:** A modded client could under-report / not report ammo, so `spent = old - new` stayed ≤ 0 and durability never dropped — the weapon never wore or jammed.
+**Fix:** Wear now comes from the engine's `weaponDamageEvent` (trusted `sender`); the ammo net event is a pure magazine sync.
+**Prevention:** Never derive an authoritative stat from a client-sent value at a security boundary; use an engine-raised event whose actor the server controls.
+
 ## [2026-07-11 — session] — v-shops sell destroyed goods on a $0 payout
 **Context:** Money laundering: a launderer that pays a 0.65 rate for `marked_bills` (price 1).
 **Error:** Selling 1 marked bill removed the item, then `total = floor(1*1*0.65) = 0` hit the `if total <= 0 then resolve(false)` guard **before** any payout/refund — the bill was destroyed for nothing, with no notification. Caught by an adversarial review workflow (3 agents independently).
