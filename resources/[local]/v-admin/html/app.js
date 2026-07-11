@@ -67,6 +67,7 @@ function renderPlayers() {
             <button class="mini" data-a="goto">${t('adm.act_goto')}</button>
             <button class="mini" data-a="bring">${t('adm.act_bring')}</button>
             <button class="mini" data-a="spectate">${t('adm.act_spectate')}</button>
+            <button class="mini" data-a="openinv">${t('adm.act_inv')}</button>
             <button class="mini" data-a="heal">${t('adm.act_heal')}</button>
             <button class="mini" data-a="freeze">${frozen.has(p.id) ? t('adm.act_unfreeze') : t('adm.act_freeze')}</button>
           </div>
@@ -100,6 +101,7 @@ function renderPlayers() {
           const acts = row.querySelector('.pacts');
           const get = (f) => { const el = acts.querySelector(`[data-f="${f}"]`); return el ? el.value : undefined; };
           const type = btn.dataset.a;
+          if (type === 'openinv') { post('openinv', { target: p.id }); return; }
           const payload = { type, target: p.id };
           if (type === 'money') { payload.account = get('account'); payload.amount = parseInt(get('amount'), 10) || 0; }
           if (type === 'giveitem') { payload.item = get('item'); payload.count = parseInt(get('count'), 10) || 1; }

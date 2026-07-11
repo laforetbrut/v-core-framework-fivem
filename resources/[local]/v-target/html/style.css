@@ -1,36 +1,38 @@
-/* v-target — interaction eye. Centre reticle + a foam-slot option list, Field Case theme.
-   Display-only overlay (no NUI focus), so pointer-events stay off. CEF 103 safe. */
+/* v-target — interaction eye. Free cursor (custom crosshair) + a cursor-anchored
+   option list, Field Case theme. CEF 103 safe. */
 * { box-sizing:border-box; margin:0; padding:0; }
 html, body { width:100%; height:100%; background:transparent; overflow:hidden;
   font-family:var(--v-font-body); color:var(--v-text); -webkit-font-smoothing:antialiased; }
 .hidden { display:none !important; }
 
 .eye { position:fixed; inset:0; pointer-events:none; z-index:var(--z-overlay); }
+.eye.hidden { display:none; }
+/* hide the OS cursor while the eye is open (we draw our own crosshair). CEF 103 has
+   no :has(), so the body class is toggled from JS instead. */
+html.eyeopen, html.eyeopen body, .eyeopen .opt { cursor:none; }
 
-/* ── Reticle at screen centre ── */
-.reticle { position:absolute; left:50%; top:50%; width:34px; height:34px; transform:translate(-50%,-50%);
-  display:flex; align-items:center; justify-content:center; }
-.reticle .dot { width:5px; height:5px; border-radius:50%; background:var(--v-text-dim);
-  box-shadow:0 0 6px rgba(0,0,0,.8); transition:background-color var(--v-t-base) ease, transform var(--v-t-base) ease; }
-.reticle .ring { position:absolute; inset:0; border:1.5px solid var(--v-line-2); border-radius:50%;
-  opacity:.5; transition:border-color var(--v-t-base) ease, opacity var(--v-t-base) ease, transform var(--v-t-base) ease; }
-.reticle.hot .dot { background:var(--v-accent); transform:scale(1.2); }
-.reticle.hot .ring { border-color:var(--v-accent); opacity:1; transform:scale(.82);
-  box-shadow:0 0 14px -2px var(--v-accent-600); }
+/* ── Custom crosshair cursor ── */
+.cursor { position:fixed; left:0; top:0; width:26px; height:26px; margin:-13px 0 0 -13px; pointer-events:none; }
+.cursor .cdot { position:absolute; left:50%; top:50%; width:4px; height:4px; margin:-2px 0 0 -2px;
+  border-radius:50%; background:var(--v-accent); box-shadow:0 0 8px -1px var(--v-accent-600); }
+.cursor .ch { position:absolute; background:var(--v-accent-300); box-shadow:0 0 4px rgba(0,0,0,.7); }
+.cursor .ch-t, .cursor .ch-b { left:50%; width:2px; height:7px; margin-left:-1px; }
+.cursor .ch-l, .cursor .ch-r { top:50%; height:2px; width:7px; margin-top:-1px; }
+.cursor .ch-t { top:0; } .cursor .ch-b { bottom:0; }
+.cursor .ch-l { left:0; } .cursor .ch-r { right:0; }
 
-/* ── Options list (to the right of the reticle) ── */
-.opts { position:absolute; left:calc(50% + 34px); top:50%; transform:translateY(-50%);
-  display:flex; flex-direction:column; gap:7px; min-width:210px; max-width:320px; }
+/* ── Options list (anchored near the cursor by JS) ── */
+.opts { position:fixed; left:0; top:0; display:flex; flex-direction:column; gap:6px;
+  min-width:200px; max-width:300px; pointer-events:none; }
 .opts.empty { display:none; }
 
-.opt { position:relative; display:flex; align-items:center; gap:11px; padding:9px 13px 9px 9px;
-  border-radius:var(--v-r-md); background-color:rgba(18,16,13,.92);
-  box-shadow:inset 0 0 0 1px var(--v-line), 0 8px 20px -8px rgba(0,0,0,.8);
-  animation:v-seat .2s var(--v-ease) backwards; animation-delay:calc(var(--i,0) * 40ms); }
-.opt .key { flex:0 0 auto; width:22px; height:22px; display:flex; align-items:center; justify-content:center;
-  border-radius:var(--v-r-sm); background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent));
-  color:var(--v-ink); font-family:var(--v-font-num); font-weight:700; font-size:12px;
-  box-shadow:0 3px 10px -3px var(--v-accent-600); }
+.opt { position:relative; display:flex; align-items:center; gap:11px; padding:9px 14px 9px 10px;
+  border-radius:var(--v-r-md); background-color:rgba(18,16,13,.94); pointer-events:auto; cursor:pointer;
+  box-shadow:inset 0 0 0 1px var(--v-line), 0 8px 20px -8px rgba(0,0,0,.85);
+  transition:box-shadow var(--v-t-base) ease, transform var(--v-t-fast) ease, background-color var(--v-t-base) ease;
+  animation:v-seat .18s var(--v-ease) backwards; animation-delay:calc(var(--i,0) * 34ms); }
+.opt:hover { background-color:#1a1611; transform:translateX(2px);
+  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 16px -6px var(--v-accent), 0 8px 20px -8px rgba(255,106,26,.5); }
 .opt .ico { flex:0 0 auto; width:24px; height:24px; display:flex; align-items:center; justify-content:center;
   color:var(--v-accent-300); }
 .opt .ico svg { width:20px; height:20px; }
@@ -38,4 +40,4 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden;
   text-transform:uppercase; font-size:12.5px; color:var(--v-text);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-@media (prefers-reduced-motion: reduce) { .opt { animation:none; } }
+@media (prefers-reduced-motion: reduce) { .opt { animation:none; } .opt:hover { transform:none; } }

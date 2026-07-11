@@ -48,6 +48,16 @@ RegisterNUICallback('action', function(data, cb)
     Core.TriggerCallback('v-admin:action', function(ok) cb(ok and true or false) end, data)
 end)
 
+-- Open a target player's inventory (admin) — closes the panel, then opens the container.
+RegisterNUICallback('openinv', function(data, cb)
+    local target = tonumber(data and data.target)
+    closePanel()
+    if target and GetResourceState('v-inventory') == 'started' then
+        TriggerServerEvent('v-inventory:server:adminOpenInv', target)
+    end
+    cb('ok')
+end)
+
 -- ══ Admin self-tools (client-side; only usable once the admin panel authorised) ══
 noclipOn, godOn, invisOn, espOn = false, false, false, false
 

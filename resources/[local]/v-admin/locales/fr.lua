@@ -23,6 +23,7 @@ local T = {
     ['adm.act_goto']     = 'Y aller',
     ['adm.act_bring']    = 'Amener',
     ['adm.act_spectate'] = 'Observer',
+    ['adm.act_inv']      = 'Inventaire',
     ['adm.act_heal']     = 'Soigner',
     ['adm.act_freeze']   = 'Geler',
     ['adm.act_unfreeze'] = 'Dégeler',
