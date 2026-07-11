@@ -5,7 +5,7 @@ const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 let strings = {}, isSuper = false, weathers = [], curTab = 'dash';
-let players = [], frozen = new Set();
+let players = [], frozen = new Set(), tools = {};
 const t = (k) => strings[k] || k;
 
 function applyStrings() {
@@ -34,6 +34,8 @@ async function loadTab() {
     const res = await post('players');
     players = Array.isArray(res) ? res : [];
     renderPlayers();
+  } else if (curTab === 'tools') {
+    renderTools();
   } else if (curTab === 'res') {
     const res = await post('resources');
     renderResources(Array.isArray(res) ? res : []);
@@ -64,6 +66,7 @@ function renderPlayers() {
           <div class="agroup">
             <button class="mini" data-a="goto">${t('adm.act_goto')}</button>
             <button class="mini" data-a="bring">${t('adm.act_bring')}</button>
+            <button class="mini" data-a="spectate">${t('adm.act_spectate')}</button>
             <button class="mini" data-a="heal">${t('adm.act_heal')}</button>
             <button class="mini" data-a="freeze">${frozen.has(p.id) ? t('adm.act_unfreeze') : t('adm.act_freeze')}</button>
           </div>
@@ -111,6 +114,27 @@ function renderPlayers() {
       });
       wrap.appendChild(row);
     });
+}
+
+// ── Tools (self) ──
+const TOOLTOGGLES = [
+  { k: 'noclip', i18n: 'adm.noclip' }, { k: 'god', i18n: 'adm.godmode' },
+  { k: 'invisible', i18n: 'adm.invisible' }, { k: 'esp', i18n: 'adm.esp' },
+];
+function renderTools() {
+  const wrap = byId('toolgrid'); wrap.innerHTML = '';
+  TOOLTOGGLES.forEach(tg => {
+    const on = !!tools[tg.k];
+    const b = document.createElement('button');
+    b.className = 'toolbtn' + (on ? ' on' : '');
+    b.innerHTML = `<span class="tname">${esc(t(tg.i18n))}</span><span class="tstate">${on ? t('adm.on') : t('adm.off')}</span>`;
+    b.onclick = async () => {
+      const res = await post('tool', { tool: tg.k });
+      if (res && typeof res === 'object') { tools = res; renderTools(); }
+      else flash(b, false);
+    };
+    wrap.appendChild(b);
+  });
 }
 
 // ── Resources ──
@@ -196,7 +220,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !byId('a
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
-    strings = d.strings || {}; isSuper = !!d.super; weathers = d.weathers || [];
+    strings = d.strings || {}; isSuper = !!d.super; weathers = d.weathers || []; tools = d.tools || {};
     applyStrings(); buildWeathers();
     byId('adm').classList.remove('hidden');
     setTab('dash');
