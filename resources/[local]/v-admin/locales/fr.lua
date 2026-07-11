@@ -68,5 +68,10 @@ local T = {
     ['adm.tools_hint']   = 'Noclip : ZQSD pour bouger · Espace/Q haut-bas · Maj rapide · Ctrl lent · F6 bascule',
     ['adm.spec_on']      = 'Observation — noclip activé.',
     ['adm.spec_off']     = 'Observation désactivée.',
+    ['adm.self_heal']    = 'Me soigner',
+    ['adm.self_revive']  = 'Me réanimer',
+    ['adm.self_armor']   = 'Armure',
+    ['adm.revived']      = 'Réanimé.',
+    ['adm.armored']      = 'Armure rechargée.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

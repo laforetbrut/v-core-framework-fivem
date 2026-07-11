@@ -232,3 +232,5 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .toolbtn.on { border-color:var(--v-accent); background:var(--v-accent-soft); }
 .toolbtn.on .tstate { color:var(--v-accent-300); }
 .toolhint { margin-top:14px; font-family:var(--v-font-body); font-size:11px; color:var(--v-text-faint); letter-spacing:.03em; }
+
+.selfrow { display:flex; gap:10px; margin-bottom:16px; }

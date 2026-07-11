@@ -175,7 +175,7 @@ RegisterNUICallback('tool', function(data, cb)
 end)
 
 -- ── Effects executed on this client ────────────────────────────
-RegisterNetEvent('v-admin:client:heal', function()
+local function doHeal(silent)
     local ped = PlayerPedId()
     if IsEntityDead(ped) then
         local c = GetEntityCoords(ped)
@@ -186,7 +186,27 @@ RegisterNetEvent('v-admin:client:heal', function()
     SetPedArmour(ped, 100)
     ClearPedBloodDamage(ped)
     pcall(function() exports['v-status']:Heal() end)
-    Core.Notify(strings()['adm.healed'] or 'You have been healed.', 'success')
+    if not silent then Core.Notify(strings()['adm.healed'] or 'You have been healed.', 'success') end
+end
+
+RegisterNetEvent('v-admin:client:heal', function() doHeal(false) end)
+
+-- Self quick-actions from the panel's Tools tab (admin only).
+RegisterNUICallback('self', function(data, cb)
+    if not amAdmin then cb(false); return end
+    local ped = PlayerPedId()
+    local a = data and data.act
+    if a == 'heal' then doHeal(false)
+    elseif a == 'revive' then
+        if IsEntityDead(ped) then
+            local c = GetEntityCoords(ped)
+            NetworkResurrectLocalPlayer(c.x, c.y, c.z, GetEntityHeading(ped), true, false)
+        end
+        doHeal(true)
+        Core.Notify(strings()['adm.revived'] or 'Revived.', 'success')
+    elseif a == 'armor' then SetPedArmour(ped, 100); Core.Notify(strings()['adm.armored'] or 'Armor refilled.', 'success')
+    else cb(false); return end
+    cb(true)
 end)
 
 RegisterNetEvent('v-admin:client:freeze', function(state)
