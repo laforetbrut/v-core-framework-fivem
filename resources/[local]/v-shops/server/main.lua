@@ -113,10 +113,19 @@ Core.RegisterCallback('v-shops:sell', function(source, resolve, data)
     if not exports['v-inventory']:RemoveItem(source, data.item, amount) then resolve({ error = 'count' }); return end
 
     local total = price * amount
-    player.AddMoney('cash', total, 'shop-sell')
+    local payout = (Config.SellPayout and Config.SellPayout[shop.id]) or 'cash'
+    if payout == 'dirty' then
+        -- Pay in marked_bills (1 per $). If the payout can't fit, refund the goods.
+        if not exports['v-inventory']:AddItem(source, 'marked_bills', total) then
+            exports['v-inventory']:AddItem(source, data.item, amount)
+            Core.Notify(source, LP(source, 'shop.nospace'), 'error'); resolve({ error = 'space' }); return
+        end
+    else
+        player.AddMoney('cash', total, 'shop-sell')
+    end
 
-    Core.Log('shop', ('%s sold %dx %s for %d'):format(player.citizenid, amount, data.item, total), nil, player.citizenid)
-    Core.Notify(source, LP(source, 'shop.sold', amount, (ItemDefs[data.item] and ItemDefs[data.item].label) or data.item, total), 'success')
+    Core.Log('shop', ('%s sold %dx %s for %d (%s)'):format(player.citizenid, amount, data.item, total, payout), nil, player.citizenid)
+    Core.Notify(source, LP(source, payout == 'dirty' and 'shop.sold_dirty' or 'shop.sold', amount, (ItemDefs[data.item] and ItemDefs[data.item].label) or data.item, total), 'success')
 
     local p2 = Core.GetPlayer(source)
     resolve({ cash = p2.money.cash, bank = p2.money.bank, inv = inventoryView(p2), sold = true })

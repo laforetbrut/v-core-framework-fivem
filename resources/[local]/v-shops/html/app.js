@@ -203,9 +203,13 @@ async function onUp(e) {
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
-    strings = d.strings || {}; shop = d.shop; setAccount('cash'); mode = 'buy';
-    byId('mode-buy').classList.add('sel'); byId('mode-sell').classList.remove('sel');
-    byId('shop').classList.remove('selling');
+    strings = d.strings || {}; shop = d.shop; setAccount('cash');
+    // Sell-only shops (empty buy catalogue but a sell list) open straight in Sell mode.
+    const sellOnly = (!shop.items || !shop.items.length) && shop.sell && Object.keys(shop.sell).length;
+    mode = sellOnly ? 'sell' : 'buy';
+    byId('mode-buy').classList.toggle('sel', mode === 'buy');
+    byId('mode-sell').classList.toggle('sel', mode === 'sell');
+    byId('shop').classList.toggle('selling', mode === 'sell');
     render();
     byId('shop').classList.remove('hidden');
   } else if (d.action === 'close') {
