@@ -19,8 +19,10 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 - **`v-crafting`** — workbench crafting: 6 stations (workbench, reloading, kitchen, electronics, **recycling/refining**, hidden **drug lab**), server-authoritative.
 - **`v-gathering`** — resource nodes (mining, salvage, textile, hidden cannabis grows) that supply raw materials.
 - **`v-shops`** — stores with **buy & sell**, vending machines, a scrap dealer, and an illegal **dealer / launderer** (dirty money).
+- **`v-target`** — universal interaction eye (hold Left-Alt): entity/zone options **filtered by permission & job**.
+- **`v-jobs`** — jobs, grades, on-duty salaries; the source of truth for every job gate.
 - **Economy loop** — gather → craft → sell; and the illegal loop grow → process → deal → launder.
-- **`v-banking`** (Fleeca ATM), **`v-status`** (hunger/thirst/stress), **`v-admin`** (in-game panel).
+- **`v-banking`** (Fleeca ATM), **`v-status`** (hunger/thirst/stress), **`v-admin`** (in-game panel + noclip / player blips).
 
 ## Installation
 
@@ -84,8 +86,10 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 - **`v-crafting`** — artisanat à l'établi : 6 stations (établi, rechargement, cuisine, électronique, **recyclage/raffinage**, **labo de drogue** caché), autoritaire serveur.
 - **`v-gathering`** — points de ressources (minage, casse, textile, cultures de cannabis cachées) qui fournissent les matières premières.
 - **`v-shops`** — boutiques avec **achat & vente**, distributeurs, revendeur de ferraille, et **dealer / blanchisseur** illégal (argent sale).
+- **`v-target`** — œil d'interaction universel (maintiens Alt gauche) : options entité/zone **filtrées par permission & métier**.
+- **`v-jobs`** — métiers, grades, salaires en service ; la référence pour tous les gates métier.
 - **Boucle économique** — récolter → fabriquer → vendre ; et la boucle illégale cultiver → traiter → dealer → blanchir.
-- **`v-banking`** (DAB Fleeca), **`v-status`** (faim/soif/stress), **`v-admin`** (panneau in-game).
+- **`v-banking`** (DAB Fleeca), **`v-status`** (faim/soif/stress), **`v-admin`** (panneau in-game + noclip / blips joueurs).
 
 ## Installation
 

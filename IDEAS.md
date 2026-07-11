@@ -76,8 +76,10 @@ by value/effort. Tick items as they ship.
 
 ## E. Cross-cutting polish
 
-- [ ] **Central `v-target` interaction** — one eye/entity-target system feeding every module's "press E" (benches,
-      stashes, peds, players) instead of per-resource proximity loops. Cleaner + cheaper on the client.
+- [~] **Central `v-target` interaction** ✅ (shipped) — permission/job-aware eye with a full registration API;
+      built-ins: vehicle trunk/glovebox, player frisk, admin repair, police search. *Next:* migrate the
+      per-resource "press E" prompts (shops, benches, gathering nodes, stashes) onto v-target zones; add
+      cursor-hover selection + entity outline/highlight; item-gated options (needs a client item mirror).
 - [ ] **Unified notifications** — make sure every module routes through `v-notify` for a consistent look.
 - [ ] **Sound design pass** — shared SFX helper (open/close/craft/jam) for a cohesive audio identity.
 - [ ] **Localization sweep** — verify fr/en parity across all modules; consider a third language toggle.

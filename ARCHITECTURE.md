@@ -68,7 +68,7 @@ v-<module>  → feature resources (hud, banking, inventory, …).
               They consume v-core's API and events.
 ```
 
-Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-jobs → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
+Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-jobs → v-spawn → v-status → v-hud → v-banking → v-target → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
 
 **Rule that is currently violated:** modules are supposed to never touch SQL — only `v-core` may.
 Five modules query the DB directly today. See `## 6. Cross-cutting debt`.
