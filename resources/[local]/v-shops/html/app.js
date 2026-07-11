@@ -117,9 +117,13 @@ function renderSellList() {
     const thumb = d.image
       ? `<div class="thumb" style="background-image:url('https://cfx-nui-v-inventory/html/images/${esc(d.image)}')"></div>`
       : `<div class="thumb ph">${iconFor(name)}</div>`;
+    const rate = shop.rate || 1;
+    const priceLabel = rate < 1
+      ? `<b>${Math.round(rate * 100)}%</b> ${t('shop.rate_of')} · ${have} ${t('shop.owned')}`
+      : `<b>${fmt(price)}</b> ${t('shop.each')} · ${have} ${t('shop.owned')}`;
     row.innerHTML =
       thumb +
-      `<div class="info"><div class="name">${esc(d.label || name)}</div><div class="price"><b>${fmt(price)}</b> ${t('shop.each')} · ${have} ${t('shop.owned')}</div></div>` +
+      `<div class="info"><div class="name">${esc(d.label || name)}</div><div class="price">${priceLabel}</div></div>` +
       `<div class="stepper"><button class="step dec" aria-label="Decrease quantity">−</button><span class="qty">1</span><button class="step inc" aria-label="Increase quantity">+</button></div>` +
       `<button class="sell" data-i18n="shop.sell">Sell</button>`;
     const qty = row.querySelector('.qty');

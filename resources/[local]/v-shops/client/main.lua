@@ -71,7 +71,7 @@ CreateThread(function()
             for _, loc in ipairs(Config.Locations) do
                 if #(coords - vector3(loc.coords.x, loc.coords.y, loc.coords.z)) < Config.Distance then
                     wait = 0
-                    local helpKey = ({ vending = 'shop.vending_help', blackmarket = 'shop.dealer_help' })[loc.shop] or 'shop.help'
+                    local helpKey = ({ vending = 'shop.vending_help', blackmarket = 'shop.dealer_help', launderer = 'shop.launder_help' })[loc.shop] or 'shop.help'
                     BeginTextCommandDisplayHelp('STRING')
                     AddTextComponentSubstringPlayerName('~INPUT_CONTEXT~ ' .. (strings()[helpKey] or 'Shop'))
                     EndTextCommandDisplayHelp(0, false, true, -1)

@@ -85,6 +85,7 @@ Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
     resolve({
         id = shop.id, label = shop.label, items = list,
         sell = Config.SellLists[shop.id] or {},
+        rate = (Config.SellRate and Config.SellRate[shop.id]) or 1,
         cash = player.money.cash, bank = player.money.bank,
         inv = inventoryView(player),
     })
@@ -112,8 +113,10 @@ Core.RegisterCallback('v-shops:sell', function(source, resolve, data)
     end
     if not exports['v-inventory']:RemoveItem(source, data.item, amount) then resolve({ error = 'count' }); return end
 
-    local total = price * amount
+    local rate = (Config.SellRate and Config.SellRate[shop.id]) or 1
+    local total = math.floor(price * amount * rate)
     local payout = (Config.SellPayout and Config.SellPayout[shop.id]) or 'cash'
+    if total <= 0 then resolve(false); return end
     if payout == 'dirty' then
         -- Pay in marked_bills (1 per $). If the payout can't fit, refund the goods.
         if not exports['v-inventory']:AddItem(source, 'marked_bills', total) then
