@@ -666,7 +666,9 @@ RegisterNetEvent('v-inventory:server:searchPlayer', function(targetSrc)
 
     local downed  = GetEntityHealth(tped) <= 101
     local handsUp = Player(targetSrc).state.handsup == true
-    local police  = Core.HasPermission(src, 'admin')   -- TODO: police job when v-jobs lands
+    -- Police (via v-jobs, if present) or an admin can search without hands-up/downed.
+    local job = (GetResourceState('v-jobs') == 'started') and exports['v-jobs']:GetJob(src) or nil
+    local police  = (job and job.name == 'police') or Core.HasPermission(src, 'admin')
     if not (downed or handsUp or police) then
         Core.Notify(src, LP(src, 'inv.cant_search'), 'error'); return
     end
