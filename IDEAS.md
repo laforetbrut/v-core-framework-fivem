@@ -53,8 +53,9 @@ by value/effort. Tick items as they ship.
 - [x] **`v-shops` selling + hardening** ✅ (shipped) — Buy/Sell toggle, scrap dealer buys raw materials,
       server-authoritative proximity + job-lock enforced. *Next:* in-game stock/price editor, dynamic
       market pricing (supply/demand), restock consuming crafted goods → fully player-driven economy.
-- [ ] **`v-drugs`** (high) — growing/cooking/processing chains that feed `v-crafting` (weed → joint, coke
-      brick → baggies) and the drug items already in the catalogue. Sell zones + police heat.
+- [~] **`v-drugs`** (high, in progress) — ✅ grow cannabis (v-gathering) + process at a hidden Drug Lab
+      (v-crafting: joints/baggies/bricks, cut coke/meth). *Next:* street selling for dirty money (blackmarket
+      buyer), police heat/risk on sale, weed-plant growth timers, more precursors for meth cooking.
 - [x] **`v-gathering` / resource jobs** ✅ (shipped) — mining / salvage / textile nodes produce raw
       materials (`iron`, `copper`, `cloth`…) crafting consumes. Closes the loop: gather → craft → sell.
       *Next:* tool-gated gathering (pickaxe/durability), gathering XP, more node types (wood, oil, chemicals

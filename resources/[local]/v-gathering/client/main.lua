@@ -11,7 +11,7 @@ local function pretty(name) return (name:gsub('_', ' ')) end
 CreateThread(function()
     for _, node in ipairs(Config.Nodes) do
         local res = Config.Resources[node.type]
-        if res then
+        if res and res.blip then   -- illegal nodes (blip=false) stay off the map
             local blip = AddBlipForCoord(node.coords.x, node.coords.y, node.coords.z)
             SetBlipSprite(blip, res.blip.sprite)
             SetBlipColour(blip, res.blip.color)
