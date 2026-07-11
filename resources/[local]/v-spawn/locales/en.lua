@@ -67,6 +67,7 @@ local T = {
     ['face.chin_len']    = 'Chin length',
     ['face.lips']        = 'Lips',
     ['err.name']         = 'Please enter a first and last name.',
+    ['err.create']       = 'Character creation failed, please retry.',
     ['spawn.title']       = 'Where does your story begin?',
     ['spawn.airport']     = 'LSIA Airport',
     ['spawn.airport_sub'] = 'Fresh off the plane in Los Santos.',

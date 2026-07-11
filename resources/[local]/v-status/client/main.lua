@@ -65,6 +65,7 @@ end)
 
 -- ── Stress screen effects ──────────────────────────────────────
 CreateThread(function()
+    local blurActive = false   -- only clear the timecycle WE set, on the set->unset edge
     while true do
         Wait(1000)
         local s = status.stress or 0
@@ -74,8 +75,10 @@ CreateThread(function()
         if s >= Config.StressBlurFrom then
             SetTimecycleModifier('Bank_ariel_amcop')  -- subtle desaturated tunnel feel
             SetTimecycleModifierStrength(0.35)
-        else
-            ClearTimecycleModifier()
+            blurActive = true
+        elseif blurActive then
+            ClearTimecycleModifier()   -- don't wipe modifiers owned by other resources
+            blurActive = false
         end
     end
 end)

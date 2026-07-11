@@ -161,14 +161,15 @@ end)
 
 -- ── Spectate a player (free look at their location) ────────────
 local spectating = nil
-RegisterNetEvent('v-admin:client:spectate', function(x, y, z)
-    -- simple spectate: teleport up above the target and freeze; toggle off to restore
+RegisterNetEvent('v-admin:client:spectate', function(x, y, z, target)
+    -- teleport onto the target + noclip; re-selecting the SAME target turns it off,
+    -- selecting a different player switches to them (instead of toggling off).
     local ped = PlayerPedId()
-    if spectating then
+    if spectating and spectating == target then
         setNoclip(false); spectating = nil
         Core.Notify(strings()['adm.spec_off'] or 'Spectate off.', 'info'); return
     end
-    spectating = true
+    spectating = target or true
     SetEntityCoordsNoOffset(ped, x, y, z + 0.5, false, false, false)
     if not noclipOn then setNoclip(true) end
     Core.Notify(strings()['adm.spec_on'] or 'Spectating — noclip enabled.', 'success')
@@ -202,6 +203,14 @@ end
 RegisterNetEvent('v-admin:client:heal', function() doHeal(false) end)
 
 -- Self quick-actions from the panel's Tools tab (admin only).
+-- Server revokes the admin tools when this player is demoted below admin. Disable
+-- everything WHILE amAdmin is still true (the setters early-return otherwise), then clear.
+RegisterNetEvent('v-admin:client:revoke', function()
+    setNoclip(false); setGod(false); setInvis(false); setEsp(false)
+    amAdmin = false
+    if isOpen then closePanel() end
+end)
+
 -- Current position readout for the coord-copy tool.
 RegisterNUICallback('coords', function(_, cb)
     if not amAdmin then cb(false); return end

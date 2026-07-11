@@ -171,7 +171,7 @@ RegisterNUICallback('createInSlot', function(data, cb)
     appearance = DefaultAppearance(0)
     pcall(function() SetSexModel(0); ApplyAppearance(appearance) end)
     SendNUIMessage({ action = 'strings', strings = Locales[currentLang] or {} })
-    SendNUIMessage({ action = 'screen', screen = 'identity' })
+    SendNUIMessage({ action = 'open' })   -- show the language screen; selectLang then advances to identity
 end)
 
 -- Delete one of the player's characters (server permission-gated) -> refresh list.
@@ -244,6 +244,10 @@ RegisterNUICallback('confirm', function(data, cb)
                 spawns[#spawns + 1] = { key = p.key, label = L[p.i18n] or p.key, sub = L[p.sub] or '' }
             end
             SendNUIMessage({ action = 'screen', screen = 'spawnselect', spawns = spawns })
+        else
+            -- creation failed (taken slot / DB error) — don't strand the player; let them retry
+            local L = Locales[currentLang] or {}
+            Core.Notify(L['err.create'] or 'Création échouée, réessaie.', 'error')
         end
     end, {
         firstname = identity.firstname, lastname = identity.lastname,

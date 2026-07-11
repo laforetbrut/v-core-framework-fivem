@@ -60,7 +60,7 @@ end
 -- The player's inventory as a view for the shop panel: items + the defs they need.
 local function inventoryView(player)
     local items = exports['v-inventory']:GetItems(player.source) or {}
-    local limits = exports['v-inventory']:GetLimits() or { maxSlots = 40, hotbar = 5 }
+    local limits = exports['v-inventory']:GetLimits(player.source) or { maxSlots = 40, hotbar = 5 }
     local defs = {}
     for _, it in ipairs(items) do defs[it.name] = defs[it.name] or defOf(it.name) end
     return { items = items, defs = defs, maxSlots = limits.maxSlots or 40, hotbar = limits.hotbar or 5 }

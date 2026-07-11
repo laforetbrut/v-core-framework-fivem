@@ -86,13 +86,19 @@ RegisterNetEvent('v-core:server:playerReady', function()
 end)
 
 -- Load one of the player's own characters (from the selection screen).
+-- `loading` is a synchronous latch set BEFORE the first DB await, so a double-call
+-- (double-click / malicious client) can't load the same character twice.
+local loading = {}
+VCore.Loading = loading
 VCore.RegisterCallback('v-core:selectCharacter', function(source, resolve, citizenid)
-    if VCore.Players[source] then resolve(false); return end
-    local license = VCore.GetLicense(source)
+    if VCore.Players[source] or loading[source] then resolve(false); return end
+    loading[source] = true
+    local license = VCore.GetLicense(source)   -- synchronous native, no yield before the latch
     local row = citizenid and VCore.DB.GetCharacterByCitizenId(citizenid)
-    if not license or not row or row.license ~= license then resolve(false); return end
+    if not license or not row or row.license ~= license then loading[source] = nil; resolve(false); return end
     loadPlayer(source, row, license)
     SetPlayerRoutingBucket(source, 0)   -- leave the private instance -> main world
+    loading[source] = nil
     resolve(true)
 end)
 
@@ -166,6 +172,7 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
     if VCore.Creating then VCore.Creating[src] = nil end
+    if VCore.Loading then VCore.Loading[src] = nil end
     local player = VCore.Players[src]
     if not player then return end
     player.Save()

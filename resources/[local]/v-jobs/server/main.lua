@@ -72,6 +72,7 @@ RegisterCommand('setjob', function(source, args)
         return
     end
     if exports['v-jobs']:SetJob(target, name, grade) then
+        if not gradeDef(name, grade) then grade = 0 end   -- mirror SetJob's clamp-to-0 so labels/log are accurate
         local g = gradeDef(name, grade) or {}
         Core.Notify(target, LP(target, 'jobs.set', jobDef(name).label, g.name or ''), 'info')
         if source ~= 0 then Core.Notify(source, LP(source, 'jobs.set', jobDef(name).label, g.name or ''), 'success') end

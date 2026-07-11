@@ -11,6 +11,7 @@ local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent 
 local OpenStash    = {}   -- [source] = stash id currently open ('search' = frisking a player)
 local SearchTarget = {}   -- [searcher src] = target src (frisk/steal target)
 local AdminView    = {}   -- [admin src] = true when opened via admin (no hands-up / proximity gate)
+local StashRef     = {}   -- [src] = open-container context re-validated on every move { kind, netId | coords | id }
 local UsableItems  = {}   -- name -> handler(src, item)
 local Equipped     = {}   -- [source] = { slot, name }  currently-drawn weapon
 local dropCounter  = 0
@@ -170,6 +171,7 @@ AddEventHandler('playerDropped', function()
     Equipped[src] = nil
     SearchTarget[src] = nil
     AdminView[src] = nil
+    StashRef[src] = nil
     -- anyone frisking / admin-viewing this player must stop
     for s, t in pairs(SearchTarget) do if t == src then SearchTarget[s] = nil; OpenStash[s] = nil; AdminView[s] = nil end end
 end)
@@ -303,6 +305,33 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         end
     end
 
+    -- Re-validate an open trunk/glovebox/drop/shared stash on EVERY move, so you can't
+    -- keep looting after walking away from the vehicle/drop or losing job/gang access.
+    local ref = StashRef[source]
+    if ref and (data.from == 'secondary' or data.to == 'secondary') then
+        local ok = true
+        if ref.kind == 'vehicle' then
+            local veh = NetworkGetEntityFromNetworkId(ref.netId)
+            local ped = GetPlayerPed(source)
+            ok = veh and veh ~= 0 and DoesEntityExist(veh) and ped ~= 0
+                 and #(GetEntityCoords(ped) - GetEntityCoords(veh)) <= 5.0
+        elseif ref.kind == 'drop' then
+            local ped, c = GetPlayerPed(source), ref.coords
+            ok = ped ~= 0 and c and #(GetEntityCoords(ped) - vector3(c.x, c.y, c.z)) <= 5.0
+        elseif ref.kind == 'shared' then
+            local cfg = Config.SharedStashes and Config.SharedStashes[ref.id]
+            local p = Core.GetPlayer(source)
+            ok = cfg and p or false
+            if ok and cfg.job then ok = p.job and p.job.name == cfg.job and (p.job.grade or 0) >= (cfg.minGrade or 0) end
+            if ok and cfg.gang then ok = p.gang and p.gang.name == cfg.gang and (p.gang.grade or 0) >= (cfg.minGrade or 0) end
+            if ok and cfg.permission then ok = Core.HasPermission(source, cfg.permission) end
+        end
+        if not ok then
+            OpenStash[source] = nil; StashRef[source] = nil
+            resolve(buildState(source)); return
+        end
+    end
+
     -- (A) Wallet cash -> a real container (drop/trunk/stash): withdraw + spawn item.
     if data.from == 'wallet' then
         local p = Core.GetPlayer(source)
@@ -353,6 +382,7 @@ Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
         -- same container: merge / swap / move / split
         local d = ItemDefs[it.name]
         local dest = data.toSlot
+        if dest and (dest < 1 or dest > toSlots) then dest = nil end   -- reject out-of-grid target slots
         local target = dest and itemAt(fromItems, dest)
         if target then
             if target.name == it.name and d and d.stackable == 1 and noMeta(it.metadata) and noMeta(target.metadata) then
@@ -585,6 +615,15 @@ end)
 Core.RegisterCallback('v-inventory:give', function(source, resolve, data)
     local target = tonumber(data.target)
 
+    -- Server-authoritative proximity gate (the client's distance check is bypassable):
+    -- both the cash and item paths require the target to be a real, nearby player.
+    if not target or target == source then resolve({ error = 'target' }); return end
+    local sped, tped = GetPlayerPed(source), GetPlayerPed(target)
+    if not sped or not tped or sped == 0 or tped == 0
+       or #(GetEntityCoords(sped) - GetEntityCoords(tped)) > (Config.GiveDistance or 3.0) then
+        resolve({ error = 'target' }); return
+    end
+
     -- Giving cash from the wallet: account -> account (never touches the arrays).
     if data.money then
         local p  = Core.GetPlayer(source)
@@ -636,6 +675,7 @@ RegisterNetEvent('v-inventory:server:openStash', function(payload, label, kind)
         local s = loadStash(id, cfg.slots, cfg.weight, true)
         s.label, s.kind = label or kind, kind
         OpenStash[src] = id
+        StashRef[src] = { kind = 'vehicle', netId = netId }
         TriggerClientEvent('v-inventory:client:openSecondary', src)
     elseif kind == 'drop' then
         local id = tostring(payload or '')
@@ -646,6 +686,7 @@ RegisterNetEvent('v-inventory:server:openStash', function(payload, label, kind)
         if ped == 0 or not c or #(GetEntityCoords(ped) - vector3(c.x, c.y, c.z)) > 5.0 then return end
         Stashes[id].kind = 'drop'
         OpenStash[src] = id
+        StashRef[src] = { kind = 'drop', coords = c }
         TriggerClientEvent('v-inventory:client:openSecondary', src)
     end
 end)
@@ -655,6 +696,7 @@ RegisterNetEvent('v-inventory:server:closeStash', function()
     OpenStash[source] = nil
     SearchTarget[source] = nil
     AdminView[source] = nil
+    StashRef[source] = nil
 end)
 
 -- ── Admin: open ANY player's inventory (no hands-up / proximity gate) ──
@@ -713,6 +755,7 @@ local function openShared(src, id)
     local s = loadStash(sid, cfg.slots or 50, cfg.weight or 500000, true)
     s.label, s.kind = cfg.label or id, 'stash'
     OpenStash[src] = sid
+    StashRef[src] = { kind = 'shared', id = id }
     TriggerClientEvent('v-inventory:client:openSecondary', src)
     return true
 end
@@ -760,7 +803,15 @@ end)
 exports('RegisterUsableItem', function(name, handler) UsableItems[name] = handler end)
 
 -- Read-only helpers for other modules (e.g. the shop's inventory-view panel).
-exports('GetLimits', function() return { maxSlots = Config.MaxSlots, maxWeight = Config.MaxWeight, hotbar = Config.HotbarSlots } end)
+exports('GetLimits', function(src)
+    -- source-aware: with a src, report the backpack-extended slot/weight so callers
+    -- (e.g. the shop inventory grid) render every slot the player actually has.
+    return {
+        maxSlots  = src and maxSlotsFor(src) or Config.MaxSlots,
+        maxWeight = src and maxWeightFor(src) or Config.MaxWeight,
+        hotbar    = Config.HotbarSlots,
+    }
+end)
 exports('GetItems', function(src) return Inv[src] or {} end)
 
 -- What a police search / steal is allowed to see: the MAIN inventory only.

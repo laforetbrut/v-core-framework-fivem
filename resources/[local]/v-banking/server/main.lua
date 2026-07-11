@@ -62,7 +62,14 @@ Core.RegisterCallback('v-banking:transfer', function(source, resolve, data)
         recordTx(target.citizenid, 'transfer_in', amount, target.money.bank, p.citizenid)
         Core.Notify(target.source, ('Virement reçu: $%d'):format(amount), 'success')
     else
-        MySQL.update.await('UPDATE characters SET bank = bank + ? WHERE citizenid = ?', { amount, targetCid })
+        -- Offline recipient: debit the (online) sender AND credit the recipient in ONE
+        -- atomic DB write, so a crash before the sender's next autosave can't duplicate
+        -- the money. The sender's in-memory RemoveMoney above already keeps the live
+        -- session correct; this just flushes that deduction durably now.
+        MySQL.transaction.await({
+            { 'UPDATE characters SET bank = bank - ? WHERE citizenid = ?', { amount, p.citizenid } },
+            { 'UPDATE characters SET bank = bank + ? WHERE citizenid = ?', { amount, targetCid } },
+        })
         local newBal = MySQL.scalar.await('SELECT bank FROM characters WHERE citizenid = ?', { targetCid }) or 0
         recordTx(targetCid, 'transfer_in', amount, newBal, p.citizenid)
     end

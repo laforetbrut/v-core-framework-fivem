@@ -31,7 +31,11 @@ Core.RegisterCallback('v-clothing:buy', function(source, resolve, data)
     if (player.money.cash or 0) < cat.price then
         Core.Notify(source, LP(source, 'cl.nofunds'), 'error'); resolve({ error = 'funds' }); return
     end
-    local meta = { cat = cat.key, kind = cat.kind, id = cat.id, drawable = data.drawable or 0, texture = data.texture or 0 }
+    -- Coerce + clamp the client-supplied drawable/texture so a malformed value can't
+    -- reach math.floor() during apply and error out.
+    local dr = math.floor(tonumber(data.drawable) or 0); if dr < 0 then dr = 0 end
+    local tx = math.floor(tonumber(data.texture) or 0); if tx < 0 then tx = 0 end
+    local meta = { cat = cat.key, kind = cat.kind, id = cat.id, drawable = dr, texture = tx }
     if not exports['v-inventory']:AddItem(source, cat.item, 1, meta) then
         resolve({ error = 'space' }); return
     end
@@ -49,9 +53,12 @@ local function equip(source, item)
     local m = item.metadata
     local cat = m.cat
     local w = worn(player)
-    -- return the currently worn piece of this category to the inventory first
+    -- return the currently worn piece of this category to the inventory first — abort
+    -- the swap if it can't fit, so the worn piece isn't destroyed by a full inventory
     if w[cat] then
-        exports['v-inventory']:AddItem(source, w[cat].item, 1, w[cat].meta)
+        if not exports['v-inventory']:AddItem(source, w[cat].item, 1, w[cat].meta) then
+            Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return
+        end
     end
     w[cat] = { item = item.name, meta = m }
     player.SetMetadata('worn', w)
@@ -137,7 +144,13 @@ SetHttpHandler(function(req, res)
         SaveResourceFile(ResName, thumbFile(cat.key, d), uri, -1)
         ThumbIndex[cat.key] = ThumbIndex[cat.key] or {}
         ThumbIndex[cat.key][tostring(d)] = true
-        thumbCache[cat.key .. '_' .. d] = uri   -- keep the cache fresh
+        -- keep the cache fresh AND counted, so the 400-entry cap can actually bound it
+        local ck = cat.key .. '_' .. d
+        if thumbCache[ck] == nil then
+            if thumbCacheN > 400 then thumbCache, thumbCacheN = {}, 0 end
+            thumbCacheN = thumbCacheN + 1
+        end
+        thumbCache[ck] = uri
         savesSinceFlush = savesSinceFlush + 1
         if savesSinceFlush >= 25 then savesSinceFlush = 0; saveIndex() end
         res.writeHead(200, { ['Access-Control-Allow-Origin'] = '*', ['Content-Type'] = 'application/json' })
@@ -251,7 +264,11 @@ local function doUnequip(source, catKey)
     local w = worn(player)
     local entry = w[catKey]
     if not entry then return false end
-    exports['v-inventory']:AddItem(source, entry.item, 1, entry.meta)   -- give the piece back
+    -- Only remove the worn piece once it's safely back in the inventory (a full
+    -- inventory must not silently delete the clothing item).
+    if not exports['v-inventory']:AddItem(source, entry.item, 1, entry.meta) then
+        Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return false
+    end
     w[catKey] = nil
     player.SetMetadata('worn', w)
     -- revert to the bare default for this slot

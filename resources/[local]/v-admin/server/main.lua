@@ -128,6 +128,10 @@ function Actions.setperm(src, d)
     local levels = { user = true, mod = true, admin = true, superadmin = true }
     if not target or not levels[d.level or ''] then return false end
     if not Core.SetPermission(target, d.level) then return false end
+    -- Demoted below admin: revoke their client-side self-tools (noclip / god / etc.)
+    if d.level ~= 'admin' and d.level ~= 'superadmin' then
+        TriggerClientEvent('v-admin:client:revoke', target)
+    end
     return true, ('permission of %d -> %s'):format(target, d.level)
 end
 
@@ -188,7 +192,7 @@ Actions.spectate = function(src, d)
     local tped = GetPlayerPed(target)
     if not tped or tped == 0 then return false end
     local c = GetEntityCoords(tped)
-    TriggerClientEvent('v-admin:client:spectate', src, c.x, c.y, c.z)
+    TriggerClientEvent('v-admin:client:spectate', src, c.x, c.y, c.z, target)
     return true, ('spectate %d'):format(target)
 end
 
