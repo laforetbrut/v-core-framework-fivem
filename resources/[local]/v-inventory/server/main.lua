@@ -399,27 +399,33 @@ local function maybeUnequip(src, slot)
 end
 
 -- Client reports a weapon's live ammo (on holster / periodically) -> persist it.
+-- Pure magazine sync: wear is NOT derived from this (a client could under-report ammo
+-- to dodge wear). Durability is handled server-authoritatively in weaponDamageEvent.
 RegisterNetEvent('v-inventory:server:weaponAmmo', function(slot, ammo)
     local src = source
     local it = itemAt(Inv[src] or {}, slot)
     if it and ItemDefs[it.name] and ItemDefs[it.name].itype == 'weapon' then
         it.metadata = it.metadata or {}
-        local new = math.max(0, math.floor(tonumber(ammo) or 0))
-        local old = it.metadata.ammo or new
-        -- Rounds fired since the last report wear the weapon down (derived server-side;
-        -- a higher count means the client picked up ammo, not fired — no wear).
-        local spent = old - new
-        if spent > 0 and it.metadata.durability ~= nil then
-            it.metadata.durability = math.max(0, it.metadata.durability - spent * (Config.WeaponWearPerShot or 0))
-            -- Keep the client's cached condition current so its jam odds stay accurate.
-            local eq = Equipped[src]
-            if eq and eq.slot == slot then
-                TriggerClientEvent('v-inventory:client:weaponCondition', src, slot, it.metadata.durability)
-            end
-        end
-        it.metadata.ammo = new
+        it.metadata.ammo = math.max(0, math.floor(tonumber(ammo) or 0))
         syncPlayer(src)
     end
+end)
+
+-- Weapon wear, server-authoritative: the engine raises weaponDamageEvent for the
+-- firing player (sender is trusted, unlike a client-sent ammo count), so a fired
+-- round can't be hidden to dodge durability loss / jamming.
+AddEventHandler('weaponDamageEvent', function(sender, data)
+    local src = tonumber(sender)
+    if not src then return end
+    local eq = Equipped[src]
+    if not eq then return end
+    local it = itemAt(Inv[src] or {}, eq.slot)
+    if not it or not ItemDefs[it.name] or ItemDefs[it.name].itype ~= 'weapon' then return end
+    it.metadata = it.metadata or {}
+    if it.metadata.durability == nil then return end
+    it.metadata.durability = math.max(0, it.metadata.durability - (Config.WeaponWearPerShot or 0))
+    TriggerClientEvent('v-inventory:client:weaponCondition', src, eq.slot, it.metadata.durability)
+    syncPlayer(src)
 end)
 
 -- ── Use ────────────────────────────────────────────────────────
@@ -631,6 +637,10 @@ RegisterNetEvent('v-inventory:server:openStash', function(payload, label, kind)
     elseif kind == 'drop' then
         local id = tostring(payload or '')
         if not id:match('^drop:%d+$') or not Stashes[id] then return end   -- must be a real ground drop
+        -- Proximity gate (drop ids are sequential — without this, any client could
+        -- enumerate drop:1, drop:2, ... and loot every ground drop on the map remotely).
+        local ped, c = GetPlayerPed(src), Stashes[id].coords
+        if ped == 0 or not c or #(GetEntityCoords(ped) - vector3(c.x, c.y, c.z)) > 5.0 then return end
         Stashes[id].kind = 'drop'
         OpenStash[src] = id
         TriggerClientEvent('v-inventory:client:openSecondary', src)
