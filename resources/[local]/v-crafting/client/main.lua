@@ -21,6 +21,7 @@ end
 CreateThread(function()
     for _, st in pairs(Config.Stations) do
         for _, b in ipairs(st.benches) do
+            if not st.blip then goto continue end   -- hidden stations (e.g. illegal labs) have no map blip
             local blip = AddBlipForCoord(b.x, b.y, b.z)
             SetBlipSprite(blip, st.blip.sprite)
             SetBlipColour(blip, st.blip.color)
@@ -29,6 +30,7 @@ CreateThread(function()
             BeginTextCommandSetBlipName('STRING')
             AddTextComponentSubstringPlayerName(st.label)
             EndTextCommandSetBlipName(blip)
+            ::continue::
         end
     end
 end)

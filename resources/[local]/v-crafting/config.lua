@@ -56,6 +56,14 @@ Config.Stations = {
             vector4(-322.9, -1546.6, 26.9, 180.0),     -- El Burro industrial (recycling)
         },
     },
+    druglab = {
+        label = 'Processing',
+        blip  = false,                                 -- illegal: hidden, no map blip
+        benches = {
+            vector4(1391.5, 3608.5, 38.9, 200.0),      -- Sandy Shores trailer
+            vector4(-1170.5, -1571.9, 4.4, 30.0),      -- Del Perro beach lockup
+        },
+    },
 }
 
 -- ── Recipes ────────────────────────────────────────────────────
@@ -119,4 +127,13 @@ Config.Recipes = {
     -- Refining: upgrade raw stock into a higher-tier material.
     { output = 'iron',              count = 1, time = 4000, station = 'recycler',    inputs = { metal_scrap = 3 } },
     { output = 'cloth',             count = 1, time = 3000, station = 'recycler',    inputs = { cotton = 2 } },
+
+    -- Illegal processing: package raw product into sellable street units.
+    { output = 'joint',             count = 1, time = 2500, station = 'druglab',     inputs = { cannabis = 1, rolling_paper = 1 } },
+    { output = 'blunt',             count = 1, time = 3000, station = 'druglab',     inputs = { cannabis = 2 } },
+    { output = 'weed_baggy',        count = 1, time = 3500, station = 'druglab',     inputs = { cannabis = 3 } },
+    { output = 'weed_brick',        count = 1, time = 8000, station = 'druglab',     inputs = { weed_baggy = 10 } },
+    { output = 'coke_baggy',        count = 12, time = 6000, station = 'druglab',    inputs = { coke_brick = 1 } },
+    { output = 'crack_baggy',       count = 1, time = 4000, station = 'druglab',     inputs = { coke_baggy = 1, baking_soda = 1 } },
+    { output = 'meth_baggy',        count = 12, time = 6000, station = 'druglab',    inputs = { meth_brick = 1 } },
 }

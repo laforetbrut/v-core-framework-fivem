@@ -53,6 +53,14 @@ Config.Resources = {
             { item = 'cloth',  min = 1, max = 2, weight = 40 },
         },
     },
+    weed = {
+        label = 'Cannabis Plants', time = 4000, scenario = 'WORLD_HUMAN_GARDENER_PLANT',
+        blip = false,                                  -- illegal grow: hidden, no map blip
+        yields = {
+            { item = 'cannabis', min = 1, max = 2, weight = 100 },
+        },
+        rare = { item = 'weed_baggy', chance = 0.05 },
+    },
 }
 
 -- ── World nodes ────────────────────────────────────────────────
@@ -69,4 +77,8 @@ Config.Nodes = {
     -- Textile — Grapeseed fields
     { type = 'textile', coords = vector3(2005.3, 4988.6, 41.4) },
     { type = 'textile', coords = vector3(2039.8, 4998.1, 41.6) },
+    -- Cannabis — remote hillside grows (illegal, unmarked)
+    { type = 'weed', coords = vector3(2214.6, 5577.5, 53.8) },
+    { type = 'weed', coords = vector3(2249.0, 5563.0, 53.2) },
+    { type = 'weed', coords = vector3(2231.0, 5590.0, 54.1) },
 }
