@@ -164,9 +164,23 @@ local function clearHighlight()
     highlighted = nil
 end
 
+-- Idempotent teardown — an option that opens its OWN menu (a shop, an inventory) must
+-- keep focus, so the eye tears down exactly once and never after the option ran.
+local eyeTornDown = true
+local function stopEye()
+    if eyeTornDown then return end
+    eyeTornDown = true
+    active = false
+    clearHighlight()
+    SetNuiFocus(false, false)
+    exports['v-core']:MenuClosed('v-target')
+    SendNUIMessage({ action = 'eyeoff' })
+end
+
 local function openEye()
     if active or exports['v-core']:IsAnyMenuOpen() then return end
     active = true
+    eyeTornDown = false
     cursorX, cursorY = 0.5, 0.5
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
@@ -202,10 +216,7 @@ local function openEye()
             if key ~= lastKey then lastKey = key; SendNUIMessage({ action = 'options', options = list }) end
             Wait(0)
         end
-        clearHighlight()
-        SetNuiFocus(false, false)
-        exports['v-core']:MenuClosed('v-target')
-        SendNUIMessage({ action = 'eyeoff' })
+        stopEye()
     end)
 end
 
@@ -218,11 +229,10 @@ RegisterNUICallback('cursor', function(data, cb)
 end)
 RegisterNUICallback('select', function(data, cb)
     local i = data and tonumber(data.index)
-    if active and current and i and current[i] then
-        local opt, d = current[i], currentData
-        active = false
-        runOption(opt, d)
-    end
+    local opt = (active and current and i) and current[i] or nil
+    local d = currentData
+    stopEye()               -- tear the eye's focus down FIRST so an option that opens its own menu keeps focus
+    if opt then runOption(opt, d) end
     cb('ok')
 end)
 RegisterNUICallback('closeeye', function(_, cb) active = false; cb('ok') end)

@@ -102,6 +102,22 @@ RegisterNUICallback('close', function(_, cb)
     cb('ok')
 end)
 
+-- ── Open the shop by pointing at the counter with v-target ─────
+CreateThread(function()
+    if GetResourceState('v-target') == 'missing' then return end
+    while GetResourceState('v-target') ~= 'started' do Wait(500) end
+    -- Labels use v-target's own locale keys (the eye resolves them in ITS Lua state).
+    local labelKey = { convenience = 'tgt.shop', vending = 'tgt.vending', blackmarket = 'tgt.dealer',
+                       launderer = 'tgt.launder', scrapyard = 'tgt.scrap' }
+    local icon = { vending = 'shop', blackmarket = 'cash', launderer = 'cash', scrapyard = 'cash' }
+    for _, loc in ipairs(Config.Locations) do
+        exports['v-target']:AddSphereZone(nil, vector3(loc.coords.x, loc.coords.y, loc.coords.z), 2.4, {
+            { label = labelKey[loc.shop] or 'tgt.shop', icon = icon[loc.shop] or 'shop', distance = 2.6,
+              action = function() openShop(loc.shop) end },
+        })
+    end
+end)
+
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end
     SetNuiFocus(false, false)

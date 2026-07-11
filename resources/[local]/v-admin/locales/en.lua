@@ -72,6 +72,8 @@ local T = {
     ['adm.self_heal']    = 'Heal me',
     ['adm.self_revive']  = 'Revive me',
     ['adm.self_armor']   = 'Armor',
+    ['adm.coords']       = 'Coordinates',
+    ['adm.copy']         = 'Copy',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }
