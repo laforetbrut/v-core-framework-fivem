@@ -63,8 +63,8 @@ by value/effort. Tick items as they ship.
       messages, bank, job apps). The server has no chat, so this is a keystone.
 - [ ] **`v-radial`** (high) — context radial menu (the other main interaction surface): frisk, give,
       craft-here, vehicle actions — replaces the temporary keybinds (H/X/etc.).
-- [ ] **`v-vending` / dispensers** (medium) — placeable vending machines & the garbage job (roadmap #9);
-      simple recurring income + item sinks.
+- [x] **Vending machines** ✅ (shipped as v-shops locations, no-ped/no-blip). *Next:* garbage job &
+      other recurring-income jobs; dynamic detection of vending props map-wide instead of fixed coords.
 - [ ] **`v-storage-rental`** (medium) — rentable warehouses/lockers using the shared-stash engine already built.
 - [ ] **`v-blackmarket`** (medium) — illegal buyer for stolen/crafted contraband; ties frisk-stealing to an outlet.
 - [ ] **`v-repair` / mechanic** (medium) — vehicle repair consuming `repair_kit`/`tire`/`car_battery` items.
