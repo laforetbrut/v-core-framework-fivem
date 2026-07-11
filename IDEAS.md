@@ -54,8 +54,8 @@ by value/effort. Tick items as they ship.
       server-authoritative proximity + job-lock enforced. *Next:* in-game stock/price editor, dynamic
       market pricing (supply/demand), restock consuming crafted goods → fully player-driven economy.
 - [~] **`v-drugs`** (high, mostly shipped) — ✅ grow cannabis + ✅ process at a hidden Drug Lab + ✅ street
-      selling for dirty money (blackmarket dealer, `marked_bills` payout). *Next:* police heat/risk on sale,
-      weed-plant growth timers, money laundering (marked_bills → clean cash), more meth precursors.
+      selling for dirty money + ✅ money laundering (65% rate). *Next:* police heat/risk on sale & laundering,
+      weed-plant growth timers, drug-use screen effects (v-status), more meth precursors, addiction.
 - [x] **`v-gathering` / resource jobs** ✅ (shipped) — mining / salvage / textile nodes produce raw
       materials (`iron`, `copper`, `cloth`…) crafting consumes. Closes the loop: gather → craft → sell.
       *Next:* tool-gated gathering (pickaxe/durability), gathering XP, more node types (wood, oil, chemicals
