@@ -48,6 +48,14 @@ Config.Stations = {
             vector4(707.03, -965.4, 30.41, 90.0),      -- Mission Row workshop
         },
     },
+    recycler = {
+        label = 'Recycling Center',
+        blip  = { sprite = 365, color = 5, scale = 0.7 },
+        benches = {
+            vector4(1057.3, -2313.6, 30.6, 90.0),      -- Cypress Flats scrap yard
+            vector4(-322.9, -1546.6, 26.9, 180.0),     -- El Burro industrial (recycling)
+        },
+    },
 }
 
 -- ── Recipes ────────────────────────────────────────────────────
@@ -96,4 +104,19 @@ Config.Recipes = {
     { output = 'lock_breaker',      count = 1, time = 6000, station = 'electronics', inputs = { electronics = 2, metal_scrap = 1, lithium_battery = 1 } },
     { output = 'hacking_device',    count = 1, time = 9000, station = 'electronics', inputs = { electronics = 3, usb_drive = 1, cable = 2 } },
     { output = 'phone',             count = 1, time = 8000, station = 'electronics', inputs = { electronics = 2, glass = 1, plastic = 1, lithium_battery = 1 } },
+
+    -- Recycling: break finished items back into a fraction of their materials (always a
+    -- net loss vs crafting, so it can't be farmed in a loop).
+    { output = 'metal_scrap',       count = 1, time = 2500, station = 'recycler',    inputs = { lockpick = 1 } },
+    { output = 'metal_scrap',       count = 2, time = 3500, station = 'recycler',    inputs = { advanced_lockpick = 1 } },
+    { output = 'metal_scrap',       count = 2, time = 3500, station = 'recycler',    inputs = { screwdriver_set = 1 } },
+    { output = 'metal_scrap',       count = 2, time = 4000, station = 'recycler',    inputs = { drill = 1 } },
+    { output = 'copper',            count = 1, time = 2500, station = 'recycler',    inputs = { cable = 2 } },
+    { output = 'copper',            count = 1, time = 3000, station = 'recycler',    inputs = { electronics = 1 } },
+    { output = 'electronics',       count = 1, time = 4000, station = 'recycler',    inputs = { radio = 1 } },
+    { output = 'electronics',       count = 1, time = 4500, station = 'recycler',    inputs = { phone = 1 } },
+    { output = 'cloth',             count = 1, time = 2500, station = 'recycler',    inputs = { rope = 1 } },
+    -- Refining: upgrade raw stock into a higher-tier material.
+    { output = 'iron',              count = 1, time = 4000, station = 'recycler',    inputs = { metal_scrap = 3 } },
+    { output = 'cloth',             count = 1, time = 3000, station = 'recycler',    inputs = { cotton = 2 } },
 }
