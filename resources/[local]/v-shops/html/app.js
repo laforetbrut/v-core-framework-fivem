@@ -72,7 +72,7 @@ function renderList() { if (mode === 'sell') renderSellList(); else renderCatalo
 // ── Catalogue ──
 function renderCatalogue() {
   const list = byId('list'); list.innerHTML = '';
-  shop.items.forEach((it, i) => {
+  (shop.items || []).forEach((it, i) => {
     const row = document.createElement('div');
     row.className = 'row'; row.dataset.name = it.name;
     row.style.setProperty('--cat', RARITY[it.rarity] || CAT[it.category] || CAT.misc);

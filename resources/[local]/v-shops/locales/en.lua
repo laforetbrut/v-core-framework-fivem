@@ -19,6 +19,7 @@ local T = {
     ['shop.nothing_sell'] = 'Nothing to sell here.',
     ['shop.owned']   = 'owned',
     ['shop.rate_of'] = 'payout',
+    ['shop.too_small'] = 'That amount is too small to pay out.',
     ['shop.nofunds'] = 'Not enough money.',
     ['shop.nospace'] = 'Not enough inventory space.',
     ['shop.too_far'] = 'You are too far from the store.',

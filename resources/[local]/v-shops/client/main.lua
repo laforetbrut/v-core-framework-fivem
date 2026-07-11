@@ -2,6 +2,7 @@
 local Core = exports['v-core']:GetCore()
 local isOpen  = false
 local spawned = {}
+local blips   = {}
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -30,6 +31,7 @@ CreateThread(function()
         BeginTextCommandSetBlipName('STRING')
         AddTextComponentSubstringPlayerName(strings()['shop.blip'] or 'Store')
         EndTextCommandSetBlipName(blip)
+        blips[#blips + 1] = blip
         ::continue::
     end
 end)
@@ -105,4 +107,5 @@ AddEventHandler('onResourceStop', function(resName)
     SetNuiFocus(false, false)
     exports['v-core']:MenuClosed()
     for _, p in pairs(spawned) do if DoesEntityExist(p) then DeletePed(p) end end
+    for _, b in ipairs(blips) do if DoesBlipExist(b) then RemoveBlip(b) end end
 end)
