@@ -2,6 +2,7 @@
 Locales.fr = Locales.fr or {}
 local T = {
     ['shop.help']    = 'Parcourir la boutique',
+    ['shop.vending_help'] = 'Utiliser le distributeur',
     ['shop.buy']     = 'Acheter',
     ['shop.cash']    = 'Liquide',
     ['shop.bank']    = 'Banque',

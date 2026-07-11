@@ -21,12 +21,21 @@ Config.Locations = {
     { shop = 'convenience', ped = 'mp_m_shopkeep_01', coords = vector4(373.5, 325.6, 103.56, 256.6) },
     -- Scrap dealer (buys raw materials) — Cypress Flats industrial yard
     { shop = 'scrapyard', ped = 's_m_y_dockwork_01', coords = vector4(1057.3, -2313.6, 30.6, 179.0) },
+
+    -- Vending machines: no clerk ped, no map blip — just a prompt when you're at one.
+    { shop = 'vending', noPed = true, noBlip = true, coords = vector4(311.4, -570.5, 43.3, 0.0) },   -- Pillbox Hospital
+    { shop = 'vending', noPed = true, noBlip = true, coords = vector4(441.0, -982.0, 30.7, 0.0) },    -- Mission Row PD
+    { shop = 'vending', noPed = true, noBlip = true, coords = vector4(228.0, -880.0, 30.6, 0.0) },    -- Legion Square
+    { shop = 'vending', noPed = true, noBlip = true, coords = vector4(-1037.0, -2737.0, 20.2, 0.0) }, -- LSIA terminal
+    { shop = 'vending', noPed = true, noBlip = true, coords = vector4(1834.0, 3672.0, 34.3, 0.0) },   -- Sandy Shores Medical
 }
 
 -- Shops seeded into the DB at boot if the row is missing, so a sell-only dealer
 -- exists without hand-writing SQL. `items` is the (JSON) buy catalogue — empty here.
 Config.SeedShops = {
     { id = 'scrapyard', label = 'Scrap Dealer', type = 'materials', items = '[]' },
+    { id = 'vending',   label = 'Vending Machine', type = 'vending',
+      items = '[{"item":"cola","price":4},{"item":"cocacola","price":4},{"item":"coke_zero","price":4},{"item":"cranberry_juice","price":5},{"item":"beef_jerky","price":6},{"item":"brownie","price":5}]' },
 }
 
 -- Sell prices: item -> unit price paid to the player. Selling reuses the same

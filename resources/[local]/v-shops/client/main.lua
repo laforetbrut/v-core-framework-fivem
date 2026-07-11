@@ -21,6 +21,7 @@ end
 -- ── Blips ──────────────────────────────────────────────────────
 CreateThread(function()
     for _, loc in ipairs(Config.Locations) do
+        if loc.noBlip then goto continue end
         local blip = AddBlipForCoord(loc.coords.x, loc.coords.y, loc.coords.z)
         SetBlipSprite(blip, Config.Blip.sprite)
         SetBlipColour(blip, Config.Blip.color)
@@ -29,6 +30,7 @@ CreateThread(function()
         BeginTextCommandSetBlipName('STRING')
         AddTextComponentSubstringPlayerName(strings()['shop.blip'] or 'Store')
         EndTextCommandSetBlipName(blip)
+        ::continue::
     end
 end)
 
@@ -38,6 +40,7 @@ CreateThread(function()
         Wait(1500)
         local coords = GetEntityCoords(PlayerPedId())
         for i, loc in ipairs(Config.Locations) do
+            if loc.noPed then goto continue end
             local pos = vector3(loc.coords.x, loc.coords.y, loc.coords.z)
             local d = #(coords - pos)
             if d < 45.0 and not (spawned[i] and DoesEntityExist(spawned[i])) then
@@ -54,6 +57,7 @@ CreateThread(function()
             elseif d >= 60.0 and spawned[i] and DoesEntityExist(spawned[i]) then
                 DeletePed(spawned[i]); spawned[i] = nil
             end
+            ::continue::
         end
     end
 end)
@@ -67,8 +71,9 @@ CreateThread(function()
             for _, loc in ipairs(Config.Locations) do
                 if #(coords - vector3(loc.coords.x, loc.coords.y, loc.coords.z)) < Config.Distance then
                     wait = 0
+                    local helpKey = (loc.shop == 'vending') and 'shop.vending_help' or 'shop.help'
                     BeginTextCommandDisplayHelp('STRING')
-                    AddTextComponentSubstringPlayerName('~INPUT_CONTEXT~ ' .. (strings()['shop.help'] or 'Shop'))
+                    AddTextComponentSubstringPlayerName('~INPUT_CONTEXT~ ' .. (strings()[helpKey] or 'Shop'))
                     EndTextCommandDisplayHelp(0, false, true, -1)
                     if IsControlJustReleased(0, 38) then openShop(loc.shop) end
                     break

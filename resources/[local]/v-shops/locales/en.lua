@@ -2,6 +2,7 @@
 Locales.en = Locales.en or {}
 local T = {
     ['shop.help']    = 'Browse shop',
+    ['shop.vending_help'] = 'Use vending machine',
     ['shop.buy']     = 'Buy',
     ['shop.cash']    = 'Cash',
     ['shop.bank']    = 'Bank',
