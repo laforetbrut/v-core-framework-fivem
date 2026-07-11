@@ -183,6 +183,55 @@ function Actions.resource(src, d)
     return true, ('%s %s'):format(verb, name)
 end
 
+Actions.spectate = function(src, d)
+    local target = tonumber(d.target); if not target or not Core.Players[target] then return false end
+    local tped = GetPlayerPed(target)
+    if not tped or tped == 0 then return false end
+    local c = GetEntityCoords(tped)
+    TriggerClientEvent('v-admin:client:spectate', src, c.x, c.y, c.z)
+    return true, ('spectate %d'):format(target)
+end
+
+-- ── Player ESP: stream every player's position to admins who enabled it ────
+local EspOn = {}   -- [adminSrc] = true
+
+RegisterNetEvent('v-admin:server:esp', function(on)
+    local src = source
+    if not isAdmin(src) then return end
+    EspOn[src] = on and true or nil
+end)
+
+CreateThread(function()
+    while true do
+        Wait(1500)
+        local any = false
+        for _ in pairs(EspOn) do any = true; break end
+        if any then
+            local list = {}
+            for sid, p in pairs(Core.Players) do
+                local ped = GetPlayerPed(sid)
+                if ped and ped ~= 0 then
+                    local c = GetEntityCoords(ped)
+                    list[#list + 1] = {
+                        id = sid,
+                        name = (p.charinfo and (p.charinfo.firstname .. ' ' .. p.charinfo.lastname)) or p.name or '?',
+                        x = c.x, y = c.y, z = c.z,
+                    }
+                end
+            end
+            for adminSrc in pairs(EspOn) do
+                if isAdmin(adminSrc) then
+                    TriggerClientEvent('v-admin:client:positions', adminSrc, list)
+                else
+                    EspOn[adminSrc] = nil
+                end
+            end
+        end
+    end
+end)
+
+AddEventHandler('playerDropped', function() EspOn[source] = nil end)
+
 Core.RegisterCallback('v-admin:action', function(source, resolve, d)
     if type(d) ~= 'table' or type(d.type) ~= 'string' then resolve(false); return end
     if not isAdmin(source) then resolve(false); return end

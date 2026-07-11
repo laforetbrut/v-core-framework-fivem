@@ -219,3 +219,16 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .card:nth-child(2) { animation-delay:100ms; }
 .card:nth-child(3) { animation-delay:140ms; }
 .card:nth-child(4) { animation-delay:180ms; }
+
+/* ── Tools (self) tab ── */
+.toolgrid { display:grid; grid-template-columns:repeat(2, 1fr); gap:12px; }
+.toolbtn { position:relative; display:flex; align-items:center; justify-content:space-between; gap:10px;
+  padding:16px 18px; border:1px solid var(--v-line-2); border-radius:var(--v-r-md);
+  background:linear-gradient(180deg, var(--v-bg-500), var(--v-bg-700)); color:var(--v-text);
+  cursor:pointer; transition:border-color var(--v-t-base) ease, transform var(--v-t-fast) ease, background-color var(--v-t-base) ease; }
+.toolbtn:hover { border-color:var(--v-accent); transform:translateY(-1px); }
+.toolbtn .tname { font-family:var(--v-font-display); font-size:13px; font-weight:600; letter-spacing:.12em; text-transform:uppercase; }
+.toolbtn .tstate { font-family:var(--v-font-num); font-size:12px; font-weight:700; color:var(--v-text-faint); }
+.toolbtn.on { border-color:var(--v-accent); background:var(--v-accent-soft); }
+.toolbtn.on .tstate { color:var(--v-accent-300); }
+.toolhint { margin-top:14px; font-family:var(--v-font-body); font-size:11px; color:var(--v-text-faint); letter-spacing:.03em; }

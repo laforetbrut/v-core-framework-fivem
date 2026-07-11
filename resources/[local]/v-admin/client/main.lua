@@ -1,6 +1,7 @@
 -- v-admin | client
 local Core = exports['v-core']:GetCore()
 local isOpen = false
+local amAdmin = false   -- set when the panel opens as an admin; gates the self-tools
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -20,9 +21,11 @@ RegisterCommand('vadmin_panel', function()
     Core.TriggerCallback('v-admin:open', function(res)
         if not res or not res.ok then return end   -- silently ignored for non-admins
         isOpen = true
+        amAdmin = true
         SetNuiFocus(true, true)   -- focus is per-resource: only the page owner may take it
         exports['v-core']:MenuOpened()
-        SendNUIMessage({ action = 'open', strings = strings(), super = res.super, weathers = res.weathers })
+        SendNUIMessage({ action = 'open', strings = strings(), super = res.super, weathers = res.weathers,
+            tools = { noclip = noclipOn, god = godOn, invisible = invisOn, esp = espOn } })
     end)
 end, false)
 RegisterKeyMapping('vadmin_panel', 'Admin: management panel', 'keyboard', 'F10')
@@ -43,6 +46,132 @@ end)
 
 RegisterNUICallback('action', function(data, cb)
     Core.TriggerCallback('v-admin:action', function(ok) cb(ok and true or false) end, data)
+end)
+
+-- ══ Admin self-tools (client-side; only usable once the admin panel authorised) ══
+noclipOn, godOn, invisOn, espOn = false, false, false, false
+
+-- ── Noclip (free camera-relative flight through the world) ─────
+local function setNoclip(on)
+    if not amAdmin then return end
+    noclipOn = on and true or false
+    local ped = PlayerPedId()
+    local ent = (IsPedInAnyVehicle(ped, false) and GetVehiclePedIsIn(ped, false)) or ped
+    SetEntityInvincible(ent, noclipOn)
+    FreezeEntityPosition(ent, noclipOn)
+    SetEntityCollision(ent, not noclipOn, not noclipOn)
+    if not noclipOn then SetEntityVelocity(ent, 0.0, 0.0, 0.0) end
+    Core.Notify((strings()['adm.noclip'] or 'Noclip') .. ': ' .. (noclipOn and 'ON' or 'OFF'), noclipOn and 'success' or 'info')
+end
+
+CreateThread(function()
+    while true do
+        local wait = 500
+        if noclipOn then
+            wait = 0
+            local ped = PlayerPedId()
+            local ent = (IsPedInAnyVehicle(ped, false) and GetVehiclePedIsIn(ped, false)) or ped
+            local r = GetGameplayCamRot(2)
+            local pitch, yaw = math.rad(r.x), math.rad(r.z)
+            local cosP = math.cos(pitch)
+            local fwd = vector3(-math.sin(yaw) * cosP, math.cos(yaw) * cosP, math.sin(pitch))
+            local rgt = vector3(math.cos(yaw), math.sin(yaw), 0.0)
+            local speed = 1.0
+            if IsDisabledControlPressed(0, 21) then speed = 4.0 end    -- LSHIFT: fast
+            if IsDisabledControlPressed(0, 36) then speed = 0.25 end   -- LCTRL: slow
+            local move = vector3(0.0, 0.0, 0.0)
+            if IsDisabledControlPressed(0, 32) then move = move + fwd end             -- W
+            if IsDisabledControlPressed(0, 33) then move = move - fwd end             -- S
+            if IsDisabledControlPressed(0, 34) then move = move - rgt end             -- A
+            if IsDisabledControlPressed(0, 35) then move = move + rgt end             -- D
+            if IsDisabledControlPressed(0, 22) then move = move + vector3(0,0,1.0) end -- SPACE: up
+            if IsDisabledControlPressed(0, 44) then move = move - vector3(0,0,1.0) end -- Q: down
+            local p = GetEntityCoords(ent)
+            local np = p + move * speed
+            SetEntityCoordsNoOffset(ent, np.x, np.y, np.z, true, true, true)
+            if ent == ped then SetEntityHeading(ped, math.deg(-yaw) % 360.0) end
+            DisableControlAction(0, 32, true); DisableControlAction(0, 33, true)
+            DisableControlAction(0, 34, true); DisableControlAction(0, 35, true)
+        end
+        Wait(wait)
+    end
+end)
+
+RegisterCommand('vadmin_noclip', function() if amAdmin then setNoclip(not noclipOn) end end, false)
+RegisterKeyMapping('vadmin_noclip', 'Admin: toggle noclip', 'keyboard', 'F6')
+
+-- ── God mode / invisible ───────────────────────────────────────
+local function setGod(on)
+    if not amAdmin then return end
+    godOn = on and true or false
+    SetEntityInvincible(PlayerPedId(), godOn)
+    SetPlayerInvincible(PlayerId(), godOn)
+end
+local function setInvis(on)
+    if not amAdmin then return end
+    invisOn = on and true or false
+    SetEntityVisible(PlayerPedId(), not invisOn, false)
+end
+
+-- ── Player ESP: blips + name tags for EVERY online player ──────
+local espBlips = {}   -- [serverId] = blip
+local function clearEsp()
+    for _, b in pairs(espBlips) do if DoesBlipExist(b) then RemoveBlip(b) end end
+    espBlips = {}
+end
+local function setEsp(on)
+    if not amAdmin then return end
+    espOn = on and true or false
+    TriggerServerEvent('v-admin:server:esp', espOn)
+    if not espOn then clearEsp() end
+end
+
+-- Server streams every player's position while ESP is on.
+RegisterNetEvent('v-admin:client:positions', function(list)
+    if not espOn then return end
+    local seen = {}
+    for _, pl in ipairs(list or {}) do
+        seen[pl.id] = true
+        local b = espBlips[pl.id]
+        if not b or not DoesBlipExist(b) then
+            b = AddBlipForCoord(pl.x, pl.y, pl.z); espBlips[pl.id] = b
+            SetBlipSprite(b, 1); SetBlipScale(b, 0.85); SetBlipColour(b, 3)
+            SetBlipCategory(b, 7)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentSubstringPlayerName(('[%d] %s'):format(pl.id, pl.name or '?'))
+            EndTextCommandSetBlipName(b)
+        else
+            SetBlipCoords(b, pl.x, pl.y, pl.z)
+        end
+    end
+    for id, b in pairs(espBlips) do
+        if not seen[id] then if DoesBlipExist(b) then RemoveBlip(b) end; espBlips[id] = nil end
+    end
+end)
+
+-- ── Spectate a player (free look at their location) ────────────
+local spectating = nil
+RegisterNetEvent('v-admin:client:spectate', function(x, y, z)
+    -- simple spectate: teleport up above the target and freeze; toggle off to restore
+    local ped = PlayerPedId()
+    if spectating then
+        setNoclip(false); spectating = nil
+        Core.Notify(strings()['adm.spec_off'] or 'Spectate off.', 'info'); return
+    end
+    spectating = true
+    SetEntityCoordsNoOffset(ped, x, y, z + 0.5, false, false, false)
+    if not noclipOn then setNoclip(true) end
+    Core.Notify(strings()['adm.spec_on'] or 'Spectating — noclip enabled.', 'success')
+end)
+
+RegisterNUICallback('tool', function(data, cb)
+    if not amAdmin then cb(false); return end
+    local k = data and data.tool
+    if k == 'noclip' then setNoclip(not noclipOn)
+    elseif k == 'god' then setGod(not godOn)
+    elseif k == 'invisible' then setInvis(not invisOn)
+    elseif k == 'esp' then setEsp(not espOn) end
+    cb({ noclip = noclipOn, god = godOn, invisible = invisOn, esp = espOn })
 end)
 
 -- ── Effects executed on this client ────────────────────────────
@@ -123,4 +252,10 @@ AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
     SetNuiFocus(false, false)
     exports['v-core']:MenuClosed()
+    -- Restore the ped if any self-tool was left on.
+    local ped = PlayerPedId()
+    FreezeEntityPosition(ped, false); SetEntityCollision(ped, true, true)
+    SetEntityInvincible(ped, false); SetPlayerInvincible(PlayerId(), false)
+    SetEntityVisible(ped, true, false)
+    for _, b in pairs(espBlips or {}) do if DoesBlipExist(b) then RemoveBlip(b) end end
 end)
