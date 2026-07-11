@@ -1,5 +1,31 @@
 # Error Log
 
+## [2026-07-11 — session] — v-shops sell destroyed goods on a $0 payout
+**Context:** Money laundering: a launderer that pays a 0.65 rate for `marked_bills` (price 1).
+**Error:** Selling 1 marked bill removed the item, then `total = floor(1*1*0.65) = 0` hit the `if total <= 0 then resolve(false)` guard **before** any payout/refund — the bill was destroyed for nothing, with no notification. Caught by an adversarial review workflow (3 agents independently).
+**Root cause:** The `total <= 0` guard sat **after** `RemoveItem`. Any sale whose `floor(price*amount*rate)` rounds to 0 fell into the post-removal, no-refund window.
+**Fix:** Compute `total` and run the `<= 0` guard **before** removing anything; notify (`shop.too_small`). Order is now compute → validate ownership → remove → pay.
+**Prevention:** In any "take then pay" flow, validate the payout amount **before** the irreversible removal. Never place a value guard after the item has been consumed.
+
+## [2026-07-11 — session] — v-inventory RemoveItem only decremented one stack
+**Context:** Selling stackable items; adversarial review.
+**Error:** `RemoveItem` matched a single stack with `amount >= wanted`; a quantity split across several stacks was wrongly rejected though the total sufficed.
+**Fix:** Sum every stack of the item and, if the total is enough, remove spanning stacks.
+**Prevention:** "Remove N of item X" must consider the item's **total across all stacks**, not one stack.
+
+## [2026-07-11 — session] — v-gathering harvest rate bypass (server cooldown < client animation)
+**Context:** New gathering module; adversarial review.
+**Error:** The server cooldown (2 s) was shorter than the client harvest animation (3.5–4.5 s), so a scripted client firing the `harvest` callback directly could gather ~2× faster.
+**Root cause:** The pacing that limited legit players lived **client-side** (the animation wait); the server had only a flat 2 s cooldown.
+**Fix:** Gate server-side on the resource's own `time` via `GetGameTimer()` (ms).
+**Prevention:** Never let a client-side timer be the only rate limit on a server action; enforce the real interval server-side.
+
+## [2026-07-11 — session] — v-shops buy-from-anywhere + unenforced job lock (security)
+**Context:** Store buying had no server-side location/job check.
+**Error:** Any client could buy any shop's catalogue (incl. a job-locked police armory) from anywhere on the map; `RemoveMoney`'s result was also ignored after `AddItem` (latent free-item dupe).
+**Fix:** `canUseShop` verifies the player is at a `Config.Locations` entry mapping to the shop id and holds `shops.job` if set; amount clamped server-side; item label guarded; `RemoveMoney` checked with the item refunded on failure.
+**Prevention:** Every money/item server callback must re-derive proximity + authorization server-side and check the return of each mutation, refunding on failure.
+
 ## [2026-07-10 19:05] — Infinite loading / stuck black screen after the spawn rework
 
 **Context:** v-spawn ran a "black-out guard" thread at resource start — `while not spawnReady do DoScreenFadeOut(0) ... end` — to hide the default spawnmanager ped before the custom spawn took over.
