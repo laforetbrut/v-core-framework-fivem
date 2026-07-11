@@ -68,7 +68,7 @@ v-<module>  → feature resources (hud, banking, inventory, …).
               They consume v-core's API and events.
 ```
 
-Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
+Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-jobs → v-spawn → v-status → v-hud → v-banking → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
 
 **Rule that is currently violated:** modules are supposed to never touch SQL — only `v-core` may.
 Five modules query the DB directly today. See `## 6. Cross-cutting debt`.
@@ -475,7 +475,6 @@ parameterized query). Every action validated server-side and audit-logged.
 | `v-vehicles` | 🔨 **next** | Garages, ownership (`character_vehicles` table already in the schema), keys, LSC |
 | `v-phone` | high | iFruit phone NUI — a primary interaction surface (the server has no chat) |
 | `v-radial` | high | Radial menu (context actions) — the other main interaction surface |
-| `v-jobs` | high | Jobs, grades, duty, salaries (`jobs` table exists) + in-game manager |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD) |
 | `v-anticheat` | medium | Server-side sanity checks; explosion / health / money guards, logged |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin) |

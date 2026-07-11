@@ -48,8 +48,9 @@ by value/effort. Tick items as they ship.
 
 ## D. Complementary NEW modules (pair well with inventory/crafting)
 
-- [ ] **`v-jobs`** (high) — jobs, grades, duty, salaries + in-game manager. Unlocks job-gated benches,
-      shops, stashes, and the police search permission the frisk system already stubs.
+- [~] **`v-jobs`** ✅ (foundation shipped) — jobs/grades/duty/salaries + `setjob` admin command + exports;
+      job gates across shops/stashes/benches now enforce. *Next:* in-game job manager/boss UI, job center to
+      pick a job, duty toggle UI, and wire the **police** job into the frisk `police` gate (replaces the admin stub).
 - [x] **`v-shops` selling + hardening** ✅ (shipped) — Buy/Sell toggle, scrap dealer buys raw materials,
       server-authoritative proximity + job-lock enforced. *Next:* in-game stock/price editor, dynamic
       market pricing (supply/demand), restock consuming crafted goods → fully player-driven economy.
