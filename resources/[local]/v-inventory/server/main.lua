@@ -10,6 +10,7 @@ local Pocket      = {}   -- [source] = items[]  (hidden compartment, stored in m
 local Stashes     = {}   -- [id]     = { items, maxWeight, maxSlots, persistent }
 local OpenStash    = {}   -- [source] = stash id currently open ('search' = frisking a player)
 local SearchTarget = {}   -- [searcher src] = target src (frisk/steal target)
+local AdminView    = {}   -- [admin src] = true when opened via admin (no hands-up / proximity gate)
 local UsableItems  = {}   -- name -> handler(src, item)
 local Equipped     = {}   -- [source] = { slot, name }  currently-drawn weapon
 local dropCounter  = 0
@@ -167,8 +168,9 @@ AddEventHandler('playerDropped', function()
     OpenStash[src] = nil
     Equipped[src] = nil
     SearchTarget[src] = nil
-    -- anyone frisking this player must stop
-    for s, t in pairs(SearchTarget) do if t == src then SearchTarget[s] = nil; OpenStash[s] = nil end end
+    AdminView[src] = nil
+    -- anyone frisking / admin-viewing this player must stop
+    for s, t in pairs(SearchTarget) do if t == src then SearchTarget[s] = nil; OpenStash[s] = nil; AdminView[s] = nil end end
 end)
 
 -- ── Stash loading ──────────────────────────────────────────────
@@ -290,7 +292,7 @@ end
 Core.RegisterCallback('v-inventory:move', function(source, resolve, data)
     -- While frisking a player, re-check they are still valid and nearby on every
     -- move, so you can't keep looting after walking away.
-    if OpenStash[source] == 'search' then
+    if OpenStash[source] == 'search' and not AdminView[source] then
         local st = SearchTarget[source]
         local ped, tped = GetPlayerPed(source), st and GetPlayerPed(st)
         if not st or not Inv[st] or not tped or tped == 0
@@ -651,6 +653,21 @@ RegisterNetEvent('v-inventory:server:closeStash', function()
     gcDrop(OpenStash[source])   -- clean up an emptied ground drop on close
     OpenStash[source] = nil
     SearchTarget[source] = nil
+    AdminView[source] = nil
+end)
+
+-- ── Admin: open ANY player's inventory (no hands-up / proximity gate) ──
+-- Uses the same cross-player container machinery as a frisk, but bypasses the RP
+-- gates. The admin permission is verified server-side here.
+RegisterNetEvent('v-inventory:server:adminOpenInv', function(targetSrc)
+    local src = source
+    if not Core.HasPermission(src, 'admin') then return end
+    targetSrc = tonumber(targetSrc)
+    if not targetSrc or not Inv[targetSrc] then return end
+    SearchTarget[src] = targetSrc
+    OpenStash[src] = 'search'
+    AdminView[src] = true
+    TriggerClientEvent('v-inventory:client:openSecondary', src)
 end)
 
 -- ── Frisk / steal a nearby player (RP) ─────────────────────────

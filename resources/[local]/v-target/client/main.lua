@@ -1,7 +1,8 @@
 -- v-target | client core
--- A universal interaction "eye": hold the key, look at an entity (or stand in a zone),
--- and pick from options that are filtered by the player's permission, job/grade and any
--- custom predicate. Other resources register options via the exports at the bottom.
+-- A universal interaction "eye": hold the key, a FREE CURSOR appears, hover an entity
+-- (or stand in a zone) and click an option. Options are filtered by the player's
+-- permission, job/grade and any custom predicate. Other resources register options
+-- via the exports at the bottom.
 local Core = exports['v-core']:GetCore()
 
 -- ── Registries ────────────────────────────────────────────────
@@ -30,9 +31,7 @@ local function hasJob(opt)
     if not job then return false end
     local jobs = (type(opt.job) == 'table') and opt.job or { opt.job }
     for _, j in ipairs(jobs) do
-        if job.name == j then
-            return not opt.grade or (job.grade or 0) >= opt.grade
-        end
+        if job.name == j then return not opt.grade or (job.grade or 0) >= opt.grade end
     end
     return false
 end
@@ -40,6 +39,7 @@ end
 local function optionAllowed(opt, data)
     if not hasPerm(opt.permission) then return false end
     if not hasJob(opt) then return false end
+    if opt.distance and data.distance and data.distance > opt.distance then return false end
     if opt.canInteract then
         local ok, res = pcall(opt.canInteract, data.entity, data.distance, data.coords, data)
         if not ok or res == false then return false end
@@ -47,25 +47,48 @@ local function optionAllowed(opt, data)
     return true
 end
 
--- ── Raycast straight out of the camera (look-to-target) ───────
-local function rotationToDirection(rot)
-    local z, x = math.rad(rot.z), math.rad(rot.x)
-    local num = math.abs(math.cos(x))
-    return vector3(-math.sin(z) * num, math.cos(z) * num, math.sin(x))
+-- ── Cursor → world ray (perspective projection through the free cursor) ──
+local cursorX, cursorY = 0.5, 0.5   -- normalised 0..1, updated by the NUI
+
+local function rotToDir(rx, rz)
+    rx, rz = math.rad(rx), math.rad(rz)
+    local cx = math.cos(rx)
+    return vector3(-math.sin(rz) * cx, math.cos(rz) * cx, math.sin(rx))
+end
+
+local function cursorRay()
+    local camPos = GetGameplayCamCoord()
+    local camRot = GetGameplayCamRot(2)
+    local fov    = GetGameplayCamFov()
+
+    local forward = rotToDir(camRot.x, camRot.z)
+    local right   = rotToDir(0.0, camRot.z - 90.0)   -- horizontal right
+    local up = vector3(                              -- up = right x forward
+        right.y * forward.z - right.z * forward.y,
+        right.z * forward.x - right.x * forward.z,
+        right.x * forward.y - right.y * forward.x)
+
+    local aspect = GetAspectRatio(true)
+    local tanV = math.tan(math.rad(fov) * 0.5)
+    local ndcX = (cursorX - 0.5) * 2.0
+    local ndcY = (cursorY - 0.5) * 2.0
+    local dir = forward + right * (ndcX * tanV * aspect) + up * (-ndcY * tanV)
+    local len = #(dir)
+    if len > 0 then dir = dir / len end
+    return camPos, dir
 end
 
 local function castEye()
-    local cam = GetGameplayCamCoord()
-    local dir = rotationToDirection(GetGameplayCamRot(2))
-    local dest = cam + dir * (Config.MaxDistance or 7.0)
+    local camPos, dir = cursorRay()
+    local dest = camPos + dir * (Config.MaxDistance or 7.0)
     local ray = StartExpensiveSynchronousShapeTestLosProbe(
-        cam.x, cam.y, cam.z, dest.x, dest.y, dest.z, -1, PlayerPedId(), 0)
+        camPos.x, camPos.y, camPos.z, dest.x, dest.y, dest.z, -1, PlayerPedId(), 0)
     local _, hit, endCoords, _, entity = GetShapeTestResult(ray)
     if hit == 1 and entity and entity ~= 0 then return entity, endCoords end
     return nil, endCoords
 end
 
--- ── Build the option list for what the eye is on right now ────
+-- ── Option collection ─────────────────────────────────────────
 local function appendGroup(dst, group, data)
     if not group then return end
     for _, opt in ipairs(group) do
@@ -103,7 +126,6 @@ local function collectOptions()
         if data.netId then appendGroup(opts, Entities[data.netId], data) end
     end
 
-    -- Zones are location-based (offered whenever you stand inside them).
     for name, z in pairs(Zones) do
         local inside
         if z.kind == 'sphere' then
@@ -113,11 +135,10 @@ local function collectOptions()
             inside = math.abs(d.x) <= z.size.x and math.abs(d.y) <= z.size.y and math.abs(d.z) <= z.size.z
         end
         if inside then
-            local zdata = { zone = name, coords = z.coords, distance = #(pcoords - z.coords) }
-            appendGroup(opts, z.options, zdata)
+            appendGroup(opts, z.options, { zone = name, coords = z.coords, distance = #(pcoords - z.coords) })
         end
     end
-    return opts, data
+    return opts, data, entity
 end
 
 -- ── Run a chosen option ───────────────────────────────────────
@@ -132,74 +153,93 @@ end
 
 -- ── Eye loop ──────────────────────────────────────────────────
 local active, current, currentData = false, nil, nil
+local highlighted = nil
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
 end
 
+local function clearHighlight()
+    if highlighted and DoesEntityExist(highlighted) then SetEntityDrawOutline(highlighted, false) end
+    highlighted = nil
+end
+
 local function openEye()
-    if active or (exports['v-core']:IsAnyMenuOpen()) then return end
+    if active or exports['v-core']:IsAnyMenuOpen() then return end
     active = true
+    cursorX, cursorY = 0.5, 0.5
+    SetNuiFocus(true, true)
+    SetNuiFocusKeepInput(false)
     SendNUIMessage({ action = 'eyeon' })
+    exports['v-core']:MenuOpened('v-target')
+
     CreateThread(function()
+        SetCursorLocation(0.5, 0.5)
         local lastKey = nil
         while active do
-            local opts, data = collectOptions()
+            local opts, data, entity = collectOptions()
             currentData = data
-            -- Serialise a light option list for the NUI (index-keyed).
+            current = opts
+
+            -- Outline the entity under the cursor.
+            if entity ~= highlighted then
+                clearHighlight()
+                if entity and DoesEntityExist(entity) and #opts > 0 then
+                    SetEntityDrawOutlineColor(255, 106, 26, 200)
+                    SetEntityDrawOutline(entity, true)
+                    highlighted = entity
+                end
+            elseif entity and #opts == 0 then
+                clearHighlight()
+            end
+
             local list = {}
             for i, o in ipairs(opts) do
                 list[i] = { n = i, label = (o.label and (strings()[o.label] or o.label)) or 'Action', icon = o.icon or nil }
             end
-            current = opts
-            local key = table.concat((function() local t = {} for _, o in ipairs(list) do t[#t+1] = o.label end return t end)(), '|')
+            local key = tostring(#list)
+            for _, o in ipairs(list) do key = key .. '|' .. o.label end
             if key ~= lastKey then lastKey = key; SendNUIMessage({ action = 'options', options = list }) end
-
-            -- Block shooting/aiming and weapon-select keys while the eye is open.
-            DisableControlAction(0, 24, true); DisableControlAction(0, 25, true)
-            DisableControlAction(0, 257, true); DisableControlAction(0, 1, true); DisableControlAction(0, 2, true)
-            for i = 1, 9 do DisableControlAction(0, 156 + i, true) end          -- number row 1..9
-
-            -- Selection: number keys 1..N, or left mouse = option 1.
-            if #opts > 0 then
-                local pick
-                if IsDisabledControlJustPressed(0, 24) then pick = 1 end        -- LMB
-                for i = 1, math.min(#opts, 9) do
-                    if IsDisabledControlJustPressed(0, 156 + i) then pick = i end -- keys 1..9
-                end
-                if pick and opts[pick] then
-                    active = false
-                    runOption(opts[pick], currentData)
-                    break
-                end
-            end
             Wait(0)
         end
-        active = false
+        clearHighlight()
+        SetNuiFocus(false, false)
+        exports['v-core']:MenuClosed('v-target')
         SendNUIMessage({ action = 'eyeoff' })
     end)
 end
 
-local function closeEye()
-    active = false
-end
+local function closeEye() active = false end
+
+-- NUI relays.
+RegisterNUICallback('cursor', function(data, cb)
+    if data then cursorX = data.x or cursorX; cursorY = data.y or cursorY end
+    cb('ok')
+end)
+RegisterNUICallback('select', function(data, cb)
+    local i = data and tonumber(data.index)
+    if active and current and i and current[i] then
+        local opt, d = current[i], currentData
+        active = false
+        runOption(opt, d)
+    end
+    cb('ok')
+end)
+RegisterNUICallback('closeeye', function(_, cb) active = false; cb('ok') end)
 
 RegisterCommand('+vtarget', function() openEye() end, false)
 RegisterCommand('-vtarget', function() closeEye() end, false)
 RegisterKeyMapping('+vtarget', 'Interaction eye (target)', 'keyboard', Config.Key or 'LMENU')
 
 AddEventHandler('onResourceStop', function(res)
-    if res == GetCurrentResourceName() then active = false; SendNUIMessage({ action = 'eyeoff' }) end
+    if res == GetCurrentResourceName() then
+        active = false; clearHighlight()
+        SetNuiFocus(false, false); SendNUIMessage({ action = 'eyeoff' })
+    end
 end)
 
 -- ══ Public API (other resources register options from their client scripts) ══
--- Each `options` is a list of option tables. Option fields:
---   label (i18n key or text), icon, distance, permission, job (name|list), grade,
---   canInteract(entity, distance, coords, data)->bool, and ONE of:
---   action(data) | event | serverEvent | export = { resource, method }.
-local function addTo(group, options)
-    for _, o in ipairs(options) do group[#group + 1] = o end
-end
+local function addTo(group, options) for _, o in ipairs(options) do group[#group + 1] = o end end
 
 exports('AddGlobalPlayer',  function(options) addTo(GlobalPlayer, options) end)
 exports('AddGlobalPed',     function(options) addTo(GlobalPed, options) end)
@@ -221,15 +261,9 @@ exports('AddEntity', function(netId, options)
 end)
 
 exports('AddBoxZone', function(name, coords, size, options)
-    name = name or nextName()
-    Zones[name] = { kind = 'box', coords = coords, size = size, options = options }
-    return name
+    name = name or nextName(); Zones[name] = { kind = 'box', coords = coords, size = size, options = options }; return name
 end)
-
 exports('AddSphereZone', function(name, coords, radius, options)
-    name = name or nextName()
-    Zones[name] = { kind = 'sphere', coords = coords, radius = radius, options = options }
-    return name
+    name = name or nextName(); Zones[name] = { kind = 'sphere', coords = coords, radius = radius, options = options }; return name
 end)
-
 exports('RemoveZone', function(name) Zones[name] = nil end)
