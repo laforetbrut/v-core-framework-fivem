@@ -1,5 +1,17 @@
 # Error Log
 
+## [2026-07-11 — session] — Drag-drop broken: `maybeUnequip` called before its definition
+**Context:** Every inventory move from the player grid errored: `main.lua:341: attempt to call a nil value (global 'maybeUnequip')`, so drag-drop did nothing.
+**Root cause:** `maybeUnequip` is a `local function` defined ~line 396, but the `v-inventory:move` callback calls it ~line 343 — **before** the local exists in scope, so the call resolved to a nil global and the move callback errored for *every* player move.
+**Fix:** Forward-declare `local maybeUnequip` near the top, and define it later with `function maybeUnequip(...)` (assigning the forward local) so it's in scope at the call site.
+**Prevention:** In Lua a `local function` is only visible *after* its definition — forward-declare any helper used earlier in the file (`local f` up top, `function f() … end` later).
+
+## [2026-07-11 — session] — Appearance UI showed raw i18n keys (APP.ZONE_HEAD…)
+**Context:** The tattoo/appearance editor rendered untranslated keys instead of labels.
+**Root cause:** The locale files were listed under a `locales { … }` block in the fxmanifest. **`locales` is not a script directive** — FiveM never *executed* those files, so `Locales.fr/en` never got the `app.*` keys and `t()` returned the raw key. (Data-driven text worked; only `t()`-translated text was raw.)
+**Fix:** Load the locale files as `shared_scripts` (after `@v-core/locale/shared.lua`, before `config.lua`).
+**Prevention:** Locale Lua must be loaded via `shared_scripts`/`client_scripts`/`server_scripts` — never a bare `locales {}` list. Raw keys in a NUI while data renders → the locale table isn't populated (manifest not executing the files).
+
 ## [2026-07-11 — session] — Ground drops lootable from anywhere (SECURITY)
 **Context:** Ground drops opened as secondary containers; adversarial review of v-inventory.
 **Error:** The `openStash` `drop` branch checked only that the id matched `^drop:%d+$` and existed — no proximity check (the trunk/glovebox branch had a 5 m gate). Drop ids come from an incrementing counter, so a modded client could fire `openStash('drop:1',…)`, `drop:2`, … and drain every ground drop on the map remotely; the per-move re-check only runs for `search`, so it wasn't distance-gated on move either.

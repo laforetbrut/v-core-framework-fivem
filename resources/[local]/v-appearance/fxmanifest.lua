@@ -9,8 +9,12 @@ description 'Appearance engine: single writer of ped appearance, stable identity
 
 dependencies { 'v-core' }
 
-shared_script '@v-core/locale/shared.lua'
-shared_script 'config.lua'
+shared_scripts {
+    '@v-core/locale/shared.lua',
+    'locales/en.lua',
+    'locales/fr.lua',
+    'config.lua',
+}
 
 client_scripts {
     'data/tattoos.lua',
@@ -32,9 +36,4 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
-}
-
-locales {
-    'locales/en.lua',
-    'locales/fr.lua',
 }
