@@ -8,9 +8,19 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 - Vanilla cfx default resources only (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync enabled.
 - Custom roleplay core `v-core` — DB-persistent players, API + callbacks (see [ARCHITECTURE.md](ARCHITECTURE.md)).
-- `v-ui` design system (dark/orange) + `v-hud` money HUD.
+- `v-ui` "Field Case" design system (dark/orange) + `v-hud` money HUD + `v-notify` toasts.
 - On-demand local MariaDB (never runs 24/7).
 - One-click launch via `start.bat`.
+
+### Gameplay modules
+
+- **`v-inventory`** — grid inventory (weight, use/drop/give), functional weapons (ammo, serial, **durability/jamming**, **attachments**), backpacks & armor, a hidden pocket, vehicle trunks & shared/gang stashes, and player **frisk/steal + hands-up**.
+- **`v-appearance` / `v-spawn`** — appearance engine (stable clothing identity), multi-character selection, barber / surgeon / tattoos.
+- **`v-crafting`** — workbench crafting: 6 stations (workbench, reloading, kitchen, electronics, **recycling/refining**, hidden **drug lab**), server-authoritative.
+- **`v-gathering`** — resource nodes (mining, salvage, textile, hidden cannabis grows) that supply raw materials.
+- **`v-shops`** — stores with **buy & sell**, vending machines, a scrap dealer, and an illegal **dealer / launderer** (dirty money).
+- **Economy loop** — gather → craft → sell; and the illegal loop grow → process → deal → launder.
+- **`v-banking`** (Fleeca ATM), **`v-status`** (hunger/thirst/stress), **`v-admin`** (in-game panel).
 
 ## Installation
 
@@ -63,9 +73,19 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 - Uniquement les ressources cfx par défaut (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync activé.
 - Core roleplay maison `v-core` — joueurs persistés en BDD, API + callbacks (voir [ARCHITECTURE.md](ARCHITECTURE.md)).
-- Design system `v-ui` (sombre/orangé) + HUD d'argent `v-hud`.
+- Design system `v-ui` « Field Case » (sombre/orangé) + HUD d'argent `v-hud` + toasts `v-notify`.
 - MariaDB locale à la demande (ne tourne jamais 24/7).
 - Lancement en un clic via `start.bat`.
+
+### Modules de gameplay
+
+- **`v-inventory`** — inventaire grille (poids, utiliser/jeter/donner), armes fonctionnelles (munitions, série, **durabilité/enrayage**, **pièces jointes**), sacs & armure, poche cachée, coffres de véhicule & stashes partagés/gang, et **fouille/vol de joueur + mains en l'air**.
+- **`v-appearance` / `v-spawn`** — moteur d'apparence (identité vêtement stable), sélection multi-personnages, coiffeur / chirurgien / tatouages.
+- **`v-crafting`** — artisanat à l'établi : 6 stations (établi, rechargement, cuisine, électronique, **recyclage/raffinage**, **labo de drogue** caché), autoritaire serveur.
+- **`v-gathering`** — points de ressources (minage, casse, textile, cultures de cannabis cachées) qui fournissent les matières premières.
+- **`v-shops`** — boutiques avec **achat & vente**, distributeurs, revendeur de ferraille, et **dealer / blanchisseur** illégal (argent sale).
+- **Boucle économique** — récolter → fabriquer → vendre ; et la boucle illégale cultiver → traiter → dealer → blanchir.
+- **`v-banking`** (DAB Fleeca), **`v-status`** (faim/soif/stress), **`v-admin`** (panneau in-game).
 
 ## Installation
 
