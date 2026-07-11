@@ -20,5 +20,10 @@ local T = {
     ['tgt.a_goto']        = 'Se téléporter à (admin)',
     ['tgt.a_spectate']    = 'Observer (admin)',
     ['tgt.a_inv']         = 'Ouvrir l\'inventaire (admin)',
+    ['tgt.shop']          = 'Ouvrir la boutique',
+    ['tgt.vending']       = 'Utiliser le distributeur',
+    ['tgt.dealer']        = 'Parler au dealer',
+    ['tgt.launder']       = 'Blanchir de l\'argent',
+    ['tgt.scrap']         = 'Vendre des matériaux',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

@@ -202,6 +202,26 @@ end
 RegisterNetEvent('v-admin:client:heal', function() doHeal(false) end)
 
 -- Self quick-actions from the panel's Tools tab (admin only).
+-- Current position readout for the coord-copy tool.
+RegisterNUICallback('coords', function(_, cb)
+    if not amAdmin then cb(false); return end
+    local ped = PlayerPedId()
+    local c = GetEntityCoords(ped)
+    local h = GetEntityHeading(ped)
+    local function r(n) return math.floor(n * 100 + 0.5) / 100 end
+    local s1 = GetStreetNameAtCoord(c.x, c.y, c.z)
+    local street = (s1 and s1 ~= 0) and GetStreetNameFromHashKey(s1) or ''
+    local veh = GetVehiclePedIsIn(ped, false)
+    cb({
+        v3      = ('vector3(%s, %s, %s)'):format(r(c.x), r(c.y), r(c.z)),
+        v4      = ('vector4(%s, %s, %s, %s)'):format(r(c.x), r(c.y), r(c.z), r(h)),
+        heading = tostring(r(h)),
+        raw     = ('%s, %s, %s'):format(r(c.x), r(c.y), r(c.z)),
+        street  = street,
+        model   = (veh ~= 0) and GetDisplayNameFromVehicleModel(GetEntityModel(veh)) or '',
+    })
+end)
+
 RegisterNUICallback('self', function(data, cb)
     if not amAdmin then cb(false); return end
     local ped = PlayerPedId()

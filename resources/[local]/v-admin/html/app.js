@@ -36,6 +36,7 @@ async function loadTab() {
     renderPlayers();
   } else if (curTab === 'tools') {
     renderTools();
+    renderCoords();
   } else if (curTab === 'res') {
     const res = await post('resources');
     renderResources(Array.isArray(res) ? res : []);
@@ -139,6 +140,25 @@ function renderTools() {
   });
 }
 
+// ── Coordinates copy tool ──
+function copyText(txt) {
+  try { navigator.clipboard.writeText(txt); return; } catch (e) {}
+  const ta = document.createElement('textarea');
+  ta.value = txt; ta.style.position = 'fixed'; ta.style.opacity = '0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch (e) {}
+  ta.remove();
+}
+async function renderCoords() {
+  const d = await post('coords');
+  if (!d || typeof d !== 'object') return;
+  byId('c-v3').textContent = d.v3 || '—';
+  byId('c-v4').textContent = d.v4 || '—';
+  byId('c-h').textContent = d.heading || '—';
+  byId('c-raw').textContent = d.raw || '—';
+  byId('c-meta').textContent = [d.street, d.model].filter(Boolean).join(' · ');
+}
+
 // ── Resources ──
 function renderResources(list) {
   const wrap = byId('rlist'); wrap.innerHTML = '';
@@ -215,6 +235,11 @@ function flash(el, ok) {
 document.querySelectorAll('[data-self]').forEach(b => b.onclick = async () => {
   flash(b, await post('self', { act: b.dataset.self }));
 });
+document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
+  const el = byId(b.dataset.copy); if (!el) return;
+  copyText(el.textContent.trim()); flash(b, true);
+});
+byId('c-refresh').onclick = () => renderCoords();
 document.querySelectorAll('.rtab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 byId('refresh').onclick = loadTab;
 byId('psearch').oninput = renderPlayers;
