@@ -15,6 +15,7 @@ local UsableItems  = {}   -- name -> handler(src, item)
 local Equipped     = {}   -- [source] = { slot, name }  currently-drawn weapon
 local dropCounter  = 0
 local MONEY        = 'money'
+local maybeUnequip        -- forward declaration (used by the move callback, defined below)
 
 -- Use effects by item type (hooks v-status). Registered per usable item.
 local function status(src, key, delta) pcall(function() exports['v-status']:Add(src, key, delta) end) end
@@ -392,7 +393,7 @@ end
 -- If the given slot holds the currently-drawn weapon, holster it (the client
 -- reports the remaining ammo back before removing it). Called before a weapon
 -- item is moved / dropped / given so the ped never keeps a gone weapon.
-local function maybeUnequip(src, slot)
+function maybeUnequip(src, slot)   -- assigns the forward-declared local above
     local eq = Equipped[src]
     if eq and eq.slot == slot then
         Equipped[src] = nil

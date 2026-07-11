@@ -16,8 +16,22 @@ local function currentAppearance()
     return (pd and pd.appearance) or {}
 end
 
+-- Strip the ped to underwear so tattoos (torso / arms / legs) are actually visible in
+-- the tattoo editor. The saved appearance is untouched — finish() re-dresses fully.
+local function stripForTattoos()
+    local ped = PlayerPedId()
+    local female = (work and work.sex == 1)
+    SetPedComponentVariation(ped, 8, 15, 0, 2)                    -- undershirt: none
+    SetPedComponentVariation(ped, 11, 15, 0, 2)                   -- top: none (bare torso)
+    SetPedComponentVariation(ped, 3, 15, 0, 2)                    -- arms/torso: bare
+    SetPedComponentVariation(ped, 4, female and 15 or 21, 0, 2)   -- legs: underwear
+    SetPedComponentVariation(ped, 5, 0, 0, 2)                     -- bag/parachute: none
+    ClearPedProp(ped, 0)                                         -- hat off (head tattoos)
+end
+
 local function applyWork()
     exports['v-appearance']:ApplyAppearance(work)
+    if mode == 'tattoo' then stripForTattoos() end   -- re-strip: ApplyAppearance re-dressed the ped
 end
 
 -- ── NUI data per mode ──────────────────────────────────────────────
@@ -80,6 +94,8 @@ function OpenEditor(m)
     elseif m == 'surgery' then for k, v in pairs(surgeryData()) do data[k] = v end
     else for k, v in pairs(tattooData()) do data[k] = v end end
     SendNUIMessage({ action = 'open', data = data })
+
+    if m == 'tattoo' then applyWork() end   -- apply working tattoos + strip clothing to reveal them
 end
 
 local function finish(save)
