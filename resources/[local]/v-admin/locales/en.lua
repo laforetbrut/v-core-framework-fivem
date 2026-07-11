@@ -68,5 +68,10 @@ local T = {
     ['adm.tools_hint']   = 'Noclip: WASD to move · Space/Q up-down · Shift fast · Ctrl slow · F6 toggles',
     ['adm.spec_on']      = 'Spectating — noclip enabled.',
     ['adm.spec_off']     = 'Spectate off.',
+    ['adm.self_heal']    = 'Heal me',
+    ['adm.self_revive']  = 'Revive me',
+    ['adm.self_armor']   = 'Armor',
+    ['adm.revived']      = 'Revived.',
+    ['adm.armored']      = 'Armor refilled.',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

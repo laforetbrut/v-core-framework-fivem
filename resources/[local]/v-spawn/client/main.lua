@@ -61,6 +61,11 @@ local function switchSpawn(x, y, z, h)
         while GetPlayerSwitchState() ~= 12 and t2 < 300 do Wait(25); t2 = t2 + 1 end   -- 12 = switch complete
     end
 
+    -- Hold the player (frozen) a moment longer so the world + every NUI finish
+    -- streaming/warming up before control is handed over. This shifts the heavy
+    -- first-minute load behind the spawn instead of onto the player mid-interaction.
+    if (Config.PostSpawnHold or 0) > 0 then Wait(Config.PostSpawnHold) end
+
     ped = PlayerPedId()
     FreezeEntityPosition(ped, false)   -- unfreeze only now: grounded + switched in
     SetPlayerControl(PlayerId(), true, 0)

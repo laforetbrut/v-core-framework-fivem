@@ -20,6 +20,12 @@ Config.SpawnPoints = {
 -- Fallback spawn (also used if a returning character has no saved position).
 Config.Spawn = vector4(-1037.66, -2737.98, 20.17, 329.3)
 
+-- Extra time (ms) the player is held frozen at the destination after the ground is
+-- found, so the world + all NUIs finish streaming/warming up before control is handed
+-- over — reduces the "everything is laggy for the first minute after spawn" window.
+-- Raise it if players still report a laggy first minute; 0 disables the hold.
+Config.PostSpawnHold = 3000
+
 -- Editor ranges.
 Config.Max = {
     hair = 73, eyebrows = 33, beard = 28, faceParents = 45,

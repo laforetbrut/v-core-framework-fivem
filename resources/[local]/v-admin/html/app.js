@@ -210,6 +210,9 @@ function flash(el, ok) {
   el.classList.add(ok ? 'okflash' : 'badflash');
 }
 
+document.querySelectorAll('[data-self]').forEach(b => b.onclick = async () => {
+  flash(b, await post('self', { act: b.dataset.self }));
+});
 document.querySelectorAll('.rtab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 byId('refresh').onclick = loadTab;
 byId('psearch').oninput = renderPlayers;
