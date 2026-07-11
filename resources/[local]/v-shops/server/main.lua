@@ -107,16 +107,21 @@ Core.RegisterCallback('v-shops:sell', function(source, resolve, data)
     if not price or amount <= 0 then resolve(false); return end
     amount = math.min(amount, 1000)
 
-    -- Take the items first (authoritative count check), then pay.
+    -- Compute the payout BEFORE taking anything, so a sale that floors to $0
+    -- (e.g. 1 marked bill at a 0.65 launderer) can never destroy the goods.
+    local rate = (Config.SellRate and Config.SellRate[shop.id]) or 1
+    local total = math.floor(price * amount * rate)
+    local payout = (Config.SellPayout and Config.SellPayout[shop.id]) or 'cash'
+    if total <= 0 then
+        Core.Notify(source, LP(source, 'shop.too_small'), 'error'); resolve({ error = 'amount' }); return
+    end
+
+    -- Verify ownership, then take the items, then pay.
     if (exports['v-inventory']:GetItemCount(source, data.item) or 0) < amount then
         resolve({ error = 'count' }); return
     end
     if not exports['v-inventory']:RemoveItem(source, data.item, amount) then resolve({ error = 'count' }); return end
 
-    local rate = (Config.SellRate and Config.SellRate[shop.id]) or 1
-    local total = math.floor(price * amount * rate)
-    local payout = (Config.SellPayout and Config.SellPayout[shop.id]) or 'cash'
-    if total <= 0 then resolve(false); return end
     if payout == 'dirty' then
         -- Pay in marked_bills (1 per $). If the payout can't fit, refund the goods.
         if not exports['v-inventory']:AddItem(source, 'marked_bills', total) then
@@ -163,8 +168,9 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
         Core.Notify(source, LP(source, 'shop.nospace'), 'error'); resolve({ error = 'space' }); return
     end
     -- Charge only after the item is granted; if the charge fails (race), refund the item
-    -- so the player can never keep goods they didn't pay for.
-    if not player.RemoveMoney(account, total, 'shop-buy') then
+    -- so the player can never keep goods they didn't pay for. total==0 (a free item) is
+    -- allowed through without a charge (RemoveMoney rejects a 0 amount).
+    if total > 0 and not player.RemoveMoney(account, total, 'shop-buy') then
         exports['v-inventory']:RemoveItem(source, data.item, amount)
         Core.Notify(source, LP(source, 'shop.nofunds'), 'error'); resolve({ error = 'funds' }); return
     end

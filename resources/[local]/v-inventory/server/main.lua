@@ -699,13 +699,26 @@ end)
 
 exports('RemoveItem', function(src, name, amount)
     if not Inv[src] then return false end
-    amount = amount or 1
+    amount = math.floor(amount or 1)
+    if amount <= 0 then return false end
+    -- Sum every stack of this item; only remove if the TOTAL is enough, spanning stacks
+    -- (a quantity split across several stacks must still be removable).
+    local total, slots = 0, {}
     for _, it in ipairs(Inv[src]) do
-        if it.name == name and it.amount >= amount then
-            removeFromSlot(Inv[src], it.slot, amount); syncPlayer(src); return true
+        if it.name == name then total = total + it.amount; slots[#slots + 1] = it.slot end
+    end
+    if total < amount then return false end
+    local remaining = amount
+    for _, slot in ipairs(slots) do
+        if remaining <= 0 then break end
+        local it = itemAt(Inv[src], slot)
+        if it then
+            local take = math.min(it.amount, remaining)
+            removeFromSlot(Inv[src], slot, take)
+            remaining = remaining - take
         end
     end
-    return false
+    syncPlayer(src); return true
 end)
 
 exports('GetItemCount', function(src, name)

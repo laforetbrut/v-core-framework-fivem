@@ -19,6 +19,7 @@ local T = {
     ['shop.nothing_sell'] = 'Rien à vendre ici.',
     ['shop.owned']   = 'en stock',
     ['shop.rate_of'] = 'reversé',
+    ['shop.too_small'] = 'Ce montant est trop petit pour être payé.',
     ['shop.nofunds'] = 'Pas assez d\'argent.',
     ['shop.nospace'] = 'Pas assez de place dans l\'inventaire.',
     ['shop.too_far'] = 'Tu es trop loin de la boutique.',
