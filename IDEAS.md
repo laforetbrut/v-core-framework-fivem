@@ -31,7 +31,9 @@ by value/effort. Tick items as they ship.
 - [ ] **Crafting XP / skill tree** — repeated crafts unlock faster times, bulk crafting, rare recipes (roadmap #9).
 - [ ] **Blueprints as items** — a recipe is locked until the player owns/learns its blueprint.
 - [ ] **Batch queue** — queue several crafts instead of one at a time.
-- [ ] **Salvage / dismantle** — break an item back into a fraction of its materials at the workbench.
+- [x] **Salvage / dismantle + refine** ✅ (shipped) — Recycling Center station breaks items into materials
+      (net loss) and refines raw stock. *Next:* let a recycle row title show the INPUT item (currently shows
+      the output), and multi-material yields (needs a NUI tweak to the craft row).
 - [ ] **Job-gated benches** — mechanic/medic/police stations with restricted recipes (uses the existing `gate`).
 
 ## C. Weapons — enhancements
