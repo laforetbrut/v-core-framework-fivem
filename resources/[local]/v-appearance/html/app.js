@@ -61,7 +61,7 @@ function buildBarber() {
   (data.overlays || []).forEach(ov => {
     const cur = (a.overlays || {})[ov.key] || { style: 0, opacity: 1.0, color: 0 };
     const grp = group('app.ov.' + ov.key);
-    grp.appendChild(stepper(t('app.style'), cur.style || 0, (ov.count || 0) + 1, (v) => post('appSetOverlay', { key: ov.key, style: v })));
+    grp.appendChild(stepper(t('app.style'), cur.style || 0, (ov.count || 1), (v) => post('appSetOverlay', { key: ov.key, style: v })));
     grp.appendChild(slider(t('app.opacity'), cur.opacity != null ? cur.opacity : 1.0, 0, 1, 0.05, (v) => post('appSetOverlay', { key: ov.key, opacity: v })));
     if (ov.colorType) {
       const cc = ov.colorType === 2 ? (data.makeupColors || 1) : (data.hairColors || 1);

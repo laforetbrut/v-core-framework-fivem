@@ -91,8 +91,10 @@ end
 -- ── Option collection ─────────────────────────────────────────
 local function appendGroup(dst, group, data)
     if not group then return end
+    -- Pair each option with the exact data blob it was filtered against, so a zone
+    -- option runs with { zone, coords, distance } and not the entity raycast blob.
     for _, opt in ipairs(group) do
-        if optionAllowed(opt, data) then dst[#dst + 1] = opt end
+        if optionAllowed(opt, data) then dst[#dst + 1] = { opt = opt, data = data } end
     end
 end
 
@@ -209,7 +211,8 @@ local function openEye()
 
             local list = {}
             for i, o in ipairs(opts) do
-                list[i] = { n = i, label = (o.label and (strings()[o.label] or o.label)) or 'Action', icon = o.icon or nil }
+                local opt = o.opt
+                list[i] = { n = i, label = (opt.label and (strings()[opt.label] or opt.label)) or 'Action', icon = opt.icon or nil }
             end
             local key = tostring(#list)
             for _, o in ipairs(list) do key = key .. '|' .. o.label end
@@ -229,10 +232,9 @@ RegisterNUICallback('cursor', function(data, cb)
 end)
 RegisterNUICallback('select', function(data, cb)
     local i = data and tonumber(data.index)
-    local opt = (active and current and i) and current[i] or nil
-    local d = currentData
+    local entry = (active and current and i) and current[i] or nil
     stopEye()               -- tear the eye's focus down FIRST so an option that opens its own menu keeps focus
-    if opt then runOption(opt, d) end
+    if entry then runOption(entry.opt, entry.data) end   -- run with the option's OWN data blob
     cb('ok')
 end)
 RegisterNUICallback('closeeye', function(_, cb) active = false; cb('ok') end)

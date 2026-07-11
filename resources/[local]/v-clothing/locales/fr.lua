@@ -16,6 +16,7 @@ local T = {
     ['cl.equipped']    = '%s équipé.',
     ['cl.unequipped']  = '%s retiré.',
     ['cl.nofunds']     = 'Pas assez d\'argent.',
+    ['cl.nospace']     = 'Pas assez de place dans l\'inventaire.',
     ['cl.noperm']      = 'Permission refusée.',
     ['cl.scan_start']  = 'Scan des vêtements lancé (%s)…',
     ['cl.scan_prog']   = 'Scan : %s/%s vignettes',

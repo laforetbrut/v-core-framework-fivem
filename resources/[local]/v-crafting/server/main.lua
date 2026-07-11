@@ -99,7 +99,10 @@ Core.RegisterCallback('v-crafting:craft', function(source, resolve, data)
     if not canGate(source, recipe.gate) then
         Core.Notify(source, LP(source, 'craft.locked'), 'error'); resolve({ error = 'gate' }); return
     end
-    if os.time() - (LastAt[source] or 0) < Config.Cooldown then resolve({ error = 'cooldown' }); return end
+    -- Enforce the recipe's OWN craft time server-side (the progress bar is client-side
+    -- and bypassable) plus the flat floor, so a scripted client can't craft instantly.
+    local minGap = math.max(Config.Cooldown or 1, math.ceil((recipe.time or 0) / 1000))
+    if os.time() - (LastAt[source] or 0) < minGap then resolve({ error = 'cooldown' }); return end
 
     Busy[source] = true
 

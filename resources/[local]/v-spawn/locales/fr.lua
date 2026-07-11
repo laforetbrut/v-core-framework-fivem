@@ -67,6 +67,7 @@ local T = {
     ['face.chin_len']    = 'Longueur du menton',
     ['face.lips']        = 'Lèvres',
     ['err.name']         = 'Entre un prénom et un nom.',
+    ['err.create']       = 'Création du personnage échouée, réessaie.',
     ['spawn.title']       = 'Où commence ton histoire ?',
     ['spawn.airport']     = 'Aéroport LSIA',
     ['spawn.airport_sub'] = 'Fraîchement débarqué à Los Santos.',

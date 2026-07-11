@@ -4,6 +4,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Status = {}   -- [source] = { hunger, thirst, stress, bleed, sick }
+local Dead   = {}   -- [source] = true between a real death (baseevents) and its respawn
 
 local function clamp(v, lo, hi) return math.max(lo, math.min(hi, v)) end
 
@@ -35,7 +36,13 @@ end)
 
 AddEventHandler('playerDropped', function()
     Status[source] = nil
+    Dead[source] = nil
 end)
+
+-- Server-authoritative death signal (from the baseevents resource, not a raw client
+-- event), so onRespawn can only cleanse ONCE per real death.
+AddEventHandler('baseevents:onPlayerDied',   function() Dead[source] = true end)
+AddEventHandler('baseevents:onPlayerKilled', function() Dead[source] = true end)
 
 -- ── Mutators (called by items, jobs, admin, ...) ───────────────
 local function setNeed(src, key, value)
@@ -82,7 +89,8 @@ end)
 
 RegisterNetEvent('v-status:server:onRespawn', function()
     local src = source
-    if not Status[src] then return end
+    if not Status[src] or not Dead[src] then return end   -- only after a real death
+    Dead[src] = nil
     Status[src].bleed  = 0
     Status[src].hunger = math.max(Status[src].hunger, 50)
     Status[src].thirst = math.max(Status[src].thirst, 50)

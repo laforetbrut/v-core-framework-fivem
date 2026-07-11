@@ -1,5 +1,15 @@
 # Error Log
 
+## [2026-07-11 — audit] — Recurring classes found by the framework-wide audit
+**Context:** A per-module adversarial audit (19 confirmed fixes). The reusable lessons:
+- **Client-only distance/authority gates are not gates.** `v-inventory:give` trusted the client's proximity check → cross-map transfers. Every server callback/net event that acts on a target must re-derive proximity/permission **server-side** (mirror `searchPlayer`/`openStash`).
+- **Ignoring a mutation's return value loses data.** `AddItem` returns false when full; v-clothing unequip/equip discarded it and cleared the worn slot anyway → destroyed the item. Always branch on the boolean **before** mutating dependent state.
+- **Two-step money must be atomic across the DB.** The offline bank transfer credited the recipient's DB row immediately but only debited the sender in memory → a crash duplicated money. Wrap both sides in `MySQL.transaction.await`.
+- **Re-validate on every action, not just on open.** Trunk/drop/stash proximity (and job/gang access) was checked only at open; the move callback now re-checks each move.
+- **Client-triggered "on death/respawn" resets need a server death signal.** Gate `onRespawn` on a `Dead` set fed by `baseevents:onPlayerDied`, cleared on respawn.
+- **Shared globals: only clear what you set.** The stress blur called `ClearTimecycleModifier()` unconditionally, wiping other resources' modifiers; track a local flag and clear only on the set→unset edge.
+- **A synchronous latch must be set BEFORE the first `await`** (selectCharacter re-entrancy), same as the existing `creating` guard.
+
 ## [2026-07-11 — session] — Drag-drop broken: `maybeUnequip` called before its definition
 **Context:** Every inventory move from the player grid errored: `main.lua:341: attempt to call a nil value (global 'maybeUnequip')`, so drag-drop did nothing.
 **Root cause:** `maybeUnequip` is a `local function` defined ~line 396, but the `v-inventory:move` callback calls it ~line 343 — **before** the local exists in scope, so the call resolved to a nil global and the move callback errored for *every* player move.
