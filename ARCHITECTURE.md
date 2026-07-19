@@ -34,7 +34,7 @@ Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progre
 | 2 | Weapons **functional** (equip/holster via Use, ammo boxes top up the drawn weapon, serial minted on first draw, ammo persists to metadata) ✅ · **attachments** ✅ (5 attachment items — suppressor / flashlight / scope / grip / extended-mag — `Use` fits them to the drawn weapon via a server component map, stored on the weapon item's metadata and re-applied on every draw; craftable at the reloading bench) · on-back / draw anims ⬜ | 🔨 |
 | 3 | **Shared/gang stashes with permissions** — persistent containers gated by job / gang / permission tier, opened via `exports['v-inventory']:OpenSharedStash(src, id)` or a net event; access checked server-side on every open (`Config.SharedStashes`) | ✅ framework (needs placement/interaction points) |
 | 4 | Advanced shops with a **basket** (drag-to-buy + inventory view now shipped in v-shops) | 🔨 partial |
-| 5 | Advanced crafting (recipes, benches) ✅ — **`v-crafting`** module: 4 stations (workbench / reloading / kitchen / electronics), 25 recipes, server-authoritative proximity + input check + space-check with refund, Field-Case NUI (material chips have/need + progress bar), optional job/perm gates | ✅ |
+| 5 | Advanced crafting (recipes, benches) ✅ — **`v-crafting`** module: 4 stations (workbench / reloading / kitchen / electronics), 25 recipes, server-authoritative proximity + input check + space-check with refund, EMBER NUI (material chips have/need + progress bar), optional job/perm gates | ✅ |
 | 6 | Inventory customization (colours, transparency, centered mode) | ⬜ |
 | 7 | **Backpacks** (carrying one adds +12 slots / +20 kg) ✅ · **body armor** items apply armour on use ✅ · armor DLC ⬜ | 🔨 |
 | 8 | **Player search / steal** ✅ (frisk a nearby hands-up / downed player — server-validated proximity + gate, cross-player container, take **or** plant, hidden pocket never exposed) + **hands-up surrender**. In-world *placed* items (beyond ground drops) ⬜ | 🔨 |
@@ -176,11 +176,14 @@ Schema lives in **`database/schema.sql`** (10 tables). MariaDB, accessed through
 Legend: ✅ shipped · ⚠️ shipped with a known hole · ⬜ not built.
 
 ### `v-ui` ✅ — shared design system
-**Done.** `theme.css` only: the full "Field Case" token set (warm-charcoal surfaces, orange-only
-accent, muted status + rarity scales, chamfer geometry, `--z-*` scale, motion tokens) plus the
-primitives `.v-chamfer` / `.v-tab` / `.v-brk` / `.v-slot` / `.v-gauge` / `.v-btn` / `.v-chip` /
-`.v-stencil` / `.v-input`, a global `:focus-visible` ring and a `prefers-reduced-motion` block.
-CEF-103 safe. No SQL, no Lua, no exports.
+**Done.** `theme.css` only: the full "EMBER" token set (warm-graphite surfaces, **dominant**
+brand orange with gradient/glow variants, muted status + rarity scales, 8–22px rounded geometry,
+soft layered shadows, `--z-*` scale, fluid/spring motion tokens) plus the primitives `.v-chamfer`
+(rounded glass panel + orange top light-streak) / `.v-tab` / `.v-brk` / `.v-slot` / `.v-gauge` /
+`.v-progress` / `.v-glass` / `.v-btn` / `.v-chip` / `.v-stencil` / `.v-input`, a global
+`:focus-visible` ring and a `prefers-reduced-motion` block. CEF-safe: **no `backdrop-filter`**
+(FiveM's CEF renders it as an opaque black box) — depth comes from layered gradients and shadows.
+No SQL, no Lua, no exports.
 
 **Remaining.**
 - No shared JS runtime — every module re-implements the `--i` stagger, gauge fill and `.is-over`
@@ -189,7 +192,7 @@ CEF-103 safe. No SQL, no Lua, no exports.
   from ordinary accented chrome.
 - No `dependencies{}` block: if `v-ui` fails to start, every NUI page renders unstyled **silently**.
 - No cache-busting on the stylesheet URL.
-- `v-loadscreen` cannot link it (loads pre-mount) and mirrors the tokens locally — they will drift.
+- `v-loadscreen` cannot link it (loads pre-mount) and mirrors the EMBER tokens locally — they will drift.
 
 ### `v-core` ✅ — framework
 **Done.** Player lifecycle (`playerReady` → `EnsureUser` → load-or-create character → `playerLoaded`,
@@ -215,8 +218,8 @@ bookkeeping. Two permission-gated console commands (`givemoney`, `setperm`).
 
 ### `v-notify` ✅ — toasts
 **Done.** Client `exports['v-notify']:show(data)` + `v-notify:show` net event. Four muted types with
-line icons, chamfered Field Case cards, XSS-safe escaping, click-to-dismiss, countdown bar,
-`aria-live` region.
+line icons, rounded EMBER glass cards with a type-keyed accent bar, XSS-safe escaping,
+click-to-dismiss, glowing countdown bar, `aria-live` region.
 
 **Remaining.**
 - **No server-side export.** Every server caller hardcodes the literal string
@@ -333,7 +336,7 @@ durability. **Cash as an item** — a virtual wallet tile mirroring the account,
 source of truth (no dupe path). Vehicle trunk + glovebox, persistent stashes, ground drops.
 **Equipment panel** — clothing as body slots, drag to equip, right-click to unequip (driven by
 v-clothing's `GetWorn` / `Unequip`). Server-authoritative: every action re-renders from the returned
-state. Field Case NUI.
+state. EMBER NUI.
 
 Exports: `AddItem` / `RemoveItem` / `GetItemCount` / `RegisterUsableItem`.
 Callbacks: `getState` / `move` / `use` / `drop` / `give` / `rename` / `unequipCloth`.
@@ -388,7 +391,7 @@ count, progress time, optional `gate` = job/grade/permission). Opening a station
 **server-authoritative**: `getStation` / `craft` re-check the player's real distance to a bench server-side
 (`atBench`, uses `GetPlayerPed`+`GetEntityCoords`), verify every input for `qty × amount`, consume them,
 then `AddItem` the output — **refunding the inputs if the output doesn't fit**. Per-player cooldown +
-in-flight lock guard against spam/double-submit. Field-Case NUI: recipe rows show each material as a
+in-flight lock guard against spam/double-submit. EMBER NUI: recipe rows show each material as a
 `have/need` chip (red when short), a quantity stepper capped to the craftable amount, and a progress bar;
 the panel refreshes owned counts live after each craft. fr+en. Reuses `v-inventory`
 `GetItemCount`/`RemoveItem`/`AddItem` exports — no new DB tables.
@@ -528,7 +531,7 @@ Ordered by how much damage it can do.
 2. Server: `local Core = exports['v-core']:GetCore()`, register callbacks, use `Core.GetPlayer`.
    **Never query SQL directly** — add the query to `v-core/server/database.lua`.
 3. Client: `local Core = exports['v-core']:GetCore()`, listen to `v-core:client:*`, drive NUI.
-4. NUI: `<link href="https://cfx-nui-v-ui/theme.css">` and compose the Field Case primitives
+4. NUI: `<link href="https://cfx-nui-v-ui/theme.css">` and compose the EMBER primitives
    (`RULES.md` §3.5). **The resource that owns the page calls `SetNuiFocus` itself.**
 5. Every player-facing string goes through `L('key')` with fr **and** en entries.
 6. Ship a permission-gated management UI in `v-admin` for anything an operator will want to tune.

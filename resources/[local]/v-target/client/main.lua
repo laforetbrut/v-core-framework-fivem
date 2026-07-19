@@ -98,10 +98,9 @@ local function appendGroup(dst, group, data)
     end
 end
 
-local function collectOptions()
+local function collectOptions(entity, endCoords)
     local ped = PlayerPedId()
     local pcoords = GetEntityCoords(ped)
-    local entity, endCoords = castEye()
 
     local data = { entity = entity, coords = endCoords }
     if entity then
@@ -156,6 +155,15 @@ end
 -- ── Eye loop ──────────────────────────────────────────────────
 local active, current, currentData = false, nil, nil
 local highlighted = nil
+local locked = nil          -- sticky entity while the eye is open (see the eye thread)
+local panelHover = false    -- NUI reports the cursor hovering the options panel
+
+-- Close model (deliberate): the eye closes on the page's Alt KEYUP message
+-- ('closeeye'), on Escape/right-click, on selection, on the page losing focus,
+-- or on a second Alt press (toggle safety net). It never trusts
+-- RegisterKeyMapping's '-vtarget' nor an IsControlPressed poll: both are
+-- fabricated once SetNuiFocus grabs the keyboard mid-hold — the eye flashed,
+-- then blinked open/closed in a loop.
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -183,6 +191,7 @@ local function openEye()
     if active or exports['v-core']:IsAnyMenuOpen() then return end
     active = true
     eyeTornDown = false
+    locked, panelHover = nil, false
     cursorX, cursorY = 0.5, 0.5
     SetNuiFocus(true, true)
     SetNuiFocusKeepInput(false)
@@ -193,37 +202,68 @@ local function openEye()
         SetCursorLocation(0.5, 0.5)
         local lastKey = nil
         while active do
-            local opts, data, entity = collectOptions()
-            currentData = data
-            current = opts
+            -- Watchdog: a frame error must never leave the eye frozen with NUI
+            -- focus grabbed — close cleanly and log it to the F8 console.
+            local ok, err = pcall(function()
+                -- Cursor is on the options list: FREEZE the visible list (and the
+                -- outline) so a click always matches what the user sees — no
+                -- per-frame recompute, no stale index, less CPU.
+                if not panelHover then
+                local rawEntity, endCoords = castEye()
 
-            -- Outline the entity under the cursor.
-            if entity ~= highlighted then
-                clearHighlight()
-                if entity and DoesEntityExist(entity) and #opts > 0 then
-                    SetEntityDrawOutlineColor(255, 106, 26, 200)
-                    SetEntityDrawOutline(entity, true)
-                    highlighted = entity
+                -- Sticky target: keep the current entity while the cursor travels
+                -- to the options panel (the ray then hits nothing, which used to
+                -- make the options vanish before they could be clicked). Re-target
+                -- only on a DIFFERENT entity, and never while hovering the panel.
+                local entity = rawEntity
+                if locked then
+                    if not DoesEntityExist(locked) then
+                        locked = nil
+                    elseif rawEntity and rawEntity ~= locked and not panelHover then
+                        locked = nil
+                    else
+                        entity = locked
+                    end
                 end
-            elseif entity and #opts == 0 then
-                clearHighlight()
-            end
 
-            local list = {}
-            for i, o in ipairs(opts) do
-                local opt = o.opt
-                list[i] = { n = i, label = (opt.label and (strings()[opt.label] or opt.label)) or 'Action', icon = opt.icon or nil }
+                local opts, data = collectOptions(entity, endCoords)
+                currentData = data
+                current = opts
+
+                if entity and #opts > 0 then locked = entity
+                elseif #opts == 0 then locked = nil end
+
+                -- Outline the entity under the cursor.
+                if entity ~= highlighted then
+                    clearHighlight()
+                    if entity and DoesEntityExist(entity) and #opts > 0 then
+                        SetEntityDrawOutlineColor(255, 106, 26, 200)
+                        SetEntityDrawOutline(entity, true)
+                        highlighted = entity
+                    end
+                elseif entity and #opts == 0 then
+                    clearHighlight()
+                end
+
+                local list = {}
+                for i, o in ipairs(opts) do
+                    local opt = o.opt
+                    list[i] = { n = i, label = (opt.label and (strings()[opt.label] or opt.label)) or 'Action', icon = opt.icon or nil }
+                end
+                local key = tostring(#list)
+                for _, o in ipairs(list) do key = key .. '|' .. o.label end
+                if key ~= lastKey then lastKey = key; SendNUIMessage({ action = 'options', options = list }) end
+                end
+            end)
+            if not ok then
+                print(('[v-target] eye frame error — eye closed: %s'):format(tostring(err)))
+                break
             end
-            local key = tostring(#list)
-            for _, o in ipairs(list) do key = key .. '|' .. o.label end
-            if key ~= lastKey then lastKey = key; SendNUIMessage({ action = 'options', options = list }) end
             Wait(0)
         end
         stopEye()
     end)
 end
-
-local function closeEye() active = false end
 
 -- NUI relays.
 RegisterNUICallback('cursor', function(data, cb)
@@ -233,14 +273,27 @@ end)
 RegisterNUICallback('select', function(data, cb)
     local i = data and tonumber(data.index)
     local entry = (active and current and i) and current[i] or nil
-    stopEye()               -- tear the eye's focus down FIRST so an option that opens its own menu keeps focus
-    if entry then runOption(entry.opt, entry.data) end   -- run with the option's OWN data blob
+    -- Only tear the eye down when the click maps to a REAL option — a stale or
+    -- flooded click must never close the eye without running anything.
+    if entry then
+        stopEye()               -- tear the eye's focus down FIRST so an option that opens its own menu keeps focus
+        runOption(entry.opt, entry.data)   -- run with the option's OWN data blob
+    end
     cb('ok')
 end)
 RegisterNUICallback('closeeye', function(_, cb) active = false; cb('ok') end)
+-- The NUI reports whether the cursor is over the options panel, so the sticky
+-- target never re-acquires an entity sitting behind the list mid-click.
+RegisterNUICallback('panel', function(data, cb)
+    panelHover = (data and data.hover == true)
+    cb('ok')
+end)
 
-RegisterCommand('+vtarget', function() openEye() end, false)
-RegisterCommand('-vtarget', function() closeEye() end, false)
+-- Press toggles the eye (safety net); holding also closes correctly because the
+-- NUI page reports the real Alt keyup ('closeeye'). '-vtarget' stays a no-op —
+-- it fires spuriously when NUI focus grabs the keyboard mid-hold.
+RegisterCommand('+vtarget', function() if active then stopEye() else openEye() end end, false)
+RegisterCommand('-vtarget', function() end, false)
 RegisterKeyMapping('+vtarget', 'Interaction eye (target)', 'keyboard', Config.Key or 'LMENU')
 
 AddEventHandler('onResourceStop', function(res)

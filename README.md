@@ -8,7 +8,7 @@ A clean FiveM (GTA V) server on a **vanilla base** — only the official cfx def
 - Vanilla cfx default resources only (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync enabled.
 - Custom roleplay core `v-core` — DB-persistent players, API + callbacks (see [ARCHITECTURE.md](ARCHITECTURE.md)).
-- `v-ui` "Field Case" design system (dark/orange) + `v-hud` money HUD + `v-notify` toasts.
+- `v-ui` "EMBER" design system (modern dark glass, dominant orange) + `v-hud` money HUD + `v-notify` toasts.
 - On-demand local MariaDB (never runs 24/7).
 - One-click launch via `start.bat`.
 
@@ -75,7 +75,7 @@ Serveur FiveM (GTA V) sur une **base vanilla** — uniquement les ressources off
 - Uniquement les ressources cfx par défaut (mapmanager, spawnmanager, sessionmanager, basic-gamemode, hardcap, baseevents, rconlog, playernames).
 - OneSync activé.
 - Core roleplay maison `v-core` — joueurs persistés en BDD, API + callbacks (voir [ARCHITECTURE.md](ARCHITECTURE.md)).
-- Design system `v-ui` « Field Case » (sombre/orangé) + HUD d'argent `v-hud` + toasts `v-notify`.
+- Design system `v-ui` « EMBER » (verre sombre moderne, orange dominant) + HUD d'argent `v-hud` + toasts `v-notify`.
 - MariaDB locale à la demande (ne tourne jamais 24/7).
 - Lancement en un clic via `start.bat`.
 

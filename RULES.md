@@ -29,7 +29,7 @@
 - **Structure:** one resource = one folder in `resources/[local]/`; declare everything in `fxmanifest.lua`.
 - **Do NOT:** edit vendored `[cfx-default]` resources (override in `[local]`), hardcode secrets, leave `print` spam in shipped code.
 
-## 3.5 Visual Identity — "FIELD CASE" design system — MANDATORY
+## 3.5 Visual Identity — "EMBER" design system — MANDATORY
 
 **Every** NUI page in this project uses one design language, defined once in
 `resources/[local]/v-ui/theme.css` and loaded with
@@ -37,75 +37,82 @@
 Reuse its tokens and primitives. Only override a token locally when the value genuinely differs
 for that module. **Never fork the palette.**
 
-**Concept:** a ruggedized equipment flight-case cracked open on a workbench — foam-cutout slots,
-stenciled hazard labels, riveted corner brackets, gauge-cluster readouts. It must read like a
-Pelican case in a lock-up garage, **not** like a web UI. Reference implementation:
-`resources/[local]/v-inventory/html/`.
+**Concept:** a modern dark-glass HUD in the spirit of Quasar-style FiveM interfaces — deep
+warm-graphite panels, generously rounded cards, soft layered shadows, and one **dominant**
+brand orange that glows: gradient fills, a light-streak on every panel's top edge, hover and
+selection auras. Reference implementation: `resources/[local]/v-inventory/html/`.
 
-**Deliberately avoids the generic "AI" look**: no purple/blue gradients, no glassmorphism, no
-centered emoji cards, no pastel rounded everything, no evenly-distributed warm wash.
+**Deliberately avoids the generic "AI" look**: no purple/blue gradients, no pastel colour salad,
+no centered emoji cards. The orange stays warm and singular.
 
 ### The four signature cues — repeat them in every module
 
-1. **Chamfered panel** (`.v-chamfer`) — top-left / bottom-right corners cut. Implemented as a 1px
-   border pseudo-layer + a fill pseudo-layer, both `clip-path`'d, so tabs can bleed off the edge
-   and the drop-shadow sits on a cheap solid layer instead of repainting the children on hover.
-   Set `--v-cw` per element (14px panels, 10px small floats).
-2. **Orange stencil tab** (`.v-tab`) — a parallelogram riding the top edge of every panel header,
-   carrying the section name in tracked uppercase.
-3. **Machined L-brackets** (`.v-brk--tr` / `.v-brk--bl`) on the two sharp corners.
-4. **Consolas caliper readouts** — every number in `var(--v-font-num)`, tight, right-aligned,
-   the significant figure wrapped in `<b>` (orange).
+1. **Rounded glass panel** (`.v-chamfer`) — 1px `--v-line` border, `--v-r-lg` radius, a
+   translucent `--v-panel*` gradient fill, `var(--v-shadow-box)`, and an **orange light-streak**
+   bleeding across the top edge (a `::before` pseudo, so `innerHTML` rewrites never destroy it).
+   The fill stays near-opaque: depth comes from the layered gradient and shadow, never from blur.
+2. **Orange gradient tab** (`.v-tab`) — a floating pill riding the top edge of every panel
+   header: `--v-grad-accent` fill, dark-ink tracked uppercase, glow shadow.
+3. **Glowing corner accents** (`.v-brk--tr` / `.v-brk--bl`) — rounded L-bends on two diagonal
+   corners with an orange drop-shadow.
+4. **Tabular readouts** — every number in `var(--v-font-num)` with
+   `font-variant-numeric: tabular-nums`, the significant figure wrapped in `<b>` (orange).
 
 ### Palette (CSS variables — the file is the source of truth)
 
 | Token | Value | Use |
 |-------|-------|-----|
-| `--v-bg-900` … `--v-bg-500` | `#0A0908` → `#221D18` | warm charcoal surfaces (never neutral black) |
-| `--v-bg-sunk` | `#0E0C0A` | recessed wells: inputs, gauges, slots |
-| `--v-line` / `--v-line-2` | `#2C2620` / `#3A332B` | borders |
-| `--v-text` / `--v-text-dim` / `--v-text-faint` | `#EFE7DC` / `#A9A199` / `#8F877E` | text hierarchy (all ≥ 4.5:1) |
-| `--v-ink` | `#170D05` | dark ink on orange/light fills |
-| `--v-accent` / `--v-accent-300` / `--v-accent-600` | `#FF6A1A` / `#FF9354` / `#A83C0D` | **brand orange** / hover / pressed |
-| `--v-success` / `--v-danger` / `--v-warning` / `--v-info` | `#5FA36A` / `#C2362F` / `#C98A2B` / `#2F6F9E` | status — muted on purpose |
-| `--v-rar-common` … `--v-rar-mythic` | earthy | item rarity |
+| `--v-bg-900` … `--v-bg-500` | `#0B0A08` → `#241F1A` | warm graphite surfaces (never neutral black) |
+| `--v-panel` / `--v-panel-2` / `--v-panel-3` | translucent rgba | glass panel fills (near-opaque without blur) |
+| `--v-bg-sunk` | `#0D0B09` | recessed wells: inputs, gauge/progress tracks |
+| `--v-line` / `--v-line-2` | `rgba(255,221,194,.08/.15)` | warm hairline borders |
+| `--v-text` / `--v-text-dim` / `--v-text-faint` | `#F5EEE6` / `#B8AFA5` / `#948B81` | text hierarchy (all ≥ 4.5:1) |
+| `--v-ink` | `#1A0D03` | dark ink on orange/light fills |
+| `--v-accent` / `--v-accent-300` / `--v-accent-600` | `#FF7A1A` / `#FFA85C` / `#E14E00` | **brand orange — dominant** |
+| `--v-grad-accent` / `--v-grad-soft` | 135° orange gradients | primary fills / soft tinted washes |
+| `--v-success` / `--v-danger` / `--v-warning` / `--v-info` | `#3FA663` / `#E5484D` / `#E8A33D` / `#4C8DCC` | status — quieter than the orange |
+| `--v-rar-common` … `--v-rar-mythic` | muted scale | item rarity (legendary = accent, mythic = red) |
 
 ### Hard rules
 
-- **Orange is the only saturated hue on screen**, and it stays under ~10% of pixels: accents, one
-  tab per header, fills, hover. Charcoal dominates; orange punches. Status colours are muted and
-  must never out-shout it. Only *legendary* and *mythic* rarity are allowed to bloom.
-- **No blur, no translucency for depth.** Depth is inset shadow. `backdrop-filter` renders as an
-  opaque black box in CEF 103 anyway.
-- **Don't round everything.** Radii ≤ 3px (`--v-r-sm` 2px, `--v-r-md` 3px). The identity is
-  chamfers and hard notches, not pills.
-- **Letters get tracking, numbers get none.** Display = Bahnschrift Condensed uppercase,
-  `.12em`–`.24em`. Numbers = Consolas, `letter-spacing: 0`, tabular. Never letter-space a figure.
-- Recessed wells use `--v-bg-sunk` + inset shadows. Smooth progress bars become segmented
-  `.v-gauge` notch strips wherever a discrete reading makes sense.
+- **Orange is the dominant hue.** Primary actions use `--v-grad-accent` + glow, hover and
+  selection states glow orange, active pills and progress fills are orange. Body text stays on
+  the neutral text tokens; status colours stay muted and never out-shout the brand.
+- **Roundness is the identity.** Radii ≥ 8px everywhere — `--v-r-sm` 8px small controls,
+  `--v-r-md` 12px cards, `--v-r-lg` 16px panels, `--v-r-xl` 22px hero cards, 99px pills.
+  No sharp-cornered boxes.
+- **No blur, ever.** `backdrop-filter` parses in FiveM's CEF but renders as an opaque black
+  box — it is forbidden everywhere. Depth comes from layered gradients and shadows, not from
+  translucency tricks; panel fills stay near-opaque.
+- **Letters get tracking, numbers get tabular figures.** Display = Bahnschrift / Segoe UI;
+  small labels uppercase with `.12em`–`.16em` tracking. Numbers = `font-variant-numeric:
+  tabular-nums`, `letter-spacing: 0`. Never letter-space a figure.
+- Recessed wells use `--v-bg-sunk`. Segmented `.v-gauge` strips and smooth `.v-progress` bars
+  both fill with `--v-grad-accent` + glow.
 - **Line icons only** (stroke, `currentColor`, `aria-hidden="true"`). Never emoji.
-- One tasteful drop-shadow per surface. One `0 1px 2px #000` text-shadow for legibility over
-  images — no stacked glows.
-- **Motion:** one orchestrated open sequence. Panels seat 70ms apart, then slots/rows ripple
-  12–18ms apart, driven by an `--i` custom property. Micro-interactions 150–200ms.
+- One soft layered shadow per surface (`--v-shadow-box` / `--v-shadow-sm`). Orange glows come
+  from the glow tokens — no stacked rainbow glows.
+- **Motion:** one orchestrated open sequence. Panels seat 60ms apart, then slots/rows ripple
+  10–18ms apart, driven by an `--i` custom property. Micro-interactions 140–220ms on
+  `var(--v-ease)`; springy entrances on `var(--v-ease-spring)`.
   **Always `animation-fill-mode: backwards`, never `both`** — `both` keeps forcing the final
   keyframe's opacity and silently overrides later state classes (hidden, filtered-out, dimmed).
 
 ### Accessibility — non-negotiable
 
 - Minimum font-size for real text: **10px**. `--v-text-faint` is the contrast floor (≈5:1).
-- Never hardcode a `z-index` — use `--z-base` / `--z-raised` / `--z-sticky` / `--z-tooltip` /
-  `--z-context` / `--z-overlay` / `--z-toast`.
+- Never hardcode a `z-index` — use `--z-below` / `--z-base` / `--z-raised` / `--z-sticky` /
+  `--z-tooltip` / `--z-context` / `--z-overlay` / `--z-toast`.
 - `aria-label` on every input and icon-only control; `aria-hidden="true"` on decorative SVGs.
 - The theme ships a global `:focus-visible` ring and a `prefers-reduced-motion` block.
   Don't duplicate them, don't fight them.
 
-### CEF 103 constraints (FiveM's Chromium — violating these ships a broken UI)
+### CEF constraints (FiveM's Chromium — violating these ships a broken UI)
 
-**Forbidden:** `backdrop-filter`, `color-mix()`, `:has()`, container queries, CSS nesting,
-`mask-image`, `@import`, any external font/CDN/network fetch.
-**Allowed and used:** `clip-path: polygon()` with `calc()`, `:focus-visible`,
-`prefers-reduced-motion`, custom properties, `aspect-ratio`, `gap` on flex.
+**Forbidden:** `backdrop-filter` (parses but renders as an opaque black box), `color-mix()`,
+`:has()`, container queries, CSS nesting, `mask-image`, `@import`, any external font/CDN/network fetch.
+**Allowed and used:** `:focus-visible`, `prefers-reduced-motion`, custom properties,
+`aspect-ratio`, `gap` on flex, `-webkit-background-clip: text` for gradient figures.
 
 ### Change discipline for UI
 
@@ -132,7 +139,7 @@ no-op** — no error, no log.
 
 1. **No player chat commands.** Players interact only through the phone (iFruit), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
 2. **Everything manageable in-game via permissions.** Every content system must let an authorized user create/modify/delete its data live in-game (jobs, grades, prices, shops, items, vehicles, weather…). Build management UIs, not console commands; gate them with the v-core permission tiers (`user < mod < admin < superadmin`) and surface them in `v-admin`.
-3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules keep the single orange accent and the Field Case language (§3.5) — subject-specific variation happens in iconography and copy, not in the palette.
+3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules keep the dominant orange accent and the EMBER language (§3.5) — subject-specific variation happens in iconography and copy, not in the palette.
 
 ## 3.7 Change discipline — MANDATORY
 
@@ -193,5 +200,5 @@ fivem/
 6. Do not bump versions unless explicitly asked.
 7. Log every error encountered to `ERROR_LOG.md` with a prevention rule.
 8. Only add a database (oxmysql + MariaDB) when a feature actually needs persistence — keep the base lean.
-9. **Every NUI page must follow the Field Case design system (§3.5).** Link `v-ui/theme.css`, compose its primitives, and carry the four signature cues. A UI that merely uses the right colours but drops the chamfer / stencil tab / brackets / Consolas readouts is a regression, not a restyle.
+9. **Every NUI page must follow the EMBER design system (§3.5).** Link `v-ui/theme.css`, compose its primitives, and carry the four signature cues. A UI that merely uses the right colours but drops the rounded glass panel / gradient tab / corner accents / tabular readouts is a regression, not a restyle.
 10. Before touching a module's NUI, read its `app.js` in full and list every id / class / dataset it reads. Restyle existing hooks — never rename or delete one. Pseudo-elements survive `innerHTML` rewrites; wrapper elements do not.
