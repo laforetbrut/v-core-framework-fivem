@@ -1,8 +1,10 @@
-/* v-notify — Field Case toasts.
-   Tokens + chamfer primitive come from v-ui/theme.css (loaded first).
-   Each toast is a compact chamfered float with a coloured left rule keyed
-   to its type, a recessed icon well and machined L-brackets on its two
-   sharp corners. CEF 103 safe. */
+/* v-notify — EMBER toasts.
+   Tokens + primitives come from v-ui/theme.css (loaded first).
+   Each toast is a rounded 12px glass card with a glowing type-coloured
+   accent bar on its left edge (orange by default), a tinted icon well,
+   small glowing corner brackets and a smooth gradient countdown bar.
+   CEF safe: no color-mix(), no :has(), no nesting; no backdrop-filter —
+   FiveM's CEF renders it as an opaque black box. */
 
 html, body {
   width: 100%;
@@ -11,7 +13,8 @@ html, body {
   overflow: hidden;
 }
 
-/* ── Stack — top-right, transient. Only the cards catch the pointer. ── */
+/* ── Stack — top-right, transient. Only the cards catch the pointer.
+      The 10px gap is mirrored in app.js' collapse math — do not change. ── */
 .toasts {
   position: fixed;
   top: 22px;
@@ -24,93 +27,115 @@ html, body {
   pointer-events: none;
 }
 
-/* ── Toast card — chamfered float (small cut), riveted charcoal body ── */
+/* ── Toast card — rounded glass float, soft layered shadow.
+      --c / --c-300 are the per-type accent pair; default is brand orange. ── */
 .toast {
-  --c: var(--v-info);
-  --v-cw: 10px;
+  --c: var(--v-accent);
+  --c-300: var(--v-accent-300);
   position: relative;
   display: flex;
   align-items: flex-start;
   gap: 11px;
-  padding: 12px 15px 14px 14px;
-  background: transparent;
-  border: 0;
+  padding: 12px 16px 16px 15px;
+  border: 1px solid var(--v-line);
+  border-radius: var(--v-r-md);
+  background:
+    linear-gradient(165deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 58%, rgba(14, 12, 10, .92));
+  box-shadow: var(--v-shadow-sm), inset 0 1px 0 rgba(255, 255, 255, .05);
   pointer-events: auto;
   cursor: pointer;
   transform: translateX(120%);
   opacity: 0;
-  animation: toast-in .18s var(--v-ease) forwards;
+  animation: toast-in .32s var(--v-ease-spring) forwards;
+  transition: border-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease);
 }
-/* border/edge layer — carries the one drop-shadow */
+/* Left accent bar — rounded pill riding the card edge, glowing in --c. */
 .toast::before {
-  content: ''; position: absolute; inset: 0; z-index: 0;
-  clip-path: var(--v-chamfer);
-  background: linear-gradient(180deg, var(--v-line-2), var(--v-line));
-  filter: drop-shadow(0 12px 26px rgba(0, 0, 0, .6));
+  content: ''; position: absolute; z-index: var(--z-below);
+  left: 0; top: 11px; bottom: 11px; width: 3px;
+  border-radius: 99px;
+  background: linear-gradient(180deg, var(--c-300), var(--c));
+  box-shadow: 0 0 12px -2px var(--c);
 }
-/* fill layer + coloured left rule (inset shadow follows the chamfer) */
+/* Soft type-tinted wash bleeding in from the accent edge. */
 .toast::after {
-  content: ''; position: absolute; inset: 1px; z-index: 0;
-  clip-path: var(--v-chamfer);
-  background: linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
-  box-shadow: inset 3px 0 0 var(--c), inset 0 1px 0 rgba(255, 255, 255, .045);
+  content: ''; position: absolute; inset: 0; z-index: var(--z-below);
+  border-radius: inherit;
+  background: linear-gradient(105deg, var(--c), transparent 46%);
+  opacity: .07;
+  pointer-events: none;
 }
 .toast > * { position: relative; z-index: var(--z-raised); }
-.toast.out { animation: toast-out .26s var(--v-ease) forwards; pointer-events: none; }
-/* L-brackets on the two sharp corners — re-assert absolute over `.toast > *`. */
-.toast .v-brk { position: absolute; }
-
-/* type colours — muted / earthy, never out-shouting the orange accent */
-.toast.success { --c: var(--v-success); }
-.toast.error   { --c: var(--v-danger); }
-.toast.warning { --c: var(--v-warning); }
-.toast.info    { --c: var(--v-info); }
-
-/* ── Icon — recessed well, line icon stroked in the type colour ── */
-.toast .icon {
-  flex: 0 0 auto;
-  width: 30px; height: 30px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: var(--v-r-sm);
-  color: var(--c);
-  background: var(--v-bg-sunk);
-  box-shadow:
-    inset 0 0 0 1px var(--v-line),
-    inset 0 1px 3px rgba(0, 0, 0, .6),
-    inset 0 0 12px -5px var(--c);
+.toast:hover {
+  border-color: var(--v-line-2);
+  box-shadow: var(--v-shadow-sm), 0 0 18px -8px var(--c), inset 0 1px 0 rgba(255, 255, 255, .05);
 }
-.toast .icon svg { width: 17px; height: 17px; }
+.toast.out { animation: toast-out .24s var(--v-ease) forwards; pointer-events: none; }
 
-/* ── Body — dim display eyebrow over a bright message ── */
-.toast .body { flex: 1; min-width: 0; padding-top: 1px; }
+/* Corner brackets — re-assert absolute over `.toast > *` (specificity),
+   scaled down to sit quietly on the small card. */
+.toast .v-brk { position: absolute; width: 13px; height: 13px; opacity: .55; }
+.toast .v-brk--tr { top: 7px; right: 7px; }
+.toast .v-brk--bl { bottom: 7px; left: 7px; }
+
+/* Type colours — muted status tokens; only the default toast wears orange. */
+.toast.success { --c: var(--v-success); --c-300: var(--v-success-300); }
+.toast.error   { --c: var(--v-danger);  --c-300: var(--v-danger-300); }
+.toast.warning { --c: var(--v-warning); --c-300: var(--v-warning-300); }
+.toast.info    { --c: var(--v-info);    --c-300: var(--v-info-300); }
+
+/* ── Icon — tinted rounded well, line icon stroked in the type colour ── */
+.toast .icon {
+  position: relative;
+  flex: 0 0 auto;
+  width: 32px; height: 32px;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 10px;
+  color: var(--c-300);
+  background: var(--v-bg-sunk);
+  box-shadow: inset 0 0 0 1px var(--v-line), 0 0 16px -8px var(--c);
+}
+/* Tint overlay (opacity trick — CEF has no color-mix). */
+.toast .icon::before {
+  content: ''; position: absolute; inset: 0;
+  border-radius: inherit;
+  background: var(--c); opacity: .14;
+}
+.toast .icon svg { position: relative; width: 17px; height: 17px; }
+
+/* ── Body — neutral display eyebrow over a bright message ── */
+.toast .body { flex: 1; min-width: 0; padding-top: 2px; }
 .toast .title {
   font-family: var(--v-font-display);
   font-size: 11px; font-weight: 600;
-  letter-spacing: .18em; text-transform: uppercase;
+  letter-spacing: .16em; text-transform: uppercase;
   color: var(--v-text-dim);
   margin-bottom: 3px;
 }
 .toast .msg {
   font-family: var(--v-font-body);
-  font-size: 13px; line-height: 1.4;
+  font-size: 13px; line-height: 1.45;
   color: var(--v-text);
   word-wrap: break-word;
   overflow-wrap: break-word;
 }
 
-/* ── Countdown rule — depletes across the card over the toast duration.
-      Held clear of the bottom-right chamfer cut. Duration comes from the
-      inline style app.js writes (animation-duration). ── */
+/* ── Countdown bar — smooth glowing gradient pill that depletes across
+      the card. Duration comes from the inline style app.js writes
+      (animation-duration); transform + fill mode stay here. Insets keep
+      it clear of the accent bar and the bottom-left corner bracket. ── */
 .toast .bar {
-  position: absolute; left: 2px; bottom: 2px;
-  height: 2px; width: calc(100% - 12px);
-  z-index: var(--z-raised);
-  background: var(--c);
+  position: absolute; left: 24px; right: 14px; bottom: 6px;
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--c), var(--c-300));
+  box-shadow: 0 0 10px -2px var(--c);
+  opacity: .9;
   transform-origin: left;
   animation-name: toast-bar;
   animation-timing-function: linear;
   animation-fill-mode: forwards;
-  opacity: .7;
 }
 
 @keyframes toast-in  { to { transform: translateX(0); opacity: 1; } }

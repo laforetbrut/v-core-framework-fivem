@@ -1,80 +1,113 @@
-/* v-shops — "FIELD CASE" store terminal.
-   Chamfered case panel, orange stencil tab, machined L-brackets, foam-cutout rows,
-   Consolas caliper prices. Tokens + primitives come from v-ui/theme.css.
-   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+/* v-shops — store UI on the EMBER design system (v-ui/theme.css).
+   Rounded glass panels via the shared .v-chamfer primitive, a segmented
+   pill for Buy/Sell, soft card rows that lift and glow orange on hover,
+   and gradient-orange primary actions. Tokens + primitives come from
+   v-ui/theme.css — no hardcoded palette hexes here.
+   CEF safe: no backdrop-filter (module surfaces stay near-opaque), no
+   color-mix / :has / nesting / container queries / external fonts. */
 
 * { box-sizing:border-box; margin:0; padding:0; }
 html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
   color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
 .hidden { display:none !important; }
 
-/* ── Overlay: blueprint micro-grid + vignette + grain ── */
+/* ── Overlay: the shared EMBER backdrop recipe (orange aura blobs over a
+     warm vignette) + static grain, mirrored from .v-backdrop / .v-grain
+     because this module mounts its own fixed flex overlay. ── */
 .shop-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
   display:flex; align-items:center; justify-content:center;
   background:
-    radial-gradient(120% 100% at 50% 12%, rgba(255,106,26,.05), rgba(0,0,0,.62) 46%, rgba(0,0,0,.88) 100%),
-    repeating-linear-gradient(0deg,  rgba(255,147,84,.03) 0 1px, transparent 1px 46px),
-    repeating-linear-gradient(90deg, rgba(255,147,84,.03) 0 1px, transparent 1px 46px);
-  animation:v-fade var(--v-t-fast) ease; }
-.shop-overlay::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.05;
+    radial-gradient(55% 45% at 12% 0%,   rgba(255,122,26,.10), transparent 62%),
+    radial-gradient(48% 42% at 92% 100%, rgba(240,78,0,.08),  transparent 60%),
+    radial-gradient(135% 115% at 50% 8%, rgba(11,10,8,.42), rgba(11,10,8,.82) 72%, rgba(11,10,8,.94) 100%);
+  animation:v-fade var(--v-t-fast) var(--v-ease); }
+.shop-overlay::before { content:''; position:absolute; inset:0; pointer-events:none; opacity:.04;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 
 /* ── Two-panel layout: catalogue + your inventory ── */
 .shop-wrap { position:relative; z-index:var(--z-raised); display:flex; gap:16px; align-items:stretch; max-height:82vh; }
 
-/* ── Case panel (chamfer + brackets + tab come from theme primitives) ── */
+/* ── Panels: .v-chamfer + .v-brk + .v-tab dressing comes from the theme;
+     the module only supplies geometry. ── */
 .shop { position:relative; width:530px; display:flex; flex-direction:column; padding:26px 22px 22px; }
+.invview { position:relative; width:392px; display:flex; flex-direction:column; padding:26px 20px 20px; }
 
+/* ── Close: quiet round button that warms to orange on hover ── */
 .close { position:absolute; top:13px; right:14px; z-index:var(--z-raised);
-  width:26px; height:26px; display:flex; align-items:center; justify-content:center;
-  background:none; border:0; color:var(--v-text-dim); cursor:pointer;
-  transition:color var(--v-t-base) ease; }
-.close:hover { color:var(--v-accent-300); }
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:99px;
+  color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), transform var(--v-t-fast) var(--v-ease); }
+.close:hover { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.close:active { transform:scale(.94); }
 .close svg { width:16px; height:16px; }
 
-/* ── Header: two account toggles double as the wallet readout ── */
+/* ── Header: mode pill on top, wallet cards below ── */
 .head { display:flex; flex-direction:column; gap:10px; padding-bottom:14px; margin-bottom:12px; border-bottom:1px solid var(--v-line); }
 
-/* Buy / Sell mode toggle */
-.modes { display:flex; gap:8px; }
-.mode { flex:1; padding:7px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+/* Buy / Sell — segmented pill sunk into a track; active segment is the
+   dominant gradient-orange pill with a soft glow. */
+.modes { display:flex; gap:4px; padding:4px;
+  background:var(--v-bg-sunk); border:1px solid var(--v-line); border-radius:99px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.4); }
+.mode { flex:1; padding:7px 12px; border:1px solid transparent; border-radius:99px;
+  background:transparent; color:var(--v-text-dim);
   font-family:var(--v-font-display); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase;
-  cursor:pointer; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease, background-color var(--v-t-base) ease; }
-.mode:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
-.mode.sel { border-color:var(--v-accent); background:var(--v-accent-soft); color:var(--v-accent-300); }
+  cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.mode:hover { color:var(--v-accent-300); }
+.mode.sel { background:var(--v-grad-accent); border-color:var(--v-accent-line); color:var(--v-ink);
+  box-shadow:var(--v-shadow-glow), inset 0 1px 0 rgba(255,255,255,.35); }
 
-.empty-sell { padding:28px 12px; text-align:center; color:var(--v-text-faint);
-  font-family:var(--v-font-display); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+/* Wallet — the two account cards double as the balance readout. */
 .wallet { display:flex; flex:1; gap:8px; }
 .pay { flex:1; display:flex; flex-direction:column; align-items:flex-start; gap:3px;
-  padding:8px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); cursor:pointer;
-  transition:border-color var(--v-t-base) ease, background-color var(--v-t-base) ease, transform var(--v-t-fast) ease; }
-.pay:hover { border-color:var(--v-accent); transform:translateY(-1px); }
+  padding:10px 14px; border:1px solid var(--v-line); border-radius:var(--v-r-md);
+  background:linear-gradient(180deg, var(--v-panel-3), var(--v-panel-2));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  cursor:pointer;
+  transition:border-color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             box-shadow var(--v-t-base) var(--v-ease), transform var(--v-t-fast) var(--v-ease); }
+.pay:hover { border-color:var(--v-accent-line); transform:translateY(-1px); box-shadow:var(--v-shadow-sm); }
 .pay .amt { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; letter-spacing:0;
-  font-size:15px; font-weight:700; color:var(--v-text); }
-.pay.sel { border-color:var(--v-accent); background:var(--v-accent-soft); }
+  font-size:15px; font-weight:700; color:var(--v-text);
+  transition:color var(--v-t-base) var(--v-ease); }
+.pay.sel { background:var(--v-grad-soft); border-color:var(--v-accent-line); box-shadow:var(--v-accent-glow); }
+.pay.sel .v-label { color:var(--v-accent-300); }
 .pay.sel .amt { color:var(--v-accent-300); }
 
 /* ── Item list ── */
 .list { display:flex; flex-direction:column; gap:8px; padding:2px 10px 4px;
   overflow-y:auto; min-height:0; }
 
-/* row = recessed foam bar. Draggable to your inventory to buy. */
+.empty-sell { padding:28px 12px; text-align:center; color:var(--v-text-faint);
+  font-family:var(--v-font-display); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+
+/* row = soft translucent card. Draggable onto your inventory to buy. */
 .row { position:relative; display:flex; align-items:center; gap:12px; padding:10px 12px;
-  border-radius:var(--v-r-md); background-color:#12100D; cursor:grab;
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
-  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
-.row .thumb { flex:0 0 auto; width:44px; height:44px; border-radius:var(--v-r-sm);
+  border:1px solid var(--v-line); border-radius:var(--v-r-md);
+  background:linear-gradient(180deg, var(--v-panel-3), var(--v-panel-2));
+  box-shadow:var(--v-shadow-sm), inset 0 1px 0 rgba(255,255,255,.04);
+  cursor:grab;
+  transition:transform var(--v-t-fast) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             box-shadow var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease); }
+/* Orange accent bar that fades in on the row's leading edge on hover. */
+.row::before { content:''; position:absolute; left:-1px; top:22%; bottom:22%; width:3px;
+  border-radius:99px; background:var(--v-grad-accent);
+  opacity:0; transition:opacity var(--v-t-base) var(--v-ease); pointer-events:none; }
+.row:hover { transform:translateY(-2px); border-color:var(--v-accent-line);
+  box-shadow:0 12px 24px -10px rgba(0,0,0,.65), 0 0 0 1px var(--v-accent-line), var(--v-accent-glow); }
+.row:hover::before { opacity:1; }
+.row.dragging { opacity:.4; cursor:grabbing; }
+
+.row .thumb { flex:0 0 auto; width:44px; height:44px; border-radius:10px;
   background:var(--v-bg-sunk) no-repeat center / 34px;
-  box-shadow:inset 0 2px 5px rgba(0,0,0,.7), inset 0 0 0 1px var(--cat, var(--v-line)), inset 0 0 12px -6px var(--cat, transparent);
+  box-shadow:inset 0 2px 5px rgba(0,0,0,.45), inset 0 0 0 1px var(--cat, var(--v-line)), inset 0 0 12px -6px var(--cat, transparent);
   display:flex; align-items:center; justify-content:center; }
 .row .thumb.ph { color:var(--v-text-faint); }
 .row .thumb.ph svg { width:26px; height:26px; opacity:.6; }
-.row:hover { transform:translateY(-2px); background-color:#171410;
-  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
-.row.dragging { opacity:.4; }
 
 .row .info { flex:1; min-width:0; display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
 .row .name { flex:1 1 auto; min-width:0; font-family:var(--v-font-display); font-weight:600; letter-spacing:.08em;
@@ -84,56 +117,72 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
   font-variant-numeric:tabular-nums; letter-spacing:0; font-size:11px; color:var(--v-text-faint); }
 .row .price b { color:var(--v-accent-300); font-weight:700; }
 
-/* ── Quantity stepper ── */
-.stepper { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
-.step { width:26px; height:26px; display:flex; align-items:center; justify-content:center;
-  border-radius:var(--v-r-sm); border:1px solid var(--v-line-2);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text);
+/* ── Quantity stepper: sunk pill track, round orange-lit buttons ── */
+.stepper { display:flex; align-items:center; gap:4px; flex:0 0 auto;
+  padding:3px; border-radius:99px; background:var(--v-bg-sunk);
+  border:1px solid var(--v-line); box-shadow:inset 0 1px 2px rgba(0,0,0,.4); }
+.step { width:24px; height:24px; display:flex; align-items:center; justify-content:center;
+  border-radius:99px; border:0; background:transparent; color:var(--v-text-dim);
   font-family:var(--v-font-num); font-size:16px; line-height:1; cursor:pointer;
-  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
-.step:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+  transition:background var(--v-t-base) var(--v-ease), color var(--v-t-base) var(--v-ease); }
+.step:hover { background:var(--v-accent-soft); color:var(--v-accent-300); }
+.step:active { transform:scale(.92); }
 .qty { min-width:24px; text-align:center; font-family:var(--v-font-num); font-variant-numeric:tabular-nums;
   letter-spacing:0; font-size:14px; font-weight:700; color:var(--v-text); }
 
-/* ── Buy / Sell = accent action ── */
+/* ── Buy / Sell: the primary gradient-orange action ── */
 .buy, .sell { flex:0 0 auto; font-family:var(--v-font-display); font-size:12px; font-weight:700;
   letter-spacing:.14em; text-transform:uppercase; color:var(--v-ink);
-  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); border:1px solid var(--v-accent);
-  border-radius:var(--v-r-sm); padding:9px 15px; cursor:pointer;
-  box-shadow:0 5px 16px -4px var(--v-accent-600);
-  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease; }
-.buy:hover, .sell:hover { transform:translateY(-1px); box-shadow:0 7px 20px -5px var(--v-accent-600); }
-.buy:active, .sell:active { transform:translateY(0); }
+  background:var(--v-grad-accent); border:1px solid var(--v-accent-line);
+  border-radius:10px; padding:9px 16px; cursor:pointer;
+  box-shadow:var(--v-shadow-glow), inset 0 1px 0 rgba(255,255,255,.35);
+  transition:transform var(--v-t-fast) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease),
+             filter var(--v-t-base) var(--v-ease); }
+.buy:hover, .sell:hover { transform:translateY(-1px); filter:brightness(1.07); }
+.buy:active, .sell:active { transform:translateY(0) scale(.98); }
 
 /* ── Your inventory panel (drop a catalogue item here to buy) ── */
-.invview { position:relative; width:392px; display:flex; flex-direction:column; padding:26px 20px 20px; }
 .inv-hint { font-family:var(--v-font-display); font-size:11px; font-weight:600; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--v-text-faint); margin-bottom:12px; }
+  text-transform:uppercase; color:var(--v-text-faint); margin-bottom:12px;
+  transition:opacity var(--v-t-base) var(--v-ease); }
+/* Drag-to-buy is buy-mode only — dim the hint while the shop is selling. */
+#shop.selling .inv-hint { opacity:.4; }
+
 .inv-grid { display:grid; grid-template-columns:repeat(5, 1fr); gap:7px; overflow-y:auto; min-height:0;
   align-content:start; padding:2px; border-radius:var(--v-r-md);
-  box-shadow:inset 0 0 0 1px transparent; transition:box-shadow var(--v-t-base) ease; }
-.inv-grid.drop-on { box-shadow:inset 0 0 0 2px var(--v-accent), inset 0 0 26px -8px var(--v-accent); }
-.icell { position:relative; aspect-ratio:1; border-radius:3px; background-color:#12100D;
-  background-repeat:no-repeat; background-position:center 44%; background-size:38px;
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.7), inset 0 0 0 1px var(--v-line); }
-.icell.has { box-shadow:inset 0 2px 6px rgba(0,0,0,.6), inset 0 0 0 1px var(--cat, var(--v-line)), inset 0 0 14px -6px var(--cat, transparent); }
+  transition:box-shadow var(--v-t-base) var(--v-ease); }
+.inv-grid.drop-on { box-shadow:inset 0 0 0 2px var(--v-accent), var(--v-accent-glow); }
+
+/* Slot tile — matches the theme .v-slot recipe; filled tiles carry the
+   category ring and lift toward orange on hover. */
+.icell { position:relative; aspect-ratio:1; border-radius:var(--v-r-sm);
+  background-color:var(--v-bg-sunk); background-repeat:no-repeat; background-position:center 44%; background-size:38px;
+  border:1px solid var(--v-line); box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+  transition:transform var(--v-t-fast) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             box-shadow var(--v-t-base) var(--v-ease); }
+.icell.has { border-color:var(--cat, var(--v-line)); box-shadow:inset 0 0 14px -6px var(--cat, transparent); }
+.icell.has:hover { transform:translateY(-1px); border-color:var(--v-accent-line);
+  box-shadow:0 0 0 1px var(--v-accent-line), var(--v-accent-glow); }
 .icell .ph { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--v-text-faint); opacity:.55; }
 .icell .ph svg { width:30px; height:30px; }
 .icell .amt { position:absolute; right:3px; bottom:2px; font-family:var(--v-font-num); font-weight:700;
-  font-size:11px; color:var(--v-text); text-shadow:0 1px 2px #000; }
+  font-size:11px; color:var(--v-text); text-shadow:0 1px 2px rgba(0,0,0,.8); }
 
-/* pointer-drag ghost (HTML5 DnD is unreliable in CEF) */
+/* Pointer-drag ghost (HTML5 DnD is unreliable in CEF). */
 .drag-ghost { position:fixed; left:0; top:0; z-index:var(--z-overlay); width:52px; height:52px; margin:-26px 0 0 -26px;
-  border-radius:3px; background:#12100D no-repeat center / 38px; pointer-events:none; opacity:.92;
-  display:flex; align-items:center; justify-content:center; color:var(--v-text-faint);
-  box-shadow:inset 0 0 0 1px var(--v-accent), 0 10px 24px -6px rgba(0,0,0,.8); }
+  border-radius:var(--v-r-md); background:var(--v-bg-700) no-repeat center / 38px;
+  border:1px solid var(--v-accent-line); pointer-events:none; opacity:.95;
+  display:flex; align-items:center; justify-content:center; color:var(--v-accent-300);
+  box-shadow:var(--v-shadow-glow), var(--v-shadow-sm); }
 .drag-ghost svg { width:34px; height:34px; }
 
-/* ── Open sequence: panels seat, rows ripple with --i (backwards, never both) ── */
-#shop:not(.hidden) .shop, #shop:not(.hidden) .invview { animation:v-case-open .34s var(--v-ease) backwards; }
+/* ── Open sequence: panels seat, header fades up, rows ripple with --i
+     (backwards, never both — `both` would fight the .hidden state). ── */
+#shop:not(.hidden) .shop, #shop:not(.hidden) .invview { animation:v-case-open .42s var(--v-ease) backwards; }
 #shop:not(.hidden) .invview { animation-delay:70ms; }
-#shop:not(.hidden) .row { animation:v-seat .26s var(--v-ease) backwards; animation-delay:calc(var(--i, 0) * 16ms); }
+#shop:not(.hidden) .head { animation:v-fade-up .3s var(--v-ease) backwards; animation-delay:120ms; }
+#shop:not(.hidden) .row { animation:v-seat .34s var(--v-ease-spring) backwards; animation-delay:calc(140ms + var(--i, 0) * 18ms); }
 
 @media (prefers-reduced-motion: reduce) {
-  .row:hover, .buy:hover, .pay:hover, .step:hover { transform:none !important; }
+  .row:hover, .buy:hover, .sell:hover, .pay:hover, .step:active, .icell.has:hover { transform:none !important; }
 }

@@ -39,6 +39,16 @@ WeaponComponents = {
         grip       = 'COMPONENT_AT_AR_AFGRIP',
         extclip    = 'COMPONENT_CARBINERIFLE_CLIP_02',
     },
+    weapon_specialcarbine = {
+        suppressor = 'COMPONENT_AT_AR_SUPP',
+        flashlight = 'COMPONENT_AT_AR_FLSH',
+        scope      = 'COMPONENT_AT_SCOPE_MEDIUM',
+        grip       = 'COMPONENT_AT_AR_AFGRIP',
+        extclip    = 'COMPONENT_SPECIALCARBINE_CLIP_02',
+    },
+    weapon_compactrifle = {
+        extclip    = 'COMPONENT_COMPACTRIFLE_CLIP_02',
+    },
     weapon_smg = {
         suppressor = 'COMPONENT_AT_PI_SUPP',
         flashlight = 'COMPONENT_AT_AR_FLSH',

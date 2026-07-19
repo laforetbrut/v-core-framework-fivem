@@ -1,31 +1,55 @@
-/* v-loadscreen — Projet R · "FIELD CASE".
+/* v-loadscreen — Projet R · "EMBER".
    Self-contained: the loadscreen renders before other resources are mounted,
-   so cfx-nui-v-ui/theme.css is not reliably reachable here. Field Case tokens
-   and primitives are therefore mirrored locally.
-   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+   so cfx-nui-v-ui/theme.css is not reliably reachable here. The EMBER tokens
+   (warm-graphite glass, dominant brand orange, generous radii, soft layered
+   shadows, springy motion) are therefore mirrored locally from v-ui/theme.css.
+   CEF safe: no backdrop-filter — FiveM's CEF renders it as an opaque
+   black box; no color-mix / :has / nesting / external fonts. */
 :root {
-  /* warm charcoal case body */
-  --v-bg-900:#0A0908; --v-bg-800:#100E0C; --v-bg-700:#16130F; --v-bg-600:#1C1815; --v-bg-500:#221D18;
-  --v-bg-sunk:#0E0C0A;
-  --v-line:#2C2620; --v-line-2:#3A332B;
-  /* ink — all values >= 4.5:1 on the panel body */
-  --v-text:#EFE7DC; --v-text-dim:#A9A199; --v-text-faint:#8F877E; --v-ink:#170D05;
-  /* orange is the only saturated hue on screen */
-  --v-accent:#FF6A1A; --v-accent-300:#FF9354; --v-accent-600:#A83C0D;
+  /* ── Surfaces (deep warm graphite, never neutral black) ── */
+  --v-bg-900:#0B0A08; --v-bg-800:#100E0C; --v-bg-700:#161310; --v-bg-600:#1C1814; --v-bg-500:#241F1A;
+  --v-bg-sunk:#0D0B09;            /* recessed wells: the progress track */
+  /* Translucent panel fills — high alpha so they read even without blur. */
+  --v-panel:  rgba(24, 20, 16, .88);
+  --v-panel-2:rgba(37, 31, 25, .78);
+  --v-panel-3:rgba(54, 45, 36, .60);
 
-  --v-font-display:'Bahnschrift Condensed','Bahnschrift','Oswald','Segoe UI',sans-serif;
-  --v-font-body:'Segoe UI','Inter',system-ui,sans-serif;
-  --v-font-num:Consolas,'Courier New',monospace;
+  /* ── Lines (warm hairlines) ── */
+  --v-line:  rgba(255, 221, 194, .08);
+  --v-line-2:rgba(255, 221, 194, .15);
 
-  --v-ease:cubic-bezier(.2,.8,.2,1);
-  --v-t-base:.18s;
+  /* ── Text (every value >= 4.5:1 on the panel fills) ── */
+  --v-text:#F5EEE6; --v-text-dim:#B8AFA5; --v-text-faint:#948B81; --v-ink:#1A0D03;
 
-  --v-r-sm:2px; --v-r-md:3px;
-  --v-cw:14px;
-  --v-chamfer:polygon(0 var(--v-cw), var(--v-cw) 0, 100% 0, 100% calc(100% - var(--v-cw)), calc(100% - var(--v-cw)) 100%, 0 100%);
+  /* ── Brand orange — DOMINANT: gradients, glows, edge streaks ── */
+  --v-accent:#FF7A1A; --v-accent-300:#FFA85C; --v-accent-600:#E14E00; --v-accent-700:#B23C00;
+  --v-accent-soft:rgba(255, 122, 26, .14);
+  --v-accent-line:rgba(255, 122, 26, .45);
+  --v-accent-glow:0 0 24px -6px rgba(255, 122, 26, .55);
+  --v-grad-accent:linear-gradient(135deg, #FFB25C 0%, #FF7A1A 48%, #F04E00 100%);
+  --v-grad-soft:linear-gradient(135deg, rgba(255,122,26,.20), rgba(255,122,26,.05));
+
+  /* ── Geometry — generous modern radii, no chamfers ── */
+  --v-r-sm:8px; --v-r-md:12px; --v-r-lg:16px; --v-r-xl:22px;
+
+  /* ── Shadows — soft, layered; orange glow variants ── */
+  --v-shadow-box:0 24px 48px -12px rgba(0, 0, 0, .65), 0 4px 12px -4px rgba(0, 0, 0, .50);
+  --v-shadow-sm:0 6px 16px -6px rgba(0, 0, 0, .55);
+  --v-shadow-glow:0 10px 30px -8px rgba(255, 122, 26, .50);
+
+  /* ── Type — clean modern sans; tabular figures for the readout ── */
+  --v-font-display:'Bahnschrift', 'Segoe UI', 'Inter', system-ui, sans-serif;
+  --v-font-body:'Segoe UI', 'Inter', system-ui, sans-serif;
+  --v-font-num:'Segoe UI', 'Inter', system-ui, sans-serif;
+  --v-font-mono:Consolas, 'Courier New', monospace;
+
+  /* ── Motion — fluid, slightly springy, never cartoonish ── */
+  --v-ease:cubic-bezier(.22, 1, .36, 1);
+  --v-ease-spring:cubic-bezier(.34, 1.4, .64, 1);
+  --v-t-fast:.14s; --v-t-base:.22s; --v-t-slow:.38s;
 
   /* z-index scale — never hardcode */
-  --z-base:1; --z-raised:2;                                             /* intra-component layers (mirror v-ui chamfer) */
+  --z-below:0; --z-base:1; --z-raised:2; --z-tab:3;                          /* intra-component layers */
   --z-video:1; --z-overlay:2; --z-grain:3; --z-vignette:4; --z-scan:5; --z-stage:10;
 }
 
@@ -41,32 +65,36 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900
   animation:kenburns 40s ease-in-out infinite alternate;
 }
 
-/* Warm charcoal wash + blueprint micro-grid over the footage — kept low so the
+/* Warm graphite wash + blueprint micro-grid over the footage — kept low so the
    video still reads underneath. */
 .bg-overlay {
   position:fixed; inset:0; z-index:var(--z-overlay); pointer-events:none;
   background:
-    linear-gradient(90deg, rgba(8,7,6,.94) 0%, rgba(8,7,6,.58) 40%, rgba(8,7,6,.20) 100%),
-    linear-gradient(180deg, rgba(8,7,6,.42) 0%, transparent 26%, rgba(8,7,6,.86) 100%),
-    radial-gradient(120% 90% at 84% 90%, rgba(255,106,26,.10), transparent 55%),
-    repeating-linear-gradient(0deg,  rgba(255,147,84,.028) 0 1px, transparent 1px 46px),
-    repeating-linear-gradient(90deg, rgba(255,147,84,.028) 0 1px, transparent 1px 46px);
+    linear-gradient(90deg, rgba(11,10,8,.94) 0%, rgba(11,10,8,.58) 40%, rgba(11,10,8,.20) 100%),
+    linear-gradient(180deg, rgba(11,10,8,.42) 0%, transparent 26%, rgba(11,10,8,.86) 100%),
+    radial-gradient(120% 90% at 84% 90%, rgba(255,122,26,.10), transparent 55%),
+    repeating-linear-gradient(0deg,  rgba(255,168,92,.030) 0 1px, transparent 1px 46px),
+    repeating-linear-gradient(90deg, rgba(255,168,92,.030) 0 1px, transparent 1px 46px);
 }
 /* Static SVG grain — cheap in CEF, sits above the grid, below the readouts. */
 .grain {
-  position:fixed; inset:0; z-index:var(--z-grain); pointer-events:none; opacity:.05;
+  position:fixed; inset:0; z-index:var(--z-grain); pointer-events:none; opacity:.04;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
-/* Hard vignette. */
+/* Soft orange aura blobs bleeding over the hard vignette (mirrors .v-backdrop). */
 .vignette {
   position:fixed; inset:0; z-index:var(--z-vignette); pointer-events:none;
-  background:radial-gradient(120% 120% at 50% 48%, transparent 42%, rgba(0,0,0,.72) 100%);
+  background:
+    radial-gradient(55% 45% at 12% 0%,   rgba(255,122,26,.10), transparent 62%),
+    radial-gradient(48% 42% at 92% 100%, rgba(240,78,0,.08),  transparent 60%),
+    radial-gradient(120% 120% at 50% 48%, transparent 42%, rgba(0,0,0,.72) 100%);
 }
-/* Orange gauge sweep. */
+/* Glowing orange scan sweep. */
 .scan {
   position:fixed; left:0; right:0; top:0; height:2px; z-index:var(--z-scan); pointer-events:none;
-  background:linear-gradient(90deg, transparent, rgba(255,106,26,.5), transparent);
-  opacity:.35; animation:scan 7s linear infinite;
+  background:linear-gradient(90deg, transparent, rgba(255,122,26,.55), transparent);
+  box-shadow:0 0 16px rgba(255,122,26,.30);
+  opacity:.38; animation:scan 7s linear infinite;
 }
 
 /* ── Stage / branding ── */
@@ -76,64 +104,71 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900
   padding:0 9vw;
 }
 .brand { position:relative; }
-/* Stencil kicker with an orange parallelogram accent riding its left. */
+/* Tracked kicker with a glowing gradient-orange pill riding its left. */
 .kicker {
   position:relative; display:inline-flex; align-items:center; gap:14px;
   font-family:var(--v-font-display); font-weight:600; font-size:13px;
-  letter-spacing:.5em; text-transform:uppercase; color:var(--v-text-dim);
-  margin-bottom:16px; text-shadow:0 1px 2px #000;
+  letter-spacing:.34em; text-transform:uppercase; color:var(--v-text-dim);
+  margin-bottom:18px; text-shadow:0 1px 2px rgba(0,0,0,.75);
 }
 .kicker::before {
-  content:''; width:36px; height:11px;
-  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
-  clip-path:polygon(6px 0, 100% 0, calc(100% - 6px) 100%, 0 100%);
-  box-shadow:0 2px 8px -2px var(--v-accent-600);
+  content:''; width:34px; height:10px; border-radius:99px;
+  background:var(--v-grad-accent);
+  box-shadow:0 0 14px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.35);
 }
 .mark {
   font-family:var(--v-font-display); font-weight:700;
   font-size:clamp(64px, 11vw, 150px); line-height:.9;
-  letter-spacing:.06em; text-transform:uppercase;
-  text-shadow:0 8px 60px rgba(0,0,0,.6);
+  letter-spacing:.04em; text-transform:uppercase;
+  text-shadow:0 12px 60px rgba(0,0,0,.65);
 }
-.mark span { color:var(--v-accent); text-shadow:0 0 40px rgba(255,106,26,.5); }
-/* Machined stencil rule aligning brand to the readout below. */
+/* Gradient-orange glyph with a matching glow — the one saturated wordmark. */
+.mark span {
+  background:var(--v-grad-accent);
+  -webkit-background-clip:text; background-clip:text;
+  color:transparent; -webkit-text-fill-color:transparent;
+  filter:drop-shadow(0 0 24px rgba(255,122,26,.45));
+}
+/* Hairline rule aligning brand to the readout below — orange lead, rounded caps. */
 .brand::after {
-  content:''; display:block; width:min(460px, 46vw); height:1px; margin-top:22px;
-  background:linear-gradient(90deg, var(--v-accent) 0 36px, var(--v-line) 36px 100%);
+  content:''; display:block; width:min(460px, 46vw); height:2px; margin-top:24px;
+  border-radius:99px;
+  background:linear-gradient(90deg, var(--v-accent) 0 44px, var(--v-line-2) 44px 100%);
 }
 
-/* ── Loader: a chamfered gauge-cluster readout ── */
+/* ── Loader: a rounded EMBER glass panel (replaces the old chamfer shells) ── */
 .loader {
-  position:relative; width:min(460px, 46vw); margin-top:26px;
-  background:transparent; border:0;
+  position:relative; width:min(460px, 46vw); margin-top:28px;
+  border:1px solid var(--v-line);
+  border-radius:var(--v-r-lg);
+  background:
+    linear-gradient(165deg, rgba(255,255,255,.045), rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, rgba(14,12,10,.92));
+  box-shadow:var(--v-shadow-box), inset 0 1px 0 rgba(255,255,255,.05);
 }
+/* Orange light-streak bleeding across the top edge. */
 .loader::before {
-  content:''; position:absolute; inset:0; z-index:0; clip-path:var(--v-chamfer);
-  background:linear-gradient(180deg, var(--v-line-2), var(--v-line));
-  filter:drop-shadow(0 18px 34px rgba(0,0,0,.72));
+  content:''; position:absolute; top:0; left:12%; right:12%; height:1px; z-index:var(--z-below);
+  background:linear-gradient(90deg, transparent, rgba(255,150,60,.55), transparent);
+  pointer-events:none;
 }
-.loader::after {
-  content:''; position:absolute; inset:1px; z-index:0; clip-path:var(--v-chamfer);
-  background:linear-gradient(168deg, var(--v-bg-500) 0%, var(--v-bg-600) 45%, var(--v-bg-800) 100%);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.045);
-}
-/* Content must clear the pseudo layers. */
-.loader-body { position:relative; z-index:var(--z-raised); padding:22px 24px 20px; }
+/* Content must clear the streak layer. */
+.loader-body { position:relative; z-index:var(--z-raised); padding:24px 24px 22px; }
 
-/* Stencil tab riding the top edge — the signature cue. */
+/* Gradient pill riding the top edge — the signature cue (mirrors .v-tab). */
 .loader .tab {
-  position:absolute; top:-11px; left:26px; z-index:3;
-  height:22px; padding:0 15px; display:flex; align-items:center;
+  position:absolute; top:-12px; left:24px; z-index:var(--z-tab);
+  height:24px; padding:0 14px; display:flex; align-items:center;
   font-family:var(--v-font-display); font-weight:700; font-size:11px;
-  letter-spacing:.22em; text-transform:uppercase; color:var(--v-ink);
-  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
-  clip-path:polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%);
-  box-shadow:0 3px 10px -2px var(--v-accent-600);
+  letter-spacing:.16em; text-transform:uppercase; color:var(--v-ink);
+  background:var(--v-grad-accent);
+  border-radius:99px;
+  box-shadow:0 6px 18px -4px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.35);
 }
-/* Machined L-brackets on the two sharp corners. */
-.brk { position:absolute; z-index:var(--z-base); width:16px; height:16px; opacity:.5; pointer-events:none; }
-.brk-tr { top:7px; right:7px; border-top:2px solid var(--v-accent); border-right:2px solid var(--v-accent); }
-.brk-bl { bottom:7px; left:7px; border-bottom:2px solid var(--v-accent); border-left:2px solid var(--v-accent); }
+/* Glowing corner accents on two diagonal corners (mirrors .v-brk--*). */
+.brk { position:absolute; z-index:var(--z-base); width:18px; height:18px; opacity:.65; pointer-events:none; }
+.brk-tr { top:9px; right:9px; border-top:2px solid var(--v-accent); border-right:2px solid var(--v-accent); border-top-right-radius:var(--v-r-sm); filter:drop-shadow(0 0 6px rgba(255,122,26,.6)); }
+.brk-bl { bottom:9px; left:9px; border-bottom:2px solid var(--v-accent); border-left:2px solid var(--v-accent); border-bottom-left-radius:var(--v-r-sm); filter:drop-shadow(0 0 6px rgba(255,122,26,.6)); }
 
 .row { display:flex; align-items:baseline; gap:16px; margin-bottom:12px; }
 .status {
@@ -142,29 +177,49 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900
   letter-spacing:.2em; text-transform:uppercase; color:var(--v-text-dim);
   overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
-/* Caliper readout — Consolas, no tracking, orange significant figure. */
+/* Pulsing ember dot — the loader reads as alive even between progress events. */
+.status::before {
+  content:''; display:inline-block; width:7px; height:7px; margin-right:10px;
+  vertical-align:1px; border-radius:99px;
+  background:var(--v-grad-accent);
+  box-shadow:0 0 10px rgba(255,122,26,.75);
+  animation:statusPulse 1.8s var(--v-ease) infinite;
+}
+/* Readout — tabular figures, orange significant figure (the JS writes <b>). */
 .pct {
   flex:0 0 auto;
   font-family:var(--v-font-num); font-variant-numeric:tabular-nums; letter-spacing:0;
   font-size:22px; font-weight:700; color:var(--v-text-dim);
 }
-.pct b { color:var(--v-accent-300); font-weight:700; }
+.pct b { color:var(--v-accent-300); font-weight:700; text-shadow:0 0 14px rgba(255,122,26,.35); }
 
-/* Segmented gauge — recessed strip; the JS drives a continuous fill width and a
-   notch overlay carves it into hard machined cells. */
+/* Rounded glowing track — a recessed capsule; the JS drives a continuous fill
+   width and a percentage-period overlay carves it into 16 soft notches. */
 .bar {
-  position:relative; height:16px; overflow:hidden; border-radius:var(--v-r-sm);
-  background:#1A1613; box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7);
+  position:relative; height:16px; overflow:hidden; border-radius:99px;
+  background:var(--v-bg-sunk); border:1px solid var(--v-line);
+  box-shadow:inset 0 1px 3px rgba(0,0,0,.6);
 }
 .fill {
   position:relative; z-index:var(--z-base); height:100%; width:0%;
-  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.25);
-  transition:width .5s cubic-bezier(.2, .9, .25, 1);
+  border-radius:99px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.28), rgba(255,255,255,0) 42%),
+    var(--v-grad-accent);
+  /* The outer glow is clipped to the track, so it halos the fill's leading edge. */
+  box-shadow:var(--v-accent-glow), inset 0 1px 0 rgba(255,255,255,.25);
+  transition:width var(--v-t-slow) var(--v-ease);
 }
+/* 16 notches: a 6.25% period = 1/16 of the track at any width; feathered gaps
+   keep the segments reading rounded instead of hard-machined. */
 .bar::after {
   content:''; position:absolute; inset:0; z-index:var(--z-raised); pointer-events:none;
-  background:repeating-linear-gradient(90deg, transparent 0 11px, var(--v-bg-sunk) 11px 14px);
+  background:repeating-linear-gradient(90deg,
+    rgba(13,11,9,0) 0,
+    rgba(13,11,9,0) calc(6.25% - 4px),
+    var(--v-bg-sunk) calc(6.25% - 2px),
+    var(--v-bg-sunk) calc(6.25% - 1px),
+    rgba(13,11,9,0) 6.25%);
 }
 
 /* ── Footer / tips ── */
@@ -173,40 +228,50 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900
   display:flex; align-items:center; justify-content:space-between; gap:20px;
   padding:26px 9vw;
 }
-.tip { display:flex; align-items:center; gap:12px; min-width:0; min-height:22px; }
-/* Stencil parallelogram badge. */
+/* Tips card — small rounded glass float (mirrors .v-glass). */
+.tip {
+  display:flex; align-items:center; gap:12px; min-width:0;
+  padding:10px 16px;
+  background:linear-gradient(180deg, var(--v-panel-2), var(--v-panel));
+  border:1px solid var(--v-line);
+  border-radius:var(--v-r-md);
+  box-shadow:var(--v-shadow-sm);
+}
+/* Gradient stencil tag (mirrors .v-stencil). */
 .tip-tag {
   flex:0 0 auto;
   font-family:var(--v-font-display); font-weight:700; font-size:10px;
-  letter-spacing:.18em; text-transform:uppercase; color:var(--v-ink);
-  background:linear-gradient(180deg, var(--v-accent-300), var(--v-accent));
-  padding:3px 10px; clip-path:polygon(5px 0, 100% 0, calc(100% - 5px) 100%, 0 100%);
-  box-shadow:0 2px 8px -2px var(--v-accent-600);
+  letter-spacing:.14em; text-transform:uppercase; color:var(--v-ink);
+  background:var(--v-grad-accent);
+  padding:3px 10px; border-radius:var(--v-r-sm);
+  box-shadow:0 3px 10px -3px rgba(255,122,26,.50), inset 0 1px 0 rgba(255,255,255,.35);
 }
 /* .4s crossfade stays in lockstep with the JS text swap (setTimeout 400ms). */
 .tip-text {
-  font-size:14px; color:var(--v-text-dim); transition:opacity .4s ease;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 1px 2px #000;
+  min-width:0;
+  font-size:14px; color:var(--v-text-dim); transition:opacity .4s var(--v-ease);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.75);
 }
 .tip-text.fade { opacity:0; }
 .sig {
   flex:0 0 auto;
   font-family:var(--v-font-display); font-weight:600; font-size:11px;
   letter-spacing:.28em; text-transform:uppercase; color:var(--v-text-faint);
-  white-space:nowrap; text-shadow:0 1px 2px #000;
+  white-space:nowrap; text-shadow:0 1px 2px rgba(0,0,0,.75);
 }
 
 /* ── Motion: one orchestrated seat sequence, staggered by --i ── */
-@keyframes seat     { from { opacity:0; transform:translateY(14px); } }
-@keyframes caseOpen { from { opacity:0; transform:translateY(16px) scale(.985); } }
-@keyframes fadeUp   { from { opacity:0; transform:translateY(10px); } }
-@keyframes kenburns { from { transform:scale(1); } to { transform:scale(1.09); } }
-@keyframes scan     { 0% { top:-2%; } 100% { top:102%; } }
+@keyframes seat        { from { opacity:0; transform:translateY(12px) scale(.97); } }
+@keyframes caseOpen    { from { opacity:0; transform:translateY(16px) scale(.965); } }
+@keyframes fadeUp      { from { opacity:0; transform:translateY(10px); } }
+@keyframes kenburns    { from { transform:scale(1); } to { transform:scale(1.09); } }
+@keyframes scan        { 0% { top:-2%; } 100% { top:102%; } }
+@keyframes statusPulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.45; transform:scale(.82); } }
 
 /* Use animation-fill-mode:backwards, NOT both. */
-.brand  { animation:seat     .55s var(--v-ease) backwards; animation-delay:calc(var(--i, 0) * 90ms); }
-.loader { animation:caseOpen .5s  var(--v-ease) backwards; animation-delay:calc(120ms + var(--i, 0) * 90ms); }
-.foot   { animation:fadeUp   .6s  var(--v-ease) backwards; animation-delay:calc(200ms + var(--i, 0) * 90ms); }
+.brand  { animation:seat     .5s  var(--v-ease-spring) backwards; animation-delay:calc(var(--i, 0) * 90ms); }
+.loader { animation:caseOpen .46s var(--v-ease) backwards;        animation-delay:calc(120ms + var(--i, 0) * 90ms); }
+.foot   { animation:fadeUp   .55s var(--v-ease) backwards;        animation-delay:calc(200ms + var(--i, 0) * 90ms); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

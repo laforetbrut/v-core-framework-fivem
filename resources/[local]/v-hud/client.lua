@@ -163,6 +163,19 @@ local function loadSquareMask()
     return true
 end
 
+-- Lightweight re-try, called from the minimap loop: if the streamed dict missed
+-- its first load window (fast resource restart), keep nudging until it lands so
+-- the square mask always recovers instead of staying round for the session.
+local function retrySquareMask()
+    if squareReady then return end
+    RequestStreamedTextureDict('squaremap', false)
+    if not HasStreamedTextureDictLoaded('squaremap') then return end
+    pcall(function() SetMinimapClipType(0) end)
+    AddReplaceTexture('platform:/textures/graphics', 'radarmasksm', 'squaremap', 'radarmasksm')
+    AddReplaceTexture('platform:/textures/graphics', 'radarmask1g', 'squaremap', 'radarmasksm')
+    squareReady = true
+end
+
 -- The map's TRUE on-screen rect (pixels) for the current component pos + scale.
 -- GetScriptGfxPosition applies the safe zone + aspect exactly, so the NUI frame
 -- placed at this rect is always pixel-aligned with the native map.
@@ -206,6 +219,7 @@ CreateThread(function()
             Wait(120)
         else
             DisplayRadar(true)
+            retrySquareMask()   -- no-op once the mask is in; keeps retrying after a flaky restart
             applyMinimap()
             if HasScaleformMovieLoaded(mm) then
                 BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
@@ -280,6 +294,15 @@ end)
 RegisterNUICallback('mapResize', function(data, cb)
     local sc = tonumber(data.scale)
     if sc then map.scale = math.min(2.0, math.max(0.5, sc)); saveMap() end
+    cb('ok')
+end)
+
+-- Factory reset (F7 panel Reset button): bring the map back to the default
+-- bottom-left dock — recovers a map dragged off-screen, which was unrecoverable
+-- from the UI (KVP keeps the Lua-owned pos/scale across relogs).
+RegisterNUICallback('mapReset', function(_, cb)
+    map.posX, map.posY, map.scale = 0.0, 0.0, 1.0
+    saveMap()
     cb('ok')
 end)
 

@@ -1,7 +1,9 @@
-/* v-clothing — "FIELD CASE" art direction.
-   Catalogue store: chamfered docked case, stencil tab, foam-cutout tile grid,
-   caliper (Consolas) readouts. Tokens/primitives come from v-ui/theme.css.
-   CEF 103 safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+/* v-clothing — "EMBER" art direction.
+   Clothing store: rounded glass side panel, pill tabs, thumbnail cards
+   with hover lift + orange selection ring, glass purchase bar.
+   Tokens/primitives come from v-ui/theme.css (deep graphite + brand orange).
+   CEF 103 safe: no color-mix / :has / nesting / external fonts;
+   no backdrop-filter — FiveM's CEF renders it as an opaque black box. */
 
 * { box-sizing:border-box; margin:0; padding:0; }
 html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
@@ -9,73 +11,93 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .hidden { display:none !important; }
 
 /* status light */
-.dot { flex:0 0 auto; width:8px; height:8px; border-radius:var(--v-r-sm);
+.dot { flex:0 0 auto; width:8px; height:8px; border-radius:99px;
   background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); box-shadow:0 0 10px -1px var(--v-accent); }
 
 /* ── Drag surface (rotate the ped) ── */
 .stage { position:fixed; inset:0; z-index:var(--z-base); cursor:grab; }
 .stage:active { cursor:grabbing; }
 
-/* ── Docked case panel (chamfer + tab + brackets from theme) ── */
+/* ── Docked side panel (rounded glass + tab + brackets from theme) ── */
 .cl-panel {
-  --v-cw:14px;
   position:fixed; top:18px; right:18px; bottom:18px; z-index:var(--z-raised);
   width:468px; display:flex; flex-direction:column;
-  box-shadow:-14px 0 44px rgba(0,0,0,.5);
-  animation:v-slide .3s var(--v-ease);
+  animation:v-slide .38s var(--v-ease-spring);
 }
 
-/* header — slim utility strip; the stencil tab carries the title */
-.head { display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:18px 18px 14px; border-bottom:1px solid var(--v-line); }
-.right { display:flex; align-items:center; gap:13px; }
-.cash { font-size:15px; font-weight:700; color:var(--v-accent-300); }
-.close { display:flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0;
-  border:1px solid var(--v-line-2); border-radius:var(--v-r-sm); color:var(--v-text-dim);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); cursor:pointer;
-  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
-.close svg { width:15px; height:15px; }
-.close:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+/* Orchestrated entrance: header, tabs and content stagger in behind the panel. */
+.cl-overlay .head { --i:1; }
+.cl-overlay .tabs { --i:2; }
+.cl-overlay .pane { --i:3; }
+.cl-overlay .head, .cl-overlay .tabs, .cl-overlay .pane {
+  animation:v-fade-up .38s var(--v-ease) backwards; animation-delay:calc(80ms + var(--i, 0) * 70ms); }
 
-/* ── Store / Wardrobe tabs ── */
-.tabs { display:flex; gap:7px; padding:14px 20px 0; }
-.tab { flex:1; padding:9px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+/* header — slim utility strip; the floating .v-tab pill carries the title */
+.head { display:flex; align-items:center; justify-content:flex-end; gap:14px; padding:20px 20px 14px; border-bottom:1px solid var(--v-line); }
+.right { display:flex; align-items:center; gap:12px; }
+/* cash readout — soft orange pill */
+.cash { font-size:13px; font-weight:700; color:var(--v-accent-300);
+  padding:5px 13px; border-radius:99px;
+  background:var(--v-accent-soft); border:1px solid var(--v-accent-line); }
+.close { display:flex; align-items:center; justify-content:center; width:30px; height:30px; padding:0;
+  border:1px solid var(--v-line-2); border-radius:10px; color:var(--v-text-dim);
+  background:rgba(255,255,255,.05); cursor:pointer;
+  transition:border-color var(--v-t-base) var(--v-ease), color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease), transform var(--v-t-fast) var(--v-ease); }
+.close svg { width:15px; height:15px; }
+.close:hover { border-color:var(--v-accent-line); color:var(--v-accent-300); background:var(--v-accent-soft); transform:translateY(-1px); }
+
+/* ── Store / Wardrobe tabs — segmented pill, orange active segment ── */
+.tabs { display:flex; gap:4px; margin:14px 20px 0; padding:4px;
+  background:rgba(0,0,0,.32); border:1px solid var(--v-line); border-radius:99px;
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.4); }
+.tab { flex:1; padding:8px 10px; border:1px solid transparent; border-radius:99px;
+  background:transparent; color:var(--v-text-dim);
   font-family:var(--v-font-display); font-weight:600; text-transform:uppercase; letter-spacing:.14em; font-size:12px;
-  cursor:pointer; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
-.tab:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
-.tab.on { color:var(--v-ink); font-weight:700; border-color:var(--v-accent);
-  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); }
+  cursor:pointer; transition:background var(--v-t-base) var(--v-ease), color var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.tab:hover { color:var(--v-accent-300); background:var(--v-accent-soft); }
+.tab.on { color:var(--v-ink); font-weight:700; border-color:rgba(255,150,60,.6);
+  background:var(--v-grad-accent);
+  box-shadow:0 6px 16px -6px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.35); }
 
 .pane { flex:1; min-height:0; display:flex; flex-direction:column; }
-#pane-worn { padding:16px 20px; gap:8px; overflow-y:auto; }
+#pane-worn { padding:16px 20px; gap:10px; overflow-y:auto; }
 
-/* ── Category chips ── */
+/* ── Category chips — rounded pills, gradient-orange active ── */
 /* Wrap: the strip used to scroll with a hidden scrollbar, so the last
    categories were silently clipped with no affordance. */
 .cats { display:flex; flex-wrap:wrap; gap:7px; padding:14px 20px 10px; }
-.chip { flex:0 0 auto; padding:6px 12px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+.chip { flex:0 0 auto; padding:6px 13px; border:1px solid var(--v-line-2); border-radius:99px;
+  background:rgba(255,255,255,.04); color:var(--v-text-dim);
   font-family:var(--v-font-display); font-weight:600; text-transform:uppercase; letter-spacing:.12em; font-size:11px;
-  cursor:pointer; white-space:nowrap; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
-.chip:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
-.chip.on { color:var(--v-ink); font-weight:700; border-color:var(--v-accent);
-  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); }
+  cursor:pointer; white-space:nowrap;
+  transition:background var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             color var(--v-t-base) var(--v-ease), transform var(--v-t-fast) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.chip:hover { border-color:var(--v-accent-line); color:var(--v-accent-300); background:var(--v-accent-soft); transform:translateY(-1px); }
+.chip.on { color:var(--v-ink); font-weight:700; border-color:rgba(255,150,60,.6);
+  background:var(--v-grad-accent);
+  box-shadow:0 6px 16px -6px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.35); }
 
 /* ── Search — recessed well (visuals from theme .v-input) ── */
-.search { margin:0 20px 12px; }
+.search { margin:2px 20px 12px; }
 
-/* ── Tile grid (foam cutouts) ── */
-.tiles { flex:1; min-height:0; overflow-y:auto; padding:2px 20px; display:grid;
-  grid-template-columns:repeat(5,1fr); gap:8px; align-content:start; }
-.tile { position:relative; aspect-ratio:1/1; border-radius:var(--v-r-md); background-color:#12100D;
-  box-shadow:inset 0 2px 6px rgba(0,0,0,.75), inset 0 0 0 1px var(--v-line);
+/* ── Thumbnail grid — soft cards, hover lift, orange selection ring ── */
+.tiles { flex:1; min-height:0; overflow-y:auto; padding:6px 20px; display:grid;
+  grid-template-columns:repeat(4,1fr); gap:10px; align-content:start; }
+.tile { position:relative; aspect-ratio:1/1; border-radius:var(--v-r-md);
+  background:rgba(255,255,255,.028); border:1px solid var(--v-line);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
   display:flex; align-items:center; justify-content:center; cursor:pointer;
-  transition:transform var(--v-t-fast) ease, box-shadow var(--v-t-base) ease, background-color var(--v-t-base) ease; }
-.tile:hover { transform:translateY(-2px); background-color:#171410;
-  box-shadow:inset 0 0 0 1px var(--v-accent), inset 0 0 18px -6px var(--v-accent), 0 10px 22px -8px rgba(255,106,26,.5); }
+  transition:transform var(--v-t-fast) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.tile:hover { transform:translateY(-2px);
+  background:rgba(255,122,26,.06); border-color:var(--v-accent-line);
+  box-shadow:0 12px 24px -10px rgba(0,0,0,.65), 0 0 0 1px rgba(255,122,26,.25), 0 0 22px -4px rgba(255,122,26,.35); }
 .tile:active { transform:translateY(0) scale(.98); }
-/* selected — orange inner ring (keeps the recessed depth) */
-.tile.sel { box-shadow:inset 0 2px 6px rgba(0,0,0,.6), inset 0 0 0 2px var(--v-accent), inset 0 0 18px -6px var(--v-accent); }
+/* selected — dominant orange ring + glow */
+.tile.sel { border-color:var(--v-accent); background:var(--v-accent-soft);
+  box-shadow:0 0 0 1px var(--v-accent), var(--v-shadow-glow); }
 .tile.sel:hover { transform:translateY(-2px); }
 .tile .num { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; font-weight:700; font-size:15px; color:var(--v-text-dim); }
 .tile.sel .num { color:var(--v-accent-300); }
@@ -83,70 +105,77 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 
 /* generated thumbnails (garment on transparent bg) */
 .tile img.thumb { position:absolute; inset:6%; width:88%; height:88%; object-fit:contain;
-  opacity:0; transform:scale(.92); transition:opacity var(--v-t-base) ease, transform var(--v-t-base) ease; }
+  opacity:0; transform:scale(.92); transition:opacity var(--v-t-base) var(--v-ease), transform var(--v-t-base) var(--v-ease); }
 .tile.has.ready img.thumb { opacity:1; transform:scale(1); }
 .tile.has.ready:hover img.thumb { transform:scale(1.07); }
-/* charcoal sweep placeholder (no blue/white shimmer) */
+/* warm shimmer sweep placeholder while the thumbnail loads */
 .tile.has:not(.ready):not(.noimg) {
-  background-image:linear-gradient(100deg, #14110E 38%, #241E18 50%, #14110E 62%);
+  background-image:linear-gradient(100deg, transparent 38%, rgba(255,221,194,.06) 50%, transparent 62%);
   background-size:220% 100%; animation:v-shimmer 1.15s linear infinite; }
-.tile.has .num { position:absolute; right:4px; bottom:3px; padding:1px 4px; border-radius:var(--v-r-sm);
-  background:rgba(0,0,0,.62); font-size:10px; line-height:1.3; color:var(--v-text-dim); }
-.tile.has.sel .num { color:var(--v-accent-300); }
+.tile.has .num { position:absolute; right:5px; bottom:5px; padding:1px 6px; border-radius:99px;
+  background:rgba(0,0,0,.55); border:1px solid var(--v-line); font-size:10px; line-height:1.4; color:var(--v-text-dim); }
+.tile.has.sel .num { color:var(--v-accent-300); border-color:var(--v-accent-line); }
 @keyframes v-shimmer { from { background-position:120% 0; } to { background-position:-120% 0; } }
 
 /* ── Texture strip ── */
 .tex-wrap { padding:12px 20px 0; display:flex; flex-direction:column; gap:8px; }
 .tex { display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
 .tex::-webkit-scrollbar { height:6px; }
-.tex::-webkit-scrollbar-track { background:var(--v-bg-sunk); }
-.tex::-webkit-scrollbar-thumb { background:var(--v-line-2); }
-.tex::-webkit-scrollbar-thumb:hover { background:var(--v-accent-600); }
-.tx { flex:0 0 auto; min-width:32px; height:30px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
-  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+.tex::-webkit-scrollbar-track { background:transparent; }
+.tex::-webkit-scrollbar-thumb { background:rgba(255,221,194,.14); border-radius:99px; }
+.tex::-webkit-scrollbar-thumb:hover { background:rgba(255,122,26,.5); }
+.tx { flex:0 0 auto; min-width:32px; height:30px; border:1px solid var(--v-line-2); border-radius:10px;
+  background:rgba(255,255,255,.04); color:var(--v-text-dim);
   font-family:var(--v-font-num); font-variant-numeric:tabular-nums; font-weight:700; font-size:12px;
-  cursor:pointer; transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease; }
-.tx:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
-.tx.sel { color:var(--v-ink); border-color:var(--v-accent);
-  background:linear-gradient(180deg,var(--v-accent-300),var(--v-accent)); }
+  cursor:pointer; transition:background var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.tx:hover { border-color:var(--v-accent-line); color:var(--v-accent-300); background:var(--v-accent-soft); }
+.tx.sel { color:var(--v-ink); border-color:rgba(255,150,60,.6);
+  background:var(--v-grad-accent);
+  box-shadow:0 4px 14px -4px rgba(255,122,26,.55), inset 0 1px 0 rgba(255,255,255,.35); }
 
-/* ── Buy bar ── */
-.buybar { display:flex; align-items:center; gap:14px; padding:14px 20px; border-top:1px solid var(--v-line); margin-top:12px; }
+/* ── Buy bar — floating glass strip (near-opaque fallback fill) ── */
+.buybar { display:flex; align-items:center; gap:14px; margin:12px 16px 16px; padding:12px 14px 12px 18px;
+  background:linear-gradient(180deg, var(--v-panel-2), var(--v-panel));
+  border:1px solid var(--v-line-2); border-radius:var(--v-r-md); box-shadow:var(--v-shadow-sm); }
 .bsel { flex:1; min-width:0; font-size:13px; color:var(--v-text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .bsel > b { font-family:var(--v-font-display); font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--v-text); }
 .bnum { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; color:var(--v-text-faint); margin-left:2px; }
 .bnum b { color:var(--v-accent-300); font-weight:700; }
 .buy { flex:0 0 auto; }
 .buy b { font-family:var(--v-font-num); font-weight:700; letter-spacing:0; }
-/* price 0 -> stencil badge instead of "$0" */
-.buy .freetag { display:inline-block; padding:1px 7px; font-style:normal; font-weight:700; font-size:10px;
-  letter-spacing:.16em; color:var(--v-accent); background:var(--v-ink);
-  clip-path:polygon(4px 0, 100% 0, calc(100% - 4px) 100%, 0 100%); }
+/* price 0 -> small inverted pill instead of "$0" */
+.buy .freetag { display:inline-block; padding:2px 8px; font-style:normal; font-weight:700; font-size:10px;
+  letter-spacing:.16em; color:var(--v-accent-300); background:rgba(0,0,0,.30);
+  border:1px solid rgba(255,150,60,.5); border-radius:99px; }
 
-/* ── Wardrobe ── */
-.wrow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:11px 14px;
-  background:linear-gradient(180deg,var(--v-bg-600),var(--v-bg-700));
-  border:1px solid var(--v-line); border-left:2px solid var(--v-accent); border-radius:var(--v-r-md); }
+/* ── Wardrobe — rounded rows with an orange accent bar ── */
+.wrow { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px 14px;
+  background:rgba(255,255,255,.028);
+  border:1px solid var(--v-line); border-left:3px solid var(--v-accent); border-radius:var(--v-r-md);
+  transition:transform var(--v-t-fast) var(--v-ease), border-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.wrow:hover { transform:translateY(-1px); border-color:var(--v-line-2); box-shadow:var(--v-shadow-sm); }
 .wrow .wl { font-size:13px; color:var(--v-text); }
 .wrow .wu { font-family:var(--v-font-display); font-weight:600; font-size:11px; letter-spacing:.12em; text-transform:uppercase;
-  color:var(--v-danger); background:transparent; border:1px solid var(--v-danger); border-radius:var(--v-r-sm);
-  padding:7px 12px; cursor:pointer; transition:color var(--v-t-base) ease, border-color var(--v-t-base) ease; }
-.wrow .wu:hover { color:var(--v-danger-300); border-color:var(--v-danger-300); }
+  color:var(--v-danger-300); background:transparent; border:1px solid rgba(229,72,77,.5); border-radius:10px;
+  padding:7px 12px; cursor:pointer; transition:background var(--v-t-base) var(--v-ease), color var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease); }
+.wrow .wu:hover { background:rgba(229,72,77,.12); border-color:var(--v-danger); color:var(--v-danger-300); }
 .empty { color:var(--v-text-faint); font-size:13px; padding:14px 2px; }
 
-/* ── Admin scan overlay (field-case toast) ── */
+/* ── Admin scan overlay (glass toast) ── */
 .scanov { position:fixed; left:50%; bottom:6vh; transform:translateX(-50%); z-index:var(--z-toast); pointer-events:none; }
-.scanbox { min-width:340px; padding:14px 18px; border-radius:var(--v-r-md);
-  background:linear-gradient(168deg,var(--v-bg-500),var(--v-bg-700));
+.scanbox { min-width:340px; padding:16px 20px; border-radius:var(--v-r-lg);
+  background:linear-gradient(165deg, rgba(255,255,255,.04), rgba(255,255,255,0) 40%),
+             linear-gradient(180deg, var(--v-panel-2), var(--v-panel));
   border:1px solid var(--v-line-2); border-left:3px solid var(--v-accent);
-  box-shadow:0 14px 44px rgba(0,0,0,.55); animation:v-rise .25s var(--v-ease); }
+  box-shadow:var(--v-shadow-box); animation:v-rise .25s var(--v-ease); }
 .scanhead { display:flex; align-items:center; gap:9px; margin-bottom:11px; }
 .scantitle { font-family:var(--v-font-display); font-weight:600; text-transform:uppercase; letter-spacing:.16em; font-size:13px; color:var(--v-text); }
-.scanbar { height:8px; border-radius:var(--v-r-sm); overflow:hidden;
-  background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line), inset 0 2px 4px rgba(0,0,0,.7); }
-.scanbar i { display:block; height:100%; width:0%;
-  background:linear-gradient(90deg,var(--v-accent-600),var(--v-accent));
-  box-shadow:0 0 8px rgba(255,106,26,.4); transition:width var(--v-t-base) ease; }
+.scanbar { height:8px; border-radius:99px; overflow:hidden;
+  background:rgba(0,0,0,.38); border:1px solid var(--v-line); }
+.scanbar i { display:block; height:100%; width:0%; border-radius:99px;
+  background:var(--v-grad-accent);
+  box-shadow:0 0 12px rgba(255,122,26,.5); transition:width var(--v-t-slow) var(--v-ease); }
 .scanmeta { display:flex; justify-content:space-between; margin-top:9px; font-size:11px; color:var(--v-text-dim); }
 .scanmeta #scancount { font-family:var(--v-font-num); font-variant-numeric:tabular-nums; font-weight:700; color:var(--v-accent-300); }
 
@@ -155,6 +184,6 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 
 /* transform-based hovers off under reduced motion (theme handles durations) */
 @media (prefers-reduced-motion: reduce) {
-  .cl-panel { animation:none; }
-  .tile:hover, .tile.sel:hover, .tab:hover, .chip:hover { transform:none !important; }
+  .cl-panel, .cl-overlay .head, .cl-overlay .tabs, .cl-overlay .pane { animation:none; }
+  .tile:hover, .tile.sel:hover, .chip:hover, .close:hover, .wrow:hover { transform:none !important; }
 }

@@ -40,17 +40,19 @@ function positionOpts() {
   wrap.style.top = y + 'px';
 }
 
+let optCount = 0;
 function renderOptions(list) {
   const wrap = byId('opts');
   wrap.innerHTML = '';
   const has = Array.isArray(list) && list.length > 0;
+  optCount = has ? list.length : 0;
   wrap.classList.toggle('empty', !has);
   if (!has) return;
   list.forEach((o) => {
     const row = document.createElement('div');
     row.className = 'opt';
     row.style.setProperty('--i', o.n - 1);
-    row.innerHTML = `<span class="ico">${svg(o.icon)}</span><span class="lbl">${esc(o.label)}</span>`;
+    row.innerHTML = `<span class="num">${o.n}</span><span class="ico">${svg(o.icon)}</span><span class="lbl">${esc(o.label)}</span>`;
     row.onmousedown = (e) => { e.preventDefault(); post('select', { index: o.n }); };
     wrap.appendChild(row);
   });
@@ -58,23 +60,52 @@ function renderOptions(list) {
 }
 
 // Track the free cursor and forward it (throttled) to Lua for the world raycast.
-let tick = 0;
+let lastPostX = -1, lastPostY = -1, lastPostT = 0;
 document.addEventListener('mousemove', (e) => {
   lastPx = e.clientX; lastPy = e.clientY;
   cx = e.clientX / window.innerWidth;
   cy = e.clientY / window.innerHeight;
   byId('cursor').style.transform = `translate(${lastPx}px, ${lastPy}px)`;
-  positionOpts();
-  if (++tick % 2 === 0) post('cursor', { x: cx, y: cy });
+  // The options panel is NOT re-anchored here — it stays where it appeared so
+  // the cursor can travel onto a row and click it.
+  // Posts are throttled: the Lua raycast reads ONE cursor value per frame, so a
+  // post per mousemove (30-60/s) only floods the NUI channel and can starve a
+  // real click ('select'). Send at most every 50ms and only when actually moved.
+  const now = performance.now();
+  const moved = Math.abs(lastPx - lastPostX) > 6 || Math.abs(lastPy - lastPostY) > 6;
+  if (moved && now - lastPostT > 50) {
+    lastPostX = lastPx; lastPostY = lastPy; lastPostT = now;
+    post('cursor', { x: cx, y: cy });
+  }
 });
 
-// Right-click or Escape closes the eye.
+// Right-click or Escape closes the eye; number keys 1-9 trigger an option.
 document.addEventListener('contextmenu', (e) => { e.preventDefault(); post('closeeye'); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') post('closeeye'); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') { post('closeeye'); return; }
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= Math.min(optCount, 9)) post('select', { index: n });
+});
+// Releasing Alt closes the eye (hold-to-use). The page holds keyboard focus
+// while the eye is open, so this DOM keyup is the ground truth — the game's own
+// release signal (-vtarget / IsControlPressed) is fabricated once NUI focus
+// grabs the keyboard mid-hold.
+document.addEventListener('keyup', (e) => { if (e.key === 'Alt' || e.key === 'AltGraph') post('closeeye'); });
+
+// Report panel hover to Lua: while the cursor is over the options list, the
+// sticky target must not re-acquire whatever entity sits behind the panel.
+const optsWrap = byId('opts');
+optsWrap.addEventListener('mouseover', (e) => { if (!optsWrap.contains(e.relatedTarget)) post('panel', { hover: true }); });
+optsWrap.addEventListener('mouseout', (e) => { if (!optsWrap.contains(e.relatedTarget)) post('panel', { hover: false }); });
+
+// If this page loses keyboard focus while the eye is open (another menu grabbed
+// it, the game window lost focus…), the Alt keyup will never arrive — ask Lua
+// to close rather than leaving the eye stuck.
+window.addEventListener('blur', () => post('closeeye'));
 
 window.addEventListener('message', (e) => {
   const d = e.data || {};
-  if (d.action === 'eyeon') { byId('eye').classList.remove('hidden'); document.documentElement.classList.add('eyeopen'); renderOptions([]); }
+  if (d.action === 'eyeon') { byId('eye').classList.remove('hidden'); document.documentElement.classList.add('eyeopen'); lastPx = window.innerWidth / 2; lastPy = window.innerHeight / 2; renderOptions([]); }
   else if (d.action === 'eyeoff') { byId('eye').classList.add('hidden'); document.documentElement.classList.remove('eyeopen'); renderOptions([]); }
   else if (d.action === 'options') { renderOptions(d.options || []); }
 });

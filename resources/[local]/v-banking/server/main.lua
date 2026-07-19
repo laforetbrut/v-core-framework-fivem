@@ -2,7 +2,10 @@
 local Core = exports['v-core']:GetCore()
 
 local function recordTx(citizenid, txtype, amount, balanceAfter, label)
-    MySQL.insert('INSERT INTO bank_transactions (citizenid, type, amount, balance_after, label) VALUES (?, ?, ?, ?, ?)',
+    -- awaited: history() runs a SELECT immediately after, and a fire-and-forget insert
+    -- can land on another pool connection AFTER it -> the fresh row would be missing
+    -- from the "recent activity" list the player sees.
+    MySQL.insert.await('INSERT INTO bank_transactions (citizenid, type, amount, balance_after, label) VALUES (?, ?, ?, ?, ?)',
         { citizenid, txtype, amount, balanceAfter, label })
 end
 

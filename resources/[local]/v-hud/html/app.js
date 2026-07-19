@@ -302,7 +302,7 @@ byId('btn-move').onclick = enterLayout;
 byId('btn-layout-done').onclick = exitLayout;
 byId('dynamic').onclick = () => { settings.dynamic = !settings.dynamic; byId('dynamic').classList.toggle('on'); applySettings(); };
 byId('mapvehicle').onclick = () => { settings.minimapVehicleOnly = !settings.minimapVehicleOnly; byId('mapvehicle').classList.toggle('on'); };
-byId('btn-reset').onclick = () => { settings = JSON.parse(JSON.stringify(DEFAULTS)); buildPanel(); applySettings(); };
+byId('btn-reset').onclick = () => { settings = JSON.parse(JSON.stringify(DEFAULTS)); buildPanel(); applySettings(); post('mapReset', {}); };
 byId('btn-save').onclick = () => { if (editing) exitLayout(); post('saveSettings', settings); byId('settings').classList.add('hidden'); post('closeSettings'); };
 byId('settings').addEventListener('mousedown', (e) => { if (e.target.id === 'settings' && !editing) closeSettings(); });
 document.addEventListener('keydown', (e) => {
