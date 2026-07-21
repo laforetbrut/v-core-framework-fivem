@@ -48,3 +48,6 @@ resources/\[local\]/v-clothing/thumbs/*
 resources/\[standalone\]/screenshot-basic/dist/
 resources/\[standalone\]/screenshot-basic/node_modules/
 resources/\[standalone\]/screenshot-basic/.yarn-cache/
+
+# Backed-up previous (deprecated) server artifacts — local only
+artifacts.legacy-bak/
