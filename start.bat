@@ -6,14 +6,17 @@ REM ─────────────────────────�
 title QBCore Dev Server
 cd /d "%~dp0"
 
-if not exist "artifacts\FXServer.exe" (
-    echo [ERROR] artifacts\FXServer.exe not found. Run the artifacts download first.
+REM  Prefer the FiveM Enhanced binary (cfx-server.exe); fall back to Legacy (FXServer.exe).
+set "SRV=artifacts\cfx-server.exe"
+if not exist "%SRV%" set "SRV=artifacts\FXServer.exe"
+if not exist "%SRV%" (
+    echo [ERROR] No server binary found in artifacts\ (cfx-server.exe or FXServer.exe). Download the artifacts first.
     pause
     exit /b 1
 )
 
-echo Starting QBCore server on port 30120...
-"artifacts\FXServer.exe" +exec server.cfg
+echo Starting server on port 30120 using %SRV% ...
+"%SRV%" +exec server.cfg
 echo.
 echo Server stopped.
 pause
