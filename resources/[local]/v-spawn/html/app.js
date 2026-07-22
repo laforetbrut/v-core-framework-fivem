@@ -350,10 +350,11 @@ window.addEventListener('message', (e) => {
   switch (d.action) {
     case 'characters': buildCharacters(d.data || {}); break;
     case 'open':
+      // Language screen: hide EVERY other screen first — notably screen-select, or the
+      // character grid stays visible underneath and swallows clicks.
+      ['screen-select', 'screen-identity', 'screen-appearance', 'screen-spawn', 'panel', 'cam', 'stage']
+        .forEach(id => { const el = byId(id); if (el) el.classList.add('hidden'); });
       byId('screen-language').classList.remove('hidden');
-      byId('panel').classList.add('hidden');
-      byId('cam').classList.add('hidden');
-      byId('stage').classList.add('hidden');
       break;
     case 'strings': strings = d.strings || {}; applyStrings(); break;
     case 'appearance':

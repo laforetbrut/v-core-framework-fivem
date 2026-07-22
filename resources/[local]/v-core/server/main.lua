@@ -96,9 +96,19 @@ VCore.RegisterCallback('v-core:selectCharacter', function(source, resolve, citiz
     local license = VCore.GetLicense(source)   -- synchronous native, no yield before the latch
     local row = citizenid and VCore.DB.GetCharacterByCitizenId(citizenid)
     if not license or not row or row.license ~= license then loading[source] = nil; resolve(false); return end
-    loadPlayer(source, row, license)
-    SetPlayerRoutingBucket(source, 0)   -- leave the private instance -> main world
+    -- Never let an error inside loadPlayer strand the player: the latch MUST be cleared
+    -- and the callback MUST resolve, otherwise the client sits on a black screen forever
+    -- and every retry is refused by the latch.
+    local ok, err = pcall(function()
+        loadPlayer(source, row, license)
+        SetPlayerRoutingBucket(source, 0)   -- leave the private instance -> main world
+    end)
     loading[source] = nil
+    if not ok then
+        VCore.Players[source] = nil
+        print(('[v-core] selectCharacter failed for %s: %s'):format(tostring(citizenid), tostring(err)))
+        resolve(false); return
+    end
     resolve(true)
 end)
 
