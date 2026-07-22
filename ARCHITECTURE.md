@@ -1156,11 +1156,81 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
+| `v-voice` | high | Proximity voice, radio channels and phone audio. Nothing else on this list changes roleplay as much: a server without voice is a server where nobody talks. |
 | `v-phone` | high | iFruit phone NUI - a primary interaction surface (the server has no chat). Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
-| `v-houses` | medium | Property ownership, interiors, house garages and stashes. |
+| `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
+
+#### `v-voice` - proximity, radio and phone audio
+
+FiveM ships a Mumble voice server; a voice module does not implement audio, it decides
+**who hears whom, and how loudly**. That framing is what keeps it small.
+
+**Proximity in three steps** - whisper, normal, shout - cycled on a key, with the current
+range shown in the HUD. Range is a setting, not a constant, because a server's idea of
+"normal" depends on how big its scenes are.
+
+**Radio channels** are the part that has to be server-authoritative. A client that picks
+its own channel can listen to the police, so joining a channel is a callback the server
+answers by checking `v-factions` rank or `v-police:IsCop` - the same gates the rest of the
+framework already uses, never a new permission list. A radio **item** is required to
+transmit, so being disarmed of the radio is a real event.
+
+**The phone gets its own submix** rather than sharing proximity, so a call is audible when
+the other person is across the map and inaudible to somebody standing next to you.
+
+**Integration that matters:**
+- `v-status`: bleeding or badly hurt narrows the range, because a wounded player should not
+  be shouting across a street.
+- `v-police`: cuffed players cannot use the radio.
+- `v-gangs` / `v-factions`: a faction channel is derived from membership, so leaving the
+  gang leaves the channel with no extra bookkeeping.
+- `v-hud`: a small talking indicator and the current proximity step.
+
+**Admin surface:** the three ranges, whether a radio item is required, which channels exist
+and who may use them (a `v-world` domain, like every other content list), and a mute that a
+staff member can apply without touching the voice server.
+
+**The trap to avoid:** never trust the client for channel membership or for range. Both are
+enforced server-side and mirrored down; a "range" the client sets is a megaphone.
+
+#### `v-housing` - property, interiors and what lives inside them
+
+Houses are the last big persistence layer this framework does not have, and they touch four
+modules that already exist, so the shape is largely decided.
+
+**A property is a row**, not a script: address, coordinates, shell (an MLO or a shared
+interior), price, and an owner citizen id. Created and priced from **Admin → Editor →
+Properties** like every other content list - a server that wants a different neighbourhood
+should not be editing Lua.
+
+**Entering is a teleport into a bucket.** Routing buckets are what make shared interiors
+work: everyone in the same house sees each other and nobody else, and the same shell serves
+a hundred properties. Without buckets, two players in "the same" apartment stand in the same
+room.
+
+**What lives inside** is already built elsewhere and must be reused, not reimplemented:
+- **Storage** is a `v-inventory` stash keyed by property id - the same code as a car boot.
+- **A house garage** is a `v-garages` row owned by the property, so retrieval, impound and
+  the state machine are unchanged.
+- **A wardrobe** is `v-clothing`'s existing outfit flow, gated on being inside.
+- **Keys** follow the `v-vehicles` model: giveable, revocable, checked server-side. A key
+  list on the client is not a lock.
+
+**Money and ownership:** purchase charges through `v-banking` and mints the row atomically,
+the way `v-vehicleshop` already does for cars. Rent, if a server enables it, is a scheduled
+debit that can fail - and a failed rent should *lock* a property rather than delete it,
+because deleting somebody's stash for being poor is how a server loses a player.
+
+**Robbery** is the reason houses matter to the illegal side: a lockpick attempt, a timer, a
+chance the alarm reaches `v-police`, and a stash that yields something worth the risk. That
+depends on `v-police` being in place, which it now is.
+
+**Order:** properties and entry first, then storage and wardrobe (both nearly free, since
+they are existing modules pointed at a new key), then the garage, then robbery last - it is
+the part that needs balancing once players are on the server.
 
 ### 5.6 Build order and why
 
@@ -1174,6 +1244,14 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
    laundering path, and it is the module most likely to need balancing once players are on the server.
 5. **`v-anticheat` before the server opens**, not after. It is listed last because it guards
    everything above, not because it matters least.
+6. **`v-voice` can be built at any point, and should be built early.** It depends on nothing in
+   the economy and changes roleplay more than anything else left on the list - a server without
+   voice is a server where nobody talks. The only reason it is not already done is that it was
+   never written down.
+7. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
+   existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
+   reason to exist on the illegal side, and it needs the police module that now ships. Building
+   housing first would mean shipping it twice.
 
 **Every module in this roadmap ships with:** a `v-world` domain + a v-admin Editor subtab for its
 content, fr **and** en locales, server-side re-derivation of every gate, and an entry in this file,
