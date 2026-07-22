@@ -51,3 +51,8 @@ resources/\[standalone\]/screenshot-basic/.yarn-cache/
 
 # Backed-up previous (deprecated) server artifacts — local only
 artifacts.legacy-bak/
+.console-history
+.id
+local-database/
+crashes/
+svadhesive/
