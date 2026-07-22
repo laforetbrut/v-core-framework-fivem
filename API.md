@@ -238,13 +238,18 @@ exports['v-fuel']:IsElectric(veh) / GetFuelType(veh) / GetTankSize(veh)
 exports['v-mechanic']:GetShops()                    -- server
 exports['v-mechanic']:GetLocalParts(plate) / GetMileage(plate) / ScanNearby()   -- client
 
--- v-target (client) - every option table is filtered by job and permission
+-- v-target (client) - the interaction eye. Every Add* returns handles you can remove.
 exports['v-target']:AddGlobalPlayer(options) / AddGlobalPed(options)
 exports['v-target']:AddGlobalVehicle(options) / AddGlobalObject(options)
+exports['v-target']:AddSelf(options)               -- shown when pointing at nothing
 exports['v-target']:AddModel(models, options) / AddEntity(netId, options)
-exports['v-target']:AddBoxZone(name, coords, size, options)
-exports['v-target']:AddSphereZone(name, coords, radius, options)
-exports['v-target']:RemoveZone(name)
+exports['v-target']:AddBoxZone(name, coords, size, options, { heading, label })
+exports['v-target']:AddSphereZone(name, coords, radius, options, { label })
+exports['v-target']:AddPolyZone(name, points, options, { z, height, label })
+exports['v-target']:RemoveZone(name) / ZoneExists(name)
+exports['v-target']:RemoveGlobal(group, ids) / RemoveModel(model, ids) / RemoveEntity(netId)
+exports['v-target']:RemoveResource(name)           -- everything one resource registered
+exports['v-target']:IsActive() / Close() / GetTarget() / PeekOptions()
 
 -- v-licenses (server) - the rest of the sanction surface
 exports['v-licenses']:Suspend(cid, key) / Reinstate(cid, key)
@@ -403,12 +408,44 @@ exports['v-appearance']:ApplyAppearance(a) / GetCurrentAppearance()
 exports['v-appearance']:CaptureRef(kind, id) / ApplyRef(kind, id, ref)
 exports['v-appearance']:OpenEditor(mode)      -- 'barber' | 'surgery' | 'tattoo'
 
--- v-target (client) - options are filtered by permission, job and a predicate
+-- v-target (client) - see the option schema below for every gate a row can declare
 exports['v-target']:AddGlobalPlayer(opts) / AddGlobalPed(opts) / AddGlobalVehicle(opts)
-exports['v-target']:AddGlobalObject(opts) / AddModel(models, opts) / AddEntity(ent, opts)
-exports['v-target']:AddBoxZone(name, coords, len, wid, opts)
-exports['v-target']:AddSphereZone(name, coords, radius, opts)
-exports['v-target']:RemoveZone(name)
+exports['v-target']:AddGlobalObject(opts) / AddSelf(opts)
+exports['v-target']:AddModel(models, opts) / AddEntity(netId, opts)
+exports['v-target']:AddBoxZone(name, coords, size, opts, { heading, label })
+exports['v-target']:AddSphereZone(name, coords, radius, opts, { label })
+exports['v-target']:AddPolyZone(name, points, opts, { z, height, label })
+exports['v-target']:RemoveZone(name) / RemoveResource(name)
+
+-- An option. Every field is optional except a label and one of action/event/serverEvent.
+{
+  label = 'tgt.trunk',            -- locale key, or a literal string
+  icon  = 'trunk',                -- see html/app.js for the set
+  hint  = 'tgt.trunk_hint',       -- second line under the label
+  priority = 10,                  -- lower sorts first; equal priorities keep insertion order
+
+  -- Gates. job/gang/permission HIDE the row; the rest may grey it out with a reason.
+  job    = { police = 2, sheriff = 0 },   -- name, list of names, or name -> min grade
+  gang   = 'ballas', gangGrade = 1,
+  permission = 'admin',           -- user | mod | admin | superadmin
+  duty   = true,                  -- only enforced when the server models duty
+  items  = { lockpick = 1 },      -- or 'lockpick', or { any = { 'lockpick', 'screwdriver' } }
+  bones  = { 'boot' },            -- which part of the vehicle/ped is being pointed at
+  vehicleClass = { 8 },
+  distance = 4.5,                 -- metres; may only shorten the eye's reach
+
+  -- Return false to hide, or false plus a locale key to grey the row out with a reason.
+  canInteract = function(entity, distance, coords, data) return true end,
+
+  -- What it does. A `menu` opens a nested list instead of acting.
+  action = function(data) end,
+  event = 'some:client:event', serverEvent = 'some:server:event',
+  export = { resource = 'v-shops', method = 'Open' },
+  menu = { … } or function(data) return { … } end,
+}
+
+-- `data` carries: entity, coords, distance, model, netId, type, bone,
+-- playerId, playerServerId, zone, zoneLabel, self
 
 -- v-notify (client)
 exports['v-notify']:show({ type='success', title='…', message='…', duration=4000 })

@@ -852,6 +852,47 @@ A module can suspend the policy for a scripted chase or a heist through
 `GetWorldPolicy` reports the two separately so a forgotten override is visible rather than
 silently overruling the admin panel.
 
+### `v-target` - the interaction eye, and the player's main menu
+
+**The eye is the surface every other module writes into.** A player holds one key, looks at
+something and picks an action; the alternative is one keybind per module and a printed
+cheat sheet nobody reads. When the ray finds nothing targetable it offers the player their
+own actions instead of an empty list, which is what makes it a menu rather than a context
+menu.
+
+**The ray is asynchronous and comes from the screen centre.** Both were wrong before and
+both were felt rather than seen:
+
+- The old probe was `StartExpensiveSynchronousShapeTestLosProbe` - the name is the warning.
+  It blocks the game thread until the physics query answers, sixty times a second.
+- The old ray was cast from the free mouse cursor, whose position was posted back from the
+  page at most every 50 ms. The outline therefore lagged the visible cursor by up to three
+  frames. That lag **was** the "not fluid" feeling.
+- Casting from the cursor also meant moving the mouse onto the option list made the ray
+  miss, so the options vanished before they could be clicked. Three stacked workarounds - a
+  sticky target lock, a panel-hover freeze and a do-not-re-acquire rule - existed only to
+  hide that. A centre ray cannot miss because you moved the mouse, so all three are gone.
+
+The shape-test mask went from `-1` ("everything", which includes water and foliage) to world
+plus vehicles, peds and objects: a bush in front of a car used to swallow the ray.
+
+**Rows know which part of the thing you are pointing at.** The closest vehicle or ped bone
+to the impact point is resolved every rebuild, so the boot offers storage, the bonnet offers
+the engine, and a door offers that door and the seat behind it.
+
+**Two kinds of refusal, and they are not the same.** A row gated by job, gang or permission
+is not drawn at all - advertising the police menu to a civilian tells them what the police
+can do. A row refused for a reason the player can act on (missing tool, too far, already
+unlocked) is drawn inert with the reason underneath, because the alternative is a player
+guessing why the action they expected is absent.
+
+Movement stays live while the eye is open; only look and attack are suppressed. Walking up
+to a car while deciding what to do with it is the normal case, not an edge case.
+
+Seven settings, all read by the client. Options gate on items by reading a
+`{ name = count }` map that `v-inventory` publishes on the player's own statebag: a callback
+would answer a frame after the list was drawn, and a row that appears late reads as flicker.
+
 ### `v-3dsound` ✅ - the positional sound primitive
 
 A primitive, not a feature. `v-music`, `v-radio`, `v-housing`, `v-police` and `v-drugs` all

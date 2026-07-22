@@ -161,9 +161,36 @@ local function removeFromSlot(items, slot, amount)
 end
 
 -- ── Player inventory sync ──────────────────────────────────────
+-- A compact { name = count } map published on the player's own statebag. Any module that
+-- needs to know "does this player carry X" can then answer it on the client in O(1) with
+-- no server round-trip -- v-target's item gating is the first caller, and gating a menu
+-- entry behind a callback would mean the option flickers in a frame after the list drew.
+--
+-- Written only when the map actually CHANGES: a replicated statebag write costs every
+-- client that has this player in scope, and inventory sync fires on every single move.
+local ItemSig = {}
+
+local function pushItemCounts(src)
+    local counts, names = {}, {}
+    for _, it in pairs(Inv[src] or {}) do
+        if it and it.name then
+            if counts[it.name] == nil then names[#names + 1] = it.name end
+            counts[it.name] = (counts[it.name] or 0) + (it.amount or 0)
+        end
+    end
+    table.sort(names)
+    local sig = {}
+    for i, n in ipairs(names) do sig[i] = n .. '=' .. counts[n] end
+    sig = table.concat(sig, ';')
+    if sig == ItemSig[src] then return end
+    ItemSig[src] = sig
+    Player(src).state:set('items', counts, true)
+end
+
 local function syncPlayer(src)
     local player = Core.GetPlayer(src)
     if player then player.SetInventory(Inv[src]) end
+    pushItemCounts(src)
 end
 
 -- The hidden pocket persists in the character's metadata, NOT the main inventory
@@ -180,6 +207,9 @@ AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
     if type(Inv[src]) ~= 'table' then Inv[src] = {} end
     local pk = player.GetMetadata('pocket')
     Pocket[src] = (type(pk) == 'table') and pk or {}
+    -- Publish immediately: a client that spawns holding a lockpick must see the option
+    -- on its first interaction, not after the first thing it moves.
+    pushItemCounts(src)
 end)
 
 AddEventHandler('playerDropped', function()
@@ -188,6 +218,7 @@ AddEventHandler('playerDropped', function()
     if Pocket[src] then syncPocket(src) end
     Inv[src] = nil
     Pocket[src] = nil
+    ItemSig[src] = nil
     OpenStash[src] = nil
     Equipped[src] = nil
     SearchTarget[src] = nil

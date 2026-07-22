@@ -9,12 +9,28 @@
 </head>
 <body>
   <div id="eye" class="eye hidden">
-    <div id="cursor" class="cursor">
-      <span class="ch ch-t"></span><span class="ch ch-r"></span>
-      <span class="ch ch-b"></span><span class="ch ch-l"></span>
-      <span class="cdot"></span>
+    <!-- The reticle is pinned to the screen centre because that is exactly where the
+         world ray is cast from. It is the aim point, not a cursor. -->
+    <div class="reticle" id="reticle">
+      <span class="ring"></span>
+      <span class="dot"></span>
+      <span class="tick t"></span><span class="tick r"></span>
+      <span class="tick b"></span><span class="tick l"></span>
     </div>
-    <div class="opts" id="opts"></div>
+
+    <div class="panel hidden" id="panel">
+      <div class="head" id="head">
+        <button class="back hidden" id="back" type="button" aria-label="back">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+               stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+        </button>
+        <span class="ttl" id="ttl"></span>
+      </div>
+      <div class="rows" id="rows"></div>
+      <div class="foot" id="foot"></div>
+    </div>
+
+    <div class="cursor" id="cursor"></div>
   </div>
   <script src="app.js"></script>
 </body>
