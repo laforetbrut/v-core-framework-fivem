@@ -255,6 +255,12 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
 exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
+-- v-drugs (server)
+exports['v-drugs']:GetHeat(cid) / AddHeat(cid, n)   -- 0..100, decays on its own
+exports['v-drugs']:GetPlants()                      -- live plant rows
+exports['v-drugs']:GetDemand(district)              -- 0..1 for a district key
+-- client: exports['v-drugs']:OfferTo(item) offers to the nearest ped
+
 -- v-police (server)
 exports['v-police']:IsCop(src)          -- job + duty, not a permission tier
 exports['v-police']:IsCuffed(src)

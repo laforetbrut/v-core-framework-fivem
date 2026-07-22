@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
-[![Modules](https://img.shields.io/badge/modules-30-e8a33d.svg)](ARCHITECTURE.md)
+[![Modules](https://img.shields.io/badge/modules-31-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 30 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 31 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -119,6 +119,9 @@ in-game** - never by editing Lua on a live server.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (vitals, money,
   compass, square minimap and a vehicle cluster with fuel, engine and odometer) · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
+- **`v-drugs`** - plantations a player places and can lose, and street dealing that pushes back:
+  demand decays per district as you sell into it, and heat drives both refusals and the chance of
+  a bust. Sales pay dirty money, which has to go through the launderer.
 - **Economy loops** - legal: gather → craft → sell. Illegal: grow → process → deal → launder.
 
 ## Installation
@@ -179,7 +182,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 30 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 31 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -281,6 +284,9 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (vitales,
   argent, boussole, minimap carrée et un bloc véhicule avec carburant, moteur et compteur) · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
+- **`v-drugs`** - des plantations que le joueur pose et peut perdre, et un deal de rue qui résiste :
+  la demande décroît par quartier à mesure qu'on y vend, et la chaleur pilote les refus comme le
+  risque d'interpellation. Les ventes paient en argent sale, qui doit passer par le blanchisseur.
 - **Boucles économiques** - légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.
 
 ## Installation
