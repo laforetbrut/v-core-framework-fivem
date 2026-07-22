@@ -1,5 +1,5 @@
 /* ============================================================
-   v-phone — iFruit · iOS 26 "Liquid Glass"
+   v-phone — iFruit · iOS 27 "Liquid Glass"
 
    Two rules govern everything below.
 
@@ -40,12 +40,24 @@ input { font: inherit; }
   --fill: rgba(120, 120, 128, .24);    /* system fill */
   --fill2: rgba(120, 120, 128, .16);
 
-  /* Liquid Glass, three thicknesses. */
-  --glass-1: rgba(255, 255, 255, .07);
-  --glass-2: rgba(255, 255, 255, .12);
-  --glass-3: rgba(28, 28, 30, .72);
+  /* ── Liquid Glass, iOS 27 ──
+     iOS 27 changed the foundations of the material rather than its shape: it
+     diffuses what is behind it more aggressively so text stays legible, it gained
+     a DARKENED edge outside the bright rim, and its specular highlights got
+     brighter. All three are below.
+
+     `--gk` is the transparency slider, 0 (ultra clear) to 1 (fully tinted). It is
+     a stored per-character preference, set on .screen from JS, and every alpha in
+     the material derives from it -- so the slider genuinely restyles the phone
+     rather than fading one overlay. */
+  --gk: .55;
+  --tint-a: calc(.05 + var(--gk) * .60);      /* the diffusing layer */
+  --sheen-a: calc(.10 + var(--gk) * .12);     /* brighter speculars than iOS 26 */
+  --rim-a: calc(.20 + var(--gk) * .22);
+
   --rim: rgba(255, 255, 255, .28);
   --rim-soft: rgba(255, 255, 255, .14);
+  --edge: rgba(0, 0, 0, .55);                 /* the iOS 27 darkened edge */
 
   --spring: cubic-bezier(.32, .72, 0, 1);   /* the iOS sheet curve */
   --snap: cubic-bezier(.2, .9, .3, 1);
@@ -98,22 +110,36 @@ input { font: inherit; }
 .screen.app-open .wallpaper { filter: blur(18px) saturate(120%); transform: scale(1.08); }
 
 /* ── Liquid Glass primitive ────────────────────────────────────
-   Composed, not sampled. The order matters: sheen on top, tint under it, rim
-   drawn as an inset ring so it survives border-radius. */
+   Composed, not sampled: FiveM's CEF renders backdrop-filter as an opaque black
+   box, so the material is built from layers.
+
+   Four of them, in order:
+     1. a specular sheen along the top edge, and a second diagonal one (iOS 27
+        made these brighter, and they are what stops glass reading as plastic)
+     2. the diffusing tint, whose density is the transparency slider
+     3. a bright half-pixel rim just inside the border
+     4. a DARKENED edge outside it -- new in iOS 27, and the single change that
+        most separates a glass panel from the wallpaper behind it */
 .glass { position: relative;
   background:
-    linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.04) 32%, rgba(255,255,255,0) 60%),
-    linear-gradient(180deg, var(--glass-2), var(--glass-1));
-  box-shadow: inset 0 0 0 .5px var(--rim),
-              inset 0 1px 0 rgba(255,255,255,.22),
-              inset 0 -14px 24px -18px rgba(0,0,0,.7),
-              0 8px 26px rgba(0,0,0,.34); }
+    linear-gradient(155deg, rgba(255,255,255,var(--sheen-a)) 0%, rgba(255,255,255,0) 34%),
+    linear-gradient(180deg, rgba(255,255,255,.14) 0%, rgba(255,255,255,.03) 26%, rgba(255,255,255,0) 55%),
+    linear-gradient(180deg, rgba(46,46,50,var(--tint-a)), rgba(22,22,26,var(--tint-a)));
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,var(--rim-a)),
+              inset 0 1px 0 rgba(255,255,255,calc(var(--rim-a) + .10)),
+              inset 0 -16px 26px -20px rgba(0,0,0,.72),
+              0 0 0 .5px var(--edge),
+              0 10px 30px rgba(0,0,0,.40); }
+
 .glass-solid {
   background:
-    linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.02) 40%, rgba(255,255,255,0) 70%),
-    linear-gradient(180deg, rgba(44,44,46,.90), rgba(22,22,24,.94));
-  box-shadow: inset 0 0 0 .5px var(--rim-soft), inset 0 1px 0 rgba(255,255,255,.14),
-              0 10px 34px rgba(0,0,0,.45); }
+    linear-gradient(155deg, rgba(255,255,255,calc(var(--sheen-a) * .8)) 0%, rgba(255,255,255,0) 30%),
+    linear-gradient(180deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,.02) 38%, rgba(255,255,255,0) 68%),
+    linear-gradient(180deg, rgba(48,48,52,.93), rgba(24,24,28,.96));
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,var(--rim-a)),
+              inset 0 1px 0 rgba(255,255,255,.16),
+              0 0 0 .5px var(--edge),
+              0 12px 38px rgba(0,0,0,.5); }
 
 /* ══ Status bar & Dynamic Island ══════════════════════════════ */
 .status { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 40;
@@ -221,7 +247,10 @@ input { font: inherit; }
   box-shadow: 0 4px 12px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.35),
               inset 0 0 0 .5px rgba(255,255,255,.18);
   transition: transform .22s var(--snap); }
-.tile .ic svg { width: 30px; height: 30px; }
+.tile .ic svg { width: 30px; height: 30px;
+  /* iOS 27 renders icons sharper. A hair more stroke and a crisp edge does the
+     same job at this size without shipping a second icon set. */
+  stroke-width: 2; shape-rendering: geometricPrecision; }
 .tile:active .ic { transform: scale(.88); }
 /* Per-app tints, so the grid is not eight identical squares. */
 .tile .ic.t-green { background: linear-gradient(180deg, #4cd964, #24a83a); }
@@ -278,7 +307,12 @@ input { font: inherit; }
 .navtitle { font-size: 34px; font-weight: 700; letter-spacing: -.028em; padding: 2px 0 6px;
   transform-origin: left center; transition: opacity .2s ease, transform .2s ease; }
 .navbar.collapsed .navtitle { opacity: 0; transform: scale(.55) translateY(-8px); }
-.navbar.collapsed { box-shadow: 0 .5px 0 var(--sep); }
+/* iOS 27: content scrolling under a floating bar gets a UNIFORM toolbar across the
+   top rather than a hairline, so the title never sits on top of moving content. */
+.navbar.collapsed { box-shadow: 0 .5px 0 var(--edge);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,calc(var(--sheen-a) * .6)) 0%, rgba(255,255,255,0) 60%),
+    linear-gradient(180deg, rgba(30,30,34,calc(.55 + var(--gk) * .42)), rgba(24,24,28,calc(.62 + var(--gk) * .36))); }
 
 .appbody { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
   padding: 0 16px 34px; -webkit-overflow-scrolling: touch; }
@@ -491,3 +525,41 @@ input { font: inherit; }
   .device, .app.on, .app.closing, .tile, .lnotif, .bub, .cc, .sheet, .banner, .toast { animation: none; }
   .island, .sw i, .home, .lock, .wallpaper { transition: none; }
 }
+
+/* ══ Slider ═══════════════════════════════════════════════════
+   iOS 27's transparency control. A real slider, because the value it sets is a
+   real preference the whole material derives from. */
+.sliderow { padding: 14px 16px; border-radius: 12px; margin-bottom: 22px;
+  background: rgba(28,28,30,.86); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.06); }
+.sliderow .sl { display: flex; justify-content: space-between; font-size: 13px;
+  color: var(--l2); margin-bottom: 12px; }
+.sliderow input[type=range] { width: 100%; height: 28px; background: none;
+  -webkit-appearance: none; appearance: none; }
+.sliderow input[type=range]::-webkit-slider-runnable-track { height: 8px; border-radius: 99px;
+  background: linear-gradient(90deg, var(--v-accent) 0%, var(--v-accent) var(--fill-pct, 55%),
+              rgba(120,120,128,.32) var(--fill-pct, 55%), rgba(120,120,128,.32) 100%); }
+.sliderow input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: none;
+  width: 26px; height: 26px; margin-top: -9px; border-radius: 50%; background: #fff;
+  box-shadow: 0 2px 6px rgba(0,0,0,.4); }
+
+/* ══ Segmented control ════════════════════════════════════════ */
+.seg { display: flex; gap: 2px; padding: 2px; border-radius: 10px; margin-bottom: 16px;
+  background: rgba(120,120,128,.24); }
+.seg button { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 13px;
+  color: var(--l1); transition: background .18s var(--snap); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.seg button.on { background: rgba(99,99,102,.95);
+  box-shadow: 0 1px 3px rgba(0,0,0,.35), inset 0 0 0 .5px rgba(255,255,255,.16); }
+
+/* ══ Calculator ═══════════════════════════════════════════════ */
+.calcout { text-align: right; padding: 26px 6px 18px; font-family: var(--ios-num);
+  font-size: 54px; font-weight: 300; letter-spacing: -.03em; line-height: 1;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calcgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 11px; }
+.ckey { height: 68px; border-radius: 50%; font-family: var(--ios-num); font-size: 27px;
+  background: rgba(72,72,76,.94); color: #fff;
+  transition: filter .1s ease, transform .1s ease; }
+.ckey:active { filter: brightness(1.5); transform: scale(.95); }
+.ckey.fn { background: rgba(165,165,170,.95); color: #000; }
+.ckey.op { background: var(--v-grad-accent); color: #fff; font-size: 30px; }
+.ckey.wide { grid-column: span 2; border-radius: 34px; text-align: left; padding-left: 26px; }

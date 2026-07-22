@@ -1049,7 +1049,7 @@ not interchangeable - the operator's switch, the owning module actually running,
 job/gang on the row. An app whose owner is stopped is hidden, because an app that opens onto
 nothing is worse than an app that is not there.
 
-**The shell is iOS 26, and the glass is composed rather than sampled.** Lock screen with a
+**The shell is iOS 27, and the glass is composed rather than sampled.** Lock screen with a
 notification stack, a Dynamic Island that expands into a live activity for a call, a paging
 home grid with a dock, iOS inset-grouped lists, large titles that collapse on scroll,
 sheets, banners and a control centre. `backdrop-filter` is not available - FiveM's CEF
@@ -1058,6 +1058,34 @@ tint, a bright half-pixel rim, a specular sheen along the top edge and an inner 
 Against the gradient wallpapers that reads as glass and costs nothing to draw. An app opens
 by scaling out of the icon that launched it, which is most of what separates "an iPhone"
 from "a list on a dark background".
+
+**What iOS 27 changed, and what that meant here.** Apple's own summary of the update is
+that it rebuilt the foundations of the material rather than its shape, and three of those
+changes are visible enough to be worth copying: the glass **diffuses what is behind it
+more aggressively** so text stays legible, it gained a **darkened edge** outside the bright
+rim, and its **specular highlights got brighter**. There is also a **uniform toolbar** when
+content scrolls under a floating bar, instead of a hairline.
+
+The headline user-facing change is a **transparency slider**, from ultra clear to fully
+tinted, and that is the part worth being careful about: it would have been easy to ship as
+a fade on one overlay. It is a stored per-character preference instead, exposed as a single
+CSS custom property, and **every alpha in the material is a `calc()` off it** - tint,
+sheen and rim all move together. Moving the slider restyles the phone rather than dimming
+a layer.
+
+**Fourteen apps, and every one of them is a view of something real.** Maps turns v-world's
+public location lists into a waypoint, which is the one thing a phone map is for. Music
+lists what v-music says this player may control and sends it the same actions its own UI
+does. Property exists because **a failed rent locks a door rather than deleting a
+property**, so being able to pay it off from anywhere is what makes that rule survivable.
+The MDT is police-only by default, and the app gate only decides whether the icon is drawn
+- `isCop` is re-checked on every call. The calculator is the one app that owns itself, and
+it earns its place: splitting a payment three ways is something players do constantly and
+currently do in their heads.
+
+Nothing here was invented to fill the grid. A weather app was considered and dropped
+because no module answers for weather, and an app with nothing behind it is worse than an
+empty space where one could go.
 
 **The control centre contains only real controls.** A tile that toggles nothing is
 decoration, and decoration shaped like a switch is a lie about what the phone can do.
