@@ -17,11 +17,13 @@ local function rollYield(res)
         acc = acc + (y.weight or 1)
         if pick <= acc then
             local amount = math.random(y.min or 1, math.max(y.min or 1, y.max or 1))
+            -- admin-tunable server yield multiplier, applied to the rolled amount
+            amount = math.max(1, math.floor(amount * (Config.YieldMult or 1.0)))
             return { item = y.item, amount = amount }
         end
     end
     local y = res.yields[#res.yields]
-    return { item = y.item, amount = y.min or 1 }
+    return { item = y.item, amount = math.max(1, math.floor((y.min or 1) * (Config.YieldMult or 1.0))) }
 end
 
 -- Is `source` actually standing at node #idx, and is its type as claimed?
@@ -81,4 +83,41 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
     Busy[src] = nil; LastAt[src] = nil
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-gathering', {
+        label = 'Gathering', category = 'economy',
+        settings = {
+
+            { key = 'distance',  label = 'Node range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'cooldown',  label = 'Harvest cooldown (s)',  type = 'number', default = Config.Cooldown, min = 0, max = 120 },
+            { key = 'yieldMult', label = 'Yield multiplier',      type = 'number', default = 1.0, min = 0.1, max = 10 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-gathering', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance  = S('distance', Config.Distance)
+    Config.Cooldown  = S('cooldown', Config.Cooldown)
+    Config.YieldMult = S('yieldMult', 1.0)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-gathering' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
 end)

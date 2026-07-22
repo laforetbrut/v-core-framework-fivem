@@ -855,3 +855,64 @@ RegisterCommand('giveitem', function(source, args)
         Core.Notify(target, ('+%dx %s'):format(amount, ItemDefs[name].label), 'success')
     end
 end, false)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-inventory', {
+        label = 'Inventory', category = 'economy',
+        settings = {
+
+            { key = 'maxWeight',   label = 'Carry weight (g)',       type = 'number', default = Config.MaxWeight, min = 1000, max = 500000, step = 1 },
+            { key = 'maxSlots',    label = 'Slots',                  type = 'number', default = Config.MaxSlots, min = 5, max = 200, step = 1 },
+            { key = 'hotbarSlots', label = 'Hotbar slots',           type = 'number', default = Config.HotbarSlots, min = 0, max = 9, step = 1 },
+            { key = 'giveDistance',label = 'Give range (m)',         type = 'number', default = Config.GiveDistance, min = 0.5, max = 12 },
+            { key = 'armorAmount', label = 'Armor item gives',       type = 'number', default = Config.ArmorAmount, min = 1, max = 100, step = 1 },
+            { key = 'ammoPerItem', label = 'Rounds per ammo item',   type = 'number', default = Config.AmmoPerItem, min = 1, max = 500, step = 1 },
+            { key = 'wearPerShot', label = 'Weapon wear per shot',   type = 'number', default = Config.WeaponWearPerShot, min = 0, max = 10 },
+            { key = 'jamThreshold',label = 'Jams below condition (%)', type = 'number', default = Config.JamThreshold, min = 0, max = 100, step = 1 },
+            { key = 'jamMaxChance',label = 'Max jam chance (0-1)',   type = 'number', default = Config.JamMaxChance, min = 0, max = 1 },
+            { key = 'backpackSlots', label = 'Backpack extra slots', type = 'number', default = Config.Backpack.slots, min = 0, max = 100, step = 1 },
+            { key = 'backpackWeight',label = 'Backpack extra weight (g)', type = 'number', default = Config.Backpack.weight, min = 0, max = 500000, step = 1 },
+            { key = 'trunkSlots',  label = 'Trunk slots',            type = 'number', default = Config.Trunk.slots, min = 0, max = 200, step = 1 },
+            { key = 'trunkWeight', label = 'Trunk weight (g)',       type = 'number', default = Config.Trunk.weight, min = 0, max = 2000000, step = 1 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-inventory', key, fallback) end
+
+local function applySettings()
+
+    Config.MaxWeight           = S('maxWeight', Config.MaxWeight)
+    Config.MaxSlots            = S('maxSlots', Config.MaxSlots)
+    Config.HotbarSlots         = S('hotbarSlots', Config.HotbarSlots)
+    Config.GiveDistance        = S('giveDistance', Config.GiveDistance)
+    Config.ArmorAmount         = S('armorAmount', Config.ArmorAmount)
+    Config.AmmoPerItem         = S('ammoPerItem', Config.AmmoPerItem)
+    Config.WeaponWearPerShot   = S('wearPerShot', Config.WeaponWearPerShot)
+    Config.JamThreshold        = S('jamThreshold', Config.JamThreshold)
+    Config.JamMaxChance        = S('jamMaxChance', Config.JamMaxChance)
+    Config.Backpack.slots      = S('backpackSlots', Config.Backpack.slots)
+    Config.Backpack.weight     = S('backpackWeight', Config.Backpack.weight)
+    Config.Trunk.slots         = S('trunkSlots', Config.Trunk.slots)
+    Config.Trunk.weight        = S('trunkWeight', Config.Trunk.weight)
+    TriggerClientEvent('v-inventory:client:tunables', -1, {
+        jamThreshold = Config.JamThreshold, jamMaxChance = Config.JamMaxChance,
+        hotbarSlots = Config.HotbarSlots,
+    })
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-inventory' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
+end)

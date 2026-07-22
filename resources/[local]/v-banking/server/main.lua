@@ -81,3 +81,38 @@ Core.RegisterCallback('v-banking:transfer', function(source, resolve, data)
     Core.Log('bank', ('%s transfer %d -> %s'):format(p.citizenid, amount, targetCid), nil, p.citizenid)
     resolve(state(p))
 end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-banking', {
+        label = 'Banking', category = 'economy',
+        settings = {
+
+            { key = 'distance',     label = 'ATM range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'historyLimit', label = 'Transactions shown',   type = 'number', default = Config.HistoryLimit, min = 5, max = 200, step = 1 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-banking', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance     = S('distance', Config.Distance)
+    Config.HistoryLimit = S('historyLimit', Config.HistoryLimit)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-banking' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
+end)

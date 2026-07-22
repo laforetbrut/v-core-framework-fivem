@@ -31,3 +31,39 @@ end)
 exports('ApplyRefTo', function(src, kind, compId, ref)
     TriggerClientEvent('v-appearance:client:applyRef', src, kind, compId, ref)
 end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-appearance', {
+        label = 'Appearance', category = 'gameplay',
+        settings = {
+
+            { key = 'distance',      label = 'Salon range (m)',   type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'heightEnabled', label = 'Height (experimental)', type = 'bool', default = Config.Height.enabled,
+              hint = 'GTA V has no ped-scale native; this is visual only and glitches.' },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-appearance', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance       = S('distance', Config.Distance)
+    Config.Height.enabled = S('heightEnabled', Config.Height.enabled)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-appearance' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
+end)

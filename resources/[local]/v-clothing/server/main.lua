@@ -145,7 +145,9 @@ Core.RegisterCallback('v-clothing:buy', function(source, resolve, data)
     if not atStore(source) then
         Core.Notify(source, LP(source, 'cl.toofar'), 'error'); resolve({ error = 'far' }); return
     end
-    if (player.money.cash or 0) < cat.price then
+    -- one derived price, used by the funds check, the charge and the notification
+    local price = math.max(0, math.floor((cat.price or 0) * (Config.PriceMult or 1.0)))
+    if (player.money.cash or 0) < price then
         Core.Notify(source, LP(source, 'cl.nofunds'), 'error'); resolve({ error = 'funds' }); return
     end
     -- Coerce + clamp the client-supplied drawable/texture so a malformed value can't
@@ -156,9 +158,9 @@ Core.RegisterCallback('v-clothing:buy', function(source, resolve, data)
     if not exports['v-inventory']:AddItem(source, cat.item, 1, meta) then
         resolve({ error = 'space' }); return
     end
-    player.RemoveMoney('cash', cat.price, 'clothing-buy')
+    player.RemoveMoney('cash', price, 'clothing-buy')
     Core.Log('clothing', ('%s bought %s'):format(player.citizenid, cat.item), meta, player.citizenid)
-    Core.Notify(source, LP(source, 'cl.bought', LP(source, 'item.' .. cat.item), cat.price), 'success')
+    Core.Notify(source, LP(source, 'cl.bought', LP(source, 'item.' .. cat.item), price), 'success')
     local p2 = Core.GetPlayer(source)
     resolve({ cash = p2.money.cash, bank = p2.money.bank })
 end)
@@ -413,4 +415,39 @@ exports('GetWorn', function(src)
         out[cat] = { item = entry.item, drawable = entry.meta.drawable, texture = entry.meta.texture }
     end
     return out
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-clothing', {
+        label = 'Clothing', category = 'gameplay',
+        settings = {
+
+            { key = 'distance', label = 'Store range (m)',   type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'priceMult',label = 'Price multiplier',  type = 'number', default = 1.0, min = 0.1, max = 10 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-clothing', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance  = S('distance', Config.Distance)
+    Config.PriceMult = S('priceMult', 1.0)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-clothing' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
 end)

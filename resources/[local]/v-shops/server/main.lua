@@ -91,7 +91,13 @@ end)
 RegisterNetEvent('v-shops:server:requestLocations', function() pushLocations(source) end)
 
 local function priceOf(shop, itemName)
-    for _, e in ipairs(shop.items) do if e.item == itemName then return e.price end end
+    -- the admin-tunable multiplier is applied here, so every caller (browse, buy,
+    -- the label in a notification) agrees on one number
+    for _, e in ipairs(shop.items) do
+        if e.item == itemName then
+            return math.max(1, math.floor(e.price * (Config.PriceMult or 1.0)))
+        end
+    end
     return nil
 end
 
@@ -148,7 +154,9 @@ Core.RegisterCallback('v-shops:getShop', function(source, resolve, shopId)
         if d then
             local meta = d.metadata
             if type(meta) == 'string' then meta = json.decode(meta) or {} end
-            list[#list + 1] = { name = d.name, label = d.label, price = e.price, weight = d.weight,
+            list[#list + 1] = { name = d.name, label = d.label,
+                                price = math.max(1, math.floor(e.price * (Config.PriceMult or 1.0))),
+                                weight = d.weight,
                 category = d.category, image = d.image, rarity = (meta and meta.rarity) or 'common' }
         end
     end
@@ -180,7 +188,7 @@ Core.RegisterCallback('v-shops:sell', function(source, resolve, data)
     -- Compute the payout BEFORE taking anything, so a sale that floors to $0
     -- (e.g. 1 marked bill at a 0.65 launderer) can never destroy the goods.
     local rate = (Config.SellRate and Config.SellRate[shop.id]) or 1
-    local total = math.floor(price * amount * rate)
+    local total = math.floor(price * amount * rate * (Config.SellMult or 1.0))
     local payout = (Config.SellPayout and Config.SellPayout[shop.id]) or 'cash'
     if total <= 0 then
         Core.Notify(source, LP(source, 'shop.too_small'), 'error'); resolve({ error = 'amount' }); return
@@ -250,4 +258,41 @@ Core.RegisterCallback('v-shops:buy', function(source, resolve, data)
 
     local p2 = Core.GetPlayer(source)   -- re-read for the post-purchase balances + inventory
     resolve({ cash = p2.money.cash, bank = p2.money.bank, inv = inventoryView(p2) })
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-shops', {
+        label = 'Stores', category = 'economy',
+        settings = {
+
+            { key = 'distance',  label = 'Counter range (m)',    type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'priceMult', label = 'Buy price multiplier', type = 'number', default = 1.0, min = 0.1, max = 10 },
+            { key = 'sellMult',  label = 'Sell price multiplier',type = 'number', default = 1.0, min = 0.1, max = 10 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-shops', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance  = S('distance', Config.Distance)
+    Config.PriceMult = S('priceMult', 1.0)
+    Config.SellMult  = S('sellMult', 1.0)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-shops' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
 end)

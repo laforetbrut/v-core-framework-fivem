@@ -99,3 +99,11 @@ CreateThread(function()
         end
     end
 end)
+
+-- An admin changed a weapon tunable: the jam roll happens on the client, so it needs them.
+RegisterNetEvent('v-inventory:client:tunables', function(t)
+    if type(t) ~= 'table' then return end
+    Config.JamThreshold = tonumber(t.jamThreshold) or Config.JamThreshold
+    Config.JamMaxChance = tonumber(t.jamMaxChance) or Config.JamMaxChance
+    Config.HotbarSlots  = tonumber(t.hotbarSlots) or Config.HotbarSlots
+end)

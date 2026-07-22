@@ -8,6 +8,22 @@ let strings = {}, isSuper = false, weathers = [], curTab = 'dash';
 let players = [], frozen = new Set(), tools = {};
 const t = (k) => strings[k] || k;
 
+// Typing in a search box used to rebuild the whole list on every keystroke. With 300+
+// catalogue rows that is a visible stutter, so every search is debounced through here.
+function debounce(fn, ms) {
+  let h = null;
+  return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); };
+}
+
+// Appending rows one at a time costs one reflow per row. Building into a fragment and
+// attaching once costs exactly one.
+function paint(wrap, nodes) {
+  const frag = document.createDocumentFragment();
+  nodes.forEach(n => frag.appendChild(n));
+  wrap.innerHTML = '';
+  wrap.appendChild(frag);
+}
+
 function applyStrings() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.placeholder = t(el.getAttribute('data-i18n-ph')); });
@@ -196,8 +212,9 @@ function renderSettings() {
   const mods = (setData && setData.modules) || [];
   const shown = mods.filter(m => !q || m.label.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)
     || (m.settings || []).some(s => (s.label || '').toLowerCase().includes(q) || s.key.toLowerCase().includes(q)));
-  if (!shown.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.set_none'))}</div>`; return; }
+  if (!shown.length) { wrap.appendChild(el('div', 'empty-ed', t('adm.set_none'))); return; }
 
+  const nodes = [];
   shown.forEach((m, i) => {
     const box = document.createElement('div');
     box.className = 'setmod'; box.style.setProperty('--i', i);
@@ -233,21 +250,34 @@ function renderSettings() {
         const res = await post('setSetting', { module: m.name, key: s.key, value });
         flash(b, !!(res && res.ok));
         b.disabled = false;
-        if (res && res.ok) loadSettings();
+        // patch the one value we changed rather than refetching the whole registry
+        if (res && res.ok) {
+          s.value = res.value !== undefined ? res.value : value;
+          s.overridden = true;
+          r.classList.add('over');
+          r.querySelector('.setreset').disabled = false;
+        }
       };
       r.querySelector('.setreset').onclick = async (e) => {
         const b = e.currentTarget; b.disabled = true;
         const res = await post('setSetting', { module: m.name, key: s.key, reset: true });
         flash(b, !!(res && res.ok));
-        if (res && res.ok) loadSettings(); else b.disabled = false;
+        if (res && res.ok) {
+          s.value = s.default; s.overridden = false;
+          r.classList.remove('over');
+          const c = r.querySelector('input, select');
+          if (s.type === 'bool') c.checked = !!s.default; else c.value = s.default;
+        }
+        b.disabled = false;
       };
       rowsBox.appendChild(r);
     });
-    wrap.appendChild(box);
+    nodes.push(box);
   });
+  paint(wrap, nodes);
 }
 
-byId('setsearch').oninput = renderSettings;
+byId('setsearch').oninput = debounce(renderSettings, 140);
 
 // ── Coordinates copy tool ──
 function copyText(txt) {
@@ -373,6 +403,7 @@ function renderScanReview() {
     else b.disabled = false;
   };
 
+  const scanNodes = [];
   scanRows.slice(0, 400).forEach((r, i) => {
     const el = document.createElement('div');
     el.className = 'edrow vs-row'; el.dataset.model = r.model; el.style.setProperty('--i', i);
@@ -383,8 +414,12 @@ function renderScanReview() {
         <select class="vs-cat">${(edData.cats || []).map(c => `<option value="${esc(c)}"${c === r.cat ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
         <input class="vs-price" type="number" value="${r.price}" />
       </span>`;
-    wrap.appendChild(el);
+    scanNodes.push(el);
   });
+  // 400 rows one at a time is 400 reflows; a fragment is one
+  const sfrag = document.createDocumentFragment();
+  scanNodes.forEach(n => sfrag.appendChild(n));
+  wrap.appendChild(sfrag);
   if (scanRows.length > 400) {
     const more = document.createElement('div');
     more.className = 'empty-ed';
@@ -393,29 +428,54 @@ function renderScanReview() {
   }
 }
 
+const ED_PAGE = 200;        // rows drawn at once; the rest is one click away
+let edShown = ED_PAGE;
+
 function renderEdList() {
   const wrap = byId('ed-list'); wrap.innerHTML = '';
   if (edDomain === 'vehcat') renderScanBar(wrap);
   const rows = edFilter(edData.rows || []);
-  if (!rows.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.ed_empty'))}</div>`; return; }
-  rows.slice(0, 300).forEach((r, i) => {
-    const el = document.createElement('div'); el.className = 'edrow'; el.style.setProperty('--i', i);
+  if (!rows.length) { wrap.appendChild(el('div', 'empty-ed', t('adm.ed_empty'))); return; }
+
+  const nodes = [];
+  rows.slice(0, edShown).forEach((r, i) => {
+    const row = document.createElement('div'); row.className = 'edrow'; row.style.setProperty('--i', i);
     const off = (r.enabled === 0 || r.enabled === false);
-    el.innerHTML = `<span class="edname${off ? ' off' : ''}">${edRowTitle(r)}</span>
+    row.innerHTML = `<span class="edname${off ? ' off' : ''}">${edRowTitle(r)}</span>
       <span class="edacts">
         <button class="mini" data-act="edit">${esc(t('adm.ed_edit'))}</button>
         <button class="mini danger" data-act="del">${esc(t('adm.ed_del'))}</button>
       </span>`;
-    el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
-    el.querySelector('[data-act="del"]').onclick = async () => {
+    row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
+    row.querySelector('[data-act="del"]').onclick = async () => {
       const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
         : (edDomain === 'vehcat') ? r.model : r.id;   // garages/dealers key on `id`
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
-    wrap.appendChild(el);
+    nodes.push(row);
   });
+  const frag = document.createDocumentFragment();
+  nodes.forEach(n => frag.appendChild(n));
+  wrap.appendChild(frag);
+
+  // Never truncate silently: say how many are hidden and offer them.
+  if (rows.length > edShown) {
+    const more = document.createElement('button');
+    more.className = 'mini showmore';
+    more.textContent = `${t('adm.ed_showmore')} (${rows.length - edShown})`;
+    more.onclick = () => { edShown += ED_PAGE; renderEdList(); };
+    wrap.appendChild(more);
+  }
+}
+
+// tiny element helper, used where a node is simpler than an innerHTML string
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
 }
 
 const field = (label, id, val, type) =>
@@ -854,7 +914,7 @@ document.querySelectorAll('.sub[data-dom]').forEach(b => b.onclick = () => {
   loadEditor();
 });
 byId('ed-new').onclick = () => openEdForm(null);
-byId('ed-search').oninput = () => renderEdList();
+byId('ed-search').oninput = debounce(() => { edShown = ED_PAGE; renderEdList(); }, 140);
 document.querySelectorAll('.rtab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 byId('refresh').onclick = loadTab;
 byId('psearch').oninput = renderPlayers;
