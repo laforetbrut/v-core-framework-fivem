@@ -235,6 +235,7 @@ local T = {
     ['adm.ed_chan']         = 'Channel number',
     ['adm.ed_openchan']     = 'open to anyone with a radio',
     ['adm.ed_onlygang']     = 'Gang only',
+    ['adm.ed_jukebox']      = 'Jukeboxes',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }
