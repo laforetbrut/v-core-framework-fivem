@@ -196,6 +196,12 @@ local T = {
     ['adm.ed_fontscale']    = 'Échelle de police',
     ['adm.ed_inherit']      = 'hérité',
     ['adm.ed_inherits']     = 'hérite de tout',
+    ['adm.ed_rentals']      = 'Points de location',
+    ['adm.ed_rentcats']     = 'Catégories (liste séparée par des virgules)',
+    ['adm.ed_anycat']       = 'toutes catégories',
+    ['adm.ed_rentdep']      = 'Caution de location',
+    ['adm.ed_rentfee']      = 'Frais de location',
+    ['adm.ed_norent']       = 'non louable',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

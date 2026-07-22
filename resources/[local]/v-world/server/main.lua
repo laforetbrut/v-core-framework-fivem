@@ -17,6 +17,7 @@ local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
 local Dealers, VehCat = {}, {}
+local Rentals = {}
 local UiThemes = {}
 local ready = false
 
@@ -212,6 +213,32 @@ local function ensureTables()
         PRIMARY KEY (`model`), KEY `cat_idx` (`cat`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Rental points. `cats` is a comma list of vehicle categories this point hires
+    -- out; empty means anything the catalogue marks rentable.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_rentals` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `sx` FLOAT NOT NULL, `sy` FLOAT NOT NULL, `sz` FLOAT NOT NULL, `sh` FLOAT NOT NULL DEFAULT 0,
+        `cats` VARCHAR(200) NOT NULL DEFAULT '',
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `job` VARCHAR(50) DEFAULT NULL,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Rentability rides on the vehicle catalogue rather than a second list: one row per
+    -- model, edited in one place. NULL deposit = this model cannot be hired.
+    for _, col in ipairs({
+        { 'rent_deposit', "ADD COLUMN `rent_deposit` INT DEFAULT NULL" },
+        { 'rent_fee',     "ADD COLUMN `rent_fee` INT DEFAULT NULL" },
+    }) do
+        local has = MySQL.scalar.await(
+            'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            { 'vehicle_catalogue', col[1] })
+        if not has then MySQL.query.await('ALTER TABLE `vehicle_catalogue` ' .. col[2]) end
+    end
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -381,6 +408,14 @@ local function loadDealers()
     end
 end
 
+local function loadRentals()
+    Rentals = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_rentals ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Rentals[#Rentals + 1] = r
+    end
+end
+
 local function loadVehCat()
     VehCat = {}
     for _, r in ipairs(MySQL.query.await('SELECT * FROM vehicle_catalogue ORDER BY cat, price') or {}) do
@@ -411,6 +446,7 @@ local function reload(domain)
     if domain == 'licenses'    or not domain then loadLicTypes() end
     if domain == 'dealers'     or not domain then loadDealers() end
     if domain == 'vehcat'      or not domain then loadVehCat() end
+    if domain == 'rentals'     or not domain then loadRentals() end
     if domain == 'uitheme'     or not domain then loadUiThemes() end
 end
 
@@ -486,6 +522,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetRentals', function() return Rentals end)
 exports('GetGarages', function() return Garages end)
 exports('GetStations', function() return Stations end)
 exports('GetMechShops', function() return MechShops end)
@@ -563,6 +600,23 @@ exports('SeedClothCategories', function(defaults)
     seedDone('clothcats', want)
     loadClothCats()
     print(('[v-world] seeded %d clothing category(ies) from config'):format(#ClothCats))
+    return true
+end)
+
+-- v-rentals: list of { id, label, x, y, z, sx, sy, sz, sh, cats }
+exports('SeedRentals', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('rentals', defaults)
+    if not need then return false end
+    for _, r in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_rentals
+            (id, label, x, y, z, sx, sy, sz, sh, cats, blip, job, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,1)]],
+            { r.id, r.label or r.id, r.x, r.y, r.z, r.sx, r.sy, r.sz, r.sh or 0.0,
+              r.cats or '', r.job })
+    end
+    seedDone('rentals', want)
+    loadRentals()
+    print(('[v-world] seeded %d rental point(s) from config'):format(#Rentals))
     return true
 end)
 
@@ -732,6 +786,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = Dealers, jobs = jobs, cats = Config.VehicleCategories })
+    elseif domain == 'rentals' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = Rentals, jobs = jobs, cats = Config.VehicleCategories })
     elseif domain == 'vehcat' then
         local jobs, lics = {}, {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -934,6 +992,29 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   bool(row.blip), job, bool(row.enabled), did })
         end
 
+    elseif d == 'rentals' then
+        local rid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if rid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        local cats = tostring(row.cats or ''):sub(1, 200)
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_rentals WHERE id = ?', { rid })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO world_rentals (id, label, x, y, z, sx, sy, sz, sh, cats, blip, job, enabled)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)]],
+                { rid, label, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh),
+                  cats, bool(row.blip == nil or row.blip), job, bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE world_rentals SET label=?, x=?, y=?, z=?, sx=?, sy=?, sz=?, sh=?,
+                cats=?, blip=?, job=?, enabled=? WHERE id=?]],
+                { label, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh),
+                  cats, bool(row.blip), job, bool(row.enabled), rid })
+        end
+
     elseif d == 'vehcat' then
         -- `model` is the spawn name: settable on CREATE, never after (owned cars store it).
         local model = tostring(row.model or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
@@ -943,19 +1024,27 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         local lic = tostring(row.license or ''):sub(1, 40); if lic == '' then lic = nil end
         local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
         local stock = math.floor(num(row.stock, -1))
+        -- Blank means "not rentable" (NULL). It must not collapse to 0, which would be a
+        -- free hire with no deposit — a very different thing.
+        local rdep = (row.rentDeposit ~= nil and tostring(row.rentDeposit) ~= '')
+            and math.max(0, math.floor(num(row.rentDeposit))) or nil
+        local rfee = (row.rentFee ~= nil and tostring(row.rentFee) ~= '')
+            and math.max(0, math.floor(num(row.rentFee))) or nil
         if row.isNew then
             local exists = MySQL.scalar.await('SELECT 1 FROM vehicle_catalogue WHERE model = ?', { model })
             if exists then resolve({ error = 'exists' }); return end
-            MySQL.insert.await([[INSERT INTO vehicle_catalogue (model, label, cat, price, stock, license, job, enabled)
-                VALUES (?,?,?,?,?,?,?,?)]],
+            MySQL.insert.await([[INSERT INTO vehicle_catalogue
+                (model, label, cat, price, stock, license, job, enabled, rent_deposit, rent_fee)
+                VALUES (?,?,?,?,?,?,?,?,?,?)]],
                 { model, label, tostring(row.cat or 'sedans'):sub(1, 30),
                   math.max(0, math.floor(num(row.price))), stock, lic, job,
-                  bool(row.enabled == nil or row.enabled) })
+                  bool(row.enabled == nil or row.enabled), rdep, rfee })
         else
-            MySQL.update.await([[UPDATE vehicle_catalogue SET label=?, cat=?, price=?, stock=?, license=?, job=?, enabled=?
-                WHERE model=?]],
+            MySQL.update.await([[UPDATE vehicle_catalogue SET label=?, cat=?, price=?, stock=?, license=?, job=?,
+                enabled=?, rent_deposit=?, rent_fee=? WHERE model=?]],
                 { label, tostring(row.cat or 'sedans'):sub(1, 30),
-                  math.max(0, math.floor(num(row.price))), stock, lic, job, bool(row.enabled), model })
+                  math.max(0, math.floor(num(row.price))), stock, lic, job,
+                  bool(row.enabled), rdep, rfee, model })
         end
 
     elseif d == 'licenses' then
@@ -1121,6 +1210,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local did = tostring(id or '')
         if did == '' then resolve({ error = 'protected' }); return end
         MySQL.query.await('DELETE FROM world_dealers WHERE id = ?', { did })
+    elseif d == 'rentals' then
+        local rid = tostring(id or '')
+        if rid == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_rentals WHERE id = ?', { rid })
     elseif d == 'vehcat' then
         local model = tostring(id or '')
         if model == '' then resolve({ error = 'protected' }); return end
