@@ -22,6 +22,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Fixed (English first)
 
+- **The editor's subtab strip was clipped, not scrollable** - a fix written when there were 11 domains put `overflow-x:auto` inside a `max-width:900px` media query, so a full-width panel simply ran the row off the edge with no way to reach the last tabs. There are 22 domains now. The strip scrolls at every width, buttons no longer break onto two lines, a fade at the right edge shows there is more, and selecting a tab scrolls it into view.
+
 - **`v-vehicles` used `V.*` in three files without ever loading the helper** - the server side failed at boot the moment a service declaration was added, and the two client files (seatbelt, driver controls) would have failed for every player. A headless boot has no client, which is exactly why it went unnoticed. A repo-wide check now confirms every module that touches `V` loads it.
 
 - **A client-only module cannot reach the admin panel**, because settings are registered server-side. `v-radio` shipped as a client script with a `Config.PresetSlots` nobody could change, which quietly made "configurable in the admin panel" untrue for it. It has a server file now, and the client reads the live setting rather than the config constant.
@@ -41,6 +43,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **`v-3dsound` - le primitif de son positionnel**. Un primitif, pas une fonctionnalité : `v-music`, `v-radio`, `v-housing`, `v-police` et `v-drugs` veulent tous la même chose, et le construire une seule fois est tout l'intérêt. **Le fil transporte un nom, une position et une portée - jamais de l'audio** ; la banque est déjà sur chaque client, donc le serveur diffuse l'intention et chaque client atténue selon sa propre distance. Deux banques : sons natifs GTA (gratuits, mixés en 3D par le moteur) et fichiers personnalisés via une petite page NUI, parce qu'un fichier est un téléchargement que chaque joueur paie. **La règle qu'il fait respecter** : tout ce qu'un joueur peut provoquer passe par `PlayFromPlayer`, qui prend la position sur le ped et non dans une charge utile - un son qu'un client déclenche et diffuse lui-même est un outil de grief. Seuls les auditeurs à portée reçoivent le message. Câblé dès l'arrivée au clic des menottes, à la plantation et la récolte, et à une confirmation bancaire privée. Cinq réglages.
 
 ### Correctifs (miroir français)
+
+- **Le ruban de sous-onglets de l'éditeur était coupé, pas défilable** - un correctif écrit à l'époque des 11 domaines plaçait `overflow-x:auto` dans une media query `max-width:900px`, donc un panneau en pleine largeur laissait simplement la rangée déborder sans aucun moyen d'atteindre les derniers onglets. Il y a 22 domaines aujourd'hui. Le ruban défile à toutes les largeurs, les boutons ne passent plus sur deux lignes, un dégradé à droite signale la suite, et sélectionner un onglet le ramène dans le champ de vision.
 
 - **`v-vehicles` utilisait `V.*` dans trois fichiers sans jamais charger la lib** - le côté serveur a planté au démarrage dès l'ajout d'une déclaration de service, et les deux fichiers client (ceinture, contrôles de conduite) auraient planté pour chaque joueur. Un boot sans client ne le révèle pas, ce qui explique qu'il soit passé inaperçu. Une vérification sur tout le dépôt confirme désormais que chaque module touchant à `V` la charge.
 
