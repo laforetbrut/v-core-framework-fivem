@@ -180,6 +180,20 @@ end)
 
 RegisterNUICallback('photos', relay('v-phone:photo'))
 
+--- The social apps. One relay with a whitelist, because the page names an operation and
+--- the client decides which callbacks that can ever mean - the same shape as the SDK.
+local SOCIAL_OPS = {
+    me = true, setup = true, feed = true, post = true, like = true,
+    hushMe = true, hushSetup = true, hushNext = true, hushChoice = true,
+}
+
+RegisterNUICallback('social', function(data, cb)
+    if GetResourceState('v-social') ~= 'started' then cb({ error = 'off' }) return end
+    local op = tostring((data and data.op) or '')
+    if not SOCIAL_OPS[op] then cb({ error = 'forbidden' }) return end
+    V.Request('v-social:' .. op, function(res) cb(res or { error = 'x' }) end, data)
+end)
+
 --- What the widgets show. Both are the GAME's: the weather the server is actually
 --- running (v-admin replicates it on GlobalState) and the in-game clock. A widget
 --- showing the player's real-world time would be showing the wrong clock.
