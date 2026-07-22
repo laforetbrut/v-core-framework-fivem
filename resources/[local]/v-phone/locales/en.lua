@@ -89,5 +89,14 @@ local T = {
     ['ph.err_dnd']      = 'They are not taking calls',
     ['ph.err_fields']   = 'A name and a number are needed',
     ['ph.err_unknown']  = 'Unknown app',
+    ['ph.home'] = 'Home',
+    ['ph.unread'] = 'Unread',
+    ['ph.mute'] = 'mute',
+    ['ph.keypad'] = 'keypad',
+    ['ph.speaker'] = 'speaker',
+    ['ph.new_message_to'] = 'New message',
+    ['ph.dnd_hint'] = 'Calls are refused and messages arrive without a banner.',
+    ['ph.camera_off'] = 'The camera is disabled on this server',
+    ['ph.torch_hint'] = 'Nothing to light up in here',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

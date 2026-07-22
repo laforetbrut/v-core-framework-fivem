@@ -1,209 +1,493 @@
 /* ============================================================
-   v-phone — iFruit · EMBER theme
+   v-phone — iFruit · iOS 26 "Liquid Glass"
 
-   The chrome is a phone's; every colour, radius, font and shadow comes from v-ui.
-   A server that themes the framework purple gets a purple phone rather than an
-   orange rectangle in a purple world.
+   Two rules govern everything below.
 
-   CEF safe: no color-mix(), no :has(), no nesting, no @import, no backdrop-filter.
+   1. **No `backdrop-filter`.** FiveM's CEF renders it as an opaque black box, so
+      the glass is COMPOSED rather than sampled: a translucent tint, a bright 1px
+      rim, a specular sheen across the top edge and a soft inner shadow. Against
+      the smooth gradient wallpapers this reads as glass, and it costs nothing.
+
+   2. **The chrome is the phone's; the accent is the server's.** Structure,
+      radii, materials and motion are iOS. The accent colour comes from v-ui, so
+      a server that themes the framework purple gets a purple iPhone rather than
+      an orange rectangle in a purple world.
+
+   CEF safe: no color-mix(), no :has(), no nesting, no @import.
    ============================================================ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden;
-  font-family: var(--v-font-body); color: var(--v-text); -webkit-font-smoothing: antialiased; }
+  -webkit-font-smoothing: antialiased; }
 .hidden { display: none !important; }
-button { font: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+button { font: inherit; color: inherit; background: none; border: none; cursor: pointer;
+  -webkit-tap-highlight-color: transparent; }
+input { font: inherit; }
+
+/* ── Tokens ────────────────────────────────────────────────────
+   SF Pro is not ours to ship, so the stack falls through to whatever the host
+   has that is closest in structure. On Windows that is Segoe UI Variable. */
+:root {
+  --ios-font: -apple-system, 'SF Pro Display', 'SF Pro Text', 'Segoe UI Variable Display',
+              'Segoe UI', Inter, system-ui, sans-serif;
+  --ios-num: 'SF Pro Display', 'Segoe UI Variable Display', var(--v-font-num), var(--ios-font);
+
+  /* iOS greys, on the dark side of the system palette. */
+  --l1: #ffffff;                       /* label */
+  --l2: rgba(235, 235, 245, .62);      /* secondary label */
+  --l3: rgba(235, 235, 245, .32);      /* tertiary label */
+  --sep: rgba(84, 84, 88, .55);        /* separator */
+  --fill: rgba(120, 120, 128, .24);    /* system fill */
+  --fill2: rgba(120, 120, 128, .16);
+
+  /* Liquid Glass, three thicknesses. */
+  --glass-1: rgba(255, 255, 255, .07);
+  --glass-2: rgba(255, 255, 255, .12);
+  --glass-3: rgba(28, 28, 30, .72);
+  --rim: rgba(255, 255, 255, .28);
+  --rim-soft: rgba(255, 255, 255, .14);
+
+  --spring: cubic-bezier(.32, .72, 0, 1);   /* the iOS sheet curve */
+  --snap: cubic-bezier(.2, .9, .3, 1);
+}
 
 /* ══ Device ═══════════════════════════════════════════════════ */
-.device { position: fixed; right: 3.2vw; bottom: 3vh; width: 330px; height: 668px;
-  z-index: var(--z-overlay); animation: v-pop .26s var(--v-ease) backwards; }
+.device { position: fixed; right: 3vw; bottom: 2.5vh; width: 372px; height: 784px;
+  z-index: var(--z-overlay); font-family: var(--ios-font); color: var(--l1);
+  animation: ph-rise .38s var(--spring) backwards; }
 
-.bezel { position: relative; width: 100%; height: 100%; padding: 11px;
-  border-radius: 46px; background: linear-gradient(160deg, #2a2724, #131110 55%, #090807);
-  box-shadow: var(--v-shadow-box), 0 0 0 1px rgba(255,255,255,.06),
-              inset 0 1px 0 rgba(255,255,255,.10); }
-.notch { position: absolute; left: 50%; top: 11px; width: 108px; height: 24px;
-  margin-left: -54px; border-radius: 0 0 16px 16px; background: #090807; z-index: 4; }
+@keyframes ph-rise {
+  from { transform: translateY(46px) scale(.94); opacity: 0; }
+  to   { transform: none; opacity: 1; }
+}
 
-.screen { position: relative; width: 100%; height: 100%; overflow: hidden;
-  border-radius: 36px; background: var(--v-bg-900);
-  background-image: var(--wall, linear-gradient(170deg, #241a12, #120f0d 60%, #0b0908)); }
-/* Wallpapers are gradients rather than images: an image is a download every player pays
+/* Titanium band, then the black ceramic front, then the screen. */
+.bezel { position: relative; width: 100%; height: 100%; padding: 10px;
+  border-radius: 56px;
+  background:
+    linear-gradient(145deg, #8d8d8d 0%, #3a3a3c 18%, #1c1c1e 45%, #48484a 78%, #0e0e0f 100%);
+  box-shadow: 0 42px 90px rgba(0, 0, 0, .62), 0 6px 18px rgba(0, 0, 0, .5),
+              inset 0 1px 0 rgba(255, 255, 255, .30),
+              inset 0 -1px 0 rgba(0, 0, 0, .6); }
+.bezel::before { content: ''; position: absolute; inset: 6px; border-radius: 51px;
+  background: #050505; }
+
+/* Side buttons. Small, but their absence is the first thing that reads as "not
+   a phone". */
+.btn-side { position: absolute; background: linear-gradient(180deg, #6e6e70, #2c2c2e);
+  border-radius: 2px; }
+.btn-side.vol-up   { left: -2px; top: 168px; width: 3px; height: 58px; border-radius: 2px 0 0 2px; }
+.btn-side.vol-down { left: -2px; top: 238px; width: 3px; height: 58px; border-radius: 2px 0 0 2px; }
+.btn-side.action   { left: -2px; top: 120px; width: 3px; height: 34px; border-radius: 2px 0 0 2px; }
+.btn-side.power    { right: -2px; top: 196px; width: 3px; height: 92px; border-radius: 0 2px 2px 0; }
+
+.screen { position: absolute; inset: 10px; overflow: hidden; border-radius: 47px;
+  background: #000; }
+
+/* Wallpapers are gradients, not images: an image is a download every player pays
    for, and the phone should not be the module that adds one. */
-.screen.wall-dune  { --wall: linear-gradient(165deg, #4a2f18, #1c130c 62%, #0b0806); }
-.screen.wall-grid  { --wall: linear-gradient(180deg, #14171c, #0b0d10 70%); }
-.screen.wall-night { --wall: linear-gradient(200deg, #101828, #07090f 65%); }
-.screen.wall-ember { --wall: linear-gradient(170deg, #3a1d0a, #170f0a 58%, #0a0706); }
+.wallpaper { position: absolute; inset: 0; z-index: 0;
+  background: var(--wall, linear-gradient(165deg, #3a1d0a, #170f0a 58%, #0a0706));
+  transition: filter .42s var(--spring), transform .42s var(--spring); }
+.wall-dune   { --wall: radial-gradient(120% 90% at 22% 8%, #8a5a2c 0%, #4a2f18 34%, #1c130c 68%, #0b0806 100%); }
+.wall-grid   { --wall: radial-gradient(110% 80% at 78% 12%, #2a3550 0%, #14171c 44%, #0b0d10 100%); }
+.wall-night  { --wall: radial-gradient(130% 100% at 50% 110%, #2a2a55 0%, #101828 40%, #07090f 100%); }
+.wall-ember  { --wall: radial-gradient(120% 95% at 28% 6%, #a84d16 0%, #3a1d0a 38%, #170f0a 72%, #0a0706 100%); }
 
-/* ══ Status bar ═══════════════════════════════════════════════ */
-.status { position: relative; z-index: 3; display: flex; align-items: center;
-  justify-content: space-between; padding: 9px 22px 0; height: 34px;
-  font-family: var(--v-font-num); font-size: 11px; letter-spacing: .06em;
-  color: var(--v-text-dim); }
-.status .carrier { font-family: var(--v-font-display); font-weight: 700; letter-spacing: .12em;
-  color: var(--v-accent-300); }
-.status .sbits { display: flex; align-items: center; gap: 8px; }
-.status .batt { width: 20px; height: 10px; border-radius: 3px; border: 1px solid var(--v-line);
-  position: relative; }
-.status .batt::before { content: ''; position: absolute; inset: 1.5px; right: 5px;
-  border-radius: 1px; background: var(--v-accent); }
+/* The wallpaper blurs and pulls back while an app is open — the iOS depth cue. */
+.screen.app-open .wallpaper { filter: blur(18px) saturate(120%); transform: scale(1.08); }
+
+/* ── Liquid Glass primitive ────────────────────────────────────
+   Composed, not sampled. The order matters: sheen on top, tint under it, rim
+   drawn as an inset ring so it survives border-radius. */
+.glass { position: relative;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.04) 32%, rgba(255,255,255,0) 60%),
+    linear-gradient(180deg, var(--glass-2), var(--glass-1));
+  box-shadow: inset 0 0 0 .5px var(--rim),
+              inset 0 1px 0 rgba(255,255,255,.22),
+              inset 0 -14px 24px -18px rgba(0,0,0,.7),
+              0 8px 26px rgba(0,0,0,.34); }
+.glass-solid {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.10) 0%, rgba(255,255,255,.02) 40%, rgba(255,255,255,0) 70%),
+    linear-gradient(180deg, rgba(44,44,46,.90), rgba(22,22,24,.94));
+  box-shadow: inset 0 0 0 .5px var(--rim-soft), inset 0 1px 0 rgba(255,255,255,.14),
+              0 10px 34px rgba(0,0,0,.45); }
+
+/* ══ Status bar & Dynamic Island ══════════════════════════════ */
+.status { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 16px 30px 0; font-family: var(--ios-num); font-size: 15px; font-weight: 600;
+  letter-spacing: .01em; pointer-events: none; }
+.status .sright { display: flex; align-items: center; gap: 6px; }
+.status svg { width: 17px; height: 12px; }
+.battery { width: 25px; height: 12px; border-radius: 3.5px; position: relative;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+.battery::before { content: ''; position: absolute; inset: 2px; right: 6px; border-radius: 1.5px;
+  background: #fff; }
+.battery::after { content: ''; position: absolute; right: -3px; top: 4px; width: 2px; height: 4px;
+  border-radius: 0 1px 1px 0; background: rgba(255,255,255,.4); }
+
+/* The island: a pill, and it EXPANDS for a live activity (a call). That expansion
+   is the single most recognisable thing about a modern iPhone. */
+.island { position: absolute; left: 50%; top: 13px; z-index: 45;
+  width: 124px; height: 36px; margin-left: -62px; border-radius: 22px;
+  background: #000; display: flex; align-items: center; justify-content: center;
+  overflow: hidden; cursor: pointer;
+  transition: width .44s var(--spring), height .44s var(--spring),
+              margin-left .44s var(--spring), border-radius .44s var(--spring); }
+.island .icontent { display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 0 16px; opacity: 0; transform: scale(.86);
+  transition: opacity .2s ease .12s, transform .34s var(--spring) .06s; }
+.island.live { width: 340px; height: 84px; margin-left: -170px; border-radius: 30px; }
+.island.live .icontent { opacity: 1; transform: none; }
+.island .idot { width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
+  background: var(--v-grad-accent); display: flex; align-items: center; justify-content: center;
+  color: #000; }
+.island .idot svg { width: 15px; height: 15px; }
+.island .itxt { flex: 1; min-width: 0; }
+.island .it1 { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.island .it2 { font-size: 11px; color: var(--l2); }
+.island .iwave { display: flex; align-items: flex-end; gap: 2px; height: 20px; }
+.island .iwave i { width: 2.5px; border-radius: 2px; background: var(--v-accent-300);
+  animation: ph-wave 1s ease-in-out infinite; }
+.island .iwave i:nth-child(1) { height: 8px;  animation-delay: 0s; }
+.island .iwave i:nth-child(2) { height: 16px; animation-delay: .15s; }
+.island .iwave i:nth-child(3) { height: 11px; animation-delay: .3s; }
+.island .iwave i:nth-child(4) { height: 18px; animation-delay: .45s; }
+@keyframes ph-wave { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+
+/* ══ Home indicator ═══════════════════════════════════════════ */
+.homebar { position: absolute; left: 50%; bottom: 9px; z-index: 60;
+  width: 140px; height: 5px; margin-left: -70px; border-radius: 99px;
+  background: rgba(255,255,255,.55); cursor: pointer; }
 
 /* ══ Lock screen ══════════════════════════════════════════════ */
-.lock { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
-  align-items: center; padding-top: 118px; }
-.lockclock { font-family: var(--v-font-num); font-size: 62px; font-weight: 300;
-  letter-spacing: -.02em; line-height: 1; color: var(--v-text); }
-.lockdate { margin-top: 8px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--v-text-dim); }
-.locknum { margin-top: 26px; font-family: var(--v-font-num); font-size: 13px;
-  letter-spacing: .18em; color: var(--v-accent-300); }
-.unlock { position: absolute; inset: 0; }
+.lock { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
+  align-items: center; padding: 78px 22px 0;
+  transition: opacity .4s var(--spring), transform .4s var(--spring); }
+.lock.out { opacity: 0; transform: scale(1.12); pointer-events: none; }
+.lockdate { font-size: 17px; font-weight: 600; letter-spacing: .01em; color: rgba(255,255,255,.9); }
+.lockclock { font-family: var(--ios-num); font-size: 82px; font-weight: 500;
+  letter-spacing: -.035em; line-height: 1.02; margin-top: 2px; }
+.lockmeta { margin-top: 4px; font-size: 13px; color: var(--l2); }
 
-/* ══ Home grid ════════════════════════════════════════════════ */
-.home { position: absolute; inset: 34px 0 0; z-index: 2; padding: 16px 18px; overflow-y: auto; }
-.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px 10px; }
+/* Notification stack — the reason a lock screen exists. */
+.locknotifs { width: 100%; margin-top: auto; margin-bottom: 92px;
+  display: flex; flex-direction: column; gap: 8px; }
+.lnotif { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
+  border-radius: 20px; animation: ph-in .3s var(--spring) backwards;
+  animation-delay: calc(var(--i,0) * 50ms); }
+.lnotif .lic { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px;
+  background: var(--v-grad-accent); color: #000;
+  display: flex; align-items: center; justify-content: center; }
+.lnotif .lic svg { width: 18px; height: 18px; }
+.lnotif .lbody { display: block; flex: 1; min-width: 0; }
+.lnotif .lt { display: block; font-size: 13.5px; font-weight: 600; }
+.lnotif .lb { font-size: 13px; color: rgba(255,255,255,.82); line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lnotif .lw { font-size: 11.5px; color: var(--l3); flex: 0 0 auto; }
+
+/* Two glass quick actions, exactly where iOS puts them. */
+.lockquick { position: absolute; bottom: 34px; left: 0; right: 0; z-index: 21;
+  display: flex; justify-content: space-between; padding: 0 40px; }
+.qbtn { width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: #fff; transition: transform .2s var(--snap); }
+.qbtn:active { transform: scale(.9); }
+.qbtn svg { width: 21px; height: 21px; }
+
+@keyframes ph-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ══ Home screen ══════════════════════════════════════════════ */
+.home { position: absolute; inset: 54px 0 0; z-index: 10; display: flex; flex-direction: column;
+  transition: opacity .32s var(--spring), transform .32s var(--spring); }
+.home.behind { opacity: 0; transform: scale(1.14); pointer-events: none; }
+
+.pages { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+.page { flex: 0 0 100%; padding: 12px 22px 0;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 14px;
+  align-content: start; }
+.pages { scroll-behavior: smooth; }
 
 .tile { display: flex; flex-direction: column; align-items: center; gap: 6px;
-  animation: v-fade-up .24s var(--v-ease) backwards; animation-delay: calc(var(--i,0) * 26ms); }
-.tile .ic { width: 54px; height: 54px; display: flex; align-items: center; justify-content: center;
-  border-radius: 15px; color: var(--v-ink); background: var(--v-grad-accent);
-  box-shadow: var(--v-shadow-glow), inset 0 1px 0 rgba(255,255,255,.25);
-  transition: transform var(--v-t-fast) var(--v-ease); }
-.tile:active .ic { transform: scale(.92); }
-.tile .ic svg { width: 26px; height: 26px; }
-.tile .nm { font-size: 10px; letter-spacing: .04em; color: var(--v-text);
-  max-width: 66px; text-align: center; white-space: nowrap; overflow: hidden;
-  text-overflow: ellipsis; }
-/* Unread count on an app icon. */
-.tile .dot { position: absolute; }
+  animation: ph-in .3s var(--spring) backwards; animation-delay: calc(var(--i,0) * 22ms); }
 .tile .wrap { position: relative; }
-.tile .badge { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px;
-  padding: 0 5px; display: flex; align-items: center; justify-content: center;
-  border-radius: 99px; background: var(--v-danger); color: #fff;
-  font-family: var(--v-font-num); font-size: 10px; font-weight: 700; }
-
-/* ══ App ══════════════════════════════════════════════════════ */
-.app { position: absolute; inset: 34px 0 0; z-index: 2; display: flex; flex-direction: column;
-  background: linear-gradient(180deg, rgba(10,8,7,.72), rgba(10,8,7,.94));
-  animation: v-fade-up .18s var(--v-ease) backwards; }
-.apphead { display: flex; align-items: center; gap: 10px; padding: 10px 16px;
-  border-bottom: 1px solid var(--v-line-2); }
-.apphead .back { width: 26px; height: 26px; display: flex; align-items: center;
-  justify-content: center; border: 1px solid var(--v-line); border-radius: 8px;
-  color: var(--v-text-dim); }
-.apphead .back:hover { color: var(--v-accent-300); border-color: var(--v-accent-line); }
-.apphead .back svg { width: 15px; height: 15px; }
-.apptitle { font-family: var(--v-font-display); font-weight: 700; font-size: 13px;
-  letter-spacing: .1em; text-transform: uppercase; color: var(--v-accent-300); }
-.appbody { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 14px 22px; }
-.appbody::-webkit-scrollbar { width: 4px; }
-.appbody::-webkit-scrollbar-thumb { background: var(--v-accent-line); border-radius: 99px; }
-
-/* ── Shared app furniture ── */
-.rowlist { display: flex; flex-direction: column; gap: 6px; }
-.item { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
-  border: 1px solid var(--v-line); border-radius: var(--v-r-md);
-  background: var(--v-panel); transition: border-color var(--v-t-fast) var(--v-ease); }
-.item:hover { border-color: var(--v-accent-line); }
-.item .av { flex: 0 0 auto; width: 34px; height: 34px; display: flex; align-items: center;
-  justify-content: center; border-radius: 50%; background: var(--v-accent-soft);
-  color: var(--v-accent-300); font-family: var(--v-font-display); font-weight: 700;
-  font-size: 13px; }
-.item .main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.item .t { font-size: 12.5px; font-weight: 600; color: var(--v-text);
+/* iOS icon geometry: 60px, corner radius 22.5% of the side. */
+.tile .ic { width: 60px; height: 60px; border-radius: 13.5px; overflow: hidden;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: var(--v-grad-accent);
+  box-shadow: 0 4px 12px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.35),
+              inset 0 0 0 .5px rgba(255,255,255,.18);
+  transition: transform .22s var(--snap); }
+.tile .ic svg { width: 30px; height: 30px; }
+.tile:active .ic { transform: scale(.88); }
+/* Per-app tints, so the grid is not eight identical squares. */
+.tile .ic.t-green { background: linear-gradient(180deg, #4cd964, #24a83a); }
+.tile .ic.t-blue  { background: linear-gradient(180deg, #4aa3ff, #0a63d6); }
+.tile .ic.t-grey  { background: linear-gradient(180deg, #8e8e93, #545458); }
+.tile .ic.t-dark  { background: linear-gradient(180deg, #3a3a3c, #1c1c1e); }
+.tile .nm { font-size: 11.5px; letter-spacing: -.01em; color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.55); max-width: 74px; text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.item .s { font-size: 10.5px; color: var(--v-text-faint);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.item .amt { font-family: var(--v-font-num); font-size: 12px; font-weight: 700; }
-.item .amt.pos { color: var(--v-success-300); }
-.item .amt.neg { color: var(--v-danger-300); }
-.item .pill { flex: 0 0 auto; padding: 2px 7px; border-radius: 99px; font-size: 9.5px;
-  letter-spacing: .06em; text-transform: uppercase; border: 1px solid var(--v-line);
-  color: var(--v-text-dim); }
-.item .pill.on { border-color: var(--v-accent-line); color: var(--v-accent-300); }
-.item .unread { flex: 0 0 auto; min-width: 18px; height: 18px; padding: 0 5px;
+.tile .badge { position: absolute; top: -5px; right: -6px; min-width: 21px; height: 21px;
+  padding: 0 6px; display: flex; align-items: center; justify-content: center;
+  border-radius: 99px; background: #ff3b30; color: #fff;
+  font-family: var(--ios-num); font-size: 12px; font-weight: 600;
+  box-shadow: 0 0 0 2px rgba(0,0,0,.28); }
+
+.dots { display: flex; justify-content: center; gap: 7px; padding: 10px 0 8px; }
+.dots i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255,255,255,.32);
+  transition: background .2s ease; }
+.dots i.on { background: #fff; }
+
+.dock { margin: 0 12px 12px; padding: 12px 10px; border-radius: 32px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.dock .tile .nm { display: none; }
+
+/* ══ App ══════════════════════════════════════════════════════
+   Opens by scaling out of the icon it was launched from: transform-origin is set
+   in JS from the tile's position, which is what makes it feel like iOS rather
+   than a page swap. */
+.app { position: absolute; inset: 0; z-index: 30; display: none; flex-direction: column;
+  background: linear-gradient(180deg, #101012, #000);
+  border-radius: 47px; overflow: hidden; }
+.app.on { display: flex; animation: ph-zoom .42s var(--spring); }
+.app.closing { display: flex; animation: ph-zoom .3s var(--spring) reverse; }
+@keyframes ph-zoom {
+  from { opacity: 0; transform: scale(.16); border-radius: 90px; }
+  to   { opacity: 1; transform: none; border-radius: 47px; }
+}
+
+/* Navigation bar with an iOS large title that collapses on scroll. */
+.navbar { position: relative; z-index: 2; padding: 54px 20px 0; flex: 0 0 auto; }
+.navrow { display: flex; align-items: center; gap: 4px; min-height: 34px; }
+.navback { display: flex; align-items: center; gap: 1px; margin-left: -6px;
+  color: var(--v-accent-300); font-size: 17px; }
+.navback svg { width: 20px; height: 20px; }
+.navspacer { flex: 1; }
+.navact { color: var(--v-accent-300); font-size: 17px; }
+.navact.round { width: 30px; height: 30px; border-radius: 50%; display: flex;
+  align-items: center; justify-content: center; background: var(--fill); }
+.navact.round svg { width: 16px; height: 16px; }
+.navtitle-sm { position: absolute; left: 0; right: 0; top: 58px; text-align: center;
+  font-size: 17px; font-weight: 600; opacity: 0; transition: opacity .2s ease;
+  pointer-events: none; }
+.navbar.collapsed .navtitle-sm { opacity: 1; }
+.navtitle { font-size: 34px; font-weight: 700; letter-spacing: -.028em; padding: 2px 0 6px;
+  transform-origin: left center; transition: opacity .2s ease, transform .2s ease; }
+.navbar.collapsed .navtitle { opacity: 0; transform: scale(.55) translateY(-8px); }
+.navbar.collapsed { box-shadow: 0 .5px 0 var(--sep); }
+
+.appbody { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden;
+  padding: 0 16px 34px; -webkit-overflow-scrolling: touch; }
+.appbody::-webkit-scrollbar { width: 0; }
+
+/* ══ iOS list rows ════════════════════════════════════════════
+   Inset grouped style: a rounded card per section, separators inset from the
+   left so they start after the leading icon. */
+.group { border-radius: 12px; overflow: hidden; margin-bottom: 22px;
+  background: rgba(28,28,30,.86); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.06); }
+.grouphead { padding: 0 16px 7px; font-size: 13px; color: var(--l2); }
+.groupfoot { padding: 7px 16px 0; font-size: 12.5px; color: var(--l3); line-height: 1.35; }
+
+.row { position: relative; display: flex; align-items: center; gap: 12px;
+  padding: 11px 14px; min-height: 46px; width: 100%; text-align: left;
+  transition: background-color .12s ease; }
+.row:active { background-color: rgba(255,255,255,.07); }
+.row + .row::before { content: ''; position: absolute; left: 14px; right: 0; top: 0;
+  height: .5px; background: var(--sep); }
+.row.lead + .row::before { left: 58px; }
+.row .ricon { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 7px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--v-grad-accent); color: #000; }
+.row .ricon svg { width: 16px; height: 16px; }
+.row .rav { flex: 0 0 auto; width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #8e8e93, #545458); color: #fff;
+  font-size: 15px; font-weight: 500; }
+.row .rmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.row .rt { font-size: 16px; letter-spacing: -.01em; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.row .rs { font-size: 13.5px; color: var(--l2); white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+.row .rval { flex: 0 0 auto; font-size: 16px; color: var(--l2); }
+.row .rval.num { font-family: var(--ios-num); }
+.row .rval.pos { color: #30d158; }
+.row .rval.neg { color: #ff453a; }
+.row .rchev { flex: 0 0 auto; width: 8px; height: 13px; color: var(--l3); }
+.row .rbadge { flex: 0 0 auto; min-width: 20px; height: 20px; padding: 0 6px;
   display: flex; align-items: center; justify-content: center; border-radius: 99px;
-  background: var(--v-danger); color: #fff; font-family: var(--v-font-num);
-  font-size: 10px; font-weight: 700; }
+  background: #ff3b30; color: #fff; font-family: var(--ios-num); font-size: 12px;
+  font-weight: 600; }
+.row .rtime { flex: 0 0 auto; font-size: 13px; color: var(--l3); }
 
-.empty { padding: 34px 10px; text-align: center; font-size: 11.5px; color: var(--v-text-faint); }
+/* iOS switch. */
+.sw { flex: 0 0 auto; width: 51px; height: 31px; border-radius: 99px; background: var(--fill);
+  position: relative; transition: background .22s var(--snap); cursor: pointer; }
+.sw.on { background: #30d158; }
+.sw i { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%;
+  background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,.3);
+  transition: transform .22s var(--snap); }
+.sw.on i { transform: translateX(20px); }
 
-.hero { display: flex; flex-direction: column; gap: 3px; padding: 16px; margin-bottom: 12px;
-  border: 1px solid var(--v-accent-line); border-radius: var(--v-r-lg);
-  background: var(--v-grad-soft); }
-.hero .lab { font-size: 10px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--v-text-dim); }
-.hero .val { font-family: var(--v-font-num); font-size: 26px; font-weight: 700;
-  color: var(--v-accent-300); }
-.hero .sub { font-family: var(--v-font-num); font-size: 11px; color: var(--v-text-dim); }
+/* ══ Buttons & fields ═════════════════════════════════════════ */
+.bigbtn { width: 100%; padding: 14px; border-radius: 14px; font-size: 17px; font-weight: 600;
+  background: var(--v-grad-accent); color: #000; margin-bottom: 10px;
+  transition: transform .16s var(--snap), opacity .16s ease; }
+.bigbtn:active { transform: scale(.97); opacity: .85; }
+.bigbtn.tinted { background: var(--v-accent-soft); color: var(--v-accent-300); }
+.bigbtn.plain { background: var(--fill2); color: var(--l1); }
+.bigbtn.destructive { background: rgba(255,59,48,.16); color: #ff453a; }
 
-.sechead { margin: 14px 0 7px; font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--v-text-faint); }
+.field { width: 100%; padding: 12px 14px; margin-bottom: 10px; border-radius: 12px;
+  background: rgba(28,28,30,.86); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.06);
+  color: var(--l1); font-size: 16px; outline: none; border: none; }
+.field::placeholder { color: var(--l3); }
+.field:focus { box-shadow: inset 0 0 0 1px var(--v-accent-line); }
 
-.fld { width: 100%; padding: 9px 11px; margin-bottom: 8px; border-radius: var(--v-r-md);
-  border: 1px solid var(--v-line); background: var(--v-bg-sunk); color: var(--v-text);
-  font-family: var(--v-font-body); font-size: 12px; outline: none; }
-.fld:focus { border-color: var(--v-accent-line); }
-.btn { width: 100%; padding: 10px; border-radius: var(--v-r-md); background: var(--v-grad-accent);
-  color: var(--v-ink); font-family: var(--v-font-display); font-weight: 700; font-size: 11.5px;
-  letter-spacing: .1em; text-transform: uppercase; box-shadow: var(--v-shadow-glow); }
-.btn.ghost { background: none; border: 1px solid var(--v-line); color: var(--v-text-dim);
-  box-shadow: none; }
-.btn.ghost:hover { border-color: var(--v-accent-line); color: var(--v-accent-300); }
-.btn.danger { background: none; border: 1px solid var(--v-danger); color: var(--v-danger-300);
-  box-shadow: none; }
-.btnrow { display: flex; gap: 8px; margin-top: 4px; }
+.empty { padding: 60px 24px; text-align: center; font-size: 15px; color: var(--l3); }
+.empty svg { width: 44px; height: 44px; margin-bottom: 12px; opacity: .4; }
 
-/* ── Messages thread ── */
-.thread { display: flex; flex-direction: column; gap: 6px; padding-bottom: 8px; }
-.bub { max-width: 78%; padding: 8px 11px; border-radius: 16px; font-size: 12px;
-  line-height: 1.35; word-break: break-word; }
-.bub.them { align-self: flex-start; border-bottom-left-radius: 5px;
-  background: var(--v-panel-2); border: 1px solid var(--v-line); }
-.bub.me { align-self: flex-end; border-bottom-right-radius: 5px;
-  background: var(--v-grad-accent); color: var(--v-ink); }
-.compose { display: flex; gap: 7px; padding-top: 8px; border-top: 1px solid var(--v-line-2); }
-.compose .fld { margin: 0; }
-.compose .btn { width: auto; padding: 9px 14px; }
+/* Big number, for a balance. */
+.bignum { text-align: center; padding: 12px 0 22px; }
+.bignum .bl { font-size: 14px; color: var(--l2); }
+.bignum .bv { font-family: var(--ios-num); font-size: 44px; font-weight: 600;
+  letter-spacing: -.03em; margin-top: 2px; }
+.bignum .bs { font-size: 14px; color: var(--l2); margin-top: 4px; }
 
-/* ── Keypad ── */
-.keypad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 14px 0; }
-.key { height: 52px; border-radius: 50%; border: 1px solid var(--v-line);
-  background: var(--v-panel); font-family: var(--v-font-num); font-size: 19px;
-  color: var(--v-text); transition: background var(--v-t-fast) var(--v-ease); }
-.key:hover { background: var(--v-accent-soft); border-color: var(--v-accent-line); }
-.dialed { text-align: center; font-family: var(--v-font-num); font-size: 24px;
-  letter-spacing: .1em; min-height: 32px; color: var(--v-text); }
+/* ══ Messages ═════════════════════════════════════════════════ */
+.thread { display: flex; flex-direction: column; gap: 3px; padding: 8px 0 12px; }
+.bub { max-width: 74%; padding: 9px 14px; border-radius: 20px; font-size: 16px;
+  line-height: 1.32; word-break: break-word; position: relative;
+  animation: ph-bub .3s var(--spring) backwards; }
+@keyframes ph-bub { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+.bub.them { align-self: flex-start; background: #26262a; color: #fff;
+  border-bottom-left-radius: 6px; }
+.bub.me { align-self: flex-end; background: var(--v-grad-accent); color: #000;
+  border-bottom-right-radius: 6px; }
+.bub + .bub { margin-top: 0; }
+.bubtime { align-self: center; font-size: 11.5px; color: var(--l3); padding: 8px 0 4px; }
 
-/* ══ Call overlay ═════════════════════════════════════════════ */
-.callui { position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
-  align-items: center; padding-top: 132px;
-  background: linear-gradient(180deg, rgba(8,6,5,.94), rgba(8,6,5,.99)); }
-.callnum { font-family: var(--v-font-num); font-size: 26px; letter-spacing: .1em;
-  color: var(--v-text); }
-.callstate { margin-top: 10px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--v-accent-300); }
-.callbtns { position: absolute; bottom: 74px; left: 0; right: 0; display: flex;
-  justify-content: center; gap: 26px; }
-.cbtn { width: 62px; height: 62px; border-radius: 50%; display: flex; align-items: center;
-  justify-content: center; color: #fff; }
-.cbtn svg { width: 25px; height: 25px; }
-.cbtn.ok { background: var(--v-success); }
-.cbtn.no { background: var(--v-danger); }
+.compose { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 12px 14px; }
+.compose .field { margin: 0; border-radius: 20px; padding: 9px 14px; }
+.compose .sendbtn { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
+  background: var(--v-grad-accent); color: #000; display: flex; align-items: center;
+  justify-content: center; transition: transform .16s var(--snap); }
+.compose .sendbtn svg { width: 17px; height: 17px; }
+.compose .sendbtn:active { transform: scale(.88); }
+
+/* ══ Keypad ═══════════════════════════════════════════════════ */
+.dialed { text-align: center; font-family: var(--ios-num); font-size: 34px; font-weight: 400;
+  letter-spacing: .01em; min-height: 44px; padding: 6px 0 2px; }
+.dialsub { text-align: center; font-size: 13px; color: var(--l2); min-height: 18px; }
+.keypad { display: grid; grid-template-columns: repeat(3, 74px); gap: 14px 22px;
+  justify-content: center; padding: 14px 0 6px; }
+.key { width: 74px; height: 74px; border-radius: 50%; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px;
+  background: rgba(255,255,255,.12); transition: background .1s ease, transform .1s ease; }
+.key:active { background: rgba(255,255,255,.28); transform: scale(.95); }
+.key b { font-family: var(--ios-num); font-size: 32px; font-weight: 400; line-height: 1; }
+.key i { font-size: 10px; font-style: normal; letter-spacing: .12em; color: var(--l2);
+  height: 11px; }
+.dialrow { display: flex; align-items: center; justify-content: center; gap: 22px;
+  padding: 10px 0 4px; }
+.callbtn { width: 74px; height: 74px; border-radius: 50%; background: #30d158; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  transition: transform .16s var(--snap); }
+.callbtn svg { width: 32px; height: 32px; }
+.callbtn:active { transform: scale(.92); }
+.delbtn { width: 74px; height: 74px; display: flex; align-items: center; justify-content: center;
+  color: #fff; }
+.delbtn svg { width: 26px; height: 26px; }
+
+/* ══ Call screen ══════════════════════════════════════════════ */
+.callui { position: absolute; inset: 0; z-index: 50; display: none; flex-direction: column;
+  align-items: center; padding-top: 116px; border-radius: 47px;
+  background: linear-gradient(180deg, rgba(30,30,34,.97), rgba(6,6,8,.99));
+  animation: ph-in .3s var(--spring); }
+.callui.on { display: flex; }
+.callav { width: 96px; height: 96px; border-radius: 50%; margin-bottom: 18px;
+  background: linear-gradient(180deg, #8e8e93, #48484a); display: flex; align-items: center;
+  justify-content: center; font-size: 38px; font-weight: 400; color: #fff; }
+.callnum { font-size: 30px; font-weight: 400; letter-spacing: -.01em; }
+.callstate { margin-top: 6px; font-size: 16px; color: var(--l2); }
+.calltimer { margin-top: 6px; font-family: var(--ios-num); font-size: 16px; color: var(--l2); }
+.callpad { position: absolute; bottom: 118px; left: 0; right: 0;
+  display: grid; grid-template-columns: repeat(3, 68px); gap: 20px 30px;
+  justify-content: center; }
+.cpad { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.cpad span { width: 68px; height: 68px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: rgba(255,255,255,.14); color: #fff; }
+.cpad span svg { width: 26px; height: 26px; }
+.cpad.on span { background: #fff; color: #000; }
+.cpad em { font-size: 12px; font-style: normal; color: #fff; }
+.callbtns { position: absolute; bottom: 42px; left: 0; right: 0; display: flex;
+  justify-content: center; gap: 70px; }
+.cbtn { width: 74px; height: 74px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: #fff; transition: transform .16s var(--snap); }
+.cbtn:active { transform: scale(.92); }
+.cbtn svg { width: 32px; height: 32px; }
+.cbtn.ok { background: #30d158; }
+.cbtn.no { background: #ff3b30; }
+
+/* ══ Control centre ═══════════════════════════════════════════ */
+.cc { position: absolute; inset: 0; z-index: 55; display: none; padding: 60px 14px 0;
+  border-radius: 47px; background: rgba(0,0,0,.42);
+  animation: ph-cc .34s var(--spring); }
+.cc.on { display: block; }
+@keyframes ph-cc { from { opacity: 0; transform: translateY(-26px); } to { opacity: 1; transform: none; } }
+.ccgrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.cctile { border-radius: 22px; padding: 14px; display: flex; flex-direction: column;
+  justify-content: space-between; min-height: 84px; }
+.cctile.w2 { grid-column: span 2; }
+.cctile.h2 { grid-row: span 2; }
+.cctile .cch { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--l2); }
+.cctile .ccv { font-size: 15px; font-weight: 600; }
+.cctile svg { width: 18px; height: 18px; }
+.ccpill { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: rgba(255,255,255,.16); color: #fff; }
+.ccpill.on { background: var(--v-grad-accent); color: #000; }
+
+/* ══ Sheet ════════════════════════════════════════════════════ */
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 58;
+  border-radius: 28px 28px 47px 47px; padding: 10px 18px 30px; display: none;
+  animation: ph-sheet .42s var(--spring); }
+.sheet.on { display: block; }
+@keyframes ph-sheet { from { transform: translateY(100%); } to { transform: none; } }
+.sheet .grab { width: 36px; height: 5px; border-radius: 99px; background: rgba(255,255,255,.3);
+  margin: 0 auto 14px; }
+.sheet .sh { font-size: 20px; font-weight: 700; letter-spacing: -.02em; margin-bottom: 12px; }
+.scrim { position: absolute; inset: 0; z-index: 57; background: rgba(0,0,0,.4); display: none;
+  border-radius: 47px; }
+.scrim.on { display: block; }
 
 /* ══ Banner ═══════════════════════════════════════════════════ */
-.banner { position: absolute; left: 12px; right: 12px; top: 40px; z-index: 7;
-  padding: 10px 13px; border-radius: var(--v-r-md); border: 1px solid var(--v-accent-line);
-  background: linear-gradient(180deg, var(--v-panel-2), var(--v-panel));
-  box-shadow: var(--v-shadow-box); animation: v-pop .2s var(--v-ease) backwards; }
-.banner .bt { font-family: var(--v-font-display); font-weight: 700; font-size: 11px;
-  letter-spacing: .08em; text-transform: uppercase; color: var(--v-accent-300); }
-.banner .bb { margin-top: 2px; font-size: 11.5px; color: var(--v-text); }
+.banner { position: absolute; left: 12px; right: 12px; top: 12px; z-index: 70;
+  display: none; align-items: flex-start; gap: 10px; padding: 12px 14px; border-radius: 22px;
+  animation: ph-drop .38s var(--spring); cursor: pointer; }
+.banner.on { display: flex; }
+@keyframes ph-drop { from { opacity: 0; transform: translateY(-64px); } to { opacity: 1; transform: none; } }
+.banner .bic { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 9px;
+  background: var(--v-grad-accent); color: #000; display: flex; align-items: center;
+  justify-content: center; }
+.banner .bic svg { width: 18px; height: 18px; }
+.banner .btext { flex: 1; min-width: 0; }
+.banner .bt { display: block; font-size: 13.5px; font-weight: 600; }
+.banner .bb { display: block; font-size: 13px; color: rgba(255,255,255,.84); line-height: 1.3; }
 
-/* ══ Home bar ═════════════════════════════════════════════════ */
-.homebar { position: absolute; left: 50%; bottom: 7px; width: 116px; height: 4px;
-  margin-left: -58px; border-radius: 99px; background: rgba(255,255,255,.30); z-index: 5; }
+/* ══ Toast (from the SDK) ═════════════════════════════════════ */
+.toast { position: absolute; left: 50%; bottom: 96px; z-index: 72; transform: translateX(-50%);
+  padding: 10px 18px; border-radius: 99px; font-size: 14px; display: none;
+  animation: ph-in .26s var(--spring); }
+.toast.on { display: block; }
+
+/* ══ Third-party app frame ════════════════════════════════════ */
+.appframe { width: 100%; height: 100%; border: 0; display: block; background: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
-  .device, .app, .tile, .banner { animation: none; }
+  .device, .app.on, .app.closing, .tile, .lnotif, .bub, .cc, .sheet, .banner, .toast { animation: none; }
+  .island, .sw i, .home, .lock, .wallpaper { transition: none; }
 }
