@@ -190,7 +190,17 @@ end)
 
 RegisterNUICallback('test', function(data, cb)
     cb('ok')
-    if data and data.model then startTest(tostring(data.model), curDealer) end
+    if not (data and data.model) then return end
+    -- Ask the server first: it owns the cooldown, the catalogue check and the proximity,
+    -- and it is the one that tells the anticheat to expect what happens next.
+    Core.TriggerCallback('v-vehicleshop:testdrive', function(res)
+        if not res or res.error then
+            local key = (res and res.error == 'cooldown') and 'shop.err_testwait' or 'shop.err_unknown'
+            Core.Notify(L(key), 'error')
+            return
+        end
+        startTest(tostring(data.model), curDealer)
+    end, { dealer = curDealer, model = data.model })
 end)
 
 RegisterNUICallback('buy', function(data, cb)

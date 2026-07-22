@@ -48,5 +48,6 @@ local T = {
     ['shop.err_unknown']        = 'Véhicule inconnu.',
     ['shop.err_x']              = 'Demande refusée.',
     ['shop.scan_done']      = 'Scan terminé : %s nouveau(x) modèle(s) trouvé(s).',
+    ['shop.err_testwait'] = 'Vous avez fait un essai trop recemment.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

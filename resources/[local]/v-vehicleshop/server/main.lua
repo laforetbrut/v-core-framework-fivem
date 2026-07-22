@@ -110,6 +110,53 @@ Core.RegisterCallback('v-vehicleshop:open', function(source, resolve, data)
 end)
 
 -- ── Buy ────────────────────────────────────────────────────────
+-- The test drive used to happen entirely on the client, cooldown included - which means
+-- it was not a cooldown. The server now owns it: it checks the dealer, checks the model is
+-- actually in the catalogue, enforces the wait, and tells the anticheat to expect the
+-- teleport and the local vehicle that follow.
+local TestUntil = {}   -- [citizenid] = os.time() when another test drive is allowed
+
+Core.RegisterCallback('v-vehicleshop:testdrive', function(source, resolve, data)
+    local p = Core.GetPlayer(source)
+    if not p or type(data) ~= 'table' then resolve(false) return end
+
+    local dealer = tostring(data.dealer or '')
+    local model = tostring(data.model or ''):lower()
+    local d
+    for _, x in ipairs(Dealers or {}) do if x.id == dealer then d = x end end
+    if not d then resolve({ error = 'dealer' }) return end
+
+    -- Proximity is re-derived: a client that names its own dealer can test-drive from
+    -- anywhere on the map.
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then resolve(false) return end
+    if #(GetEntityCoords(ped) - vector3(d.x + 0.0, d.y + 0.0, d.z + 0.0)) > 12.0 then
+        resolve({ error = 'far' }) return
+    end
+
+    local inCat = false
+    for _, c in ipairs(exports['v-world']:GetVehicleCatalogue() or {}) do
+        if c.model == model and c.enabled ~= false then inCat = true break end
+    end
+    if not inCat then resolve({ error = 'unknown' }) return end
+
+    local now = os.time()
+    if TestUntil[p.citizenid] and now < TestUntil[p.citizenid] then
+        resolve({ error = 'cooldown', wait = TestUntil[p.citizenid] - now }) return
+    end
+    local seconds = math.max(5, math.floor(tonumber(Config.TestDrive.seconds) or 60))
+    TestUntil[p.citizenid] = now + math.max(seconds, math.floor(tonumber(Config.TestDrive.cooldown) or 120))
+
+    -- The drive teleports the player twice (into the car, and back afterwards) and
+    -- creates a local vehicle; both are ours, so say so.
+    local ac = V.Use('v-anticheat')
+    ac.Expect(source, 'teleport', seconds + 20)
+    ac.Expect(source, 'entity', seconds + 20)
+
+    Core.Log('vehicles', ('%s test drove %s at %s'):format(p.citizenid, model, dealer), nil, p.citizenid)
+    resolve({ ok = true, seconds = seconds })
+end)
+
 Core.RegisterCallback('v-vehicleshop:buy', function(source, resolve, data)
     if type(data) ~= 'table' then resolve(false); return end
     -- one purchase in flight per player: two clicks must not mint two cars
