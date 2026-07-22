@@ -348,6 +348,10 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'jukebox') {
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
+      `${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+  }
   if (edDomain === 'radio') {
     const gate = r.job ? '🔒 ' + esc(r.job) : (r.gang ? '🔒 ' + esc(r.gang) : esc(t('adm.ed_openchan')));
     return `${esc(r.label)} <i class="dim">#${Number(r.id)} · ${gate}` +
@@ -499,7 +503,7 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'radio') ? r.id
+      const id = (edDomain === 'radio' || edDomain === 'jukebox') ? r.id
         : (edDomain === 'drugs') ? r.key
         : (edDomain === 'charges') ? r.code
         : (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
@@ -682,6 +686,21 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'jukebox') {
+    const isNew = !row.id;
+    const jobs = (edData.jobs || []).map(j =>
+      `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span>` +
+        `<input id="ef-jid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') +
+      // a job lock is what makes a bar's playlist belong to the staff rather than anyone
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>${jobs}</select></label>` +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip === 1 || row.blip === true) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'radio') {
     const isNew = !row.id;
     const jobs = (edData.jobs || []).map(j =>
@@ -855,7 +874,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'rentals' || edDomain === 'turfs' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'rentals' || edDomain === 'turfs' || edDomain === 'jukebox' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -914,6 +933,11 @@ function openEdForm(row) {
   if (edDomain === 'stations' && !row.id) {
     const st = byId('ef-sid');
     st.oninput = () => { st.value = st.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
+  }
+
+  if (edDomain === 'jukebox' && !row.id) {
+    const e = byId('ef-jid');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
   if (edDomain === 'turfs' && !row.id) {
@@ -1017,6 +1041,10 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'jukebox') {
+      payload = { id: v('ef-jid'), label: v('ef-label'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  job: v('ef-job'), blip: ck('ef-blip'), enabled: ck('ef-en') };
     } else if (edDomain === 'radio') {
       payload = { id: parseInt(v('ef-cid'), 10) || 0, label: v('ef-label'),
                   job: v('ef-job'), gang: v('ef-gang'),

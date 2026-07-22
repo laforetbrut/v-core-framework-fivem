@@ -916,6 +916,38 @@ included** - which means it was not a cooldown. It is a server callback now that
 the dealer's proximity, checks the model is actually in the catalogue, enforces the wait,
 and tells the anticheat to expect the two teleports and the local vehicle that follow.
 
+### `v-music` ✅ - boomboxes, jukeboxes and the car stereo
+
+Same rule as `v-3dsound`: the server sends a URL, a start timestamp and a position, and
+every client plays it locally at the volume its own distance earns. **Nothing streams
+through the server.**
+
+**Sync is by timestamp, not by streaming.** A source carries when it started; a client
+arriving late computes its own offset and seeks there, so it joins mid-track instead of
+restarting it for everybody. Pausing stores the elapsed time and resuming shifts the start
+time back by it - without that, a pause would restart the track for every listener.
+
+**The difference from `v-3dsound`:** a one-shot fires and forgets, but music is continuous,
+so the volume has to track the listener as they walk. A 250 ms loop does it - well below
+what an ear reads as a step, and well above what a per-frame loop would cost for something
+that changes only as fast as a person moves.
+
+**Three kinds, one key.** In a vehicle it is the stereo, standing at a jukebox it is the
+jukebox, otherwise it is your boombox: two keys would be one for a player to forget. A
+boombox is an item you drop and becomes a **local, non-networked prop** for the same reason
+the drug plants are - it is server state, and a networked entity would let any client
+delete somebody else's. The car stereo is **keys, not proximity**: a passenger should not
+be able to hijack it. Jukeboxes are a `v-world` domain seeded at four real Los Santos
+venues, with an optional job lock so a bar's playlist belongs to the staff.
+
+**The honest constraint, made a setting:** arbitrary URL playback is a moderation problem,
+not a technical one. The allow-list ships narrow, blank means deliberately open, and every
+play is logged with who asked for it. A server that lets anyone stream anything to everyone
+in earshot will spend its first week moderating audio.
+
+Ten settings, and the audio pool sits **outside** the panel in the NUI so closing the
+interface does not stop the music.
+
 ### `v-radio` ✅ - the handheld, and `v-voice` goes multi-channel
 
 `v-voice` owns the channels: who may join, who may transmit, and the Mumble plumbing.
@@ -1319,7 +1351,6 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
 | `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
 | `v-motel` | medium | Short-term rented rooms. A **tenancy type inside `v-housing`**, not a second housing system. |
-| `v-music` | medium | Boomboxes, jukeboxes and vehicle radio, positional through `v-3dsound`. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
 
@@ -1413,59 +1444,6 @@ their own module. They should be **rows in `v-housing`** with a `tenancy` of `re
 If it turns out to need its own module later, it will be because tenancy grew features
 housing does not want - not because a motel is fundamentally different from a flat.
 
-#### `v-music` - boomboxes, jukeboxes and the car stereo
-
-Built **on `v-3dsound`**, not beside it. A music source is a position, a stream and a set of
-listeners; the audio itself plays in a NUI page per client and is attenuated by distance.
-
-- **A boombox is an item** placed in the world; a jukebox is a `v-world` row; the car
-  stereo is bound to a vehicle and audible outside it, quieter, which is most of the fun.
-- **Sync is by timestamp, not by streaming**: everyone gets the source and an offset, so a
-  player arriving late joins mid-track instead of restarting it for everybody.
-- **Who may control a source** is the owner, plus anyone the owner allows - and inside a
-  property, whoever holds a key. Reuse, do not reinvent.
-
-**The honest constraint:** arbitrary URL playback is a moderation problem, not a technical
-one. Ship an allow-list of hosts as a setting, default it to something narrow, and log what
-was played by whom. A server that lets anyone stream anything to everyone in earshot will
-spend its first week moderating audio.
-
-#### `v-housing` - property, interiors and what lives inside them
-
-Houses are the last big persistence layer this framework does not have, and they touch four
-modules that already exist, so the shape is largely decided.
-
-**A property is a row**, not a script: address, coordinates, shell (an MLO or a shared
-interior), price, and an owner citizen id. Created and priced from **Admin → Editor →
-Properties** like every other content list - a server that wants a different neighbourhood
-should not be editing Lua.
-
-**Entering is a teleport into a bucket.** Routing buckets are what make shared interiors
-work: everyone in the same house sees each other and nobody else, and the same shell serves
-a hundred properties. Without buckets, two players in "the same" apartment stand in the same
-room.
-
-**What lives inside** is already built elsewhere and must be reused, not reimplemented:
-- **Storage** is a `v-inventory` stash keyed by property id - the same code as a car boot.
-- **A house garage** is a `v-garages` row owned by the property, so retrieval, impound and
-  the state machine are unchanged.
-- **A wardrobe** is `v-clothing`'s existing outfit flow, gated on being inside.
-- **Keys** follow the `v-vehicles` model: giveable, revocable, checked server-side. A key
-  list on the client is not a lock.
-
-**Money and ownership:** purchase charges through `v-banking` and mints the row atomically,
-the way `v-vehicleshop` already does for cars. Rent, if a server enables it, is a scheduled
-debit that can fail - and a failed rent should *lock* a property rather than delete it,
-because deleting somebody's stash for being poor is how a server loses a player.
-
-**Robbery** is the reason houses matter to the illegal side: a lockpick attempt, a timer, a
-chance the alarm reaches `v-police`, and a stash that yields something worth the risk. That
-depends on `v-police` being in place, which it now is.
-
-**Order:** properties and entry first, then storage and wardrobe (both nearly free, since
-they are existing modules pointed at a new key), then the garage, then robbery last - it is
-the part that needs balancing once players are on the server.
-
 ### 5.6 Build order and why
 
 1. **`v-vehicles` first.** Garages, dealerships, rentals, police impound and job vehicles all read the
@@ -1478,8 +1456,9 @@ the part that needs balancing once players are on the server.
    laundering path, and it is the module most likely to need balancing once players are on the server.
 5. ✅ **`v-anticheat` before the server opens**, not after - **done**. It is listed last because
    it guards everything above, not because it matters least.
-6. ✅ **`v-3dsound` before `v-music` and `v-radio`** - **done**. It is a primitive that five
-   modules want; building any of them first would have meant building it five times.
+6. ✅ **`v-3dsound` before `v-music` and `v-radio`** - **done**, and both now ship. It is a
+   primitive that five modules want; building any of them first would have meant building it
+   five times.
 7. **`v-motel` with `v-housing`, not after it.** It is a tenancy column, and discovering that
    after shipping housing means retrofitting rent into a model that assumed ownership.
 8. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire

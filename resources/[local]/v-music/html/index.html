@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+  <script src="https://cfx-nui-v-ui/theme.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <!-- The audio pool lives outside the panel: sources keep playing while it is closed. -->
+  <div id="pool" aria-hidden="true"></div>
+
+  <div id="music" class="mus-overlay hidden">
+    <div class="panel v-panel v-chamfer">
+      <div class="panel__head">
+        <div>
+          <div class="ttl" id="m-title">Music</div>
+          <div class="sub" id="m-sub"></div>
+        </div>
+        <button class="x" id="m-close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="panel__body v-scroll">
+        <div class="row">
+          <input id="m-url" type="text" placeholder="https://" />
+          <button class="btn" id="m-play">Play</button>
+        </div>
+        <div class="hint" id="m-hint"></div>
+
+        <div class="section-ttl" id="m-lbl">Playing</div>
+        <div id="m-list"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

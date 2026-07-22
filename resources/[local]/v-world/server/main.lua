@@ -13,7 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
-local Gangs, Turfs, Charges, Drugs, Radio = {}, {}, {}, {}, {}
+local Gangs, Turfs, Charges, Drugs, Radio, Jukebox = {}, {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -296,6 +296,18 @@ local function ensureTables()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Jukeboxes: a fixed music source in a venue. `job` locks the controls to the staff
+    -- who work there, which is what stops a bar's playlist being anyone's.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_jukebox` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `job` VARCHAR(50) DEFAULT NULL,
+        `blip` TINYINT(1) NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -393,6 +405,14 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadJukebox()
+    Jukebox = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_jukebox ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Jukebox[#Jukebox + 1] = r
     end
 end
 
@@ -540,6 +560,7 @@ local function reload(domain)
     if domain == 'charges' or not domain then loadCharges() end
     if domain == 'drugs'   or not domain then loadDrugs() end
     if domain == 'radio'   or not domain then loadRadio() end
+    if domain == 'jukebox' or not domain then loadJukebox() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -626,6 +647,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetJukeboxes', function() return Jukebox end)
 exports('GetRadio',   function() return Radio end)
 exports('GetDrugs',   function() return Drugs end)
 exports('GetCharges', function() return Charges end)
@@ -828,6 +850,22 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-music: list of { id, label, x, y, z, job }
+exports('SeedJukeboxes', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('jukebox', defaults)
+    if not need then return false end
+    for _, j in ipairs(defaults) do
+        MySQL.insert.await(
+            'INSERT IGNORE INTO world_jukebox (id, label, x, y, z, job, blip, enabled) VALUES (?,?,?,?,?,?,0,1)',
+            { j.id, j.label or j.id, j.x, j.y, j.z, j.job })
+    end
+    seedDone('jukebox', want)
+    loadJukebox()
+    print(('[v-world] seeded %d jukebox(es) from config'):format(#Jukebox))
+    return true
+end)
+
 -- v-voice: list of { id, label, job, gang, grade }
 exports('SeedRadio', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
@@ -960,6 +998,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'jukebox' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = Jukebox, jobs = jobs })
     elseif domain == 'radio' then
         local jobs, gangs = {}, {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -1099,6 +1141,19 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'jukebox' then
+        local jid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if jid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        MySQL.query.await([[INSERT INTO world_jukebox (id, label, x, y, z, job, blip, enabled)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), x=VALUES(x), y=VALUES(y), z=VALUES(z),
+                job=VALUES(job), blip=VALUES(blip), enabled=VALUES(enabled)]],
+            { jid, label, num(row.x), num(row.y), num(row.z), job,
+              bool(row.blip), bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'radio' then
         local id = math.floor(num(row.id))
@@ -1523,6 +1578,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'jukebox' then
+        local jid = tostring(id or '')
+        if jid == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_jukebox WHERE id = ?', { jid })
     elseif d == 'radio' then
         local cid2 = math.floor(num(id))
         if cid2 <= 0 then resolve({ error = 'protected' }); return end

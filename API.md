@@ -98,10 +98,10 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 
 ## v-world - admin-editable content
 
-The single owner of every content table. **21 domains**: `blips`, `shops`, `jobs`,
+The single owner of every content table. **22 domains**: `blips`, `shops`, `jobs`,
 `gangs`, `items`, `recipes`, `clothstores`, `clothcats`, `garages`, `rentals`, `stations`,
 `mechshops`, `dealers`, `vehcat`, `licenses`, `turfs`, `charges`, `drugs`, `radio`,
-`factions` (treasuries) and `uitheme` (per-module themes).
+`jukebox`, `factions` (treasuries) and `uitheme` (per-module themes).
 
 ```lua
 exports['v-world']:IsReady()
@@ -262,6 +262,12 @@ exports['v-core']:ClearWorldPolicy(key)        -- nil clears every override
 exports['v-core']:GetWorldPolicy()             -- { applied = {...}, overrides = {...} }
 -- keys: npcPolice, maxWanted, npcEmergency, randomCops, randomEvents,
 --       randomTrains, randomBoats, garbageTrucks
+
+-- v-music (server)
+exports['v-music']:GetSources()          -- every live source
+exports['v-music']:StopSource(id)
+exports['v-music']:IsAllowed(url)        -- against the allow-list setting
+-- client: exports['v-music']:GetSources()
 
 -- v-3dsound (server) - the wire carries a name and a place, never audio
 exports['v-3dsound']:Play(name, coords, opts)        -- a world position

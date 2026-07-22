@@ -130,6 +130,7 @@ InventoryItems = {
   { name='phone', label='Phone', weight=200, stackable=0, usable=0, category='tech', image='tech/black_phone.png', itype='misc', rarity='rare', desc='Standard smartphone.' },
   { name='iphone', label='iFruit Phone', weight=200, stackable=0, usable=0, category='tech', image='tech/iphone.png', itype='misc', rarity='rare', desc='Premium iFruit smartphone.' },
   { name='laptop', label='Laptop', weight=1800, stackable=0, usable=0, category='tech', image='tech/laptop.png', itype='misc', rarity='rare', desc='Portable laptop computer.' },
+  { name='boombox', label='Boombox', weight=3500, stackable=0, usable=1, category='tech', image='tech/cb.png', itype='misc', rarity='uncommon', desc='Drop it, plug something in, annoy a street.' },
   { name='radio', label='Radio', weight=350, stackable=0, usable=0, category='tech', image='tech/highradio.png', itype='misc', rarity='rare', desc='Handheld two-way radio.' },
   { name='cb_radio', label='CB Radio', weight=400, stackable=0, usable=0, category='tech', image='tech/cb.png', itype='misc', rarity='rare', desc='Citizens band radio.' },
   { name='camera', label='Camera', weight=600, stackable=0, usable=0, category='tech', image='tech/camera.png', itype='misc', rarity='rare', desc='Digital camera.' },

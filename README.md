@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
-[![Modules](https://img.shields.io/badge/modules-35-e8a33d.svg)](ARCHITECTURE.md)
+[![Modules](https://img.shields.io/badge/modules-36-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 35 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 36 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -56,7 +56,7 @@ in-game** - never by editing Lua on a live server.
 - **Configurable loading screen** - `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
   split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
   toggleable, and all copy + tips in one place.
-- **In-game content editor** - **21 domains** the admin panel creates, edits and deletes without a
+- **In-game content editor** - **22 domains** the admin panel creates, edits and deletes without a
   restart: map blips, store locations, shops, jobs & grades, gangs & ranks, items, craft recipes,
   clothing stores & wearable slots, garages, rental points, fuel stations, mechanic shops, dealerships,
   the vehicle catalogue, licence types, **gang territories**, **the penal code**, **substances**,
@@ -122,6 +122,9 @@ in-game** - never by editing Lua on a live server.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (vitals, money,
   compass, square minimap and a vehicle cluster with fuel, engine and odometer) · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
+- **`v-music`** (F4) - boomboxes, jukeboxes and the car stereo, positional and synced by
+  timestamp so a late arrival joins mid-track. Host allow-list, because arbitrary URL playback
+  is a moderation problem rather than a technical one.
 - **`v-radio`** (F3) - the handheld: monitor several channels at once, talk on one, presets on a
   keypad. It decides no permission - it asks `v-voice`, which asks the job and gang gates.
 - **`v-3dsound`** - a positional sound primitive other modules call: a name, a place and a range
@@ -195,7 +198,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 35 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 36 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -232,7 +235,7 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **Écran de chargement configurable** - `v-loadscreen/html/config.js` : **7 dispositions** (centre,
   gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
   effet activable, et tous les textes + astuces au même endroit.
-- **Éditeur de contenu en jeu** - **21 domaines** que le menu admin crée, modifie et supprime sans
+- **Éditeur de contenu en jeu** - **22 domaines** que le menu admin crée, modifie et supprime sans
   redémarrage : blips, boutiques, métiers & grades, gangs & rangs, items, recettes de craft, boutiques de
   vêtements & emplacements, garages, points de location, stations-service, ateliers, concessions,
   catalogue véhicules, types de licence, **territoires de gang**, **code pénal**, **substances**,
@@ -298,6 +301,9 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (vitales,
   argent, boussole, minimap carrée et un bloc véhicule avec carburant, moteur et compteur) · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
+- **`v-music`** (F4) - enceintes, juke-box et autoradio, positionnels et synchronisés par
+  horodatage pour qu'un arrivant tardif tombe en cours de morceau. Liste blanche d'hôtes, parce
+  que la lecture d'URL arbitraires est un problème de modération, pas technique.
 - **`v-radio`** (F3) - l'appareil : suivre plusieurs canaux à la fois, émettre sur un seul,
   présélections sur un pavé. Il ne décide d'aucune permission - il demande à `v-voice`.
 - **`v-3dsound`** - un primitif de son positionnel que les autres modules appellent : un nom, un
