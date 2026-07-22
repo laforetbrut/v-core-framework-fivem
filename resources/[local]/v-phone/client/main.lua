@@ -206,6 +206,8 @@ RegisterNUICallback('photos', relay('v-phone:photo'))
 local SOCIAL_OPS = {
     me = true, setup = true, feed = true, post = true, like = true,
     hushMe = true, hushSetup = true, hushNext = true, hushChoice = true,
+    -- The account system: SMS verification, sign-up, login, logout.
+    requestCode = true, verifyCode = true, register = true, login = true, logout = true,
 }
 
 RegisterNUICallback('social', function(data, cb)

@@ -80,28 +80,180 @@ end
 -- ══════════════════════════════════════════════════════════════
 -- 'bleeter' posts text, 'snap' posts photos. The app an account belongs to is part of
 -- its key: your Bleeter handle is not your Snapmatic handle unless you choose it twice.
-local APPS = { bleeter = true, snap = true }
+local APPS = { bleeter = true, snap = true, hush = true }
+local APP_NAME = { bleeter = 'Bleeter', snap = 'Snapmatic', hush = 'Hush' }
 
 local function appOfKind(kind) return kind == 'photo' and 'snap' or 'bleeter' end
 
 local function accountOf(cid, app)
     return MySQL.single.await(
-        'SELECT citizenid, handle, avatar, bio FROM social_accounts WHERE citizenid = ? AND app = ?',
+        'SELECT citizenid, handle, displayname, avatar, bio, phone, verified FROM social_accounts WHERE citizenid = ? AND app = ?',
         { cid, app })
+end
+
+-- ── Credentials ────────────────────────────────────────────────
+-- A roleplay password, not a real one: FNV-1a with a per-account salt is enough to keep
+-- it out of the database in the clear and to make one account's hash useless against
+-- another. It is never reused for anything with real stakes.
+local function randHex(n)
+    local t = {}
+    for i = 1, n do t[i] = string.format('%x', math.random(0, 15)) end
+    return table.concat(t)
+end
+
+local function fnv1a(str)
+    local h = 2166136261
+    for i = 1, #str do
+        h = h ~ string.byte(str, i)
+        h = (h * 16777619) % 4294967296
+    end
+    return h
+end
+
+local function hashPw(pw)
+    local salt = randHex(8)
+    return salt .. ':' .. string.format('%08x', fnv1a(salt .. pw))
+end
+
+local function checkPw(stored, pw)
+    if type(stored) ~= 'string' then return false end
+    local salt, hash = stored:match('^(%x+):(%x+)$')
+    if not salt then return false end
+    return string.format('%08x', fnv1a(salt .. pw)) == hash
+end
+
+local function genCode() return string.format('%04d', math.random(0, 9999)) end
+
+-- Per-session state, cleared when the player drops: the code we texted them, and which
+-- apps they are logged into on this device.
+local Pending = {}       -- [src] = { [app] = { code, number, at } }
+local Authed  = {}       -- [src] = { [app] = true }
+
+AddEventHandler('playerDropped', function()
+    local src = source
+    Pending[src] = nil
+    Authed[src] = nil
+end)
+
+local function phoneNumberOf(src)
+    if GetResourceState('v-phone') ~= 'started' then return nil end
+    local ok, n = pcall(function() return exports['v-phone']:NumberOf(src) end)
+    return ok and n or nil
+end
+
+local function smsCode(src, app, code)
+    if GetResourceState('v-phone') ~= 'started' then return end
+    pcall(function()
+        exports['v-phone']:Notify(src, app, APP_NAME[app] or 'iFruit',
+            ('Code de verification : %s'):format(code))
+    end)
 end
 
 local function publicAccount(a)
     -- The citizen id stops here.
-    return a and { handle = a.handle, avatar = a.avatar, bio = a.bio } or nil
+    return a and { handle = a.handle, displayname = a.displayname, avatar = a.avatar, bio = a.bio } or nil
 end
 
+-- exists: an account is on file. authed: this session has logged into it. The app draws
+-- a sign-up wizard, a login screen, or the feed from exactly these two bits.
 V.Callback('v-social:me', function(src, resolve, data)
     if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = tostring((data and data.app) or 'bleeter')
     if not APPS[app] then resolve(false) return end
-    resolve({ ok = true, account = publicAccount(accountOf(p.citizenid, app)) })
+    local a = accountOf(p.citizenid, app)
+    local authed = a and Authed[src] and Authed[src][app] == true or false
+    resolve({ ok = true, exists = a ~= nil, authed = authed,
+              account = authed and publicAccount(a) or nil })
+end)
+
+-- Step one of sign-up: text a code to the phone's own number. The number is not the
+-- client's to choose - it is whatever v-phone says this player's line is, so an account
+-- cannot be verified against someone else's phone.
+V.Callback('v-social:requestCode', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or '')
+    if not APPS[app] then resolve(false) return end
+    local number = phoneNumberOf(src)
+    if not number or number == '' then resolve({ error = 'nonumber' }) return end
+
+    local code = genCode()
+    Pending[src] = Pending[src] or {}
+    Pending[src][app] = { code = code, number = number, at = os.time() }
+    smsCode(src, app, code)
+    resolve({ ok = true, number = number })
+end)
+
+-- Step two: the code they were texted. A five-minute window, one guess-free check.
+V.Callback('v-social:verifyCode', function(src, resolve, data)
+    local app = tostring((data and data.app) or '')
+    local code = tostring((data and data.code) or ''):gsub('%s', '')
+    local pend = Pending[src] and Pending[src][app]
+    if not pend then resolve({ error = 'nocode' }) return end
+    if (os.time() - pend.at) > 300 then Pending[src][app] = nil resolve({ error = 'expired' }) return end
+    if code ~= pend.code then resolve({ error = 'badcode' }) return end
+    pend.verified = true
+    resolve({ ok = true })
+end)
+
+-- Step three: pick a username, a display name and a password. Only allowed once the code
+-- for this app has been verified this session.
+V.Callback('v-social:register', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or '')
+    if not APPS[app] then resolve(false) return end
+    local pend = Pending[src] and Pending[src][app]
+    if not (pend and pend.verified) then resolve({ error = 'unverified' }) return end
+
+    local handle = tostring((data and data.handle) or ''):gsub('[^%w_]', ''):sub(1, Config.HandleMax)
+    if #handle < Config.HandleMin then resolve({ error = 'handle' }) return end
+    local displayname = tostring((data and data.displayname) or ''):sub(1, 40)
+    if displayname == '' then resolve({ error = 'displayname' }) return end
+    local pw = tostring((data and data.password) or '')
+    if #pw < 4 then resolve({ error = 'password' }) return end
+    local avatar = tostring((data and data.avatar) or ''):sub(1, 300)
+    if avatar ~= '' and not imageAllowed(avatar) then resolve({ error = 'badhost' }) return end
+    local bio = tostring((data and data.bio) or ''):sub(1, 160)
+
+    if accountOf(p.citizenid, app) then resolve({ error = 'exists' }) return end
+    local taken = MySQL.scalar.await(
+        'SELECT 1 FROM social_accounts WHERE app = ? AND handle = ? LIMIT 1', { app, handle })
+    if taken then resolve({ error = 'taken' }) return end
+
+    MySQL.query.await([[INSERT INTO social_accounts
+        (citizenid, app, handle, displayname, avatar, bio, phone, password, verified)
+        VALUES (?,?,?,?,?,?,?,?,1)]],
+        { p.citizenid, app, handle, displayname, avatar, bio, pend.number, hashPw(pw) })
+
+    Pending[src][app] = nil
+    Authed[src] = Authed[src] or {}
+    Authed[src][app] = true
+    resolve({ ok = true, account = { handle = handle, displayname = displayname, avatar = avatar, bio = bio } })
+end)
+
+-- Returning to a registered account on a fresh session: the password unlocks it.
+V.Callback('v-social:login', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or '')
+    if not APPS[app] then resolve(false) return end
+    local a = accountOf(p.citizenid, app)
+    if not a then resolve({ error = 'noaccount' }) return end
+    if not checkPw(a.password, tostring((data and data.password) or '')) then
+        resolve({ error = 'badpass' }) return
+    end
+    Authed[src] = Authed[src] or {}
+    Authed[src][app] = true
+    resolve({ ok = true, account = publicAccount(a) })
+end)
+
+V.Callback('v-social:logout', function(src, resolve, data)
+    local app = tostring((data and data.app) or '')
+    if Authed[src] then Authed[src][app] = nil end
+    resolve({ ok = true })
 end)
 
 V.Callback('v-social:setup', function(src, resolve, data)
@@ -110,24 +262,23 @@ V.Callback('v-social:setup', function(src, resolve, data)
 
     local app = tostring((data and data.app) or 'bleeter')
     if not APPS[app] then resolve(false) return end
-    local handle = tostring((data and data.handle) or ''):gsub('[^%w_]', ''):sub(1, Config.HandleMax)
-    if #handle < Config.HandleMin then resolve({ error = 'handle' }) return end
+    -- Editing an existing profile, so it needs a logged-in account, not the sign-up path.
+    if not (Authed[src] and Authed[src][app]) then resolve({ error = 'unverified' }) return end
+    local a = accountOf(p.citizenid, app)
+    if not a then resolve({ error = 'noaccount' }) return end
+
+    local displayname = tostring((data and data.displayname) or a.displayname or ''):sub(1, 40)
+    if displayname == '' then displayname = a.handle end
     local avatar = tostring((data and data.avatar) or ''):sub(1, 300)
     if avatar ~= '' and not imageAllowed(avatar) then resolve({ error = 'badhost' }) return end
     local bio = tostring((data and data.bio) or ''):sub(1, 160)
 
-    -- One handle per server, checked against everyone else but not against yourself, so
-    -- editing your own bio does not collide with your own name.
-    local taken = MySQL.scalar.await(
-        'SELECT 1 FROM social_accounts WHERE app = ? AND handle = ? AND citizenid <> ? LIMIT 1',
-        { app, handle, p.citizenid })
-    if taken then resolve({ error = 'taken' }) return end
-
-    MySQL.query.await([[INSERT INTO social_accounts (citizenid, app, handle, avatar, bio)
-        VALUES (?,?,?,?,?)
-        ON DUPLICATE KEY UPDATE handle=VALUES(handle), avatar=VALUES(avatar), bio=VALUES(bio)]],
-        { p.citizenid, app, handle, avatar, bio })
-    resolve({ ok = true, account = { handle = handle, avatar = avatar, bio = bio } })
+    -- The handle is the account's name on the server and does not change here; only the
+    -- display name, avatar and bio do.
+    MySQL.query.await(
+        'UPDATE social_accounts SET displayname = ?, avatar = ?, bio = ? WHERE citizenid = ? AND app = ?',
+        { displayname, avatar, bio, p.citizenid, app })
+    resolve({ ok = true, account = { handle = a.handle, displayname = displayname, avatar = avatar, bio = bio } })
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -143,7 +294,7 @@ V.Callback('v-social:feed', function(src, resolve, data)
 
     local rows = MySQL.query.await([[
         SELECT s.id, s.kind, s.body, s.image, s.at,
-               a.handle, a.avatar,
+               a.handle, a.displayname, a.avatar,
                (SELECT COUNT(*) FROM social_likes l WHERE l.post_id = s.id) AS likes,
                EXISTS(SELECT 1 FROM social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
                (s.citizenid = ?) AS mine
@@ -342,12 +493,32 @@ CreateThread(function()
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_accounts` (
         `citizenid` VARCHAR(16) NOT NULL,
         `app`       VARCHAR(12) NOT NULL DEFAULT 'bleeter',
-        `handle`    VARCHAR(20) NOT NULL,
+        `handle`      VARCHAR(20) NOT NULL,
+        `displayname` VARCHAR(40) NOT NULL DEFAULT '',
         `avatar`    VARCHAR(300) NOT NULL DEFAULT '',
         `bio`       VARCHAR(160) NOT NULL DEFAULT '',
+        `phone`     VARCHAR(20) NOT NULL DEFAULT '',
+        `password`  VARCHAR(80) NOT NULL DEFAULT '',
+        `verified`  TINYINT(1) NOT NULL DEFAULT 0,
         PRIMARY KEY (`citizenid`, `app`),
         UNIQUE KEY `handle` (`app`, `handle`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Accounts made before credentials existed keep working: they are marked verified and
+    -- given the handle as a display name, so nobody is locked out by the upgrade.
+    for col, ddl in pairs({
+        displayname = "ADD COLUMN `displayname` VARCHAR(40) NOT NULL DEFAULT ''",
+        phone       = "ADD COLUMN `phone` VARCHAR(20) NOT NULL DEFAULT ''",
+        password    = "ADD COLUMN `password` VARCHAR(80) NOT NULL DEFAULT ''",
+        verified    = "ADD COLUMN `verified` TINYINT(1) NOT NULL DEFAULT 0",
+    }) do
+        local has = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'social_accounts'
+              AND COLUMN_NAME = ? LIMIT 1]], { col })
+        if not has then MySQL.query.await('ALTER TABLE `social_accounts` ' .. ddl) end
+    end
+    MySQL.query.await("UPDATE `social_accounts` SET `verified` = 1 WHERE `verified` = 0 AND `password` = ''")
+    MySQL.query.await("UPDATE `social_accounts` SET `displayname` = `handle` WHERE `displayname` = ''")
 
     -- A database created before accounts were per-app is migrated in place: existing
     -- rows become Bleeter accounts, which is what they were in spirit.

@@ -2007,28 +2007,110 @@ function tabbar(tabs, current, onPick) {
 // not your Snapmatic handle unless you choose it twice.
 const socialAcc = {};
 
+const APP_ICON = { bleeter: 'bleet', snap: 'snap', hush: 'hush' };
+
+// A real account gate: a live session either opens the app, asks for a password, or runs
+// the sign-up wizard, decided by whether an account exists and whether you are logged in.
 async function needAccount(app, then) {
   if (socialAcc[app]) { then(); return; }
   const r = await post('social', { op: 'me', app });
-  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'off')), 'bleet')); return; }
-  if (r.account) { socialAcc[app] = r.account; then(); return; }
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'off')), APP_ICON[app] || 'bleet')); return; }
+  if (r.authed && r.account) { socialAcc[app] = r.account; then(); return; }
+  if (r.exists) { socialLogin(app, then); return; }
+  socialSignup(app, then);
+}
 
-  // First run: pick a handle. This IS the account the network knows you by, which is
-  // why it is the one thing you cannot skip.
+// The account header: the app's icon and name over a form, so every screen of the flow
+// looks like it belongs to the app you are joining.
+function acctHead(app, sub) {
+  return '<div class="accthead">' + UI.appIcon(APP_ICON[app] || 'bleet') +
+    '<div class="acctname">' + esc(L('app.' + app)) + '</div>' +
+    (sub ? '<div class="acctsub">' + esc(sub) + '</div>' : '') + '</div>';
+}
+
+// Returning to a registered account: unlock it with the password.
+function socialLogin(app, then) {
   body(
-    UI.bigNumber(L('ph.soc_welcome'), '@') +
-    UI.field('shandle', L('ph.soc_handle'), '', 'maxlength="20"') +
-    UI.field('savatar', L('ph.soc_avatar'), '', 'maxlength="300"') +
-    UI.field('sbio', L('ph.soc_bio'), '', 'maxlength="160"') +
-    UI.button(L('ph.soc_create'), 'smake') +
-    '<div class="groupfoot">' + esc(L('ph.soc_hint')) + '</div>'
+    acctHead(app, L('ph.soc_login_sub')) +
+    UI.field('lpw', L('ph.soc_password'), '', 'type="password" maxlength="40"') +
+    UI.button(L('ph.soc_signin'), 'lgo') +
+    '<button class="linkbtn" id="lforget" type="button">' + esc(L('ph.soc_switch')) + '</button>'
   );
-  byId('smake').addEventListener('click', async () => {
-    const r2 = await post('social', { op: 'setup', app, handle: byId('shandle').value.trim(),
-      avatar: byId('savatar').value.trim(), bio: byId('sbio').value.trim() });
-    if (r2 && r2.ok) { socialAcc[app] = r2.account; toast(L('ph.soc_made')); then(); }
-    else toast(L('ph.err_' + ((r2 && r2.error) || 'x')));
+  byId('lgo').addEventListener('click', async () => {
+    const r = await post('social', { op: 'login', app, password: byId('lpw').value });
+    if (r && r.ok) { socialAcc[app] = r.account; then(); }
+    else toast(L('ph.err_' + ((r && r.error) || 'x')));
   });
+  // "Not you?" logs the stored account out for this session and starts a fresh sign-up.
+  byId('lforget').addEventListener('click', async () => {
+    await post('social', { op: 'logout', app });
+    socialSignup(app, then);
+  });
+}
+
+// Sign-up: number -> texted code -> username, display name and password. Three steps, a
+// progress line, and nothing skippable - the account the network knows you by is built
+// here, not guessed.
+function socialSignup(app, then) {
+  const st = { step: 1, number: '' };
+  const steps = 3;
+  const prog = (n) => '<div class="signprog">' + esc(L('ph.soc_step')) + ' ' + n + '/' + steps + '</div>';
+
+  const render = () => {
+    if (st.step === 1) {
+      body(
+        acctHead(app, L('ph.soc_join_sub')) + prog(1) +
+        UI.group([UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.soc_number'),
+          value: state.number || L('ph.soc_no_number') })]) +
+        UI.button(L('ph.soc_sendcode'), 'sc1') +
+        '<div class="groupfoot">' + esc(L('ph.soc_number_hint')) + '</div>'
+      );
+      byId('sc1').addEventListener('click', async () => {
+        const r = await post('social', { op: 'requestCode', app });
+        if (r && r.ok) { st.number = r.number; st.step = 2; render(); toast(L('ph.soc_code_sent')); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+    } else if (st.step === 2) {
+      body(
+        acctHead(app, L('ph.soc_code_sub') + ' ' + (st.number || '')) + prog(2) +
+        UI.field('scode', L('ph.soc_code'), '', 'maxlength="4" inputmode="numeric"') +
+        UI.button(L('ph.soc_verify'), 'sc2') +
+        '<button class="linkbtn" id="sc2r" type="button">' + esc(L('ph.soc_resend')) + '</button>'
+      );
+      byId('scode').focus();
+      byId('sc2').addEventListener('click', async () => {
+        const r = await post('social', { op: 'verifyCode', app, code: byId('scode').value.trim() });
+        if (r && r.ok) { st.step = 3; render(); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+      byId('sc2r').addEventListener('click', async () => {
+        const r = await post('social', { op: 'requestCode', app });
+        if (r && r.ok) { st.number = r.number; toast(L('ph.soc_code_sent')); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+    } else {
+      body(
+        acctHead(app, L('ph.soc_profile_sub')) + prog(3) +
+        UI.field('shandle', L('ph.soc_identifier'), '', 'maxlength="20"') +
+        UI.field('sdisplay', L('ph.soc_pseudo'), '', 'maxlength="40"') +
+        UI.field('spw', L('ph.soc_password'), '', 'type="password" maxlength="40"') +
+        UI.field('spw2', L('ph.soc_password2'), '', 'type="password" maxlength="40"') +
+        UI.field('savatar', L('ph.soc_avatar'), '', 'maxlength="300"') +
+        UI.field('sbio', L('ph.soc_bio'), '', 'maxlength="160"') +
+        UI.button(L('ph.soc_create'), 'smake') +
+        '<div class="groupfoot">' + esc(L('ph.soc_identifier_hint')) + '</div>'
+      );
+      byId('smake').addEventListener('click', async () => {
+        if (byId('spw').value !== byId('spw2').value) { toast(L('ph.soc_pw_mismatch')); return; }
+        const r = await post('social', { op: 'register', app,
+          handle: byId('shandle').value.trim(), displayname: byId('sdisplay').value.trim(),
+          password: byId('spw').value, avatar: byId('savatar').value.trim(), bio: byId('sbio').value.trim() });
+        if (r && r.ok) { socialAcc[app] = r.account; toast(L('ph.soc_made')); then(); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+    }
+  };
+  render();
 }
 
 function postCard(pst) {
@@ -2037,7 +2119,9 @@ function postCard(pst) {
     : '<span class="pav">' + esc(String(pst.handle || '?').slice(0, 1).toUpperCase()) + '</span>';
   return '<div class="post" data-id="' + pst.id + '">' +
     '<div class="phead">' + av +
-      '<span class="ph">@' + esc(pst.handle) + '</span>' +
+      '<span class="pnames">' +
+        (pst.displayname ? '<span class="pdn">' + esc(pst.displayname) + '</span>' : '') +
+        '<span class="ph">@' + esc(pst.handle) + '</span></span>' +
       '<span class="pt">' + esc(String(pst.at || '').slice(5, 16)) + '</span></div>' +
     (pst.body ? '<div class="pbody">' + esc(pst.body) + '</div>' : '') +
     (pst.image ? '<img class="pimg" src="' + esc(pst.image) + '" />' : '') +
@@ -2110,7 +2194,8 @@ RENDER.snap = () => needAccount('snap', async () => {
 });
 
 // -- Hush -------------------------------------------------------
-RENDER.hush = async () => {
+RENDER.hush = () => needAccount('hush', hushMain);
+async function hushMain() {
   setNav(L('app.hush'), null);
   loading();
   const me = await post('social', { op: 'hushMe' });
