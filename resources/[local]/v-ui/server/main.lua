@@ -47,8 +47,12 @@ local function S(key, fallback)
     return core().GetSetting('v-ui', key, fallback)
 end
 
-local function resolve()
-    local presetKey = S('preset', Config.DefaultPreset)
+--- Build the variable list for one theme. `o` is a per-module override row (or nil for
+--- the global theme); anything it leaves nil falls through to the global setting.
+--- `partial` emits ONLY what the override actually changes, so a module block stays small
+--- and everything else keeps inheriting.
+local function buildVars(o, partial)
+    local presetKey = (o and o.preset) or S('preset', Config.DefaultPreset)
     local base = Config.Presets[Config.DefaultPreset] or {}
     local p = Config.Presets[presetKey] or base
 
@@ -64,16 +68,40 @@ local function resolve()
         if type(raw) == 'string' and raw:match('^#%x%x%x%x%x%x$') then accent = raw end
     end
     local accent2 = pick('accent2')
+    if o and o.accent and tostring(o.accent):match('^#%x%x%x%x%x%x$') then
+        accent = o.accent
+        -- An accent override without a preset would keep the GLOBAL gradient partner,
+        -- producing a two-hue gradient (a green accent ending in orange). Derive the
+        -- partner from the chosen colour instead, unless a preset supplied its own.
+        if not o.preset then accent2 = shade(accent, -0.30) end
+    end
     local bg      = pick('bg')
     local panel   = pick('panel')
     local text    = pick('text')
 
-    local radius  = S('radius', Config.Shape.radius)
+    local radius  = (o and o.radius) or S('radius', Config.Shape.radius)
     local density = S('density', Config.Shape.density)
-    local motion  = S('motion', Config.Motion.speed)
-    local alpha   = S('panelAlpha', Config.Surface.panelAlpha)
-    local backA   = S('backdropAlpha', Config.Surface.backdropAlpha)
-    local fscale  = S('fontScale', Config.Font.scale)
+    local motion  = (o and o.motion) or S('motion', Config.Motion.speed)
+    local alpha   = (o and o.panel_alpha) or S('panelAlpha', Config.Surface.panelAlpha)
+    local backA   = (o and o.backdrop_alpha) or S('backdropAlpha', Config.Surface.backdropAlpha)
+    local fscale  = (o and o.font_scale) or S('fontScale', Config.Font.scale)
+
+    -- which keys this override actually touches; in `partial` mode nothing else is emitted
+    local touched = nil
+    if partial and o then
+        touched = {}
+        if o.preset then touched.palette = true end
+        if o.accent then touched.accent = true end
+        if o.radius then touched.radius = true end
+        if o.motion then touched.motion = true end
+        if o.panel_alpha then touched.palette = true end
+        if o.backdrop_alpha then touched.backdrop = true end
+        if o.font_scale then touched.font = true end
+    end
+    local function want(group)
+        if not touched then return true end
+        return touched[group] == true
+    end
 
     local function r(px) return ('%.0fpx'):format(px * radius) end
     local function ms(v) return motion <= 0 and '0ms' or ('%.0fms'):format(v * (1 / math.max(0.05, motion))) end
@@ -82,6 +110,7 @@ local function resolve()
     local function add(k, v) out[#out + 1] = ('  %s: %s;'):format(k, v) end
 
     -- backgrounds derived from one base colour, so a preset stays coherent
+    if want('palette') then
     add('--v-bg-900', bg)
     add('--v-bg-800', shade(bg, 0.03))
     add('--v-bg-700', shade(bg, 0.06))
@@ -99,8 +128,10 @@ local function resolve()
     add('--v-text-dim',   rgba(text, 0.72))
     add('--v-text-faint', rgba(text, 0.46))
     add('--v-ink',        shade(bg, -0.5))
+    end
 
     -- the whole accent family from one colour
+    if want('palette') or want('accent') then
     add('--v-accent',       accent)
     add('--v-accent-300',   shade(accent, 0.28))
     add('--v-accent-600',   accent2)
@@ -111,38 +142,76 @@ local function resolve()
     add('--v-grad-accent',  ('linear-gradient(135deg, %s 0%%, %s 100%%)'):format(accent, accent2))
     add('--v-grad-soft',    ('linear-gradient(135deg, %s 0%%, %s 100%%)'):format(rgba(accent, 0.16), rgba(accent2, 0.10)))
 
+    end
+
+    if want('palette') then
     for _, k in ipairs({ 'success', 'danger', 'warning', 'info' }) do
         local c = pick(k)
         add('--v-' .. k, c)
         add(('--v-%s-300'):format(k), shade(c, 0.28))
     end
-
     for k, c in pairs(Config.Rarity) do add('--v-rar-' .. k, c) end
+    end
 
-    add('--v-r-sm', r(8));  add('--v-r-md', r(12))
-    add('--v-r-lg', r(16)); add('--v-r-xl', r(22))
+    if want('radius') then
+        add('--v-r-sm', r(8));  add('--v-r-md', r(12))
+        add('--v-r-lg', r(16)); add('--v-r-xl', r(22))
+    end
 
-    add('--v-t-fast', ms(120)); add('--v-t-base', ms(200)); add('--v-t-slow', ms(360))
+    if want('motion') then
+        add('--v-t-fast', ms(120)); add('--v-t-base', ms(200)); add('--v-t-slow', ms(360))
+    end
 
-    add('--v-font-display', Config.Font.display)
-    add('--v-font-body',    Config.Font.body)
-    add('--v-fs',           ('%.3f'):format(fscale))
-    add('--v-density',      ('%.3f'):format(density))
-    add('--v-backdrop-a',   ('%.3f'):format(backA))
+    if want('font') then
+        add('--v-fs', ('%.3f'):format(fscale))
+    end
 
-    -- feature switches read by theme.css
-    add('--v-brackets',  (S('brackets', Config.Shape.brackets) and 'block' or 'none'))
-    add('--v-streak',    (S('topStreak', Config.Shape.topStreak) and 'block' or 'none'))
-    add('--v-grain',     (S('grain', Config.Surface.grain) and '0.04' or '0'))
+    if want('backdrop') then
+        add('--v-backdrop-a', ('%.3f'):format(backA))
+    end
 
-    return table.concat({
-        '/* v-ui — generated from config.lua + admin settings. Do not edit by hand: it is',
-        '   rewritten on every theme change. Edit v-ui/config.lua or Admin -> Settings. */',
+    -- global-only: typography families, density and the feature switches
+    if not partial then
+        add('--v-font-display', Config.Font.display)
+        add('--v-font-body',    Config.Font.body)
+        add('--v-density',      ('%.3f'):format(density))
+        add('--v-brackets',  (S('brackets', Config.Shape.brackets) and 'block' or 'none'))
+        add('--v-streak',    (S('topStreak', Config.Shape.topStreak) and 'block' or 'none'))
+        add('--v-grain',     (S('grain', Config.Surface.grain) and '0.04' or '0'))
+    end
+
+    return out
+end
+
+--- The whole stylesheet: the global theme, then one scoped block per module that overrides
+--- it. `theme.js` stamps the owning resource onto <html>, so a page picks up its own block
+--- and inherits everything it did not override.
+local function resolve()
+    local parts = {
+        '/* v-ui — generated from config.lua, admin settings and the per-module overrides',
+        '   (Admin -> Editor -> Module themes). Do not edit by hand: it is rewritten on',
+        '   every theme change. */',
         ':root {',
-        table.concat(out, '\n'),
+        table.concat(buildVars(nil, false), '\n'),
         '}',
         '',
-    }, '\n')
+    }
+
+    local overrides = (GetResourceState('v-world') == 'started' and exports['v-world']:IsReady())
+        and exports['v-world']:GetUiThemes() or {}
+    for _, o in ipairs(overrides) do
+        if o.enabled == 1 and o.module and o.module ~= '' then
+            local vars = buildVars(o, true)
+            if #vars > 0 then
+                parts[#parts + 1] = ('/* %s */'):format(o.module)
+                parts[#parts + 1] = (':root[data-vmod="%s"] {'):format(o.module)
+                parts[#parts + 1] = table.concat(vars, '\n')
+                parts[#parts + 1] = '}'
+                parts[#parts + 1] = ''
+            end
+        end
+    end
+    return table.concat(parts, '\n')
 end
 
 local function rebuild()
@@ -194,6 +263,11 @@ end)
 
 AddEventHandler('v-core:server:settingChanged', function(mod)
     if mod == 'v-ui' then rebuild() end
+end)
+
+-- a per-module override was edited in the admin panel
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'uitheme' then rebuild() end
 end)
 
 -- A joining client needs the current version so its pages link the right cache-buster.

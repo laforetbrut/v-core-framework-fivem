@@ -17,6 +17,7 @@ local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
 local Dealers, VehCat = {}, {}
+local UiThemes = {}
 local ready = false
 
 local function isAdmin(src)
@@ -219,6 +220,21 @@ local function ensureTables()
         PRIMARY KEY (`domain`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Per-module theme overrides. Every column is nullable on purpose: NULL means
+    -- "inherit the global theme", so a row only carries what genuinely differs.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `ui_overrides` (
+        `module`  VARCHAR(64) NOT NULL,
+        `preset`  VARCHAR(32) DEFAULT NULL,
+        `accent`  VARCHAR(9)  DEFAULT NULL,
+        `panel_alpha`    FLOAT DEFAULT NULL,
+        `backdrop_alpha` FLOAT DEFAULT NULL,
+        `radius`  FLOAT DEFAULT NULL,
+        `motion`  FLOAT DEFAULT NULL,
+        `font_scale` FLOAT DEFAULT NULL,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`module`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
         `id` INT NOT NULL AUTO_INCREMENT,
         `station` VARCHAR(40) NOT NULL,
@@ -373,6 +389,14 @@ local function loadVehCat()
     end
 end
 
+local function loadUiThemes()
+    UiThemes = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM ui_overrides ORDER BY `module`') or {}) do
+        r.enabled = bool(r.enabled)
+        UiThemes[#UiThemes + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
@@ -387,6 +411,7 @@ local function reload(domain)
     if domain == 'licenses'    or not domain then loadLicTypes() end
     if domain == 'dealers'     or not domain then loadDealers() end
     if domain == 'vehcat'      or not domain then loadVehCat() end
+    if domain == 'uitheme'     or not domain then loadUiThemes() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -467,6 +492,7 @@ exports('GetMechShops', function() return MechShops end)
 exports('GetLicenseTypes', function() return LicTypes end)
 exports('GetDealers', function() return Dealers end)
 exports('GetVehicleCatalogue', function() return VehCat end)
+exports('GetUiThemes', function() return UiThemes end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -688,6 +714,20 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = Garages, jobs = jobs, types = Config.GarageTypes })
+    elseif domain == 'uitheme' then
+        -- the module list and the presets come from the live registry, so a third-party
+        -- script that declared itself is themeable without any change here
+        local mods, presets = {}, {}
+        if GetResourceState('v-core') == 'started' then
+            for name, m in pairs(exports['v-core']:GetModules() or {}) do
+                mods[#mods + 1] = { name = name, label = m.label or name }
+            end
+        end
+        table.sort(mods, function(a, b) return a.label < b.label end)
+        if GetResourceState('v-ui') == 'started' then
+            for _, p in ipairs(exports['v-ui']:GetPresets() or {}) do presets[#presets + 1] = p end
+        end
+        resolve({ rows = UiThemes, modules = mods, presets = presets })
     elseif domain == 'dealers' then
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -840,6 +880,31 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   num(row.sx), num(row.sy), num(row.sz), num(row.sh),
                   bool(row.blip), job, math.max(0, math.floor(num(row.fee))), bool(row.enabled), gid })
         end
+
+    elseif d == 'uitheme' then
+        local mod = tostring(row.module or ''):sub(1, 64)
+        if mod == '' then resolve({ error = 'module' }); return end
+        -- an empty field means "inherit": store NULL rather than a zero that would read
+        -- as a deliberate "fully transparent" or "no roundness"
+        local function opt(v)
+            if v == nil or v == '' then return nil end
+            local n = tonumber(v)
+            return n
+        end
+        local preset = tostring(row.preset or ''); if preset == '' then preset = nil end
+        local accent = tostring(row.accent or '')
+        if not accent:match('^#%x%x%x%x%x%x$') then accent = nil end
+
+        MySQL.query.await([[INSERT INTO ui_overrides
+            (`module`, preset, accent, panel_alpha, backdrop_alpha, radius, motion, font_scale, enabled)
+            VALUES (?,?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE preset=VALUES(preset), accent=VALUES(accent),
+                panel_alpha=VALUES(panel_alpha), backdrop_alpha=VALUES(backdrop_alpha),
+                radius=VALUES(radius), motion=VALUES(motion), font_scale=VALUES(font_scale),
+                enabled=VALUES(enabled)]],
+            { mod, preset, accent, opt(row.panelAlpha), opt(row.backdropAlpha),
+              opt(row.radius), opt(row.motion), opt(row.fontScale),
+              bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'dealers' then
         local did = tostring(row.did or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
@@ -1048,6 +1113,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local parked = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE garage = ? LIMIT 1', { gid })
         if parked then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_garages WHERE id = ?', { gid })
+    elseif d == 'uitheme' then
+        local mod = tostring(id or '')
+        if mod == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM ui_overrides WHERE `module` = ?', { mod })
     elseif d == 'dealers' then
         local did = tostring(id or '')
         if did == '' then resolve({ error = 'protected' }); return end

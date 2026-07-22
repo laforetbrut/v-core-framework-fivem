@@ -8,6 +8,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **A different theme per script, managed in one place** — the global theme still drives everything, but **Admin -> Editor -> Look -> Module themes** now lets you override it for any single module: its own colour preset, accent, **panel transparency**, backdrop darkness, roundness, animation speed and font scale. **Every field left blank means "inherit"**, so making the inventory a bit more see-through is one number and nothing else moves. The module list comes from the live registry, so a third-party script that declared itself is themeable too.
+
 - **The entire interface is themeable, from one place** — `v-ui/config.lua` and **Admin -> Settings -> Interface** now own the look of every menu in the game: **6 colour presets** (Ember, Midnight, Crimson, Verdant, Violet, Slate), an accent colour the whole highlight family is derived from, corner roundness, density, **animation speed (0 disables all motion)**, panel opacity, backdrop darkness, font scale, and switches for the corner brackets, the panel top light and the film grain. Change one and **all 16 NUI pages restyle at once** — no module hardcodes a colour any more.
 - **The loading screen has its own complete config** — `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right, split, bottom, top, card), the same 6 palettes plus direct colour overrides, **video / image / gradient / solid** backgrounds with an adjustable dim and a Ken Burns push, every effect toggleable, and all the copy, loading stages and tips in one file. Nothing is left in the markup.
 - **API.md** — a full reference for every export, callback and event in the framework (147 exports across 23 modules), in English and French.
@@ -54,6 +56,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **125 new items + 60 new recipes** — the catalogue grows from 175 to **302 items**: 20 more dishes, 13 drinks, 9 medical supplies, 17 hand tools, 16 industrial materials, 11 tech components, 9 pieces of jewellery, 20 real base-game weapons and 10 misc props (evidence bag, press pass, keycard…). All of them are reachable: 60 new recipes wire the new material tier (steel, titanium, carbon fibre, kevlar), the tool bench, field medicine, the electronics tier (motherboard → CPU → GPU, scanners, jammers) and the expanded kitchen menu — **105 recipes** in total.
 
 ### Ajouts (miroir français)
+
+- **Un thème différent par script, géré au même endroit** — le thème global pilote toujours tout, mais **Admin -> Éditeur -> Apparence -> Thèmes par module** permet désormais de le surcharger pour n'importe quel module : son propre preset de couleurs, son accent, la **transparence du panneau**, l'assombrissement du fond, l'arrondi, la vitesse d'animation et l'échelle de police. **Chaque champ laissé vide veut dire « hérité »**, donc rendre l'inventaire un peu plus transparent tient en un seul nombre sans que rien d'autre ne bouge. La liste des modules vient du registre en direct : un script tiers qui s'est déclaré est thémable lui aussi.
 
 - **Toute l'interface est thémable depuis un seul endroit** — `v-ui/config.lua` et **Admin -> Réglages -> Interface** pilotent désormais l'apparence de tous les menus du jeu : **6 presets de couleurs** (Ember, Midnight, Crimson, Verdant, Violet, Slate), une couleur d'accent d'où toute la famille de surbrillance est dérivée, l'arrondi des angles, la densité, la **vitesse d'animation (0 = plus aucune animation)**, l'opacité des panneaux, l'assombrissement du fond, l'échelle de police, et des interrupteurs pour les équerres d'angle, le filet lumineux et le grain. Change l'un d'eux et **les 16 pages NUI se restylent d'un coup** — plus aucun module ne code une couleur en dur.
 - **L'écran de chargement a son propre fichier de config complet** — `v-loadscreen/html/config.js` : **7 dispositions** (centre, gauche, droite, split, bas, haut, carte), les 6 mêmes palettes plus des surcharges directes, fonds **vidéo / image / dégradé / uni** avec assombrissement réglable et effet Ken Burns, chaque effet activable, et tous les textes, étapes de chargement et astuces dans un seul fichier. Plus rien n'est dans le HTML.
@@ -162,6 +166,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Shop inventory panel + drag-to-buy (v-shops)** — the store now shows **your inventory** beside the catalogue and lets you **drag a catalogue item onto it to buy** (1 unit; the Buy button + stepper remain for quantities). Catalogue and inventory tiles show item images (with the same garment/box fallback as the inventory).
 
 ### Fixed (English first)
+
+- **The panel top light was hardcoded orange** — on a violet or green theme every panel kept a warm streak, which was the one detail giving the reskin away. It follows the accent now. `.v-chamfer`'s panel gradient also ended on a fixed dark value instead of the theme background, and `.v-panel` was an empty rule that produced no panel at all when used on its own.
 
 - **Five settings that did nothing** — the first pass declared buy/sell multipliers for stores, a craft duration multiplier, a gathering yield multiplier, a clothing price multiplier and a salary multiplier that **no code read**. They are now wired into their real paths. The salary loop also cached its interval at boot, so changing "pay every N minutes" did nothing until a restart.
 
@@ -297,6 +303,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Panneau inventaire + glisser-pour-acheter (v-shops)** — la boutique affiche maintenant **votre inventaire** à côté du catalogue et permet de **glisser un article dessus pour l'acheter** (1 unité ; le bouton Acheter + le compteur restent pour les quantités). Les tuiles du catalogue et de l'inventaire montrent les images d'items (avec le même repli vêtement/colis que l'inventaire).
 
 ### Correctifs (miroir français)
+
+- **Le filet lumineux des panneaux était orange en dur** — sur un thème violet ou vert, chaque panneau gardait un liseré chaud, le seul détail qui trahissait le changement de couleurs. Il suit désormais l'accent. Le dégradé de `.v-chamfer` finissait aussi sur une valeur sombre fixe au lieu du fond du thème, et `.v-panel` était une règle vide qui ne produisait aucun panneau si on l'utilisait seule.
 
 - **Cinq réglages qui ne faisaient rien** — la première passe avait déclaré des multiplicateurs d'achat/vente en boutique, de durée de craft, de rendement de récolte, de prix des vêtements et de salaire que **aucun code ne lisait**. Ils sont maintenant branchés sur leurs vrais chemins. La boucle de salaire mettait aussi son intervalle en cache au démarrage : changer « payer toutes les N minutes » ne faisait rien jusqu'au redémarrage.
 

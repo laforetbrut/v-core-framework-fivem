@@ -315,6 +315,18 @@ function edRowTitle(r) {
   }
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
   if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
+  if (edDomain === 'uitheme') {
+    // list only what this row overrides — the rest is inherited, and saying so is the point
+    const bits = [];
+    if (r.preset) bits.push(r.preset);
+    if (r.accent) bits.push(r.accent);
+    if (r.panel_alpha != null) bits.push(t('adm.ed_opacity') + ' ' + Number(r.panel_alpha).toFixed(2));
+    if (r.backdrop_alpha != null) bits.push(t('adm.ed_backdrop') + ' ' + Number(r.backdrop_alpha).toFixed(2));
+    if (r.radius != null) bits.push(t('adm.ed_radius') + ' ' + Number(r.radius).toFixed(2));
+    if (r.motion != null) bits.push(t('adm.ed_motion') + ' ' + Number(r.motion).toFixed(2));
+    if (r.font_scale != null) bits.push(t('adm.ed_fontscale') + ' ' + Number(r.font_scale).toFixed(2));
+    return `${esc(r.module)} <i class="dim">${bits.length ? esc(bits.join(' · ')) : esc(t('adm.ed_inherits'))}</i>`;
+  }
   if (edDomain === 'dealers') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)} · ${esc(r.cats || t('adm.ed_allcats'))}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
   }
@@ -450,7 +462,8 @@ function renderEdList() {
     row.querySelector('[data-act="del"]').onclick = async () => {
       const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
-        : (edDomain === 'vehcat') ? r.model : r.id;   // garages/dealers key on `id`
+        : (edDomain === 'vehcat') ? r.model
+        : (edDomain === 'uitheme') ? r.module : r.id;   // garages/dealers key on `id`
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
@@ -528,6 +541,29 @@ function openEdForm(row) {
       field(t('adm.ed_rarity'), 'ef-rarity', m.rarity ?? 'common') +
       field(t('adm.ed_desc'), 'ef-desc', m.desc ?? '') +
       check(t('adm.ed_stack'), 'ef-stack', row.stackable !== 0) + check(t('adm.ed_usable'), 'ef-usable', row.usable === 1);
+  } else if (edDomain === 'uitheme') {
+    const isNew = !row.module;
+    const mods = (edData.modules || []).map(m =>
+      `<option value="${esc(m.name)}"${m.name === row.module ? ' selected' : ''}>${esc(m.label)} (${esc(m.name)})</option>`).join('');
+    const presets = (edData.presets || []).map(p =>
+      `<option value="${esc(p.key)}"${p.key === row.preset ? ' selected' : ''}>${esc(p.label || p.key)}</option>`).join('');
+    // a blank field means INHERIT — never 0, which would read as a deliberate
+    // "fully transparent" or "no roundness"
+    const optNum = (label, id, val) =>
+      `<label class="edf"><span>${esc(label)}</span><input id="${id}" type="number" step="any" ` +
+      `value="${val === null || val === undefined ? '' : esc(val)}" placeholder="${esc(t('adm.ed_inherit'))}" /></label>`;
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_module'))}</span><select id="ef-mod" ${isNew ? '' : 'disabled'}>${mods}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_preset'))}</span><select id="ef-preset">` +
+        `<option value="">${esc(t('adm.ed_inherit'))}</option>${presets}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_accent'))}</span>` +
+        `<input id="ef-accent" type="text" value="${esc(row.accent || '')}" placeholder="${esc(t('adm.ed_inherit'))}" /></label>` +
+      optNum(t('adm.ed_opacity'), 'ef-pa', row.panel_alpha) +
+      optNum(t('adm.ed_backdrop'), 'ef-ba', row.backdrop_alpha) +
+      optNum(t('adm.ed_radius'), 'ef-rad', row.radius) +
+      optNum(t('adm.ed_motion'), 'ef-mot', row.motion) +
+      optNum(t('adm.ed_fontscale'), 'ef-fs', row.font_scale) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'dealers') {
     const isNew = !row.id;
     const have = String(row.cats || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -764,6 +800,10 @@ function openEdForm(row) {
       payload = { name: v('ef-name'), isNew: !row.name, label: v('ef-label'), category: v('ef-cat'),
                   itype: v('ef-itype'), weight: parseInt(v('ef-weight'), 10) || 0, image: v('ef-image'),
                   rarity: v('ef-rarity'), desc: v('ef-desc'), stackable: ck('ef-stack'), usable: ck('ef-usable') };
+    } else if (edDomain === 'uitheme') {
+      payload = { module: v('ef-mod'), preset: v('ef-preset'), accent: v('ef-accent'),
+                  panelAlpha: v('ef-pa'), backdropAlpha: v('ef-ba'), radius: v('ef-rad'),
+                  motion: v('ef-mot'), fontScale: v('ef-fs'), enabled: ck('ef-en') };
     } else if (edDomain === 'dealers') {
       const cats = [...document.querySelectorAll('.cat-cb')].filter(c => c.checked).map(c => c.value);
       payload = { did: v('ef-did'), isNew: !row.id, label: v('ef-label'),

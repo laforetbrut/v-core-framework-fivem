@@ -19,6 +19,16 @@
     return l;
   }
 
+  // Stamp the OWNING resource onto <html> so the scoped block for this module applies.
+  // A NUI page is served from the resource that owns it, so its own hostname is the name:
+  //   https://cfx-nui-v-inventory/index.html  ->  v-inventory
+  //   https://v-inventory/index.html          ->  v-inventory
+  function stampModule() {
+    var h = (location.hostname || '').replace(/^cfx-nui-/, '');
+    if (h && h !== 'localhost') document.documentElement.setAttribute('data-vmod', h);
+    return h;
+  }
+
   function apply(version) {
     var l = ensureLink();
     // a new href is the only reliable way to make CEF drop a cached stylesheet
@@ -31,9 +41,16 @@
     if (d.action === 'v-ui:theme') apply(d.version);
   });
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', function () { ensureLink(); });
-  } else {
+  // A module may also declare its identity explicitly, which is useful when a page is
+  // previewed outside the game: <html data-vmod="v-inventory">
+  function boot() {
+    if (!document.documentElement.getAttribute('data-vmod')) stampModule();
     ensureLink();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+  } else {
+    boot();
   }
 })();
