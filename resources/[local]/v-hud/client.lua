@@ -302,7 +302,7 @@ CreateThread(function()
     local mm = RequestScaleformMovie('minimap')
     local t = 0
     while not HasScaleformMovieLoaded(mm) and t < 200 do Wait(0); t = t + 1 end
-    local lastR
+    local lastR, lastBig, lastApply = nil, nil, 0
     while true do
         if hudHidden or not minimapEnabled() then
             DisplayRadar(false)
@@ -310,19 +310,31 @@ CreateThread(function()
             Wait(120)
         else
             DisplayRadar(true)
-            retrySquareMask()   -- no-op once the mask is in; keeps retrying after a flaky restart
-            applyMinimap()
-            if HasScaleformMovieLoaded(mm) then
-                BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
-                ScaleformMovieMethodAddParamInt(3)   -- GOLF mode = no bars
-                EndScaleformMovieMethod()
+            -- The layout setters and the scaleform call are PERSISTENT, not per-frame:
+            -- running them 60 times a second was the single most expensive thing this
+            -- resource did. They now run when the map state actually changes (a bigmap
+            -- toggle, or a drag/resize, which re-applies from its own NUI callback), plus
+            -- a slow self-heal in case another resource stomps the layout.
+            local now = GetGameTimer()
+            local big = IsBigmapActive()
+            if big ~= lastBig or now - lastApply > 2000 then
+                retrySquareMask()   -- no-op once the mask is in; retries after a flaky restart
+                applyMinimap()
+                if HasScaleformMovieLoaded(mm) then
+                    BeginScaleformMovieMethod(mm, 'SETUP_HEALTH_ARMOUR')
+                    ScaleformMovieMethodAddParamInt(3)   -- GOLF mode = no bars
+                    EndScaleformMovieMethod()
+                end
+                lastBig, lastApply = big, now
             end
+            -- The rect read is a gfx round-trip; 10 Hz is well below what an eye resolves
+            -- for a frame that only moves on a resolution, safezone or bigmap change.
             local x, y, w, h = getMinimapRect()
             if not lastR or lastR.x ~= x or lastR.y ~= y or lastR.w ~= w or lastR.h ~= h then
                 lastR = { x = x, y = y, w = w, h = h }
                 SendNUIMessage({ action = 'minimap', rect = lastR })
             end
-            Wait(0)
+            Wait(100)
         end
     end
 end)
@@ -367,6 +379,9 @@ end
 local function saveMap()
     settings.map = { posX = map.posX, posY = map.posY, scale = map.scale }
     persistSettings()
+    -- Apply here rather than waiting for the loop's next tick: dragging must follow the
+    -- cursor, and this is the one path where the layout genuinely changes fast.
+    applyMinimap()
 end
 
 -- Drag the minimap: NUI reports a PIXEL delta -> 1:1 component delta (the gfx
