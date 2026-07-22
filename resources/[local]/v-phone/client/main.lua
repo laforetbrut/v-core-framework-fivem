@@ -112,6 +112,14 @@ end)
 -- validation, notifications and settings all still apply. None of them decide anything.
 
 RegisterNUICallback('places', relay('v-phone:places'))
+RegisterNUICallback('install', relay('v-phone:install'))
+
+--- The card belongs to v-banking, which mints it and owns the number. The wallet app
+--- only displays it, so this reads and never writes.
+RegisterNUICallback('card', function(_, cb)
+    if GetResourceState('v-banking') ~= 'started' then cb({ error = 'off' }) return end
+    V.Request('v-banking:card', function(res) cb(res or { error = 'x' }) end)
+end)
 
 --- Setting a waypoint is the one thing a phone map is actually for. Purely local: it
 --- moves a marker on this player's own minimap and touches nothing else.

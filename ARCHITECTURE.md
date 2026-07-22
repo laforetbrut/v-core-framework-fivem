@@ -958,6 +958,16 @@ the dealer's proximity, checks the model is actually in the catalogue, enforces 
 and tells the anticheat to expect the two teleports and the local vehicle that follow.
 
 ### `v-core` - the integration layer
+**`MenuOpened(name, keepInput)` now asserts the input policy.** `SetNuiFocus` is scoped to
+the calling resource, but `SetNuiFocusKeepInput` sets a single **process-wide** flag that
+`SetNuiFocus(false, false)` does not clear. One resource turning it on therefore leaked
+game input into every page opened afterwards, for the rest of the session - and the
+symptom is unmistakable once seen: typing "fume" into a phone message presses F, and the
+player climbs into a nearby car mid-sentence. Only the interaction eye wants it on;
+everything else wants it off, and off has to be *asserted* rather than assumed, because
+the flag arrives in whatever state the last menu left it. `MenuOpened` is the one call
+every page already makes, so the assertion lives there where it cannot be forgotten.
+
 
 Three things turn a large framework into an extensible one, and none of them are exports.
 
@@ -1040,6 +1050,31 @@ knowing where they are. **The phone does no audio at all** - a connected call ha
 to `v-voice`, which owns the Mumble channel, and the hang-up releases it even if the UI never
 saw the start, because a call that ends without releasing the channel leaves a player audible
 to strangers across the map.
+
+**Gestures, and where a drag starts deciding what it means.** The phone is driven by a
+mouse, so a swipe is a click-drag - but the rule is the real one: the **bottom edge** is
+the home gesture (and, held for a moment first, the app switcher), the **top edge** is the
+notification shade on the left and the control centre on the right, a drag in from the
+**left edge** inside an app goes back, and sideways on the home screen turns the page. None
+of those need a button, which is why iOS uses them.
+
+**The side buttons work, and they control real things.** Power locks and wakes. Volume
+moves the volume of whatever `v-music` says this player may control, and says "nothing
+playing" when there is nothing - rather than moving a number attached to silence. The
+Action button opens an app the player chose in Settings, and says so when they have not
+chosen one.
+
+**FruitStore separates two decisions that look like one.** The **operator** decides what is
+available (Editor - Phone apps, plus the job and gang gates); the **player** decides what
+to keep. What is stored is what they *removed*, not what they installed, so an app an
+operator adds next month is simply there rather than needing every existing character to
+go and find it. A handful of apps are `required` and refuse to be removed, because a phone
+with no Phone app is a brick.
+
+**The card is v-banking's, not the phone's.** It is minted once per character, retried on
+collision, and a transfer accepts it as a destination - for exactly the reason phone
+numbers exist: a citizen id is a database key, and asking players to trade one so they can
+be paid is asking them to hand over an internal identifier.
 
 **Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot, dock })` and a third
 party ships its own app without touching v-phone. What the operator controls is separate and

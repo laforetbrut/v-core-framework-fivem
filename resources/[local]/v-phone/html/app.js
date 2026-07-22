@@ -25,7 +25,8 @@ const post = (n, b) => fetch(`https://v-phone/${n}`, {
 // Icon tints, so the home grid is not eight identical squares.
 const TINT = { phone: 't-green', messages: 't-green', contacts: 't-grey', bank: 't-green',
   garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey',
-  map: 't-blue', music: 't-green', house: 't-blue', shield: 't-dark', calc: 't-dark' };
+  map: 't-blue', music: 't-green', house: 't-blue', shield: 't-dark', calc: 't-dark',
+  store: 't-blue' };
 
 // ══ State ══════════════════════════════════════════════════════
 let S = {};             // strings
@@ -37,6 +38,8 @@ let thread = null;
 let dialed = '';
 let page = 0;
 let notifs = [];        // lock-screen stack
+let recents = [];       // app ids, most recently opened first
+let available = [];     // what the operator permits; the store lists these
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -127,6 +130,8 @@ function flipPage(dir) {
 // what makes opening an app feel like iOS rather than a page swap.
 function enterApp(a, tile) {
   openApp = a; thread = null;
+  // Most recent first, no duplicates. This is the switcher's whole model.
+  recents = [a.id].concat(recents.filter((id) => id !== a.id)).slice(0, 8);
   const app = byId('app');
   if (tile) {
     const r = tile.getBoundingClientRect();
@@ -365,11 +370,20 @@ RENDER.garage = async () => {
 // ── Wallet ─────────────────────────────────────────────────────
 RENDER.wallet = async () => {
   loading();
+  // The card is v-banking's, not the phone's: it mints the number and it is the thing
+  // one player hands another instead of a citizen id.
+  const card = await post('card');
   const d = await post('app', { app: 'wallet' });
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'wallet')); return; }
   const list = Array.isArray(d) ? d : (d.licenses || []);
-  if (!list.length) { body(UI.empty(L('ph.no_licenses'), 'wallet')); return; }
-  body(UI.group(list.map((l) => UI.row({
+  const cardHtml = (card && card.ok)
+    ? '<div class="bankcard"><div class="brand"><span>FLEECA</span><span class="chip"></span></div>' +
+      '<div class="num">' + esc(card.card || '') + '</div>' +
+      '<div class="foot"><span>' + esc(card.holder || '') + '</span>' +
+      '<span class="bal">' + esc(money(card.bank)) + '</span></div></div>'
+    : '';
+  if (!list.length) { body(cardHtml + UI.empty(L('ph.no_licenses'), 'wallet')); return; }
+  body(cardHtml + UI.group(list.map((l) => UI.row({
     icon: 'wallet', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
     subtitle: l.issuer || '', value: l.held ? L('ph.lic_held') : L('ph.lic_none'),
     tone: l.held ? 'pos' : '',
@@ -413,7 +427,11 @@ RENDER.settings = () => {
       '<span>' + esc(L('ph.glass_tinted')) + '</span></div>' +
       '<input type="range" id="glass" min="0" max="100" step="1" value="' + (p.glass ?? 55) + '" />' +
     '</div>' +
-    '<div class="groupfoot">' + esc(L('ph.glass_hint')) + '</div>'
+    '<div class="groupfoot">' + esc(L('ph.glass_hint')) + '</div>' +
+    UI.group((state.apps || []).map((a) => UI.row({
+      icon: a.icon, title: L(a.label),
+      value: p.actionApp === a.id ? L('ph.on') : '', data: { act: a.id },
+    })), { header: L('ph.action_button'), footer: L('ph.action_hint') })
   );
   const gl = byId('glass');
   if (gl) {
@@ -434,6 +452,11 @@ RENDER.settings = () => {
     if (r.dataset.w) {
       const res = await post('prefs', { wallpaper: r.dataset.w });
       if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+    } else if (r.dataset.act) {
+      // Tapping the app already chosen clears it, so there is a way back to "nothing".
+      const next = (state.prefs || {}).actionApp === r.dataset.act ? '' : r.dataset.act;
+      const res = await post('prefs', { actionApp: next });
+      if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
     } else if (r.dataset.t === 'dnd') {
       const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
       if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
@@ -632,6 +655,211 @@ RENDER.calc = () => {
       return '<button class="ckey ' + e[1] + '" data-k="' + esc(e[0]) + '" type="button">' + e[2] + '</button>';
     }).join('') + '</div>');
   rows('.ckey', (b) => b.addEventListener('click', () => calcPress(b.dataset.k)));
+};
+
+
+// ══ Gestures ═══════════════════════════════════════════════════
+// The phone is driven by a mouse, so a "swipe" is a click-drag. Where the drag STARTS is
+// what decides its meaning, exactly as on the real thing: the bottom edge is the home
+// gesture, the top edge is the shade and the control centre, and everywhere else belongs
+// to whatever is on screen.
+const EDGE = 34;          // how deep an edge zone reaches
+const SWIPE = 46;         // travel before a drag counts as a swipe
+
+let g = null;
+
+function screenPoint(e) {
+  const r = byId('screen').getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
+}
+
+function anyOverlayOpen() {
+  return ['cc', 'shade', 'switcher', 'sheet'].some((id) => byId(id).classList.contains('on'));
+}
+
+function closeOverlays() {
+  ['cc', 'shade', 'switcher'].forEach((id) => byId(id).classList.remove('on'));
+  closeSheet();
+}
+
+byId('screen').addEventListener('pointerdown', (e) => {
+  const p = screenPoint(e);
+  g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
+        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE, fromLeft: p.x < 18 };
+});
+
+byId('screen').addEventListener('pointerup', (e) => {
+  if (!g) return;
+  const p = screenPoint(e);
+  const dx = p.x - g.x0, dy = p.y - g.y0;
+  const held = Date.now() - g.t0;
+  const gg = g; g = null;
+
+  if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;   // a tap, not a swipe
+
+  // Bottom edge, upwards: home. Held for a moment first: the app switcher. That pause is
+  // the whole difference between the two gestures on a real phone.
+  if (gg.fromBottom && dy < -SWIPE) {
+    if (held > 320) openSwitcher(); else { closeOverlays(); goHome(); }
+    return;
+  }
+
+  // Top edge, downwards: left half is the notification shade, right half the control
+  // centre. Same split iOS uses, and it means neither one needs a button.
+  if (gg.fromTop && dy > SWIPE) {
+    if (gg.x0 < gg.w / 2) openShade(); else { byId('cc').classList.add('on'); renderCC(); }
+    return;
+  }
+
+  if (anyOverlayOpen()) { closeOverlays(); return; }
+
+  // Inside an app, a drag in from the left edge goes back, which is the one gesture
+  // people reach for without being told.
+  if (byId('app').classList.contains('on') && gg.fromLeft && dx > SWIPE) {
+    byId('navback').click();
+    return;
+  }
+
+  // On the home screen, sideways moves between pages.
+  if (!byId('home').classList.contains('behind') && !byId('app').classList.contains('on')
+      && Math.abs(dx) > Math.abs(dy)) {
+    flipPage(dx < 0 ? 1 : -1);
+    return;
+  }
+
+  // On the lock screen, up unlocks.
+  if (!byId('lock').classList.contains('out') && dy < -SWIPE) unlock();
+});
+
+// ══ App switcher ═══════════════════════════════════════════════
+function openSwitcher() {
+  const list = recents
+    .map((id) => (state.apps || []).find((a) => a.id === id))
+    .filter(Boolean);
+  if (!list.length) { toast(L('ph.no_recents')); return; }
+
+  byId('cards').innerHTML = list.map((a) =>
+    '<div class="card glass" data-app="' + esc(a.id) + '">' +
+      '<div class="chead"><span class="ic">' + svg(a.icon) + '</span>' +
+      '<b>' + esc(L(a.label)) + '</b></div><div class="cbody"></div></div>').join('') +
+    '<div class="switchhint">' + esc(L('ph.switch_hint')) + '</div>';
+  byId('switcher').classList.add('on');
+
+  [...byId('cards').querySelectorAll('.card')].forEach((c) => {
+    let y0 = null;
+    c.addEventListener('pointerdown', (e) => { y0 = e.clientY; });
+    c.addEventListener('pointerup', (e) => {
+      const flicked = y0 !== null && e.clientY - y0 < -60;
+      y0 = null;
+      if (flicked) {
+        // Flick a card away to close the app, as on a real phone.
+        c.classList.add('gone');
+        recents = recents.filter((id) => id !== c.dataset.app);
+        setTimeout(() => { if (!recents.length) byId('switcher').classList.remove('on'); else openSwitcher(); }, 240);
+        return;
+      }
+      const a = (state.apps || []).find((x) => x.id === c.dataset.app);
+      byId('switcher').classList.remove('on');
+      if (a) enterApp(a, null);
+    });
+  });
+}
+
+// ══ Notification shade ═════════════════════════════════════════
+function openShade() {
+  const d = new Date();
+  byId('shadeclock').textContent =
+    String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  byId('shadedate').textContent =
+    d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
+  byId('shadelist').innerHTML = notifs.length
+    ? notifs.map((n, i) =>
+        '<div class="lnotif glass" style="--i:' + i + '"><span class="lic">' + svg(n.icon) + '</span>' +
+        '<span class="lbody"><span class="lt">' + esc(n.title || '') + '</span>' +
+        '<span class="lb">' + esc(n.body || '') + '</span></span></div>').join('')
+    : '<div class="empty">' + esc(L('ph.no_notifs')) + '</div>';
+  byId('shade').classList.add('on');
+}
+
+// ══ Side buttons ═══════════════════════════════════════════════
+// Real controls, not decoration. Volume moves the volume of whatever v-music says this
+// player may control; if nothing is playing it says so rather than pretending.
+let hudTimer = null;
+
+function hud(icon, label, pct) {
+  const el = byId('hud');
+  el.innerHTML = svg(icon) + '<span>' + esc(label) + '</span>' +
+    (pct === undefined ? '' : '<span class="bar"><i style="width:' + Math.round(pct * 100) + '%"></i></span>');
+  el.classList.add('on');
+  clearTimeout(hudTimer);
+  hudTimer = setTimeout(() => el.classList.remove('on'), 1400);
+}
+
+let volume = 0.5;
+
+async function nudgeVolume(delta) {
+  const d = await post('app', { app: 'music' });
+  const list = (d && d.sources) || [];
+  if (!list.length) { hud('speaker', L('ph.nothing_playing')); return; }
+  const src = list[0];
+  volume = Math.max(0, Math.min(1, (src.volume ?? volume) + delta));
+  hud('speaker', src.title || L('ph.untitled'), volume);
+  await post('music', { id: src.id, action: 'volume', volume });
+}
+
+function wireSideButtons() {
+  // Power: lock and wake, the way the real button behaves.
+  document.querySelector('.btn-side.power').addEventListener('click', () => {
+    if (byId('lock').classList.contains('out')) { closeOverlays(); lockScreen(); }
+    else unlock();
+  });
+  document.querySelector('.btn-side.vol-up').addEventListener('click', () => nudgeVolume(0.1));
+  document.querySelector('.btn-side.vol-down').addEventListener('click', () => nudgeVolume(-0.1));
+
+  // Action button: opens whichever app the player chose in Settings. Unset, it says so
+  // instead of quietly doing nothing.
+  document.querySelector('.btn-side.action').addEventListener('click', () => {
+    const id = (state.prefs || {}).actionApp;
+    const a = id && (state.apps || []).find((x) => x.id === id);
+    if (!a) { hud('settings', L('ph.action_unset')); return; }
+    if (!byId('lock').classList.contains('out')) unlock();
+    closeOverlays();
+    enterApp(a, null);
+  });
+}
+
+// ══ FruitStore ═════════════════════════════════════════════════
+// Two decisions, kept apart: the OPERATOR decides what is available (Editor -> Phone
+// apps), the PLAYER decides what to keep. The store can never conjure an app the operator
+// has not permitted, and it refuses to remove the ones the phone needs to work.
+RENDER.store = () => {
+  const installed = new Set((state.apps || []).map((a) => a.id));
+  const list = (available || []).slice().sort((a, b) => a.slot - b.slot);
+  if (!list.length) { body(UI.empty(L('ph.store_empty'), 'store')); return; }
+
+  body(UI.group(list.map((a) => {
+    const has = installed.has(a.id);
+    return '<div class="row lead" data-app="' + esc(a.id) + '">' +
+      '<span class="ricon">' + svg(a.icon) + '</span>' +
+      '<span class="rmain"><span class="rt">' + esc(L(a.label)) + '</span>' +
+      '<span class="rs">' + esc(a.required ? L('ph.store_required') : (has ? L('ph.store_installed') : L('ph.store_get'))) + '</span></span>' +
+      (a.required ? '' : '<button class="storebtn ' + (has ? '' : 'get') + '" data-act="' +
+        (has ? 'del' : 'get') + '" type="button">' +
+        esc(has ? L('ph.store_delete') : L('ph.store_install')) + '</button>') +
+      '</div>';
+  }), { header: L('ph.store_all'), footer: L('ph.store_hint') }));
+
+  rows('.storebtn', (b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const id = b.closest('.row').dataset.app;
+    const res = await post('install', { app: id, install: b.dataset.act === 'get' });
+    if (!res || res.error) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+    await refresh();
+    available = state.available || available;
+    renderHome();
+    RENDER.store();
+    toast(L(b.dataset.act === 'get' ? 'ph.store_added' : 'ph.store_removed'));
+  }));
 };
 
 
@@ -869,6 +1097,7 @@ window.addEventListener('message', (e) => {
   if (d.action === 'open') {
     S = d.strings || {};
     state = d;
+    available = d.available || d.apps || [];
     call = d.call || null;
     dialed = ''; thread = null; openApp = null; page = 0;
     byId('device').classList.remove('hidden');
@@ -910,4 +1139,5 @@ window.addEventListener('message', (e) => {
   }
 });
 
+wireSideButtons();
 tick();

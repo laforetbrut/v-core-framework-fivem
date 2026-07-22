@@ -76,6 +76,7 @@
     id: 'M3 5h18v14H3zM8 11a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM5 16c.6-2 5-2 6 0M14 9h4M14 13h4',
     calc: 'M5 3h14v18H5zM8 7h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h4',
     trash: 'M4 7h16M9 7V4h6v3M6 7l1 14h10l1-14M10 11v6M14 11v6',
+    store: 'M4 8h16l-1.5 12h-13zM4 8l2-4h12l2 4M9 12a3 3 0 0 0 6 0',
     dot: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
   };
   const FILLED = { phone: 1, messages: 1, hangup: 1, answer: 1, send: 1, star: 1 };

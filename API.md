@@ -262,7 +262,7 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 
 -- v-core - the rest of the registry and the NUI focus bookkeeping
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
-exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
+exports['v-core']:MenuOpened(name, keepInput) / MenuClosed(name) / IsAnyMenuOpen()
 
 -- v-core world policy (client) - what the GAME is allowed to do on its own
 exports['v-core']:SetWorldPolicy(key, value)   -- override a setting for a scripted scene
@@ -304,6 +304,11 @@ exports['v-phone']:RegisterApp(id, { label, icon, page, slot, dock })
 -- Phone.request/emit/storage/notify/badge/toast/title/close/contacts/message/call
 -- see DEVELOPERS.md "Shipping a phone app" and resources/[local]/v-phone-notes
 exports['v-phone']:UnregisterApp(id) / GetApps(src)
+
+-- v-banking (server) - the digital card
+exports['v-banking']:GetCard(src)          -- mints on first use, then stable
+exports['v-banking']:FindByCard(number)    -- citizenid behind a card number
+-- v-banking:transfer accepts a card number as `target` as well as a citizen id
 -- client: exports['v-phone']:IsOpen() / Open() / Close() / GetNumber() / OnCall()
 
 -- v-housing (server)
