@@ -348,6 +348,11 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'properties') {
+    const money = r.tenancy === 'rent' ? fmt(r.rent) + '/j' : fmt(r.price);
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.kind)} · ${esc(money)}` +
+      ` · ${r.slots} ${esc(t('adm.ed_slots'))}${r.garage ? ' · 🚗' : ''}</i>`;
+  }
   if (edDomain === 'nodes') {
     return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
@@ -362,7 +367,7 @@ function edRowTitle(r) {
   if (edDomain === 'cityhall') {
     return `${esc(r.label)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
-  if (edDomain === 'appspots') {
+  if (edDomain === 'appspots' || edDomain === 'properties') {
     return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
   if (edDomain === 'jukebox') {
@@ -520,7 +525,7 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'spawns') ? r.id
+      const id = (edDomain === 'spawns' || edDomain === 'properties') ? r.id
         : (edDomain === 'radio' || edDomain === 'jukebox') ? r.id
         : (edDomain === 'drugs') ? r.key
         : (edDomain === 'charges') ? r.code
@@ -704,6 +709,26 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'properties') {
+    const isNew = !row.id;
+    const opts = (list, sel) => (list || []).map(k =>
+      `<option value="${esc(k)}"${k === sel ? ' selected' : ''}>${esc(k)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span>` +
+        `<input id="ef-pid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_kind'))}</span><select id="ef-kind">${opts(edData.kinds, row.kind)}</select></label>` +
+      // the shell is a base-game interior; the same one serves every property using it
+      `<label class="edf"><span>${esc(t('adm.ed_shell'))}</span><select id="ef-shell">${opts(edData.shells, row.shell)}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_tenancy'))}</span><select id="ef-ten">${opts(edData.tenancies, row.tenancy)}</select></label>` +
+      field(t('adm.ed_price'), 'ef-price', row.price ?? 0, 'number') +
+      field(t('adm.ed_rent'), 'ef-rent', row.rent ?? 0, 'number') +
+      field(t('adm.ed_slots'), 'ef-slots', row.slots ?? 40, 'number') +
+      check(t('adm.ed_hasgarage'), 'ef-gar', row.garage === 1 || row.garage === true) +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'nodes') {
     const kinds = (edData.kinds || []).map(k =>
       `<option value="${esc(k)}"${k === row.kind ? ' selected' : ''}>${esc(k)}</option>`).join('');
@@ -1000,6 +1025,11 @@ function openEdForm(row) {
     st.oninput = () => { st.value = st.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
   }
 
+  if (edDomain === 'properties' && !row.id) {
+    const e = byId('ef-pid');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
+  }
+
   if (edDomain === 'spawns' && !row.id) {
     const e = byId('ef-sid');
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
@@ -1111,6 +1141,13 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'properties') {
+      payload = { id: v('ef-pid'), label: v('ef-label'), kind: v('ef-kind'), shell: v('ef-shell'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  h: parseFloat(v('ef-h')) || 0, tenancy: v('ef-ten'),
+                  price: parseInt(v('ef-price'), 10) || 0, rent: parseInt(v('ef-rent'), 10) || 0,
+                  slots: parseInt(v('ef-slots'), 10) || 40,
+                  garage: ck('ef-gar'), blip: ck('ef-blip'), enabled: ck('ef-en') };
     } else if (edDomain === 'nodes') {
       payload = { id: row.id, kind: v('ef-kind'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

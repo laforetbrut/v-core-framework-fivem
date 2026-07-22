@@ -98,10 +98,10 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 
 ## v-world - admin-editable content
 
-The single owner of every content table. **27 domains**: `blips`, `shops`, `jobs`,
+The single owner of every content table. **28 domains**: `blips`, `shops`, `jobs`,
 `gangs`, `items`, `recipes`, `clothstores`, `clothcats`, `garages`, `rentals`, `stations`,
 `mechshops`, `dealers`, `vehcat`, `licenses`, `turfs`, `charges`, `drugs`, `radio`,
-`jukebox`, `nodes`, `benches`, `spawns`, `cityhall`, `appspots`, `factions` (treasuries) and `uitheme` (per-module themes).
+`jukebox`, `nodes`, `benches`, `spawns`, `cityhall`, `appspots`, `properties`, `factions` (treasuries) and `uitheme` (per-module themes).
 
 ```lua
 exports['v-world']:IsReady()
@@ -288,6 +288,12 @@ exports['v-core']:SetModuleEnabled(name, bool) -- a real resource start/stop
 exports['v-core']:GetRegistry()                -- modules, services, hooks, events, commands
 exports['v-core']:NoteEvent(event, 'emit'|'handle')
 exports['v-core']:NoteCommand(name, perm, help)
+
+-- v-housing (server)
+exports['v-housing']:GetProperties() / OwnerOf(id) / HasKey(cid, id)
+exports['v-housing']:IsInside(src)      -- property id, or nil
+exports['v-housing']:StashId(id)        -- the v-inventory stash key for a property
+-- client: exports['v-housing']:IsInside()
 
 -- v-music (server)
 exports['v-music']:GetSources()          -- every live source

@@ -945,6 +945,31 @@ rather than failing somewhere unrelated an hour later, `V.Command` which gates a
 in one call, and the small things every script otherwise rewrites - intervals, timeouts and
 statebag helpers.
 
+### `v-housing` - property, tenancy and motels
+
+**A motel is not a second module.** It is a row with `tenancy = rent`, a smaller stash and
+no garage - the entire difference, and all three are columns. Writing it as its own system
+would have meant two copies of doors, buckets, keys and storage.
+
+**Entering is a teleport into a routing bucket**, derived from the property id. Without
+buckets, two players in "the same" apartment stand in the same room; with them, one
+base-game interior serves every property that uses it and nothing has to be streamed.
+
+**Everything inside is reused, not reimplemented.** Storage is a `v-inventory` stash keyed
+by property. Keys follow the `v-vehicles` model - giveable to somebody standing in front of
+you, revocable, checked server-side, because a key list on the client is not a lock. The
+stash is opened **through v-housing** rather than letting the client name a stash id, since
+a client that could would open anybody's.
+
+**A failed rent locks the door; it never deletes the property.** Deleting somebody's stash
+because they were poor for a day is how a server loses a player, and a locked property can
+be paid off with everything exactly where they left it. Arrears are derived from
+`paid_until` rather than ticked, so a restart loses nothing and a tenant offline for a week
+owes exactly a week.
+
+Deleting a property somebody lives in is refused outright - the row is what their storage
+hangs off. Eleven settings, and **Editor - Properties** for the rest.
+
 ### `v-music` ✅ - boomboxes, jukeboxes and the car stereo
 
 Same rule as `v-3dsound`: the server sends a URL, a start timestamp and a position, and
@@ -1406,8 +1431,6 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
 | `v-forgery` | medium | Fake papers and fake plates. The illegal counterpart of `v-licenses` and the plate registry. |
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
-| `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
-| `v-motel` | medium | Short-term rented rooms. A **tenancy type inside `v-housing`**, not a second housing system. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
 
@@ -1531,21 +1554,6 @@ client HTML is an XSS hole in a NUI), range is re-derived from the sender's posi
 flood limit is a setting rather than a constant. Every message is logged through
 `Core.Log`, because a chat with no audit trail is a chat a staff member cannot moderate.
 
-#### `v-motel` - a tenancy type, not a second housing system
-
-Motels are the cheap end of the property ladder, and the temptation is to write them as
-their own module. They should be **rows in `v-housing`** with a `tenancy` of `rent`:
-
-- Same shells, same routing buckets, same `v-inventory` stash, same key model.
-- **Rented rather than owned**: a recurring debit, and a failure *locks* the room rather
-  than deleting it. Deleting somebody's stash for missing rent is how a server loses a
-  player - the same rule already written for housing.
-- No house garage, a smaller stash, and a shorter lease. That is the entire difference, and
-  all three are columns.
-
-If it turns out to need its own module later, it will be because tenancy grew features
-housing does not want - not because a motel is fundamentally different from a flat.
-
 ### 5.6 Build order and why
 
 1. **`v-vehicles` first.** Garages, dealerships, rentals, police impound and job vehicles all read the
@@ -1561,9 +1569,9 @@ housing does not want - not because a motel is fundamentally different from a fl
 6. ✅ **`v-3dsound` before `v-music` and `v-radio`** - **done**, and both now ship. It is a
    primitive that five modules want; building any of them first would have meant building it
    five times.
-7. **`v-motel` with `v-housing`, not after it.** It is a tenancy column, and discovering that
-   after shipping housing means retrofitting rent into a model that assumed ownership.
-8. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
+7. Done - **`v-motel` with `v-housing`, not after it**: it landed as a tenancy column exactly
+   as planned rather than a second module.
+8. Done - **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
    existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
    reason to exist on the illegal side, and it needs the police module that now ships. Building
    housing first would mean shipping it twice.
