@@ -7,8 +7,10 @@
 > **Vous écrivez un nouveau script ?** Commencez par [DEVELOPERS.md](DEVELOPERS.md) :
 > une ligne de manifest remplace tout le passe-plat décrit ici.
 
-Every export, callback and event the framework exposes. Generated against the source, so
-what is listed here exists.
+Every export, callback and event a script outside the framework would reach for. Checked
+against the source, so **everything listed here exists**; a handful of internal helpers in
+`v-appearance`, `v-clothing` and `v-vehicleshop` are deliberately left out, and the source
+is the authority if you need them.
 
 **Three permission concepts, never interchangeable:**
 
@@ -201,6 +203,57 @@ exports['v-factions']:Withdraw(name, kind, amount, reason, byCid)
 exports['v-factions']:GetTransactions(name, kind, limit)
 exports['v-factions']:TrySalary(name, kind, amount, cid)  -- nil = not on treasury pay, true/false = paid or not
 exports['v-factions']:ListFactions(kind)
+
+-- v-world (server) - read the admin-editable world content. Everything the Editor
+-- manages is readable, so a third-party script never needs its own copy of a shop list.
+exports['v-world']:IsReady()
+exports['v-world']:GetBlips() / GetShopLocations() / GetJobs() / GetGangs()
+exports['v-world']:GetItems() / GetRecipes() / GetClothStores() / GetClothCategories()
+exports['v-world']:GetGarages() / GetRentals() / GetStations() / GetMechShops()
+exports['v-world']:GetDealers() / GetVehicleCatalogue() / GetLicenseTypes()
+exports['v-world']:GetTurfs() / GetCharges() / GetUiThemes()
+
+-- v-vehicles - ownership, keys and the showroom
+exports['v-vehicles']:GetOwned(src) / GetOwnedByCid(cid) / GetVehicle(plate)
+exports['v-vehicles']:IsOwner(cid, plate) / IsLive(plate)
+exports['v-vehicles']:HasKeys(src, plate) / GiveKeys(src, plate) / RemoveKeys(src, plate)
+exports['v-vehicles']:SpawnOwned(src, plate, coords, heading)   -- the ONLY legitimate spawn path
+exports['v-vehicles']:DespawnOwned(plate, data, state)
+exports['v-vehicles']:CreateOwned(cid, model, garage, props)
+exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage) / SetFuel(veh, n)
+exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
+-- client: HasKeysLocal(plate), IsBuckled(), and the showroom
+--   OpenPreview / ClosePreview / RotatePreview / ZoomPreview / IsPreviewOpen
+
+-- v-fuel (client)
+exports['v-fuel']:IsElectric(veh) / GetFuelType(veh) / GetTankSize(veh)
+-- server: GetStations(), GetTypes(), GetElectricModels(), GetBatteryHealth(plate),
+--         GetUsableCapacity(nominal, plate)
+
+-- v-mechanic
+exports['v-mechanic']:GetShops()                    -- server
+exports['v-mechanic']:GetLocalParts(plate) / GetMileage(plate) / ScanNearby()   -- client
+
+-- v-target (client) - every option table is filtered by job and permission
+exports['v-target']:AddGlobalPlayer(options) / AddGlobalPed(options)
+exports['v-target']:AddGlobalVehicle(options) / AddGlobalObject(options)
+exports['v-target']:AddModel(models, options) / AddEntity(netId, options)
+exports['v-target']:AddBoxZone(name, coords, size, options)
+exports['v-target']:AddSphereZone(name, coords, radius, options)
+exports['v-target']:RemoveZone(name)
+
+-- v-licenses (server) - the rest of the sanction surface
+exports['v-licenses']:Suspend(cid, key) / Reinstate(cid, key)
+
+-- v-status (server)
+exports['v-status']:Heal(src) / SetSick(src, level)
+
+-- v-notify (client)
+exports['v-notify']:Show({ type =, title =, message =, duration = })
+
+-- v-core - the rest of the registry and the NUI focus bookkeeping
+exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
+exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
 -- v-police (server)
 exports['v-police']:IsCop(src)          -- job + duty, not a permission tier

@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
-[![Modules](https://img.shields.io/badge/modules-25-e8a33d.svg)](ARCHITECTURE.md)
+[![Modules](https://img.shields.io/badge/modules-30-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 25 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 30 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -56,10 +56,11 @@ in-game** - never by editing Lua on a live server.
 - **Configurable loading screen** - `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
   split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
   toggleable, and all copy + tips in one place.
-- **In-game content editor** - the admin panel creates, edits and deletes **map blips, store locations,
-  jobs & grades, items, craft recipes, clothing stores & wearable slots, garages, fuel stations,
-  mechanic shops, dealerships, the vehicle catalogue and licence types**, backed by `v-world`.
-  Changes apply **live**, no restart.
+- **In-game content editor** - **19 domains** the admin panel creates, edits and deletes without a
+  restart: map blips, store locations, shops, jobs & grades, gangs & ranks, items, craft recipes,
+  clothing stores & wearable slots, garages, rental points, fuel stations, mechanic shops, dealerships,
+  the vehicle catalogue, licence types, **gang territories**, **the penal code**, **faction treasuries**
+  and **per-module themes**. All backed by `v-world`, all applied **live**.
 - **Module registry & settings** - every module declares its tunables to `v-core`; the admin panel's
   **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
   adds `v_module 'yes'` to its manifest and appears there too - see [DEVELOPERS.md](DEVELOPERS.md).
@@ -101,7 +102,22 @@ in-game** - never by editing Lua on a live server.
   revocation, expiry and demerit points; the single source of truth for character capabilities.
 - **`v-cityhall`** - the city hall job desk: apply for any position an admin has left open, or resign.
   Whitelisted jobs (police, EMS, …) never show up here - they are handed out by their own chain of command.
-- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** · **`v-notify`**
+- **`v-rentals`** - short-term hire at four counters: a deposit and a fee up front, a temporary
+  `RENT###` plate and a timer. Return it in time and the deposit comes back. A rental never creates an
+  ownership row, which is the single rule that separates a hire from a free car.
+- **`v-factions`** - one engine for legal factions and illegal ones: they differ by which table holds
+  their definition, `jobs` or `gangs`, and by nothing else. Membership, ranks, and a **treasury that is a
+  real account with its own audit trail** rather than a number in a config. Salaries can be paid out of it.
+- **`v-bossmenu`** (F6) - the panel a faction leader needs: members, ranks, hiring, dismissal, treasury
+  and payroll. **Gated on rank, not on admin permission** - staff are not bosses.
+- **`v-gangs`** - territory with capture and influence. Influence belongs to whoever holds the turf and a
+  rival *wears it down* rather than taking it, so a contested turf is a fight instead of a race. Unheld
+  influence decays: a turf has to be held, not taken once.
+- **`v-police`** - cuffs, escort, search, seizure, charges, fines, jail and an MDT (record, warrants,
+  licences, vehicles). **Police is a job, not a permission.** The penal code is data - 21 charges with
+  fine, jail time and licence points, all editable in-game.
+- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (vitals, money,
+  compass, square minimap and a vehicle cluster with fuel, engine and odometer) · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
 - **Economy loops** - legal: gather → craft → sell. Illegal: grow → process → deal → launder.
 
@@ -163,7 +179,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 25 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 30 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -200,9 +216,11 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **Écran de chargement configurable** - `v-loadscreen/html/config.js` : **7 dispositions** (centre,
   gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
   effet activable, et tous les textes + astuces au même endroit.
-- **Éditeur de contenu en jeu** - le menu admin crée, modifie et supprime **blips, boutiques, métiers &
-  grades, items, recettes de craft, boutiques de vêtements & emplacements, garages, stations-service,
-  ateliers, concessions, catalogue véhicules et types de licence**, adossé à `v-world`. À chaud, sans restart.
+- **Éditeur de contenu en jeu** - **19 domaines** que le menu admin crée, modifie et supprime sans
+  redémarrage : blips, boutiques, métiers & grades, gangs & rangs, items, recettes de craft, boutiques de
+  vêtements & emplacements, garages, points de location, stations-service, ateliers, concessions,
+  catalogue véhicules, types de licence, **territoires de gang**, **code pénal**, **trésoreries de
+  faction** et **thèmes par module**. Adossé à `v-world`, appliqué à chaud.
 - **Registre de modules & réglages** - chaque module déclare ses réglages à `v-core` ; l'onglet
   **Réglages** du menu admin affiche ce qu'on lui donne, il n'a donc jamais à changer. Un script tiers
   ajoute `v_module 'yes'` à son manifest et y apparaît aussi - voir [DEVELOPERS.md](DEVELOPERS.md).
@@ -245,7 +263,23 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
   d'arme…) avec suspension, retrait, expiration et points ; la référence unique des droits du perso.
 - **`v-cityhall`** - le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
   ou démissionner. Les métiers sur whitelist (police, EMS, …) n'y apparaissent jamais.
-- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** · **`v-notify`**
+- **`v-rentals`** - location courte durée à quatre comptoirs : caution et frais prélevés d'avance, plaque
+  temporaire `RENT###` et minuteur. Rendu à temps, la caution revient. Une location ne crée jamais de ligne
+  de propriété : c'est la seule règle qui sépare une location d'une voiture gratuite.
+- **`v-factions`** - un seul moteur pour les factions légales et illégales : elles diffèrent par la table
+  qui porte leur définition, `jobs` ou `gangs`, et par rien d'autre. Adhésion, rangs, et une **trésorerie
+  qui est un vrai compte avec sa piste d'audit** plutôt qu'un nombre dans un fichier. Les salaires peuvent
+  en sortir.
+- **`v-bossmenu`** (F6) - le panneau dont un patron a besoin : membres, rangs, recrutement, renvoi,
+  trésorerie et paie. **Verrouillé sur le rang, pas sur la permission admin** - le staff n'est pas patron.
+- **`v-gangs`** - territoires avec capture et influence. L'influence appartient à celui qui tient le
+  territoire et un rival l'*use* au lieu de la prendre : un territoire contesté est un combat, pas une
+  course. L'influence non défendue décroît, un territoire doit être tenu et pas seulement pris.
+- **`v-police`** - menottes, escorte, fouille, saisie, inculpation, amendes, prison et un MDT (casier,
+  mandats, permis, véhicules). **La police est un métier, pas une permission.** Le code pénal est une
+  donnée : 21 infractions avec amende, prison et points de permis, modifiables en jeu.
+- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (vitales,
+  argent, boussole, minimap carrée et un bloc véhicule avec carburant, moteur et compteur) · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
 - **Boucles économiques** - légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.
 
