@@ -289,8 +289,6 @@ CreateThread(function()
         exports['v-world']:SeedMechShops(Config.Shops)
     end
     rebuildShops()
-    declareSettings()
-    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -344,4 +342,12 @@ end
 
 AddEventHandler('v-core:server:settingChanged', function(mod)
     if mod == 'v-mechanic' then applySettings() end
+end)
+
+-- Own boot thread: `local function` is only visible after its definition, so this block
+-- declares itself rather than being called from a thread higher up the file.
+CreateThread(function()
+    Wait(2600)
+    declareSettings()
+    applySettings()
 end)
