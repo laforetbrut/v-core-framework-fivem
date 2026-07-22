@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-gangs'
 author 'vyrriox'
 description 'v-gangs — gang territory: capture, influence and turf ownership (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

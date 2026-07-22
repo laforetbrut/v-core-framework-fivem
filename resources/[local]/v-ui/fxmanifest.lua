@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-ui'
 author 'vyrriox'
 description 'v-ui — EMBER design system: the single source of truth for every NUI in the framework'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

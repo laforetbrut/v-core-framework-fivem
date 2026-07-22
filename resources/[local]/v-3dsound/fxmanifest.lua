@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-3dsound'
 author 'vyrriox'
 description 'v-3dsound — positional sound primitive: play a sound at a place, heard by everyone near it (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

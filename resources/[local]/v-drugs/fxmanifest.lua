@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-drugs'
 author 'vyrriox'
 description 'v-drugs — plantations, street dealing, demand and police heat (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
