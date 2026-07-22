@@ -1287,3 +1287,21 @@ input { font: inherit; }
 .camflip { width: 46px; height: 46px; border-radius: 50%; background: rgba(60,60,67,.7);
   display: flex; align-items: center; justify-content: center; color: #fff; }
 .camflip svg { width: 22px; height: 22px; }
+
+/* ── Social account flow (sign-up, login) ──────────────────────── */
+.accthead { display: flex; flex-direction: column; align-items: center; text-align: center;
+  padding: 14px 0 18px; }
+.accthead .ic { width: 72px; height: 72px; border-radius: 17px; box-shadow: 0 8px 20px rgba(0,0,0,.28); }
+.acctname { font-size: 22px; font-weight: 700; letter-spacing: -.02em; margin-top: 12px;
+  color: var(--app-label); }
+.acctsub { font-size: 13.5px; color: var(--app-label2); margin-top: 3px; }
+.signprog { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--app-tint); margin-bottom: 12px; }
+.linkbtn { display: block; width: 100%; text-align: center; padding: 12px 0 4px;
+  font-size: 14px; font-weight: 600; color: var(--app-tint); background: none; }
+
+/* Display name over the @handle in a post header. */
+.post .pnames { display: flex; flex-direction: column; min-width: 0; line-height: 1.15; }
+.post .pdn { font-size: 14px; font-weight: 700; color: var(--app-label);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.post .pnames .ph { font-size: 12.5px; color: var(--app-label2); }
