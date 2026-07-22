@@ -829,6 +829,35 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-bossmenu` ✅ — the panel a faction leader actually needs
+
+Opens on **F6**, and only for somebody who is a boss of a job or a gang. Three panes over
+one server payload: **members** (rank, online, on duty, promote, dismiss), **hire**, and
+**treasury** (deposit, withdraw, movement history, pay salaries by hand).
+
+**Gated on rank, not on admin permission.** The menu asks `v-factions` who the caller is a
+boss of and re-derives it on every action. An admin is not a boss — giving staff this panel
+is how a framework ends up with two different ways to move the same money.
+
+**Hiring is done to somebody standing in front of you.** The candidate list is built
+server-side from a radius, and the hire call re-derives that list rather than trusting the
+citizen id in the payload — otherwise the menu would be a way to recruit anyone on the
+server from anywhere on the map.
+
+**The panel owns no data and re-reads instead of guessing.** Membership and the treasury
+both live in `v-factions`; every action posts and the whole state is re-read from the
+answer, so the UI can never drift from what the server actually did. The rank dropdown only
+offers grades at or below the caller's own — the server enforces it, and offering more
+would just be a button that always fails.
+
+**Deposit takes the money first, then credits the treasury**, refunding on failure. The
+other order mints money whenever the treasury write fails. Manual salary payment withdraws
+**once per member** so a treasury that runs dry pays the first few rather than failing the
+whole run and paying nobody.
+
+Eight settings, each action independently switchable: hire, dismiss, rank changes, treasury
+movement, manual salaries, hiring radius, salary multiplier, and whether gangs get a menu.
+
 ### `v-factions` ✅ — membership, ranks and treasuries
 
 One engine for legal factions (PD, EMS, mechanics) and illegal ones (gangs, mafias). They
@@ -1001,7 +1030,7 @@ spawn path** — nothing else in the framework is allowed to `CreateVehicle` an 
 | # | Module | Depends on | Responsibility |
 |---|--------|-----------|----------------|
 | 5 | ✅ **`v-factions`** — the shared org layer (**shipped**) | `v-jobs`, `v-world` | One engine for **legal factions** (PD, EMS, mechanics, taxi, news) and **illegal ones** (gangs, mafias) — they differ by data, not by code. Owns membership, ranks (reusing `jobs.grades`), a **faction treasury** (a real account with its own transaction log, not a number in a config), owned garages/stashes/vehicles, and a territory concept for the illegal side. `gangs` already exists in the schema and is still empty. |
-| 6 | **`v-bossmenu`** — the boss/patron panel | `v-factions`, `v-banking` | The management UI a faction leader actually needs, gated on **rank**, not on admin permission: **hire / fire / promote / demote** members, see who is on duty, **deposit & withdraw from the treasury** with a full audit trail, **pay salaries**, manage the faction's **garage and stash access per rank**, and set the recruitment state. Every action is server-verified against the caller's rank and logged — a boss menu that trusts the client is a money printer. |
+| 6 | ✅ **`v-bossmenu`** — the boss/patron panel (**shipped**) | `v-factions`, `v-banking` | The management UI a faction leader actually needs, gated on **rank**, not on admin permission: **hire / fire / promote / demote** members, see who is on duty, **deposit & withdraw from the treasury** with a full audit trail, **pay salaries**, manage the faction's **garage and stash access per rank**, and set the recruitment state. Every action is server-verified against the caller's rank and logged — a boss menu that trusts the client is a money printer. |
 | 7 | **`v-gangs`** — the illegal org flavour | `v-factions` | What `v-factions` doesn't share: **territories** (capture, influence decay, contested state), turf-gated drug sales, gang stashes and gang wars. Reuses the faction engine for membership and the treasury. |
 | 8 | **`v-police`** | `v-factions`, `v-vehicles` | Cuffs, escort, search (reusing `v-inventory`'s `GetSearchable`, which already never exposes the hidden pocket), **evidence**, an MDT (records, warrants, BOLOs), fines, jail, and **impound** through `v-garages`. |
 

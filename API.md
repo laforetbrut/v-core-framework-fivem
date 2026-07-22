@@ -202,6 +202,10 @@ exports['v-factions']:GetTransactions(name, kind, limit)
 exports['v-factions']:TrySalary(name, kind, amount, cid)  -- nil = not on treasury pay, true/false = paid or not
 exports['v-factions']:ListFactions(kind)
 
+-- v-bossmenu owns no data: it is a rank gate over v-factions, and exposes no exports.
+-- Open it from your own script with the same callbacks the NUI uses, e.g.
+--   Core.TriggerCallback('v-bossmenu:open', function(data) end)
+
 -- v-rentals (server)
 exports['v-rentals']:GetActive(cid)   -- the caller's live hire row, or nil
 exports['v-rentals']:IsRental(plate)  -- true if this plate is a live hire, not an owned car

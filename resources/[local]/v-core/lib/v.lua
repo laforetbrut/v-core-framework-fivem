@@ -110,10 +110,14 @@ function V.Use(resource)
         __index = function(_, method)
             return function(...)
                 if GetResourceState(resource) ~= 'started' then return nil end
-                local ok, res = pcall(function(...)
+                -- table.pack, not `local ok, res`: several exports in this framework
+                -- return (value, reason) and a two-name capture silently drops the
+                -- reason, leaving the caller to report "unknown error" forever.
+                local r = table.pack(pcall(function(...)
                     return exports[resource][method](exports[resource], ...)
-                end, ...)
-                if ok then return res end
+                end, ...))
+                local ok, res = r[1], r[2]
+                if ok then return table.unpack(r, 2, r.n) end
                 print(('[v] %s: exports[\'%s\']:%s() failed on the %s side — %s')
                     :format(V.name, resource, method, isServer and 'server' or 'client', res))
                 return nil

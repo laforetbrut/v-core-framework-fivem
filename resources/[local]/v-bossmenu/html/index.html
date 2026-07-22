@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+  <script src="https://cfx-nui-v-ui/theme.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="boss" class="boss-overlay hidden">
+    <div class="panel v-panel v-chamfer">
+      <div class="panel__head">
+        <div>
+          <div class="ttl" id="b-title">Boss menu</div>
+          <div class="sub" id="b-sub"></div>
+        </div>
+        <div class="head-right">
+          <span class="chip" id="b-balance"></span>
+          <button class="x" id="b-close" aria-label="Close">&times;</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab on" data-tab="members" id="tb-members">Members</button>
+        <button class="tab" data-tab="hire" id="tb-hire">Hire</button>
+        <button class="tab" data-tab="treasury" id="tb-treasury">Treasury</button>
+      </div>
+
+      <div class="panel__body v-scroll">
+        <section class="pane" id="pane-members"></section>
+        <section class="pane hidden" id="pane-hire"></section>
+        <section class="pane hidden" id="pane-treasury"></section>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
