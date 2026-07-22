@@ -6,8 +6,14 @@ dependency — it is not an ESX or QBCore add-on pack, it *is* the framework.
 
 Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
 
-> **Status:** in active development on `main`. See [CHANGELOG.md](CHANGELOG.md) for what shipped and
-> [ARCHITECTURE.md](ARCHITECTURE.md) for what each module actually does today and what is left.
+> **Status:** in active development on `main`.
+>
+> | Document | What it is |
+> |---|---|
+> | **[API.md](API.md)** | Every export, callback and event — the reference |
+> | **[INTEGRATION.md](INTEGRATION.md)** | How to plug your own script in |
+> | **[ARCHITECTURE.md](ARCHITECTURE.md)** | What each module does today, and the roadmap |
+> | **[CHANGELOG.md](CHANGELOG.md)** | What shipped |
 
 ## Why it exists
 
@@ -22,8 +28,14 @@ in-game** — never by editing Lua on a live server.
   (those are Legacy build numbers and lock Enhanced clients out). CEF 140-safe NUI (`https://cfx-nui-…`).
 - **`v-core`** — DB-persistent players, server/client callback system, permission tiers, structured audit
   log, multi-character selection. Every module goes through it.
-- **`v-ui` "EMBER" design system** — one canonical `theme.css` (dark glass, dominant orange) that all 13
-  NUI pages share, so nothing looks bolted on.
+- **`v-ui` design system, fully themeable** — one canonical stylesheet every NUI page shares, driven by
+  `v-ui/config.lua`: **6 colour presets**, an accent override the whole highlight family is derived
+  from, corner roundness, density, animation speed (0 disables motion), panel opacity and font scale.
+  Changing any of it in **Admin -> Settings -> Interface** restyles **every module at once** — no
+  module hardcodes a colour.
+- **Configurable loading screen** — `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
+  split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
+  toggleable, and all copy + tips in one place.
 - **In-game content editor** — the admin panel creates, edits and deletes **map blips, store locations,
   jobs & grades, items, craft recipes, clothing stores & wearable slots, garages, fuel stations,
   mechanic shops, dealerships, the vehicle catalogue and licence types**, backed by `v-world`.
@@ -133,8 +145,14 @@ externe — ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framew
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
 
-> **État :** en développement actif sur `main`. Voir [CHANGELOG.md](CHANGELOG.md) pour ce qui est livré
-> et [ARCHITECTURE.md](ARCHITECTURE.md) pour ce que fait réellement chaque module et ce qu'il reste.
+> **État :** en développement actif sur `main`.
+>
+> | Document | Contenu |
+> |---|---|
+> | **[API.md](API.md)** | Tous les exports, callbacks et événements — la référence |
+> | **[INTEGRATION.md](INTEGRATION.md)** | Comment brancher ton propre script |
+> | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ce que fait chaque module, et la roadmap |
+> | **[CHANGELOG.md](CHANGELOG.md)** | Ce qui est livré |
 
 ## Pourquoi
 
@@ -150,8 +168,14 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
   NUI compatible CEF 140 (`https://cfx-nui-…`).
 - **`v-core`** — joueurs persistés en BDD, système de callbacks serveur/client, paliers de permission,
   log d'audit structuré, sélection multi-personnages. Tous les modules passent par lui.
-- **Design system `v-ui` « EMBER »** — un `theme.css` canonique (verre sombre, orange dominant) partagé
-  par les 13 pages NUI, pour que rien n'ait l'air rapporté.
+- **Design system `v-ui`, entièrement thémable** — une feuille de style canonique partagée par toutes
+  les pages NUI, pilotée par `v-ui/config.lua` : **6 presets de couleurs**, un accent d'où toute la
+  famille de surbrillance est dérivée, arrondi des angles, densité, vitesse d'animation (0 = aucune),
+  opacité des panneaux, échelle de police. Changer l'un d'eux dans **Admin -> Réglages -> Interface**
+  restyle **tous les modules d'un coup** — aucun module ne code une couleur en dur.
+- **Écran de chargement configurable** — `v-loadscreen/html/config.js` : **7 dispositions** (centre,
+  gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
+  effet activable, et tous les textes + astuces au même endroit.
 - **Éditeur de contenu en jeu** — le menu admin crée, modifie et supprime **blips, boutiques, métiers &
   grades, items, recettes de craft, boutiques de vêtements & emplacements, garages, stations-service,
   ateliers, concessions, catalogue véhicules et types de licence**, adossé à `v-world`. À chaud, sans restart.

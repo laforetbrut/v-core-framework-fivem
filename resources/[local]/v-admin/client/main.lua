@@ -371,3 +371,14 @@ AddEventHandler('onResourceStop', function(res)
     SetEntityVisible(ped, true, false)
     for _, b in pairs(espBlips or {}) do if DoesBlipExist(b) then RemoveBlip(b) end end
 end)
+
+-- ── Theme ──────────────────────────────────────────────────────
+-- A NUI page can only be messaged by the resource that owns it, so v-ui cannot reach this
+-- one directly: it publishes a version and each module forwards it into its own page.
+local function pushTheme()
+    if GetResourceState('v-ui') ~= 'started' then return end
+    SendNUIMessage({ action = 'v-ui:theme', version = exports['v-ui']:Version() })
+end
+
+AddEventHandler('v-ui:client:themeChanged', function() pushTheme() end)
+CreateThread(function() Wait(4000); pushTheme() end)

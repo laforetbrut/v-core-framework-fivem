@@ -280,3 +280,58 @@ html, body { width:100%; height:100%; overflow:hidden; background:var(--v-bg-900
     transition-duration:.001ms !important;
   }
 }
+
+/* ══════════════════════════════════════════════════════════════
+   Layouts — selected by `layout` in config.js (body gets .lay-<name>)
+   ══════════════════════════════════════════════════════════════ */
+.bg-image { position:fixed; inset:0; background-size:cover; background-position:center;
+  display:none; z-index:0; }
+.bg-overlay { background:rgba(0,0,0,var(--bg-dim, .55)) !important; }
+
+/* Ken Burns: a slow push on the background so a still image is not dead. */
+@keyframes ls-kb { from { transform:scale(1.0); } to { transform:scale(1.12); } }
+.fx-kenburns .bg-video, .fx-kenburns .bg-image { animation:ls-kb 40s ease-out forwards; }
+
+/* Effect switches */
+body:not(.fx-grain) .grain { display:none; }
+body:not(.fx-vignette) .vignette { display:none; }
+body:not(.fx-scan) .scan { display:none; }
+body:not(.fx-brackets) .brk { display:none; }
+
+/* Motion off: an accessibility option, and frames back on a weak client. */
+.no-motion *, .no-motion *::before, .no-motion *::after {
+  animation:none !important; transition:none !important; }
+
+/* ── centre (default): brand above a centred panel ── */
+.lay-centre .stage { justify-content:center; align-items:center; text-align:center; }
+.lay-centre .loader { width:min(560px, 82vw); }
+
+/* ── left / right: everything stacked in one bottom corner ── */
+.lay-left .stage, .lay-right .stage {
+  justify-content:flex-end; align-items:flex-start; text-align:left;
+  padding:0 0 14vh 7vw; }
+.lay-right .stage { align-items:flex-end; text-align:right; padding:0 7vw 14vh 0; }
+.lay-left .loader, .lay-right .loader { width:min(480px, 78vw); }
+
+/* ── split: brand left, panel right, both vertically centred ── */
+.lay-split .stage { flex-direction:row; align-items:center; justify-content:space-between;
+  padding:0 7vw; gap:5vw; }
+.lay-split .brand { text-align:left; flex:1; }
+.lay-split .loader { width:min(460px, 45vw); flex:none; }
+
+/* ── bottom / top: a slim full-width bar ── */
+.lay-bottom .stage, .lay-top .stage {
+  justify-content:flex-end; align-items:stretch; padding:0 5vw 6vh; gap:14px; }
+.lay-top .stage { justify-content:flex-start; padding:6vh 5vw 0; }
+.lay-bottom .brand, .lay-top .brand { text-align:left; }
+.lay-bottom .mark, .lay-top .mark { font-size:clamp(28px, 4vw, 52px); }
+.lay-bottom .loader, .lay-top .loader { width:100%; }
+
+/* ── card: one compact contained card ── */
+.lay-card .stage { justify-content:center; align-items:center; }
+.lay-card .brand { margin-bottom:0; padding:22px 26px 0; }
+.lay-card .loader { width:min(420px, 80vw); }
+.lay-card .brand, .lay-card .loader {
+  background:var(--v-panel); border:1px solid var(--v-line); }
+.lay-card .brand { border-bottom:0; border-radius:var(--v-r-xl) var(--v-r-xl) 0 0; }
+.lay-card .loader { border-radius:0 0 var(--v-r-xl) var(--v-r-xl); margin-top:0; }
