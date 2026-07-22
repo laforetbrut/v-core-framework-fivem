@@ -28,6 +28,22 @@ Config.BlipPresets = {
     { label = 'Job',           sprite = 351 },
 }
 
+-- Item editor pickers -----------------------------------------------------
+-- Category drives the slot accent colour in the inventory NUI.
+Config.ItemCategories = {
+    'general', 'food', 'drinks', 'medical', 'weapons', 'tools', 'materials',
+    'ingredients', 'drugs', 'smokes', 'tech', 'jewelry', 'mechanic', 'money', 'misc',
+}
+
+-- itype drives the USE behaviour in v-inventory (food heals hunger, weapon equips, …).
+Config.ItemTypes = {
+    'misc', 'food', 'drink', 'medical', 'weapon', 'ammo', 'attachment',
+    'armor', 'backpack', 'tool', 'material', 'drug', 'money',
+}
+
+-- Craft stations recipes can be attached to (must match v-crafting's station keys).
+Config.CraftStations = { 'workbench', 'ammo', 'cooking', 'electronics', 'recycler', 'druglab' }
+
 -- Common blip colours for the editor picker (label -> colour id).
 Config.BlipColors = {
     { label = 'White',  color = 0 },  { label = 'Red',    color = 1 },

@@ -136,4 +136,74 @@ Config.Recipes = {
     { output = 'coke_baggy',        count = 12, time = 6000, station = 'druglab',    inputs = { coke_brick = 1 } },
     { output = 'crack_baggy',       count = 1, time = 4000, station = 'druglab',     inputs = { coke_baggy = 1, baking_soda = 1 } },
     { output = 'meth_baggy',        count = 12, time = 6000, station = 'druglab',    inputs = { meth_brick = 1 } },
+
+    -- ── Extended catalogue ──────────────────────────────────────────────────
+    -- Reaches the items added to the catalogue so nothing in it is unobtainable.
+    -- Seed data only: everything below is editable in-game (v-admin → Editor → Craft).
+
+    -- Refining the new material tier
+    { output = 'steel',             count = 1, time = 5000, station = 'recycler',    inputs = { iron = 2, metal_scrap = 2 } },
+    { output = 'aluminum_sheet',    count = 2, time = 3500, station = 'recycler',    inputs = { aluminum = 2 } },
+    { output = 'titanium',          count = 1, time = 9000, station = 'recycler',    inputs = { steel = 3, aluminum = 2 } },
+    { output = 'carbon_fiber',      count = 1, time = 7000, station = 'recycler',    inputs = { plastic = 4, resin = 1 } },
+    { output = 'leather',           count = 1, time = 4000, station = 'recycler',    inputs = { cloth = 3 } },
+    { output = 'wire',              count = 2, time = 2500, station = 'workbench',   inputs = { copper = 2 } },
+    { output = 'screws',            count = 6, time = 2000, station = 'workbench',   inputs = { steel = 1 } },
+    { output = 'spring',            count = 2, time = 2500, station = 'workbench',   inputs = { steel = 1, wire = 1 } },
+    { output = 'resin',             count = 2, time = 3000, station = 'workbench',   inputs = { plastic = 2, rubber = 1 } },
+    { output = 'kevlar',            count = 1, time = 8000, station = 'workbench',   inputs = { cloth = 4, resin = 2 } },
+
+    -- Hand tools
+    { output = 'hammer',            count = 1, time = 3500, station = 'workbench',   inputs = { steel = 1, wood = 1 } },
+    { output = 'wrench_tool',       count = 1, time = 3500, station = 'workbench',   inputs = { steel = 2 } },
+    { output = 'pliers',            count = 1, time = 3000, station = 'workbench',   inputs = { steel = 1, spring = 1, rubber = 1 } },
+    { output = 'crowbar_tool',      count = 1, time = 4500, station = 'workbench',   inputs = { steel = 3 } },
+    { output = 'handsaw',           count = 1, time = 4000, station = 'workbench',   inputs = { steel = 2, wood = 1 } },
+    { output = 'chisel',            count = 1, time = 2500, station = 'workbench',   inputs = { steel = 1 } },
+    { output = 'multitool',         count = 1, time = 6000, station = 'workbench',   inputs = { steel = 2, spring = 2, screws = 4 } },
+    { output = 'welding_torch',     count = 1, time = 9000, station = 'workbench',   inputs = { steel = 3, rubber = 2, copper = 2 } },
+    { output = 'angle_grinder',     count = 1, time = 9000, station = 'workbench',   inputs = { steel = 3, electronics = 1, lithium_battery = 1 } },
+    { output = 'toolbox',           count = 1, time = 10000, station = 'workbench',  inputs = { hammer = 1, wrench_tool = 1, pliers = 1, screws = 6 } },
+    { output = 'zip_ties',          count = 5, time = 2000, station = 'workbench',   inputs = { plastic = 2 } },
+    { output = 'handcuffs',         count = 1, time = 5000, station = 'workbench',   inputs = { steel = 2, spring = 1, screws = 2 } },
+    { output = 'flashlight',        count = 1, time = 3500, station = 'workbench',   inputs = { aluminum_sheet = 1, battery_9v = 1, glass = 1 } },
+    { output = 'fishing_rod',       count = 1, time = 5000, station = 'workbench',   inputs = { carbon_fiber = 1, wire = 2, spring = 1 } },
+    { output = 'pickaxe',           count = 1, time = 6000, station = 'workbench',   inputs = { steel = 3, wood = 1 } },
+    { output = 'axe',               count = 1, time = 5500, station = 'workbench',   inputs = { steel = 2, wood = 1 } },
+    { output = 'shovel_spade',      count = 1, time = 5000, station = 'workbench',   inputs = { steel = 2, wood = 1 } },
+
+    -- Field medicine
+    { output = 'gauze',             count = 3, time = 2000, station = 'cooking',     inputs = { cloth = 1 } },
+    { output = 'tourniquet',        count = 1, time = 2500, station = 'workbench',   inputs = { cloth = 1, rubber = 1 } },
+    { output = 'splint',            count = 1, time = 3000, station = 'workbench',   inputs = { wood = 1, cloth = 2 } },
+    { output = 'suture_kit',        count = 1, time = 4000, station = 'workbench',   inputs = { wire = 1, cloth = 1, gauze = 1 } },
+
+    -- Electronics bench: the new tech tier
+    { output = 'motherboard',       count = 1, time = 7000, station = 'electronics', inputs = { electronics = 2, copper = 2, wire = 2 } },
+    { output = 'cpu_chip',          count = 1, time = 9000, station = 'electronics', inputs = { electronics = 3, copper = 1 } },
+    { output = 'gpu_card',          count = 1, time = 12000, station = 'electronics',inputs = { motherboard = 1, cpu_chip = 1, aluminum_sheet = 1 } },
+    { output = 'hard_drive',        count = 1, time = 6000, station = 'electronics', inputs = { electronics = 1, aluminum_sheet = 1, magnet = 1 } },
+    { output = 'magnet',            count = 1, time = 4000, station = 'electronics', inputs = { iron = 2, copper = 1 } },
+    { output = 'antenna',           count = 1, time = 3500, station = 'electronics', inputs = { aluminum_sheet = 1, wire = 2 } },
+    { output = 'tablet',            count = 1, time = 11000, station = 'electronics',inputs = { motherboard = 1, glass = 2, lithium_battery = 1, plastic = 2 } },
+    { output = 'gps_unit',          count = 1, time = 7000, station = 'electronics', inputs = { electronics = 2, antenna = 1, glass = 1 } },
+    { output = 'micro_bug',         count = 1, time = 8000, station = 'electronics', inputs = { electronics = 1, wire = 1, battery_9v = 1 } },
+    { output = 'signal_scanner',    count = 1, time = 11000, station = 'electronics',inputs = { electronics = 3, antenna = 2, lithium_battery = 1 } },
+    { output = 'signal_jammer',     count = 1, time = 15000, station = 'electronics',inputs = { signal_scanner = 1, antenna = 2, lithium_battery = 2 } },
+
+    -- Kitchen: the expanded menu
+    { output = 'sandwich',          count = 1, time = 2500, station = 'cooking',     inputs = { bread = 1, cheese = 1, bacon = 1 } },
+    { output = 'hotdog',            count = 1, time = 2500, station = 'cooking',     inputs = { bread = 1, meat = 1 } },
+    { output = 'taco',              count = 2, time = 3000, station = 'cooking',     inputs = { dough = 1, meat = 1, cheese = 1 } },
+    { output = 'burrito',           count = 1, time = 3500, station = 'cooking',     inputs = { dough = 1, meat = 2, cheese = 1 } },
+    { output = 'pizza_slice',       count = 4, time = 5000, station = 'cooking',     inputs = { dough = 2, cheese = 2 } },
+    { output = 'fries',             count = 2, time = 2500, station = 'cooking',     inputs = { potato = 2, butter = 1 } },
+    { output = 'soup',              count = 2, time = 3500, station = 'cooking',     inputs = { meat = 1, water = 2 } },
+    { output = 'steak',             count = 1, time = 4000, station = 'cooking',     inputs = { meat = 2, butter = 1 } },
+    { output = 'pancakes',          count = 2, time = 3500, station = 'cooking',     inputs = { flour = 2, eggs = 2, milk = 1 } },
+    { output = 'ice_cream',         count = 2, time = 3000, station = 'cooking',     inputs = { milk = 2, sugar = 1 } },
+    { output = 'milkshake',         count = 1, time = 2500, station = 'cooking',     inputs = { milk = 2, ice_cream = 1 } },
+    { output = 'lemonade',          count = 2, time = 2500, station = 'cooking',     inputs = { water = 2, sugar = 1, lemon = 1 } },
+    { output = 'iced_tea',          count = 2, time = 2500, station = 'cooking',     inputs = { water = 2, sugar = 1 } },
+    { output = 'fish_fillet',       count = 1, time = 2500, station = 'cooking',     inputs = { fish = 1 } },
 }

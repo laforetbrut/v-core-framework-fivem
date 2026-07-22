@@ -31,6 +31,38 @@ local UseByType = {
     end,
 }
 
+-- Load (or reload) the item catalogue from the DB. Called at boot and again whenever
+-- an admin creates/edits/deletes an item in the panel, so changes apply without a restart.
+function loadItemDefs()
+    ItemDefs = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM items') or {}) do
+        -- oxmysql returns TINYINT(1) as a boolean, so coerce the flags to 0/1 —
+        -- otherwise `stackable == 1` / `usable == 1` silently fail everywhere.
+        r.stackable = (r.stackable == true or r.stackable == 1) and 1 or 0
+        r.usable    = (r.usable == true or r.usable == 1) and 1 or 0
+        if type(r.metadata) == 'string' then r.metadata = json.decode(r.metadata) or {} end
+        r.itype = r.metadata and r.metadata.type    -- weapon / ammo / backpack / armor / food / ...
+        ItemDefs[r.name] = r
+    end
+    -- (Re)bind the type-driven use handlers straight from the DB catalogue, so an item
+    -- an admin just created is immediately usable. Handlers registered by other
+    -- resources (RegisterUsableItem, e.g. v-clothing) use types outside UseByType and
+    -- are therefore never clobbered here.
+    for name, d in pairs(ItemDefs) do
+        if d.usable == 1 and UseByType[d.itype] then
+            local fn = UseByType[d.itype]
+            UsableItems[name] = function(src, item) fn(src, item, ItemDefs[name]) end
+        end
+    end
+end
+
+-- An admin edited the catalogue in the panel -> reload the defs server-side. Clients
+-- receive the refreshed catalogue on their next inventory open (the full state always
+-- carries `defs`), so no extra client event is needed.
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'items' then loadItemDefs() end
+end)
+
 -- ── Item catalogue: seed the DB (INSERT IGNORE) then load defs ──
 CreateThread(function()
     while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
@@ -40,34 +72,19 @@ CreateThread(function()
         updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Seed ONLY (INSERT IGNORE): the `items` table is the source of truth and is
+    -- editable in-game from the admin panel (v-world). Re-applying the Lua values on
+    -- every boot would silently wipe every admin edit. New rows added to
+    -- data/items.lua are still inserted on the next boot because they don't exist yet.
     for _, it in ipairs(InventoryItems or {}) do
         MySQL.insert.await(
-            [[INSERT INTO items (name, label, weight, stackable, usable, category, image, metadata)
-              VALUES (?,?,?,?,?,?,?,?)
-              ON DUPLICATE KEY UPDATE label=VALUES(label), weight=VALUES(weight), stackable=VALUES(stackable),
-                usable=VALUES(usable), category=VALUES(category), image=VALUES(image), metadata=VALUES(metadata)]],
+            [[INSERT IGNORE INTO items (name, label, weight, stackable, usable, category, image, metadata)
+              VALUES (?,?,?,?,?,?,?,?)]],
             { it.name, it.label, it.weight, it.stackable, it.usable, it.category, it.image,
               json.encode({ desc = it.desc, type = it.itype, rarity = it.rarity, attach = it.attach }) })
     end
 
-    local rows = MySQL.query.await('SELECT * FROM items') or {}
-    for _, r in ipairs(rows) do
-        -- oxmysql returns TINYINT(1) as a boolean, so coerce the flags to 0/1 —
-        -- otherwise `stackable == 1` / `usable == 1` silently fail everywhere.
-        r.stackable = (r.stackable == true or r.stackable == 1) and 1 or 0
-        r.usable    = (r.usable == true or r.usable == 1) and 1 or 0
-        if type(r.metadata) == 'string' then r.metadata = json.decode(r.metadata) or {} end
-        r.itype = r.metadata and r.metadata.type    -- weapon / ammo / backpack / armor / food / ...
-        ItemDefs[r.name] = r
-    end
-
-    -- register use handlers by catalogue type
-    for _, it in ipairs(InventoryItems or {}) do
-        if it.usable == 1 and UseByType[it.itype] then
-            local fn = UseByType[it.itype]
-            UsableItems[it.name] = function(src, item) fn(src, item, ItemDefs[it.name]) end
-        end
-    end
+    loadItemDefs()
 end)
 
 -- ── Container helpers ──────────────────────────────────────────
