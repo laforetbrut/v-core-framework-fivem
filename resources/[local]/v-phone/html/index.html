@@ -19,11 +19,14 @@
 
       <div class="screen" id="screen">
         <div class="wallpaper" id="wallpaper"></div>
+        <!-- Brightness is a real dimming layer over everything, driven by the CC slider. -->
+        <div class="dim" id="dim"></div>
 
         <!-- Status bar -->
         <div class="status" id="status">
           <span id="clock">00:00</span>
           <span class="sright">
+            <svg class="apmode hidden" id="apmode" viewBox="0 0 24 24" fill="currentColor"><path d="M12 3c.9 0 1.4 1 1.4 2.2v4.1l7.1 4.2v2l-7.1-2.1v4l2.1 1.6v1.6L12 19.6 8.5 20.8v-1.6l2.1-1.6v-4L3.5 15.5v-2l7.1-4.2V5.2C10.6 4 11.1 3 12 3Z"/></svg>
             <svg id="bars" viewBox="0 0 20 14" fill="currentColor"><rect data-b="1" x="0" y="9" width="3" height="5" rx="1"/><rect data-b="2" x="5" y="6.5" width="3" height="7.5" rx="1"/><rect data-b="3" x="10" y="3.5" width="3" height="10.5" rx="1"/><rect data-b="4" x="15" y="0" width="3" height="14" rx="1"/></svg><span class="nosvc hidden" id="nosvc">SOS</span>
             <svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 5.2a11 11 0 0 1 16 0M4.8 8.2a7 7 0 0 1 10.4 0"/><circle cx="10" cy="11.6" r="1.2" fill="currentColor" stroke="none"/></svg>
             <span class="battery" id="battery"></span><span class="battpct" id="battpct"></span>
@@ -37,6 +40,11 @@
             <span class="idot" id="islandIcon"></span>
             <span class="itxt"><span class="it1" id="islandT1"></span><span class="it2" id="islandT2"></span></span>
             <span class="iwave"><i></i><i></i><i></i><i></i></span>
+          </div>
+          <!-- The notification that grows out of the black pill, iOS 27 style. -->
+          <div class="inotif" id="inotif">
+            <span class="inic" id="inicon"></span>
+            <span class="intxt"><span class="int1" id="inTitle"></span><span class="int2" id="inBody"></span></span>
           </div>
         </div>
 
@@ -104,6 +112,13 @@
         <section class="shade" id="shade">
           <div class="shadeclock" id="shadeclock"></div>
           <div class="shadedate" id="shadedate"></div>
+          <div class="shadehead" id="shadehead">
+            <span class="shtitle" id="shtitle"></span>
+            <span class="shacts">
+              <button class="shbtn" id="shmanage" type="button"></button>
+              <button class="shbtn danger" id="shclear" type="button"></button>
+            </span>
+          </div>
           <div class="shadelist" id="shadelist"></div>
         </section>
 
@@ -115,7 +130,15 @@
 
         <!-- Control centre -->
         <section class="cc" id="cc">
-          <div class="ccgrid" id="ccgrid"></div>
+          <div class="cctop">
+            <div class="ccmod ccconn" id="ccconn"></div>
+            <div class="ccmod ccnow" id="ccnow"></div>
+          </div>
+          <div class="ccbot">
+            <div class="ccslab" id="ccbright"></div>
+            <div class="ccslab" id="ccvol"></div>
+            <div class="cctoggles" id="cctoggles"></div>
+          </div>
         </section>
 
         <div class="scrim" id="scrim"></div>

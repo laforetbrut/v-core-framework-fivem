@@ -1009,3 +1009,141 @@ input { font: inherit; }
 .stmeta .mk { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
   color: var(--app-label2); }
 .stmeta .mv { font-size: 15px; font-weight: 600; color: var(--app-label); margin-top: 2px; }
+
+
+/* ===============================================================
+   Control centre, notifications and island - iOS 27 Liquid Glass
+   rework. Everything below is last-wins over the older CC rules.
+   =============================================================== */
+
+/* Brightness: a real dimming veil over the whole screen, driven by the CC slider.
+   Pointer-transparent so it darkens without swallowing taps. */
+.dim { position: absolute; inset: 0; z-index: 120; pointer-events: none;
+  background: #000; opacity: var(--dim, 0); transition: opacity .22s ease; }
+
+/* -- The island grows a notification out of the black camera pill -- */
+.island .inotif { position: absolute; inset: 0; display: flex; align-items: center;
+  gap: 11px; padding: 0 18px; opacity: 0; transform: scale(.9);
+  transition: opacity .18s ease .1s, transform .34s var(--spring) .04s; }
+.island.notif { width: 300px; height: 72px; margin-left: -150px; border-radius: 30px; }
+.island.notif .inotif { opacity: 1; transform: none; }
+.island.notif .icontent { visibility: hidden; }
+.island.notif::after { opacity: 0; }
+.island .inic { flex: 0 0 auto; }
+.island .inic .ic { width: 38px; height: 38px; border-radius: 10px;
+  box-shadow: 0 3px 10px rgba(0,0,0,.4); }
+.island .intxt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.island .int1 { font-size: 13.5px; font-weight: 700; color: #fff; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.island .int2 { font-size: 12.5px; color: rgba(235,235,245,.72); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+/* -- Control centre -- */
+.cc { position: absolute; inset: 0; z-index: 55; display: none; padding: 56px 15px 0;
+  background: rgba(9,9,12,.6); }
+.cc.on { display: block; animation: cc-in .34s var(--spring); }
+@keyframes cc-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+.cc .cctop { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.cc .ccmod { border-radius: 28px; padding: 13px; min-height: 152px; position: relative;
+  background: rgba(120,120,128,.28);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14), inset 0 1px 0 rgba(255,255,255,.16),
+    0 8px 24px rgba(0,0,0,.34); }
+
+/* Connectivity: four round buttons, real iOS colours when on. */
+.ccconn { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 11px; }
+.ccbtn { width: 100%; aspect-ratio: 1; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; color: #fff; background: rgba(120,120,128,.55);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12); transition: background .2s ease, transform .12s; }
+.ccbtn:active { transform: scale(.92); }
+.ccbtn svg { width: 22px; height: 22px; }
+.ccbtn.on.air { background: #FF9F0A; }
+.ccbtn.on.cel { background: #30D158; }
+.ccbtn.on.wif { background: #0A84FF; }
+.ccbtn.on.blu { background: #0A84FF; }
+
+/* Now playing. */
+.ccnow { display: flex; flex-direction: column; }
+.ccnow .nowlab { font-size: 12px; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: rgba(235,235,245,.6); }
+.ccnow .nowmid { display: flex; align-items: center; gap: 10px; margin: auto 0; min-width: 0; }
+.ccnow .nowart { width: 42px; height: 42px; border-radius: 10px; flex: 0 0 auto;
+  background: linear-gradient(135deg, var(--v-accent-400), var(--v-accent-600)); display: flex;
+  align-items: center; justify-content: center; color: #fff; }
+.ccnow .nowart svg { width: 20px; height: 20px; }
+.ccnow .nowt { font-size: 14px; font-weight: 600; color: #fff; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.ccnow .nows { font-size: 12px; color: rgba(235,235,245,.6); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+.ccnow .nowbtns { display: flex; justify-content: flex-end; gap: 6px; }
+.ccnow .nowbtns button { width: 34px; height: 34px; border-radius: 50%; color: #fff;
+  display: flex; align-items: center; justify-content: center; }
+.ccnow .nowbtns svg { width: 20px; height: 20px; }
+
+.cc .ccbot { display: grid; grid-template-columns: 62px 62px 1fr; gap: 12px; }
+
+/* Vertical sliders: a white fill you drag, icon pinned to the bottom. */
+.ccslab { border-radius: 32px; position: relative; overflow: hidden; min-height: 152px;
+  background: rgba(120,120,128,.4); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12);
+  cursor: pointer; touch-action: none; }
+.ccslab .fill { position: absolute; left: 0; right: 0; bottom: 0; background: #fff;
+  border-radius: 32px; transition: height .12s ease; }
+.ccslab .gl { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
+  z-index: 2; color: #1c1c1e; pointer-events: none; }
+.ccslab .gl svg { width: 22px; height: 22px; }
+
+/* Bottom-right cluster: four round toggles. */
+.cctoggles { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 12px; }
+.cctoggles .ccpill { width: 100%; height: 100%; aspect-ratio: auto; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #fff;
+  background: rgba(120,120,128,.55); box-shadow: inset 0 0 0 .5px rgba(255,255,255,.12);
+  transition: background .2s ease, transform .12s; }
+.cctoggles .ccpill:active { transform: scale(.92); }
+.cctoggles .ccpill svg { width: 22px; height: 22px; }
+.cctoggles .ccpill.on { background: #fff; color: #1c1c1e; }
+.cctoggles .ccpill.on.focus { background: #5E5CE6; color: #fff; }
+.cctoggles .ccpill.on.torch { background: #fff; color: #1c1c1e; }
+
+/* -- Notification shade -- */
+.shade { position: absolute; inset: 0; z-index: 53; display: none; padding: 54px 14px 0;
+  background: rgba(9,9,12,.62); overflow-y: auto; }
+.shade.on { display: block; animation: cc-in .34s var(--spring); }
+.shadehead { display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 6px 12px; }
+.shtitle { font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: #fff; }
+.shacts { display: flex; gap: 8px; }
+.shbtn { padding: 6px 14px; border-radius: 99px; font-size: 13px; font-weight: 600;
+  color: #fff; background: rgba(120,120,128,.5);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.14); }
+.shbtn.danger { color: #FF453A; }
+.shbtn.hidden { display: none; }
+
+.shadelist { display: flex; flex-direction: column; gap: 14px; padding-bottom: 40px; }
+.ngroup { display: flex; flex-direction: column; gap: 7px; }
+.ngrouphead { display: flex; align-items: center; gap: 9px; padding: 0 8px 2px; }
+.ngrouphead .ic { width: 22px; height: 22px; border-radius: 6px; flex: 0 0 auto; }
+.ngrouphead .gname { font-size: 13px; font-weight: 700; color: rgba(235,235,245,.82);
+  flex: 1; text-transform: uppercase; letter-spacing: .03em; }
+.ngrouphead .gmute { padding: 4px 11px; border-radius: 99px; font-size: 12px; font-weight: 600;
+  color: #fff; background: rgba(120,120,128,.5); }
+.ngrouphead .gmute.on { background: #FF453A; }
+
+.ncard { position: relative; display: flex; align-items: flex-start; gap: 11px;
+  padding: 12px 13px; border-radius: 20px; background: rgba(44,44,48,.72);
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.1), 0 6px 18px rgba(0,0,0,.28);
+  animation: ph-in .3s var(--spring) backwards; }
+.ncard .nic { flex: 0 0 auto; }
+.ncard .nic .ic { width: 36px; height: 36px; border-radius: 9px; }
+.ncard .nbody { flex: 1; min-width: 0; }
+.ncard .nt { display: block; font-size: 14px; font-weight: 600; color: #fff; }
+.ncard .nb { font-size: 13.5px; color: rgba(235,235,245,.74); line-height: 1.32;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ncard .nw { position: absolute; top: 12px; right: 13px; font-size: 12px;
+  color: rgba(235,235,245,.5); }
+.ncard .nx { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px;
+  border-radius: 50%; display: none; align-items: center; justify-content: center;
+  background: rgba(120,120,128,.85); color: #fff; }
+.ncard .nx svg { width: 13px; height: 13px; }
+.shade.manage .ncard .nx { display: flex; }
+.shade.manage .ncard .nw { display: none; }
+.nempty { text-align: center; color: rgba(235,235,245,.5); font-size: 15px; padding: 60px 0; }
+
