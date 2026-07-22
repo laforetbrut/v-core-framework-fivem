@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
-[![Modules](https://img.shields.io/badge/modules-38-e8a33d.svg)](ARCHITECTURE.md)
+[![Modules](https://img.shields.io/badge/modules-39-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 38 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 39 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -203,7 +203,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 38 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 39 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.

@@ -60,7 +60,12 @@ Config.Apps = {
     { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13 },
     { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 14 },
     { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15 },
-    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 13,
+    -- The social apps. Rockstar's own brands, because the world already has them, and
+    -- every one is a view over v-social: an app whose module is stopped is not shown.
+    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 16 },
+    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 17 },
+    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 18 },
+    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 19,
       required = true },
     { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20,
       required = true },

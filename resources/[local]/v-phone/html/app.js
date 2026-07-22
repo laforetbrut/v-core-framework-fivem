@@ -334,11 +334,11 @@ function closeApp(instant) {
   const app = byId('app');
   if (!app.classList.contains('on')) return;
   byId('screen').classList.remove('app-open');
-  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; return; }
+  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; socialMe = null; return; }
   app.classList.remove('on');
   app.classList.add('closing');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
-  openApp = null; thread = null; storeView = null;
+  openApp = null; thread = null; storeView = null; socialMe = null;
 }
 
 function setNav(title, backLabel, action) {
@@ -1434,6 +1434,159 @@ function tabbar(tabs, current, onPick) {
   [...byId('appfoot').querySelectorAll('button')].forEach((b) =>
     b.addEventListener('click', () => onPick(b.dataset.t)));
 }
+
+
+// ══ Social ═════════════════════════════════════════════════════
+// Three views over v-social. The account gate is shared: none of them work without a
+// handle, and the handle is the identity every post travels under.
+let socialMe = null;
+
+async function needAccount(then) {
+  if (socialMe) { then(); return; }
+  const r = await post('social', { op: 'me' });
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'off')), 'bleet')); return; }
+  if (r.account) { socialMe = r.account; then(); return; }
+
+  // First run: pick a handle. This IS the account the network knows you by, which is
+  // why it is the one thing you cannot skip.
+  body(
+    UI.bigNumber(L('ph.soc_welcome'), '@') +
+    UI.field('shandle', L('ph.soc_handle'), '', 'maxlength="20"') +
+    UI.field('savatar', L('ph.soc_avatar'), '', 'maxlength="300"') +
+    UI.field('sbio', L('ph.soc_bio'), '', 'maxlength="160"') +
+    UI.button(L('ph.soc_create'), 'smake') +
+    '<div class="groupfoot">' + esc(L('ph.soc_hint')) + '</div>'
+  );
+  byId('smake').addEventListener('click', async () => {
+    const r2 = await post('social', { op: 'setup', handle: byId('shandle').value.trim(),
+      avatar: byId('savatar').value.trim(), bio: byId('sbio').value.trim() });
+    if (r2 && r2.ok) { socialMe = r2.account; toast(L('ph.soc_made')); then(); }
+    else toast(L('ph.err_' + ((r2 && r2.error) || 'x')));
+  });
+}
+
+function postCard(pst) {
+  const av = pst.avatar
+    ? '<span class="pav" style="background-image:url(' + esc(pst.avatar) + ')"></span>'
+    : '<span class="pav">' + esc(String(pst.handle || '?').slice(0, 1).toUpperCase()) + '</span>';
+  return '<div class="post" data-id="' + pst.id + '">' +
+    '<div class="phead">' + av +
+      '<span class="ph">@' + esc(pst.handle) + '</span>' +
+      '<span class="pt">' + esc(String(pst.at || '').slice(5, 16)) + '</span></div>' +
+    (pst.body ? '<div class="pbody">' + esc(pst.body) + '</div>' : '') +
+    (pst.image ? '<img class="pimg" src="' + esc(pst.image) + '" />' : '') +
+    '<div class="pfoot"><button class="plike ' + (pst.liked ? 'on' : '') + '" type="button">' +
+      svg('heart') + '<span>' + (pst.likes || 0) + '</span></button></div></div>';
+}
+
+function wireLikes() {
+  rows('.post .plike', (b) => b.addEventListener('click', async () => {
+    const id = Number(b.closest('.post').dataset.id);
+    const r = await post('social', { op: 'like', id });
+    if (r && r.ok) {
+      b.classList.toggle('on', r.liked);
+      b.querySelector('span').textContent = r.likes;
+    }
+  }));
+}
+
+async function socialFeed(kind, emptyKey) {
+  loading();
+  const r = await post('social', { op: 'feed', kind });
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'bleet')); return; }
+  const list = r.posts || [];
+  body(list.length ? list.map(postCard).join('') : UI.empty(L(emptyKey), kind === 'photo' ? 'snap' : 'bleet'));
+  wireLikes();
+}
+
+// -- Bleeter ----------------------------------------------------
+RENDER.bleeter = () => needAccount(async () => {
+  setNav(L('app.bleeter'), null, { icon: 'add', onClick: () => {
+    sheet(L('ph.bleet_new'),
+      UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') + UI.button(L('ph.bleet_send'), 'bgo'),
+      () => byId('bgo').addEventListener('click', async () => {
+        const r = await post('social', { op: 'post', kind: 'text', body: byId('btext').value });
+        closeSheet();
+        if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      }));
+  } });
+  await socialFeed('text', 'ph.bleet_none');
+});
+
+// -- Snapmatic --------------------------------------------------
+// Posting starts from the gallery, because that is where photos already are: the camera
+// shoots, Snapmatic shows.
+RENDER.snap = () => needAccount(async () => {
+  setNav(L('app.snap'), null, { icon: 'add', onClick: () => {
+    const shots = state.photos || [];
+    if (!shots.length) { toast(L('ph.snap_noshots')); return; }
+    sheet(L('ph.snap_new'),
+      '<div class="shots" style="margin-bottom:10px">' + shots.map((u, i) =>
+        '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>' +
+      UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"'),
+      () => [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
+        el.addEventListener('click', async () => {
+          const r = await post('social', { op: 'post', kind: 'photo',
+            image: shots[Number(el.dataset.i)], body: byId('scap').value });
+          closeSheet();
+          if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        })));
+  } });
+  await socialFeed('photo', 'ph.snap_none');
+});
+
+// -- Hush -------------------------------------------------------
+RENDER.hush = () => needAccount(async () => {
+  setNav(L('app.hush'), null);
+  loading();
+  const me = await post('social', { op: 'hushMe' });
+  if (!me || me.error) { body(UI.empty(L('ph.err_' + ((me && me.error) || 'off')), 'hush')); return; }
+
+  if (!me.profile) {
+    // Hush has its own profile, because who you are to a date is not who you are to the
+    // whole network. The photo defaults to the account avatar.
+    body(
+      UI.field('hbio', L('ph.hush_bio'), '', 'maxlength="160"') +
+      UI.field('hphoto', L('ph.hush_photo'), (socialMe && socialMe.avatar) || '', 'maxlength="300"') +
+      UI.button(L('ph.hush_join'), 'hgo') +
+      '<div class="groupfoot">' + esc(L('ph.hush_hint')) + '</div>'
+    );
+    byId('hgo').addEventListener('click', async () => {
+      const r = await post('social', { op: 'hushSetup', bio: byId('hbio').value, photo: byId('hphoto').value });
+      if (r && r.ok) RENDER.hush(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+    });
+    return;
+  }
+
+  const r = await post('social', { op: 'hushNext' });
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'hush')); return; }
+  const pf = r.profile;
+  if (!pf) { body(UI.empty(L('ph.hush_empty'), 'hush')); return; }
+
+  body(
+    '<div class="hushcard">' +
+      '<div class="hphoto"' + (pf.photo ? ' style="background-image:url(' + esc(pf.photo) + ')"' : '') + '>' +
+        '<div class="hname">' + esc(pf.name || '?') + (pf.age ? ', ' + pf.age : '') + '</div></div>' +
+      (pf.bio ? '<div class="hbio">' + esc(pf.bio) + '</div>' : '') +
+    '</div>' +
+    '<div class="hushrow">' +
+      '<button class="hushbtn no" id="hno" type="button">' + svg('del') + '</button>' +
+      '<button class="hushbtn yes" id="hyes" type="button">' + svg('heart') + '</button>' +
+    '</div>'
+  );
+  pushAnim();
+  const choose = async (like) => {
+    const c = await post('social', { op: 'hushChoice', ref: pf.ref, like });
+    if (c && c.error) { toast(L('ph.err_' + ((c && c.error) || 'x'))); return; }
+    if (c && c.match) {
+      banner({ icon: 'hush', title: L('ph.hush_match'),
+               body: (c.name || '?') + (c.number ? '  ' + c.number : '') });
+    }
+    RENDER.hush();
+  };
+  byId('hno').addEventListener('click', () => choose(false));
+  byId('hyes').addEventListener('click', () => choose(true));
+});
 
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════

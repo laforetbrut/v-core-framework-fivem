@@ -1198,6 +1198,37 @@ Ten settings. The conversation list is three plain queries rather than one with 
 functions: MariaDB only grew those in 10.2, and working on the operator's database matters
 more than a clever statement.
 
+### `v-social` - the shared layer, and why the social apps waited for it
+
+The social apps were refused twice, and the reason was always the same: they need data
+**shared between players** - handles, posts, likes, matches - and the phone is a shell
+that owns nothing shared. This module is that missing owner. The apps went from
+impossible to thin views the day it existed.
+
+**The brands are Rockstar's own.** Bleeter and Snapmatic ship in the game; inventing a
+parallel Twitter would break the world every other module is set in. Hush is the dating
+service the same universe already jokes about.
+
+**Bleeter and Snapmatic are one feed.** One table with a `kind` column; one app shows
+`text`, the other shows `photo`, and both share the same card, the same likes and the
+same account. Two modules would have been two copies of everything.
+
+**Three identity rules, and they are the architecture:**
+
+- **The author is always the server's idea of who called**, never a payload field. A
+  client that could name the author of a post could bleet as the mayor.
+- **Handles address people; citizen ids never leave the server.** Every answer resolves
+  ids to handles before it resolves at all. A Hush candidate travels as an opaque ref the
+  client hands straight back.
+- **A match is the only place identity crosses**, because both sides asked: each gets the
+  other's first name and number - through v-phone, which owns numbers - and each receives
+  a message from the other, so the conversation already exists when they open it.
+
+A like is a toggle keyed on (post, citizen), so double-clicking can never count twice. A
+Hush pass is recorded like a like, or the same face would come back on every open; the
+daily ceiling counts likes only, because saying no is free. Image links go through the
+same host allow-list as wallpapers, for the same reason. Six settings.
+
 ### `v-music` ✅ - boomboxes, jukeboxes and the car stereo
 
 Same rule as `v-3dsound`: the server sends a URL, a start timestamp and a position, and
