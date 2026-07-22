@@ -784,7 +784,11 @@ function applyWallpaper() {
 // the server works them out from where the player actually is.
 function applyPower(p) {
   if (!p) return;
-  const b = Math.max(0, Math.min(100, Number(p.battery)));
+  // A payload without a level (an old server, a fixture, a race at open) must fall
+  // back to full rather than to NaN: Math.round(undefined) is the word NaN drawn in
+  // the status bar, and it was.
+  const raw = Number(p.battery);
+  const b = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 100;
   const el = byId('battery');
   el.style.setProperty('--batt', String(b / 100));
   el.style.setProperty('--batt-col', p.charging ? '#34C759' : (b <= 5 ? '#FF3B30' : (b <= 20 ? '#FF9500' : '#fff')));
@@ -998,7 +1002,9 @@ RENDER.calc = () => {
 // what decides its meaning, exactly as on the real thing: the bottom edge is the home
 // gesture, the top edge is the shade and the control centre, and everywhere else belongs
 // to whatever is on screen.
-const EDGE = 34;          // how deep an edge zone reaches
+const EDGE = 34;          // how deep the bottom edge zone reaches
+const EDGE_TOP = 56;      // the top zone is the whole status bar, or a drag that
+                          // starts on the clock would not count as from the top
 const SWIPE = 46;         // travel before a drag counts as a swipe
 
 let g = null;
@@ -1020,7 +1026,7 @@ function closeOverlays() {
 byId('screen').addEventListener('pointerdown', (e) => {
   const p = screenPoint(e);
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
-        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE, fromLeft: p.x < 18 };
+        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18 };
 });
 
 byId('screen').addEventListener('pointerup', (e) => {
@@ -1645,13 +1651,10 @@ byId('spill').addEventListener('click', () => {
     });
 });
 byId('island').addEventListener('click', () => { if (call) renderCall(); });
+// The status bar takes pointer events so a drag can START on it, but a tap does
+// nothing on purpose: the shade and the control centre are pull-downs, and a click
+// that also opened them made every stray tap up there flash a panel.
 byId('status').style.pointerEvents = 'auto';
-byId('status').addEventListener('click', () => {
-  if (!byId('lock').classList.contains('out')) return;
-  const cc = byId('cc');
-  cc.classList.toggle('on');
-  if (cc.classList.contains('on')) renderCC();
-});
 
 byId('navback').addEventListener('click', () => {
   if (openApp && openApp.id === 'store' && storeView) {
