@@ -64,3 +64,12 @@ Config.GarageTypes = { 'public', 'job', 'gang', 'impound' }
 
 -- Fuel type keys a station may sell (must match v-fuel's Config.Types).
 Config.FuelTypes = { 'regular', 'premium', 'diesel', 'electric' }
+
+-- Non-job licence issuers (a place anyone can walk into, not an employer).
+Config.LicensePlaces = { 'cityhall', 'school', 'admin' }
+
+-- Vehicle catalogue categories (must match v-vehicleshop's Config.Categories).
+Config.VehicleCategories = {
+    'compacts', 'sedans', 'suvs', 'coupes', 'muscle', 'sports', 'super',
+    'motorcycles', 'offroad', 'vans', 'industrial', 'boats', 'air', 'utility',
+}

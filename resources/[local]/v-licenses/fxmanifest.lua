@@ -2,17 +2,15 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'v-cityhall'
+name 'v-licenses'
 author 'vyrriox'
-description 'v-cityhall — city hall: take an open job, resign, read your contract (v-core module)'
+description 'v-licenses — licences and permits: the single source of truth for "may this character do this" (v-core module)'
 version '0.1.0'
 
 dependencies {
     'v-core',
-    'v-ui',
-    'v-jobs',
-    'v-licenses',   -- the licences counter lives in this panel
     'v-world',
+    'oxmysql',
 }
 
 shared_scripts {
@@ -27,12 +25,4 @@ client_script 'client/main.lua'
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/main.lua',
-}
-
-ui_page 'html/index.html'
-
-files {
-    'html/index.html',
-    'html/style.css',
-    'html/app.js',
 }

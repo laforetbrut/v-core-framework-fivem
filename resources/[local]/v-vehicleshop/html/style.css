@@ -1,0 +1,101 @@
+/* v-vehicleshop — "EMBER" dealership panel.
+   Docked left like the garage so the clear half of the screen is the showroom; a blocked
+   row (missing licence or job) stays visible because the reason IS the information.
+   Tokens + primitives come from v-ui/theme.css.
+   CEF-safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+.shop-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:flex-start; padding-left:3.5vw;
+  background:linear-gradient(90deg, rgba(11,10,8,.92) 0%, rgba(11,10,8,.74) 34%, rgba(11,10,8,.18) 58%, transparent 74%);
+  animation:v-fade var(--v-t-fast) var(--v-ease); }
+
+.stage { position:absolute; inset:0; z-index:var(--z-below); cursor:grab; }
+.stage:active { cursor:grabbing; }
+
+.shop { position:relative; z-index:var(--z-raised); width:540px; max-height:86vh;
+  display:flex; flex-direction:column; padding:26px 22px 20px; }
+
+.close { position:absolute; top:12px; right:12px; z-index:var(--z-raised);
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:99px;
+  color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease); }
+.close:hover { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.close svg { width:15px; height:15px; }
+
+/* ── Tabs & categories ── */
+.tabs { display:flex; gap:7px; margin-bottom:11px; }
+.stab { padding:6px 14px; font-family:var(--v-font-display); font-size:10px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--v-text-faint); cursor:pointer;
+  background:transparent; border:1px solid var(--v-line); border-radius:99px;
+  transition:color var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.stab:hover { color:var(--v-text-dim); border-color:var(--v-accent-line); }
+.stab.on { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+
+.cats { display:flex; flex-wrap:wrap; gap:5px; margin-bottom:11px; padding-bottom:11px;
+  border-bottom:1px solid var(--v-line); }
+.cbtn { padding:4px 10px; font-size:10px; color:var(--v-text-faint); cursor:pointer;
+  background:transparent; border:1px solid var(--v-line); border-radius:99px;
+  font-family:var(--v-font-body);
+  transition:color var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease); }
+.cbtn:hover { color:var(--v-text-dim); border-color:var(--v-accent-line); }
+.cbtn.on { color:var(--v-accent-300); border-color:var(--v-accent-line); background:var(--v-accent-soft); }
+
+/* ── Vehicle rows ── */
+.list { display:flex; flex-direction:column; gap:6px; overflow-y:auto; padding-right:4px; flex:1; }
+.empty { padding:26px 0; text-align:center; font-size:12px; color:var(--v-text-faint); }
+
+.crow { display:flex; align-items:center; gap:12px; padding:10px 13px; cursor:pointer;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px;
+  animation:v-fade-up var(--v-t-base) var(--v-ease) backwards; animation-delay:calc(var(--i) * 14ms);
+  transition:transform var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.crow:hover { transform:translateY(-1px); border-color:var(--v-accent-line); background:var(--v-panel-3); }
+.crow.on { border-color:var(--v-accent); background:var(--v-accent-soft);
+  box-shadow:0 0 0 1px var(--v-accent-line), 0 0 18px rgba(255,122,26,.18); }
+.crow.blocked { opacity:.62; }
+
+.cinfo { flex:1; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.cname { font-size:13px; font-weight:600; color:var(--v-text); }
+.crow.on .cname { color:var(--v-accent-300); }
+.cmeta { font-size:10px; color:var(--v-text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.cmeta .warn { color:#e0a05a; font-weight:600; }
+.cprice { font-size:14px; font-weight:700; color:var(--v-accent-300); white-space:nowrap; }
+
+/* ── Footer ── */
+.foot { display:flex; align-items:center; gap:8px; margin-top:12px; padding-top:12px;
+  border-top:1px solid var(--v-line); }
+.chk { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--v-text-dim); cursor:pointer; }
+.chk input { accent-color:var(--v-accent); }
+.spacer { flex:1; }
+
+/* ── Test-drive countdown (shown alone, no NUI focus) ── */
+.testbar { position:fixed; left:50%; bottom:11vh; transform:translateX(-50%); z-index:var(--z-overlay);
+  display:flex; align-items:center; gap:14px; padding:12px 20px;
+  background:var(--v-panel); border:1px solid var(--v-accent-line); border-radius:14px;
+  box-shadow:var(--v-shadow-sm), 0 0 26px rgba(255,122,26,.16);
+  animation:v-fade-up var(--v-t-base) var(--v-ease); }
+.tlbl { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--v-accent-300); }
+.tval { font-size:16px; font-weight:700; color:var(--v-text); min-width:44px; text-align:right; }
+
+/* ── Buttons (shared .mini language) ── */
+.mini { padding:8px 18px; font-family:var(--v-font-display); font-size:11px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--v-text-dim); cursor:pointer;
+  background:var(--v-panel-3); border:1px solid var(--v-line); border-radius:99px; white-space:nowrap;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease); }
+.mini:hover { color:var(--v-text); border-color:var(--v-accent-line); }
+.mini:disabled { opacity:.42; cursor:default; }
+.mini.accent { color:#1a1206; background:linear-gradient(135deg, var(--v-accent) 0%, var(--v-accent-600) 100%);
+  border-color:transparent; }
+.mini.accent:hover { filter:brightness(1.08); }
+.mini.accent:disabled { background:var(--v-panel-3); color:var(--v-text-dim); border-color:var(--v-line); }
+.mini.ko { color:#fff; background:rgba(224,90,90,.28); border-color:rgba(224,90,90,.5); }

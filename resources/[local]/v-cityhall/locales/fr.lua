@@ -23,5 +23,9 @@ local T = {
     ['cityhall.ls']        = 'Mairie de Los Santos',
     ['cityhall.sandy']     = 'Mairie de Sandy Shores',
     ['cityhall.paleto']    = 'Mairie de Paleto Bay',
+    ['cityhall.tab_jobs']   = 'Emplois',
+    ['cityhall.tab_lic']    = 'Licences',
+    ['cityhall.lic_sub']    = 'Tes papiers · la mairie délivre ceux-ci',
+    ['cityhall.lic_none']   = 'Aucun type de licence n\'existe.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

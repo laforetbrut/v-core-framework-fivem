@@ -195,6 +195,15 @@ function edRowTitle(r) {
   }
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
   if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
+  if (edDomain === 'dealers') {
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)} · ${esc(r.cats || t('adm.ed_allcats'))}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+  }
+  if (edDomain === 'vehcat') {
+    return `${esc(r.label)} <i class="dim">${esc(r.model)} · ${esc(r.cat)} · ${fmt(r.price)}${r.stock >= 0 ? ' · ' + r.stock + ' stock' : ''}${r.license ? ' · 🪪 ' + esc(r.license) : ''}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+  }
+  if (edDomain === 'licenses') {
+    return `${esc(r.label)} <i class="dim">${esc(r.key)} · ${esc(r.issuer)} · ${fmt(r.price)} · ${r.days ? r.days + 'd' : t('adm.ed_never')}${r.test ? ' · ' + t('adm.ed_needstest') : ''}</i>`;
+  }
   if (edDomain === 'mechshops') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}${r.job ? ' · 🔒 ' + esc(r.job) : ' · self-service'} · x${(Number(r.mult) || 1).toFixed(2)}</i>`;
   }
@@ -238,7 +247,8 @@ function renderEdList() {
     el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     el.querySelector('[data-act="del"]').onclick = async () => {
       const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
-        : (edDomain === 'clothcats') ? r.key : r.id;   // garages key on `id` too
+        : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
+        : (edDomain === 'vehcat') ? r.model : r.id;   // garages/dealers key on `id`
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
@@ -296,6 +306,53 @@ function openEdForm(row) {
       field(t('adm.ed_rarity'), 'ef-rarity', m.rarity ?? 'common') +
       field(t('adm.ed_desc'), 'ef-desc', m.desc ?? '') +
       check(t('adm.ed_stack'), 'ef-stack', row.stackable !== 0) + check(t('adm.ed_usable'), 'ef-usable', row.usable === 1);
+  } else if (edDomain === 'dealers') {
+    const isNew = !row.id;
+    const have = String(row.cats || '').split(',').map(x => x.trim()).filter(Boolean);
+    const boxes = (edData.cats || []).map(c =>
+      `<label class="edf chk"><input type="checkbox" class="cat-cb" value="${esc(c)}"${have.includes(c) ? ' checked' : ''} /><span>${esc(c)}</span></label>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_dealerid'))}</span><input id="ef-did" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
+      field(t('adm.ed_spawnx'), 'ef-sx', row.sx ?? '', 'number') + field(t('adm.ed_spawny'), 'ef-sy', row.sy ?? '', 'number') +
+      field(t('adm.ed_spawnz'), 'ef-sz', row.sz ?? '', 'number') + field(t('adm.ed_spawnh'), 'ef-sh', row.sh ?? 0, 'number') +
+      `<div class="edf full"><span>${esc(t('adm.ed_sellscats'))}</span><div class="ftypes">${boxes}</div></div>` +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'vehcat') {
+    const isNew = !row.model;
+    const cats = (edData.cats || []).map(c => `<option value="${esc(c)}"${c === row.cat ? ' selected' : ''}>${esc(c)}</option>`).join('');
+    const lics = (edData.licenses || []).map(l => `<option value="${esc(l.key)}"${l.key === row.license ? ' selected' : ''}>${esc(l.label || l.key)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_vehmodel'))}</span><input id="ef-model" value="${esc(row.model ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_cat'))}</span><select id="ef-cat">${cats}</select></label>` +
+      field(t('adm.ed_price'), 'ef-price', row.price ?? 0, 'number') +
+      field(t('adm.ed_stock'), 'ef-stock', row.stock ?? -1, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_reqlic'))}</span><select id="ef-lic">` +
+        `<option value="">${esc(t('adm.ed_byclass'))}</option>${lics}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'licenses') {
+    const isNew = !row.key;
+    const issuers = (edData.places || []).map(p => `<option value="${esc(p)}"${p === row.issuer ? ' selected' : ''}>${esc(p)}</option>`).join('')
+      + (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.issuer ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_lickey'))}</span><input id="ef-lkey" value="${esc(row.key ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_issuer'))}</span><select id="ef-issuer">${issuers}</select></label>` +
+      field(t('adm.ed_price'), 'ef-price', row.price ?? 0, 'number') +
+      field(t('adm.ed_validdays'), 'ef-days', row.days ?? 0, 'number') +
+      field(t('adm.ed_sort'), 'ef-sort', row.sort ?? 0, 'number') +
+      check(t('adm.ed_needstest'), 'ef-test', row.test === 1 || row.test === true) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'mechshops') {
     const isNew = !row.id;
     html =
@@ -380,7 +437,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'stations' || edDomain === 'mechshops') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -416,6 +473,19 @@ function openEdForm(row) {
     const cur = Object.entries(row.inputs || {});
     if (cur.length) cur.forEach(([n, q]) => addIng(n, q)); else addIng(undefined, 1);
     byId('ef-adding').onclick = () => addIng(undefined, 1);
+  }
+
+  if (edDomain === 'dealers' && !row.id) {
+    const dd = byId('ef-did');
+    dd.oninput = () => { dd.value = dd.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
+  }
+  if (edDomain === 'vehcat' && !row.model) {
+    const vm = byId('ef-model');
+    vm.oninput = () => { vm.value = vm.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 50); };
+  }
+  if (edDomain === 'licenses' && !row.key) {
+    const lk = byId('ef-lkey');
+    lk.oninput = () => { lk.value = lk.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
   }
 
   if (edDomain === 'mechshops' && !row.id) {
@@ -472,6 +542,22 @@ function openEdForm(row) {
       payload = { name: v('ef-name'), isNew: !row.name, label: v('ef-label'), category: v('ef-cat'),
                   itype: v('ef-itype'), weight: parseInt(v('ef-weight'), 10) || 0, image: v('ef-image'),
                   rarity: v('ef-rarity'), desc: v('ef-desc'), stackable: ck('ef-stack'), usable: ck('ef-usable') };
+    } else if (edDomain === 'dealers') {
+      const cats = [...document.querySelectorAll('.cat-cb')].filter(c => c.checked).map(c => c.value);
+      payload = { did: v('ef-did'), isNew: !row.id, label: v('ef-label'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  sx: parseFloat(v('ef-sx')), sy: parseFloat(v('ef-sy')), sz: parseFloat(v('ef-sz')),
+                  sh: parseFloat(v('ef-sh')) || 0, cats: cats.join(','), job: v('ef-job'),
+                  blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'vehcat') {
+      payload = { model: v('ef-model'), isNew: !row.model, label: v('ef-label'), cat: v('ef-cat'),
+                  price: parseInt(v('ef-price'), 10) || 0,
+                  stock: parseInt(v('ef-stock'), 10),
+                  license: v('ef-lic'), job: v('ef-job'), enabled: ck('ef-en') };
+    } else if (edDomain === 'licenses') {
+      payload = { key: v('ef-lkey'), isNew: !row.key, label: v('ef-label'), issuer: v('ef-issuer'),
+                  price: parseInt(v('ef-price'), 10) || 0, days: parseInt(v('ef-days'), 10) || 0,
+                  sort: parseInt(v('ef-sort'), 10) || 0, test: ck('ef-test'), enabled: ck('ef-en') };
     } else if (edDomain === 'mechshops') {
       payload = { mid: v('ef-mid'), isNew: !row.id, label: v('ef-label'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

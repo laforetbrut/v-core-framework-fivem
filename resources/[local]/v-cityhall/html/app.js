@@ -4,7 +4,7 @@ const post = (n, b) => fetch(`https://v-cityhall/${n}`, { method: 'POST', header
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 
-let strings = {}, state = {};
+let strings = {}, state = {}, tab = 'jobs', lic = null;
 const t = (k) => strings[k] || k;
 
 const ERR = { far: 'cityhall.err_far', whitelisted: 'cityhall.err_wl', already: 'cityhall.err_alr', funds: 'cityhall.err_fund' };
@@ -54,6 +54,53 @@ function render() {
   });
 }
 
+// ── Licences ───────────────────────────────────────────────────
+// The wallet lives here because the city hall is where paperwork happens. A licence that
+// needs a practical test can only be RENEWED here — it is earned at the driving school.
+const LICERR = { already: 'lic.err_already', revoked: 'lic.err_revoked', needtest: 'lic.err_needtest',
+                 notissuer: 'lic.err_notissuer', funds: 'lic.err_funds' };
+
+function renderLic() {
+  const wrap = byId('liclist'); wrap.innerHTML = '';
+  const rows = (lic && lic.licenses) || [];
+  if (!rows.length) { wrap.innerHTML = `<div class="empty">${esc(t('cityhall.lic_none'))}</div>`; return; }
+  rows.forEach((l, i) => {
+    const st = l.status || 'none';
+    const row = document.createElement('div');
+    row.className = 'jrow'; row.style.setProperty('--i', i);
+    // only a city-hall licence can be bought at this counter
+    const here = l.issuer === 'cityhall';
+    const can = here && st !== 'valid' && st !== 'revoked' && !(l.test && !l.status);
+    row.innerHTML = `
+      <span class="jmark st-${esc(st)}"></span>
+      <span class="jinfo">
+        <span class="jname">${esc(t(l.i18n))}</span>
+        <span class="jmeta">${esc(t('lic.st_' + st))}${l.points ? ' · ' + l.points + ' ' + esc(t('lic.points')) : ''}${here ? ' · ' + fmt(l.price) : ' · ' + esc(l.issuer)}</span>
+      </span>
+      ${can ? `<button class="mini accent lbuy">${esc(t(l.status ? 'lic.renew' : 'lic.buy'))}</button>` : ''}`;
+    const b = row.querySelector('.lbuy');
+    if (b) b.onclick = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true;
+      const res = await post('buyLicense', { type: l.key });
+      if (res && res.ok) { flash(btn, true); }
+      else { flash(btn, false, t(LICERR[res && res.error] || 'lic.err_x')); btn.disabled = false; }
+    };
+    wrap.appendChild(row);
+  });
+}
+
+function setTab(next) {
+  tab = next;
+  document.querySelectorAll('.ctab').forEach(b => b.classList.toggle('on', b.dataset.t === tab));
+  byId('list').classList.toggle('hidden', tab !== 'jobs');
+  byId('liclist').classList.toggle('hidden', tab !== 'lic');
+  byId('cur').classList.toggle('hidden', tab !== 'jobs');
+  byId('csub').textContent = t(tab === 'jobs' ? 'cityhall.sub' : 'cityhall.lic_sub');
+  if (tab === 'lic' && !lic) post('licenses');
+}
+
+document.querySelectorAll('.ctab').forEach(b => { b.onclick = () => setTab(b.dataset.t); });
+
 byId('close').onclick = () => post('close');
 byId('resign').onclick = async (e) => {
   const b = e.currentTarget;
@@ -72,11 +119,15 @@ window.addEventListener('message', (e) => {
   if (d.action === 'open') {
     strings = d.strings || {};
     state = d.data || {};
-    applyStrings(); render();
+    lic = null; tab = 'jobs';
+    applyStrings(); render(); setTab('jobs');
     byId('hall').classList.remove('hidden');
   } else if (d.action === 'data') {
     state = d.data || {};
     render();
+  } else if (d.action === 'licenses') {
+    lic = d.data || { licenses: [] };
+    renderLic();
   } else if (d.action === 'close') {
     byId('hall').classList.add('hidden');
   }

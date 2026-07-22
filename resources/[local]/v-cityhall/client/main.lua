@@ -117,6 +117,25 @@ RegisterNUICallback('take', function(data, cb)
     end, data)
 end)
 
+-- Licences: the wallet and the counter. v-licenses owns every rule; we only relay.
+RegisterNUICallback('licenses', function(_, cb)
+    Core.TriggerCallback('v-licenses:mine', function(data)
+        if data then SendNUIMessage({ action = 'licenses', data = data }) end
+        cb('ok')
+    end)
+end)
+
+RegisterNUICallback('buyLicense', function(data, cb)
+    Core.TriggerCallback('v-licenses:buy', function(res)
+        cb(res or false)
+        if res and res.ok then
+            Core.TriggerCallback('v-licenses:mine', function(fresh)
+                if fresh then SendNUIMessage({ action = 'licenses', data = fresh }) end
+            end)
+        end
+    end, data)
+end)
+
 RegisterNUICallback('resign', function(_, cb)
     Core.TriggerCallback('v-cityhall:resign', function(res)
         cb(res or false)
