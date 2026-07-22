@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+  <script src="https://cfx-nui-v-ui/theme.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="radio" class="radio-overlay hidden">
+    <div class="device v-panel v-chamfer">
+      <div class="device__head">
+        <div>
+          <div class="ttl" id="r-title">Radio</div>
+          <div class="sub" id="r-sub"></div>
+        </div>
+        <button class="x" id="r-close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="device__body v-scroll">
+        <div class="section-ttl" id="r-lbl-presets">Presets</div>
+        <div class="presets" id="r-presets"></div>
+
+        <div class="section-ttl" id="r-lbl-avail">Available channels</div>
+        <div class="list" id="r-list"></div>
+      </div>
+
+      <div class="device__foot">
+        <button class="btn ghost" id="r-off">Turn off</button>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,95 @@
+/* v-radio - the handheld. Theme tokens only, so the device follows the server palette and
+   any per-module override without a literal colour here. */
+.radio-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: flex-end;
+  padding-right: 6vw;
+  background: rgba(0, 0, 0, calc(var(--v-backdrop-a) * 0.55));
+}
+.radio-overlay.hidden { display: none; }
+
+/* Narrow and tall: it reads as a device rather than a dialog. */
+.device {
+  width: min(26vw, 380px); max-height: 78vh;
+  display: flex; flex-direction: column;
+}
+
+.device__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1rem 1.2rem; border-bottom: 1px solid var(--v-line);
+}
+.ttl { font-family: var(--v-font-display); font-size: 1.2rem; color: var(--v-text); }
+.sub { font-size: .78rem; color: var(--v-text-dim); margin-top: .12rem; }
+.x {
+  background: none; border: 0; color: var(--v-text-dim); font-size: 1.5rem; line-height: 1;
+  cursor: pointer; transition: color var(--v-t-fast);
+}
+.x:hover { color: var(--v-text); }
+
+.device__body { padding: 1rem 1.2rem; overflow-y: auto; flex: 1; }
+.device__foot { padding: .8rem 1.2rem; border-top: 1px solid var(--v-line); }
+
+.section-ttl {
+  font-family: var(--v-font-display); font-size: .72rem; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--v-text-faint); margin: 1rem 0 .5rem;
+}
+.section-ttl:first-child { margin-top: 0; }
+
+/* Presets: a keypad, so the muscle memory is a number rather than a name. */
+.presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+.preset {
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  background: var(--v-panel-2); padding: .45rem .3rem; cursor: pointer;
+  text-align: center; transition: border-color var(--v-t-fast), background var(--v-t-fast);
+}
+.preset:hover { border-color: var(--v-accent-line); }
+.preset.on { border-color: var(--v-accent); background: var(--v-accent-soft); }
+.preset__slot { font-size: .68rem; color: var(--v-text-faint); }
+.preset__ch {
+  font-family: var(--v-font-display); font-size: .95rem; color: var(--v-text);
+  font-variant-numeric: tabular-nums;
+}
+.preset.empty .preset__ch { color: var(--v-text-faint); }
+
+.list { display: flex; flex-direction: column; gap: .35rem; }
+
+.chan {
+  display: flex; align-items: center; gap: .55rem; padding: .5rem .6rem;
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  background: var(--v-panel-2);
+  transition: border-color var(--v-t-fast), background var(--v-t-fast);
+}
+.chan:hover { border-color: var(--v-accent-line); }
+.chan.listening { border-color: var(--v-success); }
+.chan.transmit { border-color: var(--v-accent); background: var(--v-accent-soft); }
+
+.chan__num {
+  min-width: 2.1rem; font-variant-numeric: tabular-nums;
+  font-family: var(--v-font-display); font-size: .82rem; color: var(--v-accent);
+}
+.chan__main { flex: 1; min-width: 0; }
+.chan__label {
+  font-size: .86rem; color: var(--v-text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.chan__meta { font-size: .68rem; color: var(--v-text-faint); margin-top: .06rem; }
+.chan__acts { display: flex; gap: .25rem; }
+
+.mini {
+  border: 1px solid var(--v-line); background: none; cursor: pointer;
+  border-radius: var(--v-r-sm); padding: .25rem .45rem;
+  font-size: .68rem; color: var(--v-text-dim);
+  transition: color var(--v-t-fast), border-color var(--v-t-fast);
+}
+.mini:hover { color: var(--v-text); border-color: var(--v-accent-line); }
+.mini.on { color: var(--v-accent); border-color: var(--v-accent); }
+
+.btn {
+  width: 100%; padding: .5rem .9rem; border: 0; cursor: pointer;
+  border-radius: var(--v-r-sm); font-family: var(--v-font-display); font-size: .84rem;
+  color: var(--v-ink); background: var(--v-grad-accent); transition: filter var(--v-t-fast);
+}
+.btn:hover { filter: brightness(1.08); }
+.btn.ghost { background: none; color: var(--v-text-dim); border: 1px solid var(--v-line); }
+.btn.ghost:hover { color: var(--v-text); border-color: var(--v-accent-line); }
+
+.empty-note { text-align: center; color: var(--v-text-faint); padding: 1.4rem 0; font-size: .82rem; }

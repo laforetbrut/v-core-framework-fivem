@@ -5,7 +5,10 @@
 
 local Core
 local Channels = {}      -- [id] = row
-local Joined = {}        -- [source] = channelId
+-- A handheld listens to several channels and talks on one. Keeping them separate is the
+-- whole difference between a radio and a walkie-talkie.
+local Listen   = {}      -- [source] = { [channelId] = true }
+local Transmit = {}      -- [source] = channelId or nil
 local Muted = {}         -- [citizenid] = true
 
 local function num(v, d) return tonumber(v) or d or 0 end
@@ -26,6 +29,8 @@ V.Module({
         { key = 'radio',      label = 'Radio enabled',          type = 'bool',   default = true },
         { key = 'radioItem',  label = 'Radio item required (blank = none)', type = 'string', default = Config.RadioItem, maxLength = 40 },
         { key = 'radioWhileCuffed', label = 'Cuffed players can use the radio', type = 'bool', default = false },
+        { key = 'maxChannels', label = 'Channels one radio can monitor', type = 'number', default = 4, min = 1, max = 12, step = 1,
+          hint = 'Without a ceiling, listening to everything beats choosing and the radio stops being a decision.' },
         { key = 'injuredMult', label = 'Range multiplier when badly hurt', type = 'number', default = Config.Injured.rangeMult, min = 0.1, max = 1, step = 0.05 },
         { key = 'bleedThreshold', label = 'Bleed level that counts as badly hurt', type = 'number', default = Config.Injured.bleedThreshold, min = 1, max = 5, step = 1 },
         { key = 'phoneChannel', label = 'Mumble channel used for calls', type = 'number', default = Config.PhoneChannel, min = 1, max = 65000, step = 1 },
@@ -82,15 +87,32 @@ local function hasRadio(src)
 end
 
 -- ── Join / leave ──────────────────────────────────────────────
-local function leave(src, quiet)
-    if not Joined[src] then return end
-    Joined[src] = nil
-    TriggerClientEvent('v-voice:client:channel', src, nil)
+local function pushState(src)
+    local list = {}
+    for id in pairs(Listen[src] or {}) do list[#list + 1] = id end
+    table.sort(list)
+    TriggerClientEvent('v-voice:client:channels', src, list, Transmit[src])
+end
+
+--- Leave one channel, or every channel when `id` is nil.
+local function leave(src, id, quiet)
+    if id then
+        if not (Listen[src] and Listen[src][id]) then return end
+        Listen[src][id] = nil
+        if Transmit[src] == id then Transmit[src] = next(Listen[src]) end
+    else
+        Listen[src], Transmit[src] = nil, nil
+    end
+    pushState(src)
     if not quiet then Core.Notify(src, L(src, 'voice.left'), 'info') end
 end
 
 V.Callback('v-voice:channels', function(src, resolve)
-    resolve({ ok = true, channels = availableTo(src), current = Joined[src],
+    local list = {}
+    for id in pairs(Listen[src] or {}) do list[#list + 1] = id end
+    table.sort(list)
+    resolve({ ok = true, channels = availableTo(src), listening = list,
+              transmit = Transmit[src],
               radio = V.SettingBool('radio', true) and hasRadio(src) })
 end)
 
@@ -99,33 +121,58 @@ V.Callback('v-voice:join', function(src, resolve, data)
     if not hasRadio(src) then resolve({ error = 'noradio' }) return end
 
     local id = math.floor(num(data and data.channel))
-    if id <= 0 then leave(src); resolve({ ok = true, channel = nil }) return end
+    if id <= 0 then leave(src, nil); resolve({ ok = true, channel = nil }) return end
 
     local ok, why = mayUse(src, id)
     if not ok then resolve({ error = why or 'notyours' }) return end
 
-    Joined[src] = id
-    TriggerClientEvent('v-voice:client:channel', src, id)
+    -- A ceiling on how many channels one radio monitors: without it, "listen to
+    -- everything" is a strictly better choice than picking, and the device stops being a
+    -- decision.
+    Listen[src] = Listen[src] or {}
+    local n = 0
+    for _ in pairs(Listen[src]) do n = n + 1 end
+    local maxCh = math.floor(num(V.Setting('maxChannels', 4), 4))
+    if not Listen[src][id] and n >= maxCh then resolve({ error = 'full', max = maxCh }) return end
+
+    Listen[src][id] = true
+    -- The first channel joined becomes the transmit target, so a player who only ever
+    -- joins one never has to think about the distinction.
+    if not Transmit[src] then Transmit[src] = id end
+    pushState(src)
     resolve({ ok = true, channel = id, label = Channels[id] and Channels[id].label or tostring(id) })
 end)
 
-V.Callback('v-voice:leave', function(src, resolve)
-    leave(src)
+V.Callback('v-voice:leave', function(src, resolve, data)
+    local id = data and math.floor(num(data.channel))
+    leave(src, (id and id > 0) and id or nil)
     resolve({ ok = true })
+end)
+
+--- Which of the channels you already monitor do you talk on? Re-gated, because a rank can
+--- change between joining and keying up.
+V.Callback('v-voice:setTransmit', function(src, resolve, data)
+    local id = math.floor(num(data and data.channel))
+    if id <= 0 then Transmit[src] = nil; pushState(src); resolve({ ok = true }) return end
+    if not (Listen[src] and Listen[src][id]) then resolve({ error = 'notlistening' }) return end
+    if not mayUse(src, id) then resolve({ error = 'notyours' }) return end
+    Transmit[src] = id
+    pushState(src)
+    resolve({ ok = true, channel = id })
 end)
 
 --- Asked every time the client wants to key the mic. Cheap, and it is the only place that
 --- can know the player is still allowed on the channel a second after they joined.
 V.Callback('v-voice:mayTransmit', function(src, resolve)
-    local id = Joined[src]
+    local id = Transmit[src]
     if not id then resolve(false) return end
     local p = Core.GetPlayer(src)
     if p and Muted[p.citizenid] then resolve(false) return end
-    if not hasRadio(src) then leave(src, true); resolve(false) return end
+    if not hasRadio(src) then leave(src, nil, true); resolve(false) return end
     if not V.SettingBool('radioWhileCuffed', false) then
         if V.Use('v-police').IsCuffed(src) == true then resolve(false) return end
     end
-    if not mayUse(src, id) then leave(src, true); resolve(false) return end
+    if not mayUse(src, id) then leave(src, id, true); resolve(false) return end
     resolve(true)
 end)
 
@@ -165,7 +212,13 @@ end
 exports('Mute',     function(cid) setMute(tostring(cid or ''), true) end)
 exports('Unmute',   function(cid) setMute(tostring(cid or ''), false) end)
 exports('IsMuted',  function(cid) return Muted[tostring(cid or '')] == true end)
-exports('GetChannel', function(src) return Joined[src] end)
+exports('GetChannel',   function(src) return Transmit[src] end)
+exports('GetListening', function(src)
+    local out = {}
+    for id in pairs(Listen[src] or {}) do out[#out + 1] = id end
+    table.sort(out)
+    return out
+end)
 exports('GetChannels', function() return Channels end)
 
 --- Force somebody onto a channel from another script (a faction radio handed out by the
@@ -173,8 +226,11 @@ exports('GetChannels', function() return Channels end)
 exports('JoinChannel', function(src, id)
     local ok = mayUse(src, id)
     if not ok then return false end
-    Joined[src] = math.floor(num(id))
-    TriggerClientEvent('v-voice:client:channel', src, Joined[src])
+    id = math.floor(num(id))
+    Listen[src] = Listen[src] or {}
+    Listen[src][id] = true
+    if not Transmit[src] then Transmit[src] = id end
+    pushState(src)
     return true
 end)
 
@@ -184,20 +240,23 @@ AddEventHandler('v-world:server:changed', function(domain)
         loadChannels()
         -- Somebody sitting on a channel an admin has just deleted or re-gated has to be
         -- taken off it, or the edit does nothing until they relog.
-        for src, id in pairs(Joined) do
-            if not mayUse(src, id) then leave(src, true) end
+        for src, set in pairs(Listen) do
+            for id in pairs(set) do
+                if not mayUse(src, id) then leave(src, id, true) end
+            end
         end
     end
 end)
 
 AddEventHandler('playerDropped', function()
-    Joined[source] = nil
+    Listen[source], Transmit[source] = nil, nil
 end)
 
 -- Leaving a job or a gang leaves its channel, with no extra bookkeeping.
 AddEventHandler('v-core:server:onJobChange', function(src)
-    local id = Joined[src]
-    if id and not mayUse(src, id) then leave(src, true) end
+    for id in pairs(Listen[src] or {}) do
+        if not mayUse(src, id) then leave(src, id, true) end
+    end
 end)
 
 V.Ready(function(core)

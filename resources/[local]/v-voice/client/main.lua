@@ -5,7 +5,8 @@
 local step      = Config.DefaultStep
 local ranges    = { whisper = 3.0, normal = 8.0, shout = 20.0 }
 local phoneCh   = Config.PhoneChannel
-local channel   = nil        -- radio channel we are listening to
+local listening = {}         -- [channelId] = true, every channel we monitor
+local channel   = nil        -- the one we transmit on
 local onRadio   = false      -- currently keyed
 local muted     = false
 local injured   = false
@@ -48,15 +49,22 @@ RegisterCommand('vvoice_cycle', cycle, false)
 RegisterKeyMapping('vvoice_cycle', 'Voice: cycle proximity', 'keyboard', Config.Keys.cycle or 'Z')
 
 -- ── Radio ──────────────────────────────────────────────────────
-RegisterNetEvent('v-voice:client:channel', function(id)
-    -- Stop listening to the old one first, or a player who switches channels keeps
-    -- hearing the previous one for the rest of the session.
-    if channel then MumbleRemoveVoiceChannelListen(channel) end
-    channel = id and math.floor(id) or nil
-    if channel then
-        MumbleAddVoiceChannelListen(channel)
-        V.Notify((L('voice.joined')):format(channel), 'success')
+--- The server sends the whole set every time, so this only has to reconcile: add what is
+--- new, drop what is gone. Sending deltas would mean the client and the server could
+--- disagree about what is being monitored, and only one of them is right.
+RegisterNetEvent('v-voice:client:channels', function(list, transmit)
+    local want = {}
+    for _, id in ipairs(list or {}) do want[math.floor(id)] = true end
+
+    for id in pairs(listening) do
+        if not want[id] then MumbleRemoveVoiceChannelListen(id); listening[id] = nil end
     end
+    for id in pairs(want) do
+        if not listening[id] then MumbleAddVoiceChannelListen(id); listening[id] = true end
+    end
+
+    channel = transmit and math.floor(transmit) or nil
+    TriggerEvent('v-voice:client:onChannels', list or {}, channel)
 end)
 
 RegisterNetEvent('v-voice:client:muted', function(on)
@@ -130,6 +138,12 @@ exports('GetState', function()
 end)
 
 exports('GetChannel',   function() return channel end)
+exports('GetListening', function()
+    local out = {}
+    for id in pairs(listening) do out[#out + 1] = id end
+    table.sort(out)
+    return out
+end)
 exports('GetStepLabel', function() return stepLabel() end)
 
 -- ── Boot ───────────────────────────────────────────────────────
@@ -154,6 +168,6 @@ V.OnSetting(function() refreshRanges() end)
 
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
-    if channel then MumbleRemoveVoiceChannelListen(channel) end
+    for id in pairs(listening) do MumbleRemoveVoiceChannelListen(id) end
     MumbleClearVoiceChannel()
 end)
