@@ -1,0 +1,41 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening: check the server log around the failure. Most reports are
+        answered by the first error line, not by the symptom.
+  - type: input
+    id: module
+    attributes:
+      label: Module
+      description: Which resource — e.g. v-inventory, v-garages, v-core
+      placeholder: v-garages
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what happened instead
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Park a vehicle at Legion Square
+        2. ...
+    validations: { required: true }
+  - type: textarea
+    id: log
+    attributes:
+      label: Server log around the failure
+      description: Paste the lines before AND after — the error is rarely the last line.
+      render: shell
+  - type: input
+    id: artifact
+    attributes:
+      label: Server artifact
+      description: Must be the Enhanced binary (cfx-server.exe). FXServer.exe is Legacy.
+      placeholder: cfx-server.exe 32561

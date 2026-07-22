@@ -1,10 +1,29 @@
-# v-core — a FiveM Enhanced roleplay framework
+# v-core — a roleplay framework built for FiveM Enhanced
 
-**v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** (the GTA V Enhanced
-next-gen edition). 25 modules, one shared design system, one database, no external framework
-dependency — it is not an ESX or QBCore add-on pack, it *is* the framework.
+[![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
+[![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
+[![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
+[![Modules](https://img.shields.io/badge/modules-25-e8a33d.svg)](ARCHITECTURE.md)
+[![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
-Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
+**v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** — the GTA V
+Enhanced next-gen edition. 25 modules, one shared design system, one database, no external
+framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
+
+**Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
+and the differences are not cosmetic: the Enhanced binary is `cfx-server.exe` and rejects Legacy
+stream assets outright; `sv_enforceGameBuild` takes Legacy build numbers that lock Enhanced clients
+out entirely; and CEF 140 dropped `nui://` as a secure context and renders `backdrop-filter` as an
+opaque black box, which breaks most existing NUI. Every one of those is designed around here rather
+than patched over.
+
+Built and tested on `cfx-server.exe`, OneSync, MariaDB via `oxmysql`.
+
+```bash
+git clone https://github.com/laforetbrut/v-core-framework-fivem.git
+```
+
+Then follow [Installation](#installation) — five steps, no build toolchain.
 
 > **Status:** in active development on `main`.
 >
@@ -14,6 +33,7 @@ Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, Mari
 > | **[DEVELOPERS.md](DEVELOPERS.md)** | Write a script for v-core: the `V` helper, conventions, gotchas |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | What each module does today, and the roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | What shipped |
+> | **[CONTRIBUTING.md](CONTRIBUTING.md)** | How to contribute, and what gets sent back |
 
 ## Why it exists
 
@@ -153,6 +173,7 @@ Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSyn
 > | **[DEVELOPERS.md](DEVELOPERS.md)** | Écrire un script pour v-core : le helper `V`, conventions, pièges |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ce que fait chaque module, et la roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | Ce qui est livré |
+> | **[CONTRIBUTING.md](CONTRIBUTING.md)** | Comment contribuer |
 
 ## Pourquoi
 

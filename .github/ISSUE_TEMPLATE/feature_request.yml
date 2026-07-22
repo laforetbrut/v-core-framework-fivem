@@ -1,0 +1,22 @@
+name: Feature request
+description: Propose a module or a capability
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What roleplay situation does this make possible?
+      description: Describe the situation at the table, not the implementation.
+    validations: { required: true }
+  - type: textarea
+    id: config
+    attributes:
+      label: What should a server owner be able to configure?
+      description: Everything in this framework is tunable in-game. What are the knobs?
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Fit
+      options:
+        - label: This respects GTA V lore (real in-game brands, no invented ones)
+        - label: This needs no chat command for players
