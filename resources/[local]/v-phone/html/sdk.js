@@ -124,9 +124,11 @@
      *   data            { k: v } becomes data-k="v", for your click handler
      */
     row: function (o) {
-      const lead = o.icon
-        ? '<span class="ricon">' + svg(o.icon) + '</span>'
-        : (o.avatar ? '<span class="rav">' + esc(String(o.avatar).slice(0, 1).toUpperCase()) + '</span>' : '');
+      const lead = o.appicon
+        ? UI.appIcon(o.appicon, 'appx')
+        : o.icon
+          ? '<span class="ricon"' + (o.tint ? ' style="background:' + esc(o.tint) + '"' : '') + '>' + svg(o.icon) + '</span>'
+          : (o.avatar ? '<span class="rav">' + esc(String(o.avatar).slice(0, 1).toUpperCase()) + '</span>' : '');
       const tail =
         (o.badge ? '<span class="rbadge">' + esc(o.badge) + '</span>' : '') +
         (o.time ? '<span class="rtime">' + esc(o.time) + '</span>' : '') +
@@ -178,6 +180,64 @@
         if (el && host.contains(el)) handler(e, el);
       });
     },
+  };
+
+  // ══ App icon tiles ═══════════════════════════════════════════
+  // An iOS app icon is a vivid gradient squircle with a FILLED white glyph. The
+  // stroke set above is for rows and buttons; drawing it on a flat tint is what
+  // made the home screen read as a web page rather than a phone. One table, so a
+  // third-party app gets the same treatment just by naming an icon.
+  const G = {
+    phone: 'M20 15.6c-1.2 0-2.4-.2-3.5-.6a1 1 0 0 0-1 .3l-2.2 2.2a15.2 15.2 0 0 1-6.6-6.6L8.9 8.7a1 1 0 0 0 .2-1A11.4 11.4 0 0 1 8.5 4.2a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1 17 17 0 0 0 17 17 1 1 0 0 0 1-1v-3.5a1 1 0 0 0-1-1.1z',
+    messages: 'M12 3C6.5 3 2 6.9 2 11.7c0 2.6 1.3 5 3.4 6.6-.1 1.1-.6 2.3-1.6 3.3-.2.2 0 .7.4.7 1.9-.1 3.6-.9 5-1.8.9.2 1.8.3 2.8.3 5.5 0 10-3.9 10-8.8S17.5 3 12 3z',
+    contacts: 'M12 11.5a4.25 4.25 0 1 0 0-8.5 4.25 4.25 0 0 0 0 8.5zm0 2.1c-4.6 0-8.3 2.3-8.3 5.2v1a1 1 0 0 0 1 1h14.6a1 1 0 0 0 1-1v-1c0-2.9-3.7-5.2-8.3-5.2z',
+    bank: 'M12 2 2.5 7.6v1.9h19V7.6L12 2zM4 11h3v6.5H4V11zm6.5 0h3v6.5h-3V11zm6.5 0h3v6.5h-3V11zM3 19.5h18V22H3v-2.5z',
+    garage: 'M6.3 6.6A2.4 2.4 0 0 1 8.6 5h6.8a2.4 2.4 0 0 1 2.3 1.6l1.3 3.5c.9.3 1.5 1.2 1.5 2.1v5.3a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-.9h-11v.9a1 1 0 0 1-1 1h-1a1 1 0 0 1-1-1v-5.3c0-1 .6-1.8 1.5-2.1l1.3-3.5zM8 7.2l-1 2.8h10l-1-2.8a.9.9 0 0 0-.9-.6H8.9a.9.9 0 0 0-.9.6zM7.1 14.7a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6zm9.8 0a1.3 1.3 0 1 0 0-2.6 1.3 1.3 0 0 0 0 2.6z',
+    wallet: 'M4 5.5A2.5 2.5 0 0 1 6.5 3h11A2.5 2.5 0 0 1 20 5.5V7H6.2a.85.85 0 0 0 0 1.7H21a1 1 0 0 1 1 1v8.8a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 4 18.5v-13zm12.8 10.2a1.45 1.45 0 1 0 0-2.9 1.45 1.45 0 0 0 0 2.9z',
+    jobs: 'M9.5 3h5A1.5 1.5 0 0 1 16 4.5V6h3.5A1.5 1.5 0 0 1 21 7.5V11H3V7.5A1.5 1.5 0 0 1 4.5 6H8V4.5A1.5 1.5 0 0 1 9.5 3zm.5 3h4V4.8h-4V6zM3 12.5h7v1.8h4v-1.8h7v6a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 18.5v-6z',
+    map: 'M20.7 3.3a.9.9 0 0 1 .2 1L13.6 21a.9.9 0 0 1-1.7-.1l-1.8-6.1-6.1-1.8A.9.9 0 0 1 4 11.3L19.7 3.1a.9.9 0 0 1 1 .2z',
+    music: 'M19.7 3.1a1 1 0 0 1 .8 1v11.2a3.1 3.1 0 1 1-1.8-2.8V7.4l-8.4 1.9v8.4a3.1 3.1 0 1 1-1.8-2.8V6.6a1 1 0 0 1 .8-1l10.4-2.5z',
+    house: 'M11.35 3.5a1 1 0 0 1 1.3 0l8.2 7.1a.8.8 0 0 1-.55 1.4H19v7.5a1.5 1.5 0 0 1-1.5 1.5H14v-6h-4v6H6.5A1.5 1.5 0 0 1 5 19.5V12H3.7a.8.8 0 0 1-.55-1.4l8.2-7.1z',
+    shield: 'M12 2.3 19.5 5v6.1c0 4.9-3.2 8.5-7.5 10.6C7.7 19.6 4.5 16 4.5 11.1V5L12 2.3z',
+    calc: 'M6.5 2h11A2.5 2.5 0 0 1 20 4.5v15a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2zM7 5v3.4h10V5H7zm0 6v2.2h2.6V11H7zm3.7 0v2.2h2.6V11h-2.6zm3.7 0v2.2H17V11h-2.6zM7 16v2.2h2.6V16H7zm3.7 0v2.2h2.6V16h-2.6zm3.7 0v2.2H17V16h-2.6z',
+    heart: 'M12 20.7C7.1 17.2 3.5 14 3.5 10.2 3.5 7.6 5.5 5.6 8 5.6c1.5 0 3 .7 4 2 1-1.3 2.5-2 4-2 2.5 0 4.5 2 4.5 4.6 0 3.8-3.6 7-8.5 10.5z',
+    check: 'M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm-1.3 14.3-4-4 1.7-1.7 2.3 2.3 5-5 1.7 1.7-6.7 6.7z',
+    camera: 'M9.2 3.8a1.8 1.8 0 0 0-1.5.8l-.9 1.3H4.5A2.5 2.5 0 0 0 2 8.4v9.2a2.5 2.5 0 0 0 2.5 2.5h15a2.5 2.5 0 0 0 2.5-2.5V8.4a2.5 2.5 0 0 0-2.5-2.5h-2.3l-.9-1.3a1.8 1.8 0 0 0-1.5-.8H9.2zM12 8.6a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9zm0 1.8a2.7 2.7 0 1 0 0 5.4 2.7 2.7 0 0 0 0-5.4z',
+    store: 'M8.2 8V7a3.8 3.8 0 1 1 7.6 0v1h2.7a1 1 0 0 1 1 .93l-.75 10.5A2.4 2.4 0 0 1 16.36 21H7.64a2.4 2.4 0 0 1-2.39-1.57L4.5 8.93A1 1 0 0 1 5.5 8h2.7zm1.8 0h4V7a2 2 0 1 0-4 0v1z',
+    settings: 'M13.9 2.2l.4 2.4a7.6 7.6 0 0 1 2 1.2l2.3-.9 1.9 3.3-1.9 1.6a7.6 7.6 0 0 1 0 2.4l1.9 1.6-1.9 3.3-2.3-.9a7.6 7.6 0 0 1-2 1.2l-.4 2.4h-3.8l-.4-2.4a7.6 7.6 0 0 1-2-1.2l-2.3.9-1.9-3.3 1.9-1.6a7.6 7.6 0 0 1 0-2.4L3.5 8.2l1.9-3.3 2.3.9a7.6 7.6 0 0 1 2-1.2l.4-2.4h3.8zM12 8.6a3.4 3.4 0 1 0 0 6.8 3.4 3.4 0 0 0 0-6.8z',
+    note: 'M6.8 12.2h10.4v1.7H6.8zM6.8 16.1h7.2v1.7H6.8z',
+  };
+  const GREEN = 'linear-gradient(180deg,#67E585,#0CBE3C)';
+  const GREY = 'linear-gradient(180deg,#9DA0A6,#606268)';
+  const TILES = {
+    phone: { bg: GREEN, d: G.phone },
+    messages: { bg: GREEN, d: G.messages },
+    contacts: { bg: GREY, d: G.contacts },
+    bank: { bg: 'linear-gradient(180deg,#2ECC71,#0B8F43)', d: G.bank },
+    garage: { bg: 'linear-gradient(180deg,#54B9FF,#0A63D6)', d: G.garage },
+    wallet: { bg: 'linear-gradient(180deg,#3A3A3C,#141416)', d: G.wallet },
+    jobs: { bg: 'linear-gradient(180deg,#7D7AFF,#4B48D6)', d: G.jobs },
+    map: { bg: 'linear-gradient(135deg,#A5E8B8 0%,#F2F7F4 48%,#A9D3FF 100%)', d: G.map, fill: '#0A84FF' },
+    music: { bg: 'linear-gradient(180deg,#FB5C74,#F5233B)', d: G.music },
+    house: { bg: 'linear-gradient(180deg,#49C6D8,#0E8FA6)', d: G.house },
+    shield: { bg: 'linear-gradient(180deg,#3C82F6,#0A48C4)', d: G.shield },
+    calc: { bg: 'linear-gradient(180deg,#3A3A3C,#141416)', d: G.calc, fill: '#FF9F0A' },
+    heart: { bg: '#FFFFFF', d: G.heart, fill: '#FF2D55' },
+    check: { bg: '#FFFFFF', d: G.check, fill: '#FF9500' },
+    camera: { bg: 'linear-gradient(180deg,#8E8E93,#3A3A3C)', d: G.camera },
+    store: { bg: 'linear-gradient(180deg,#31A5FF,#0A6CFF)', d: G.store },
+    settings: { bg: GREY, d: G.settings },
+    note: { bg: 'linear-gradient(180deg,#FFD44D 0%,#FFD44D 24%,#FFFFFF 24%)', d: G.note, fill: '#C2C3C8' },
+  };
+
+  /** The coloured app tile. `cls` adds context classes ('appx' inside a row). */
+  UI.appIcon = function (name, cls) {
+    const t = TILES[name];
+    const open = '<span class="ic ' + (cls || '') + '" style="background:' +
+      (t ? t.bg : GREY) + '">';
+    if (!t) return open + svg(name) + '</span>';
+    return open + '<svg viewBox="0 0 24 24" fill="' + (t.fill || '#fff') + '"><path d="' +
+      t.d + '"/></svg></span>';
   };
 
   root.PhoneUI = UI;

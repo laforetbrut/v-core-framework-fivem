@@ -22,11 +22,7 @@ const post = (n, b) => fetch(`https://v-phone/${n}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}),
 }).then((r) => r.json()).catch(() => ({ error: 'x' }));
 
-// Icon tints, so the home grid is not eight identical squares.
-const TINT = { phone: 't-green', messages: 't-green', contacts: 't-grey', bank: 't-green',
-  garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey',
-  map: 't-blue', music: 't-green', house: 't-blue', shield: 't-dark', calc: 't-dark',
-  store: 't-blue', heart: 't-dark', check: 't-green', camera: 't-grey' };
+// Tile backgrounds come from the icon table in sdk.js (UI.appIcon).
 
 // ══ State ══════════════════════════════════════════════════════
 let S = {};             // strings
@@ -88,12 +84,13 @@ function unreadTotal() {
 function tileHTML(a, i) {
   const badge = a.id === 'messages' ? unreadTotal() : (a.badge || 0);
   return `<button class="tile" type="button" data-app="${esc(a.id)}" style="--i:${i}">` +
-    `<span class="wrap"><span class="ic ${TINT[a.icon] || ''}">${svg(a.icon)}</span>` +
+    `<span class="wrap">${UI.appIcon(a.icon)}` +
     (badge > 0 ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '') +
     `</span><span class="nm">${esc(L(a.label))}</span></button>`;
 }
 
 function renderHome() {
+  byId('pages').classList.remove('jiggle');
   const apps = (state.apps || []).slice();
   // The last four go in the dock, the way iOS ships: the apps you reach for without
   // thinking stay put while the grid pages move.
@@ -174,7 +171,7 @@ function appById(id) { return (state.apps || []).find((a) => a.id === id); }
 function folderTile(it, i) {
   const four = it.apps.slice(0, 4).map((id) => {
     const a = appById(id);
-    return '<span>' + (a ? svg(a.icon) : '') + '</span>';
+    return '<span>' + (a ? UI.appIcon(a.icon) : '') + '</span>';
   }).join('');
   return '<button class="tile" type="button" data-folder="' + i + '" style="--i:' + i + '">' +
     '<span class="wrap"><span class="folder glass">' + four + '</span></span>' +
@@ -219,6 +216,7 @@ function wireArrange() {
     hold = setTimeout(() => {
       editing = true;
       tile.classList.add('dragging');
+      byId('pages').classList.add('jiggle');
       toast(L('ph.arrange_on'));
     }, 420);
   });
@@ -259,6 +257,7 @@ function wireArrange() {
     }
     editing = false;
     from = null;
+    byId('pages').classList.remove('jiggle');
   });
 }
 
@@ -288,11 +287,11 @@ async function renderWidgets() {
   const icon = WEATHER_ICON[w] || 'sun';
   const hh = String(d.hours).padStart(2, '0') + ':' + String(d.minutes).padStart(2, '0');
   host.innerHTML =
-    '<div class="widget glass"><div class="wtop"><span>' + esc(L('ph.los_santos')) + '</span>' +
+    '<div class="widget weather"><div class="wtop"><span>' + esc(L('ph.los_santos')) + '</span>' +
       '<span class="wicon">' + svg(icon) + '</span></div>' +
       '<div><div class="wbig">' + esc(hh) + '</div>' +
       '<div class="wsub">' + esc(L('ph.weather_' + icon)) + '</div></div></div>' +
-    '<div class="widget cal glass"><div class="wday">' + esc(L('ph.month_' + MONTHS[(d.month || 1) - 1])) + '</div>' +
+    '<div class="widget cal"><div class="wday">' + esc(L('ph.month_' + MONTHS[(d.month || 1) - 1])) + '</div>' +
       '<div class="wnum">' + esc(d.day || 1) + '</div>' +
       '<div class="wsub">' + esc(L('ph.in_game_date')) + '</div></div>';
 }
@@ -362,6 +361,15 @@ const body = (html) => { byId('appbody').innerHTML = html; };
 const foot = (html) => { byId('appfoot').innerHTML = html || ''; };
 const loading = () => body(UI.empty(L('ph.loading')));
 const rows = (sel, fn) => [...byId('appbody').querySelectorAll(sel)].forEach(fn);
+
+// The iOS push: new content slides in from the right. A swap with no motion reads as a
+// refresh rather than a step deeper.
+const pushAnim = () => {
+  const b = byId('appbody');
+  b.classList.remove('pushin');
+  void b.offsetWidth;
+  b.classList.add('pushin');
+};
 
 // The large title collapses into the bar on scroll, as it does on iOS.
 byId('appbody').addEventListener('scroll', (e) => {
@@ -447,6 +455,7 @@ async function openThread(number) {
   const res = await post('conversation', { number });
   if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
   paintThread(res.messages || []);
+  pushAnim();
   const c = (state.conversations || []).find((x) => x.number === number);
   if (c) c.unread = 0;
 }
@@ -563,7 +572,7 @@ RENDER.garage = async () => {
   const list = Array.isArray(d) ? d : (d.vehicles || []);
   if (!list.length) { body(UI.empty(L('ph.no_vehicles'), 'garage')); return; }
   body(UI.group(list.map((v) => UI.row({
-    icon: 'garage', title: v.model || '', subtitle: `${v.plate || ''}  ${v.garage || L('ph.out')}`,
+    icon: 'garage', tint: '#0A84FF', title: v.model || '', subtitle: `${v.plate || ''}  ${v.garage || L('ph.out')}`,
     value: v.live ? L('ph.veh_out') : L('ph.veh_stored'),
   }))));
 };
@@ -594,7 +603,7 @@ RENDER.wallet = async () => {
     }
   };
   body(cardHtml + UI.group(list.map((l) => UI.row({
-    icon: 'wallet', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
+    icon: 'wallet', tint: '#5856D6', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
     subtitle: l.issuer || '', value: l.held ? L('ph.lic_held') : L('ph.lic_none'),
     tone: l.held ? 'pos' : '',
   }))));
@@ -612,7 +621,7 @@ RENDER.jobs = async () => {
     UI.bigNumber(L('ph.current_job'), d.current || '') +
     (list.length
       ? UI.group(list.map((j) => UI.row({
-          icon: 'jobs', title: j.label || j.name, subtitle: j.grade || '',
+          icon: 'jobs', tint: '#5856D6', title: j.label || j.name, subtitle: j.grade || '',
           value: money(j.salary), mono: true,
         })), { header: L('ph.openings'), footer: L('ph.jobs_hint') })
       : UI.empty(L('ph.no_jobs'), 'jobs'))
@@ -624,9 +633,9 @@ RENDER.settings = () => {
   const p = state.prefs || {};
   body(
     UI.group([
-      UI.row({ icon: 'phone', title: L('ph.my_number'), value: state.number || '',
+      UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.my_number'), value: state.number || '',
                data: { copy: state.number || '' } }),
-      UI.row({ icon: 'moon', title: L('ph.dark_mode'), toggle: !!p.dark, data: { t: 'dark' } }),
+      UI.row({ icon: 'moon', tint: '#5856D6', title: L('ph.dark_mode'), toggle: !!p.dark, data: { t: 'dark' } }),
     ]) +
     (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
     (state.customWallpaper === false ? '' :
@@ -639,7 +648,7 @@ RENDER.settings = () => {
       (p.wallpaperUrl ? UI.button(L('ph.wall_clear'), 'wclear', 'plain') : '') +
       '<div class="groupfoot">' + esc(L('ph.wall_hint')) + '</div>') +
     UI.group((state.wallpapers || []).map((w) => UI.row({
-      icon: 'wall', title: L('ph.wall_' + w),
+      icon: 'wall', tint: '#007AFF', title: L('ph.wall_' + w),
       value: (!p.wallpaperUrl && p.wallpaper === w) ? L('ph.on') : '',
       data: { w },
     })), { header: L('ph.wallpaper') }) +
@@ -653,7 +662,7 @@ RENDER.settings = () => {
         '<button class="' + (p.side === 'left' ? 'on' : '') + '" data-side="left">' + esc(L('ph.side_left')) + '</button>' +
       '</div>' +
     '</div>' +
-    UI.group([UI.row({ icon: 'moon', title: L('ph.dnd'), toggle: !!p.dnd, data: { t: 'dnd' } })],
+    UI.group([UI.row({ icon: 'moon', tint: '#5856D6', title: L('ph.dnd'), toggle: !!p.dnd, data: { t: 'dnd' } })],
       { footer: L('ph.dnd_hint') }) +
     // iOS 27's headline user-facing change. It is a stored preference every layer of
     // the glass derives from, not a fade on one overlay.
@@ -665,7 +674,7 @@ RENDER.settings = () => {
     '</div>' +
     '<div class="groupfoot">' + esc(L('ph.glass_hint')) + '</div>' +
     UI.group((state.apps || []).map((a) => UI.row({
-      icon: a.icon, title: L(a.label),
+      appicon: a.icon, title: L(a.label),
       value: p.actionApp === a.id ? L('ph.on') : '', data: { act: a.id },
     })), { header: L('ph.action_button'), footer: L('ph.action_hint') })
   );
@@ -777,7 +786,7 @@ function applyPower(p) {
   const b = Math.max(0, Math.min(100, Number(p.battery)));
   const el = byId('battery');
   el.style.setProperty('--batt', String(b / 100));
-  el.style.setProperty('--batt-col', p.charging ? '#30d158' : (b <= 5 ? '#ff453a' : (b <= 20 ? '#ff9f0a' : '#fff')));
+  el.style.setProperty('--batt-col', p.charging ? '#34C759' : (b <= 5 ? '#FF3B30' : (b <= 20 ? '#FF9500' : '#fff')));
   byId('battpct').textContent = Math.round(b);
 
   const bars = Math.max(0, Math.min(4, Number(p.signal ?? 4)));
@@ -845,7 +854,7 @@ RENDER.music = async () => {
   const list = d.sources || [];
   if (!list.length) { body(UI.empty(L('ph.no_music'), 'music')); return; }
   body(UI.group(list.map((m, i) => UI.row({
-    icon: 'music', title: m.title || L('ph.untitled'),
+    icon: 'music', tint: '#FA2D48', title: m.title || L('ph.untitled'),
     subtitle: L('ph.music_' + (m.kind || 'boombox')),
     value: m.paused ? L('ph.paused') : L('ph.playing'),
     tone: m.paused ? '' : 'pos', chevron: true, data: { i },
@@ -879,7 +888,7 @@ RENDER.property = async () => {
   const list = d.rows || [];
   if (!list.length) { body(UI.empty(L('ph.no_property'), 'house')); return; }
   body(UI.group(list.map((pr, i) => UI.row({
-    icon: 'house', title: pr.label,
+    icon: 'house', tint: '#12A5BC', title: pr.label,
     subtitle: L('ph.tenancy_' + (pr.tenancy || 'own')) +
       (Number(pr.arrears) > 0 ? '  ' + String(L('ph.arrears')).replace('%s', pr.arrears) : ''),
     value: pr.locked ? L('ph.locked') : '',
@@ -1165,7 +1174,7 @@ RENDER.store = () => {
   body(UI.group(list.map((a) => {
     const has = installed.has(a.id);
     return '<div class="row lead" data-app="' + esc(a.id) + '">' +
-      '<span class="ricon">' + svg(a.icon) + '</span>' +
+      UI.appIcon(a.icon, 'appx') +
       '<span class="rmain"><span class="rt">' + esc(L(a.label)) + '</span>' +
       '<span class="rs">' + esc(a.required ? L('ph.store_required') : (has ? L('ph.store_installed') : L('ph.store_get'))) + '</span></span>' +
       (a.required ? '' : '<button class="storebtn ' + (has ? '' : 'get') + '" data-act="' +
@@ -1207,8 +1216,8 @@ RENDER.health = async () => {
   const d = await post('health');
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'heart')); return; }
   const rows = [];
-  if (d.bleed > 0) rows.push(UI.row({ icon: 'heart', title: L('ph.bleeding'), value: String(d.bleed), tone: 'neg' }));
-  if (d.sick > 0) rows.push(UI.row({ icon: 'heart', title: L('ph.illness'), value: String(d.sick), tone: 'neg' }));
+  if (d.bleed > 0) rows.push(UI.row({ icon: 'heart', tint: '#FF3B30', title: L('ph.bleeding'), value: String(d.bleed), tone: 'neg' }));
+  if (d.sick > 0) rows.push(UI.row({ icon: 'heart', tint: '#FF3B30', title: L('ph.illness'), value: String(d.sick), tone: 'neg' }));
   body(
     '<div class="rings">' +
       ringHtml(L('ph.vitality'), d.health, 100, '#ff453a') +
@@ -1218,7 +1227,7 @@ RENDER.health = async () => {
     '</div>' +
     ringHtml(L('ph.stress'), d.stress, 100, '#bf5af2').replace('class="ring"', 'class="ring" style="margin-bottom:20px"') +
     (rows.length ? UI.group(rows, { header: L('ph.attention') })
-                 : UI.group([UI.row({ icon: 'heart', title: L('ph.all_well') })]))
+                 : UI.group([UI.row({ icon: 'heart', tint: '#FF3B30', title: L('ph.all_well') })]))
   );
 };
 
@@ -1255,10 +1264,10 @@ RENDER.reminders = async () => {
   const done = reminders.filter((r) => r.done);
   body(
     (open.length ? UI.group(open.map((r) => UI.row({
-      icon: 'check', title: r.t, data: { i: reminders.indexOf(r) },
+      icon: 'check', tint: '#FF9500', title: r.t, data: { i: reminders.indexOf(r) },
     })), { header: L('ph.to_do') }) : '') +
     (done.length ? UI.group(done.map((r) => UI.row({
-      icon: 'check', title: r.t, value: L('ph.done'), tone: 'pos', data: { i: reminders.indexOf(r) },
+      icon: 'check', tint: '#FF9500', title: r.t, value: L('ph.done'), tone: 'pos', data: { i: reminders.indexOf(r) },
     })), { header: L('ph.done') }) : '')
   );
   rows('.row[data-i]', (el) => el.addEventListener('click', async () => {
@@ -1391,7 +1400,7 @@ function toast(text) {
 let bannerTimer = null;
 function banner(b) {
   const el = byId('banner');
-  el.innerHTML = `<span class="bic">${svg(b.icon || 'messages')}</span>` +
+  el.innerHTML = `<span class="bic">${UI.appIcon(b.icon || 'messages')}</span>` +
     `<span class="btext"><span class="bt">${esc(b.title || '')}</span>` +
     `<span class="bb">${esc(b.body || '')}</span></span>`;
   el.classList.add('on');
@@ -1406,7 +1415,7 @@ function banner(b) {
 
 function paintNotifs() {
   byId('locknotifs').innerHTML = notifs.map((n, i) =>
-    `<div class="lnotif glass" style="--i:${i}"><span class="lic">${svg(n.icon)}</span>` +
+    `<div class="lnotif glass" style="--i:${i}"><span class="lic">${UI.appIcon(n.icon)}</span>` +
     `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
     `<span class="lb">${esc(n.body || '')}</span></span></div>`).join('');
 }
@@ -1558,6 +1567,28 @@ async function refresh() {
 // ══ Wiring ═════════════════════════════════════════════════════
 byId('lock').addEventListener('click', unlock);
 byId('homebar').addEventListener('click', goHome);
+
+// Spotlight: the pill above the dock finds an app by name and launches it. It exists
+// because a sixth page of icons is where apps go to be forgotten.
+byId('spill').addEventListener('click', () => {
+  sheet(L('ph.search'),
+    UI.field('appq', L('ph.search_apps')) + '<div id="appres"></div>',
+    () => {
+      const draw = (q) => {
+        const list = (state.apps || []).filter((a) => !q || L(a.label).toLowerCase().includes(q));
+        byId('appres').innerHTML = list.length
+          ? UI.group(list.map((a) => UI.row({ appicon: a.icon, title: L(a.label), chevron: true, data: { app: a.id } })))
+          : UI.empty(L('ph.no_app'));
+        [...byId('appres').querySelectorAll('.row')].forEach((r) => r.addEventListener('click', () => {
+          const a = (state.apps || []).find((x) => x.id === r.dataset.app);
+          closeSheet();
+          if (a) enterApp(a, null);
+        }));
+      };
+      draw('');
+      byId('appq').addEventListener('input', () => draw(byId('appq').value.trim().toLowerCase()));
+    });
+});
 byId('island').addEventListener('click', () => { if (call) renderCall(); });
 byId('status').style.pointerEvents = 'auto';
 byId('status').addEventListener('click', () => {
@@ -1612,6 +1643,7 @@ window.addEventListener('message', (e) => {
     applyGlass((d.prefs && d.prefs.glass) ?? 55);
     tick();
     paintNotifs();
+    const sp = byId('spilltxt'); if (sp) sp.textContent = L('ph.search');
     byId('lock').classList.remove('out');
     byId('lockquick').classList.remove('hidden');
     byId('home').classList.add('behind');

@@ -247,5 +247,6 @@ local T = {
     ['ph.err_flat'] = 'Votre téléphone est déchargé',
     ['ph.err_nosignal'] = 'Aucun réseau ici',
     ['ph.err_unreachable'] = 'Cette personne n’a pas de réseau',
+    ['ph.search_apps'] = 'Rechercher une application',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

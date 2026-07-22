@@ -1167,6 +1167,20 @@ Nothing here was invented to fill the grid. A weather app was considered and dro
 because no module answers for weather, and an app with nothing behind it is worse than an
 empty space where one could go.
 
+**The pass that made it read as iOS, and what it actually consisted of.** App icons were
+the single biggest tell: a stroke outline on a flat tint reads as a web dashboard, so
+every built-in app now has a vivid gradient squircle with a **filled white glyph**, drawn
+from one table in the SDK that third-party apps inherit just by naming an icon. The
+palette is the system's, exactly: grouped background, system blue, green, red, orange,
+indigo - and Settings carries the per-row coloured icon tiles the real app is recognised
+by. The keypad is the real keypad (light grey circles, letters under the digits, green
+call), the calculator is the real calculator (black, orange operators, grey functions),
+received bubbles are the exact grey against system-blue sent, and banners, lock-screen
+notifications and the calendar widget sit on **light material** rather than dark glass -
+with the weather widget on Weather blue. Motion: icons **jiggle** while being arranged,
+drilling into a thread **pushes in from the right**, and a **spotlight** above the dock
+finds an app by name, because a sixth page of icons is where apps go to be forgotten.
+
 **The control centre contains only real controls.** A tile that toggles nothing is
 decoration, and decoration shaped like a switch is a lie about what the phone can do.
 

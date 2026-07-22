@@ -245,5 +245,6 @@ local T = {
     ['ph.err_flat'] = 'Your phone is dead',
     ['ph.err_nosignal'] = 'No signal here',
     ['ph.err_unreachable'] = 'They have no signal',
+    ['ph.search_apps'] = 'Search apps',
 }
 for k, v in pairs(T) do Locales.en[k] = v end
