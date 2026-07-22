@@ -1194,11 +1194,108 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-phone` | high | iFruit phone NUI - a primary interaction surface (the server has no chat). Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
+| `v-3dsound` | high | A shared primitive, not a feature: play a sound at a position or on an entity, heard by everyone in range. Half the list below needs it. |
+| `v-phone` | high | iFruit phone NUI - a primary interaction surface. Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
+| `v-radio` | high | The handheld radio **device**: multi-channel listening, presets, per-channel volume. The transport is `v-voice`; this is the thing in your hand. |
+| `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
 | `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
+| `v-motel` | medium | Short-term rented rooms. A **tenancy type inside `v-housing`**, not a second housing system. |
+| `v-music` | medium | Boomboxes, jukeboxes and vehicle radio, positional through `v-3dsound`. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
+
+#### `v-3dsound` - the positional audio primitive
+
+Build this first of the five, because `v-music`, `v-radio`, `v-housing` (doors, alarms),
+`v-police` (sirens, cuffs) and `v-drugs` (a lab that goes wrong) all want the same thing
+and will otherwise each grow their own copy.
+
+**One export, honestly scoped:** play a named sound at a world position or attached to an
+entity, with a range and a volume, heard by every client in range. The server broadcasts
+the *intent*; each client plays it locally and attenuates by its own distance. Never send
+audio data - that is what the sound bank is for.
+
+Two banks: **native GTA sounds** (`PlaySoundFromCoord`, free, no streaming) and **custom
+files** shipped in the resource and played through a tiny NUI page. Prefer native; a custom
+sound is a download every player pays for.
+
+**The trap:** a sound triggered client-side and broadcast by that client is a griefing tool.
+Anything a player can cause goes through the server, which re-derives the position from the
+player rather than the payload - the same rule as every other module here.
+
+#### `v-radio` - the device, not the transport
+
+`v-voice` already owns radio **channels**: who may join, who may transmit, and the Mumble
+plumbing. `v-radio` is deliberately the other half - **the object in your hand**.
+
+**Multi-channel is the point.** `v-voice` today joins one channel; the device lets you
+**listen to several at once** while transmitting on one selected channel, which is how a
+real handheld works and what a police officer monitoring dispatch and a tac channel needs.
+That means one change inside `v-voice`: the joined channel becomes a *set* of listens plus
+a single transmit target. `MumbleAddVoiceChannelListen` already supports several; the
+authority check simply runs per channel.
+
+**What the device adds:** a NUI with the channel list filtered to what you may use, presets
+you can name and save, **per-channel volume** (`MumbleSetVolumeOverrideByServerId` for
+people, a gain per channel for the mix), a click when somebody keys up, and the radio going
+dead when the item leaves your inventory.
+
+**Boundary:** `v-radio` never decides permission. It asks `v-voice`, which asks
+`v-factions` / `v-police`. A device that decides its own channel list is a device that can
+be edited.
+
+#### `v-chat` - local, OOC and emotes, without becoming a command surface
+
+The framework's rule is **no player commands**, and that rule stands: chat must not become
+a way to `/givemoney` or `/tp`. What it *is* for:
+
+- **Local text** with a range, so a deaf or mute player is not locked out of roleplay - the
+  single strongest reason to build this at all.
+- **`/me` and `/do`** emotes, the two conventions every roleplay server actually uses.
+- **OOC**, range-limited or global depending on a setting, clearly marked as out of
+  character.
+- **A report channel** that reaches staff, which today has no surface at all.
+
+Everything else stays where it is: gameplay actions go through the radial menu, the phone
+and keybinds. Admin commands remain admin commands.
+
+**Server-side and rate-limited.** Message text is sanitised server-side (a chat that renders
+client HTML is an XSS hole in a NUI), range is re-derived from the sender's position, and a
+flood limit is a setting rather than a constant. Every message is logged through
+`Core.Log`, because a chat with no audit trail is a chat a staff member cannot moderate.
+
+#### `v-motel` - a tenancy type, not a second housing system
+
+Motels are the cheap end of the property ladder, and the temptation is to write them as
+their own module. They should be **rows in `v-housing`** with a `tenancy` of `rent`:
+
+- Same shells, same routing buckets, same `v-inventory` stash, same key model.
+- **Rented rather than owned**: a recurring debit, and a failure *locks* the room rather
+  than deleting it. Deleting somebody's stash for missing rent is how a server loses a
+  player - the same rule already written for housing.
+- No house garage, a smaller stash, and a shorter lease. That is the entire difference, and
+  all three are columns.
+
+If it turns out to need its own module later, it will be because tenancy grew features
+housing does not want - not because a motel is fundamentally different from a flat.
+
+#### `v-music` - boomboxes, jukeboxes and the car stereo
+
+Built **on `v-3dsound`**, not beside it. A music source is a position, a stream and a set of
+listeners; the audio itself plays in a NUI page per client and is attenuated by distance.
+
+- **A boombox is an item** placed in the world; a jukebox is a `v-world` row; the car
+  stereo is bound to a vehicle and audible outside it, quieter, which is most of the fun.
+- **Sync is by timestamp, not by streaming**: everyone gets the source and an offset, so a
+  player arriving late joins mid-track instead of restarting it for everybody.
+- **Who may control a source** is the owner, plus anyone the owner allows - and inside a
+  property, whoever holds a key. Reuse, do not reinvent.
+
+**The honest constraint:** arbitrary URL playback is a moderation problem, not a technical
+one. Ship an allow-list of hosts as a setting, default it to something narrow, and log what
+was played by whom. A server that lets anyone stream anything to everyone in earshot will
+spend its first week moderating audio.
 
 #### `v-housing` - property, interiors and what lives inside them
 
@@ -1248,10 +1345,17 @@ the part that needs balancing once players are on the server.
    laundering path, and it is the module most likely to need balancing once players are on the server.
 5. **`v-anticheat` before the server opens**, not after. It is listed last because it guards
    everything above, not because it matters least.
-6. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
+6. **`v-3dsound` before `v-music` and `v-radio`.** It is a primitive that five modules want;
+   building any of them first means building it five times.
+7. **`v-motel` with `v-housing`, not after it.** It is a tenancy column, and discovering that
+   after shipping housing means retrofitting rent into a model that assumed ownership.
+8. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
    existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
    reason to exist on the illegal side, and it needs the police module that now ships. Building
    housing first would mean shipping it twice.
+9. **`v-chat` whenever, but not as a shortcut.** It is small, and the temptation the moment it
+   exists is to hang gameplay commands off it. The no-player-commands rule is what keeps the
+   phone and the radial menu worth building.
 
 **Every module in this roadmap ships with:** a `v-world` domain + a v-admin Editor subtab for its
 content, fr **and** en locales, server-side re-derivation of every gate, and an entry in this file,

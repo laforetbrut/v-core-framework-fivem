@@ -68,7 +68,8 @@ by value/effort. Tick items as they ship.
       *Next:* tool-gated gathering (pickaxe/durability), gathering XP, more node types (wood, oil, chemicals
       for `gunpowder`), processing stations (ore → ingot).
 - [ ] **`v-phone`** (high) - iFruit NUI: primary interaction surface (marketplace to sell crafted items,
-      messages, bank, job apps). The server has no chat, so this is a keystone.
+      messages, bank, job apps). Gameplay never happens through chat (see `v-chat` in ARCHITECTURE §5.5: local, OOC and
+      emotes only), so the phone is a keystone.
 - [ ] **`v-radial`** (high) - context radial menu (the other main interaction surface): frisk, give,
       craft-here, vehicle actions - replaces the temporary keybinds (H/X/etc.).
 - [x] **Vending machines** ✅ (shipped as v-shops locations, no-ped/no-blip). *Next:* garbage job &
