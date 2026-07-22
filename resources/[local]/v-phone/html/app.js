@@ -770,6 +770,23 @@ function applyWallpaper() {
 // left-handed player are not the same person's problem.
 // An app is light by default, as it is on iOS. The chrome around it stays dark glass
 // over the wallpaper, which is also how iOS behaves: the two are different surfaces.
+// The status bar tells the truth about both. Neither number is the client's to invent:
+// the server works them out from where the player actually is.
+function applyPower(p) {
+  if (!p) return;
+  const b = Math.max(0, Math.min(100, Number(p.battery)));
+  const el = byId('battery');
+  el.style.setProperty('--batt', String(b / 100));
+  el.style.setProperty('--batt-col', p.charging ? '#30d158' : (b <= 5 ? '#ff453a' : (b <= 20 ? '#ff9f0a' : '#fff')));
+  byId('battpct').textContent = Math.round(b);
+
+  const bars = Math.max(0, Math.min(4, Number(p.signal ?? 4)));
+  [...byId('bars').querySelectorAll('rect')].forEach((r) =>
+    r.classList.toggle('off', Number(r.dataset.b) > bars));
+  // No service is worth saying in words: an icon of four empty bars reads as a glitch.
+  byId('nosvc').classList.toggle('hidden', bars > 0);
+}
+
 function applyTheme() {
   byId('screen').classList.toggle('dark', (state.prefs || {}).dark === true);
 }
@@ -1591,6 +1608,7 @@ window.addEventListener('message', (e) => {
     applyWallpaper();
     applyDevice();
     applyTheme();
+    applyPower(d.power || { battery: d.battery, charging: d.charging, signal: d.signal });
     applyGlass((d.prefs && d.prefs.glass) ?? 55);
     tick();
     paintNotifs();
@@ -1622,6 +1640,8 @@ window.addEventListener('message', (e) => {
                                 if (a) { enterApp(a, null); openThread(d.message.from); } } });
       refresh().then(() => { if (!openApp) renderHome(); });
     }
+  } else if (d.action === 'power') {
+    applyPower(d.power);
   } else if (d.action === 'banner') {
     banner(d.banner || {});
   }

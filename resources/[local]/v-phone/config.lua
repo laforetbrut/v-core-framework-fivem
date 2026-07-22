@@ -96,3 +96,45 @@ Config.WallpaperFit = 'cover'
 -- on the other side; neither is worth making them live without.
 Config.DeviceSize = 1.0        -- 0.75 .. 1.15
 Config.DeviceSide = 'right'    -- right | left
+
+-- ── Battery ────────────────────────────────────────────────────
+-- Eight real-world hours from full to flat, which is roughly what a phone does. The
+-- number is a setting because "how long is a session here" is a server's answer, not
+-- ours.
+--
+-- **It only drains while the player is connected.** A phone genuinely goes flat in a
+-- drawer, but so does the ability to charge it: coming back from a week away to a dead
+-- phone and no way to have prevented it is a punishment for logging off.
+Config.Battery = {
+    hoursToEmpty = 8.0,     -- idle, phone closed
+    screenMultiplier = 3.0, -- how much faster it drains with the screen on
+    chargeMinutes = 45.0,   -- flat to full at a charger
+    lowAt = 20,             -- first warning
+    criticalAt = 5,
+}
+
+-- Charging happens at these, and also in any vehicle and inside a property you hold a key
+-- to. Those two are code, because they follow the player rather than a coordinate.
+-- SEED DATA ONLY: chargers live in `world_chargers` and are edited from the admin panel.
+Config.Chargers = {
+    { id = 'ch_lsia',      label = 'LSIA, arrivals hall',    x = -1037.0, y = -2737.0, z = 20.2, radius = 8.0 },
+    { id = 'ch_legion',    label = 'Legion Square kiosk',    x = 195.0,   y = -933.0,  z = 30.7, radius = 6.0 },
+    { id = 'ch_pillbox',   label = 'Pillbox Hill Medical',   x = 306.0,   y = -595.0,  z = 43.3, radius = 8.0 },
+    { id = 'ch_paleto',    label = 'Paleto Bay, sheriff',    x = -448.0,  y = 6013.0,  z = 31.7, radius = 6.0 },
+    { id = 'ch_sandy',     label = 'Sandy Shores, clinic',   x = 1839.0,  y = 3672.0,  z = 34.3, radius = 8.0 },
+    { id = 'ch_vespucci',  label = 'Vespucci boardwalk',     x = -1223.0, y = -1493.0, z = 4.4,  radius = 6.0 },
+}
+
+-- Where the network does not reach. `bars` is the CEILING inside the zone: 0 means no
+-- service at all. Real places, chosen because they are places a story would put you.
+-- SEED DATA ONLY: edited from the admin panel -> Editor -> Dead zones.
+Config.DeadZones = {
+    { id = 'dz_chiliad',   label = 'Mount Chiliad',          x = 501.0,   y = 5604.0,  z = 797.0, radius = 700.0, bars = 0 },
+    { id = 'dz_raton',     label = 'Raton Canyon',           x = -1500.0, y = 4400.0,  z = 40.0,  radius = 500.0, bars = 0 },
+    { id = 'dz_zancudo',   label = 'Fort Zancudo',           x = -2100.0, y = 3200.0,  z = 32.0,  radius = 900.0, bars = 0 },
+    { id = 'dz_humane',    label = 'Humane Labs',            x = 3600.0,  y = 3700.0,  z = 30.0,  radius = 400.0, bars = 0 },
+    { id = 'dz_wilderness',label = 'Chiliad Wilderness',     x = -700.0,  y = 5000.0,  z = 100.0, radius = 900.0, bars = 1 },
+    { id = 'dz_senora',    label = 'Grand Senora Desert',    x = 1400.0,  y = 2800.0,  z = 60.0,  radius = 800.0, bars = 1 },
+    { id = 'dz_tunnel_ls', label = 'Los Santos tunnels',     x = 800.0,   y = -1300.0, z = -40.0, radius = 260.0, bars = 0 },
+    { id = 'dz_mine',      label = 'Davis Quartz',           x = 2900.0,  y = 2800.0,  z = 40.0,  radius = 350.0, bars = 1 },
+}

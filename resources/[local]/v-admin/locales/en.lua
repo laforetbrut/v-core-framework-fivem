@@ -253,5 +253,11 @@ local T = {
     ['adm.ed_hasgarage']    = 'Has a garage',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
+    ['adm.ed_chargers'] = 'Phone chargers',
+    ['adm.ed_deadzones'] = 'Dead zones',
+    ['adm.ed_chargerate'] = 'Charge rate (%)',
+    ['adm.ed_maxbars'] = 'Signal bars inside (0 = no service)',
+    ['adm.ed_nosignal'] = 'no service',
+    ['adm.ed_bars'] = 'bar(s)',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

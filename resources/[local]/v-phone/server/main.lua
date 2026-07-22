@@ -60,6 +60,24 @@ V.Module({
           min = 1, max = 240, step = 1,
           hint = 'A ceiling so a call somebody walked away from does not hold a voice channel open all night.' },
 
+        { key = 'battery', label = 'Battery drains', type = 'bool', default = true,
+          hint = 'Off leaves every phone permanently charged. It only ever drains while the player is connected: coming back from a week away to a dead phone is a punishment for logging off, not a simulation.' },
+
+        { key = 'hoursToEmpty', label = 'Hours from full to flat', type = 'number',
+          default = Config.Battery.hoursToEmpty, min = 0.25, max = 72, step = 0.25,
+          hint = 'Real hours, with the phone closed. The screen drains faster (see below).' },
+
+        { key = 'screenDrain', label = 'Drain multiplier with the screen on', type = 'number',
+          default = Config.Battery.screenMultiplier, min = 1, max = 20, step = 0.5 },
+
+        { key = 'chargeMinutes', label = 'Minutes from flat to full', type = 'number',
+          default = Config.Battery.chargeMinutes, min = 1, max = 600, step = 1,
+          hint = 'At a charger. A vehicle and a property you hold a key to charge at the same rate.' },
+
+        { key = 'powerbankCharge', label = 'Power bank charge (%)', type = 'number',
+          default = 45, min = 5, max = 100, step = 5,
+          hint = 'How much of the battery one power bank restores before it is used up.' },
+
         { key = 'anonymous', label = 'Allow withholding your number', type = 'bool', default = false,
           hint = 'On, a caller may hide their number. It is off by default because an anonymous call is a harassment tool before it is a roleplay tool.' },
 
@@ -346,6 +364,13 @@ local function conversation(cid, otherCid, limit)
 end
 
 --- The one write the phone owns. Returns ok plus the stored row, or an error key.
+--- Nothing leaves the phone without a signal. Checked here rather than in the client so
+--- that standing in a tunnel actually means something.
+local function hasBars(src)
+    if not V.SettingBool('battery', true) and (Signal[src] == nil) then return true end
+    return (Signal[src] or 4) > 0
+end
+
 local function sendMessage(fromCid, toNumber, body)
     body = tostring(body or ''):sub(1, math.max(1, math.floor(num(S('maxLength', Config.Messages.maxLength), 250))))
     if body:gsub('%s', '') == '' then return nil, 'empty' end
@@ -393,6 +418,11 @@ end
 
 local function startCall(src, p, toNumber, anonymous)
     if CallOf[src] then return nil, 'busy' end
+    if not hasBars(src) then return nil, 'nosignal' end
+    -- And the person being called has to be reachable too, or a call would ring somebody
+    -- standing in a tunnel.
+    local target0 = Online[toNumber]
+    if target0 and (Signal[target0] or 4) <= 0 then return nil, 'unreachable' end
 
     local toCid = cidOfNumber(toNumber)
     if not toCid then return nil, 'nonumber' end
@@ -447,6 +477,115 @@ local function answerCall(src)
 end
 
 -- ══════════════════════════════════════════════════════════════
+-- Battery and signal
+-- ══════════════════════════════════════════════════════════════
+-- Both are decided here, from the player's real position, for the same reason calls are:
+-- a client that reported its own signal would report five bars from inside a tunnel.
+
+local Battery = {}       -- [source] = level 0..100
+local Signal  = {}       -- [source] = bars 0..4
+local Charging = {}      -- [source] = true while in reach of something that charges
+
+local function batteryOf(src)
+    return math.max(0, math.min(100, math.floor(Battery[src] or 100)))
+end
+
+local function setBattery(src, level)
+    level = math.max(0, math.min(100, level))
+    local was = batteryOf(src)
+    Battery[src] = level
+    if math.floor(level) ~= was then
+        TriggerClientEvent('v-phone:client:power', src, {
+            battery = math.floor(level), charging = Charging[src] or false, signal = Signal[src] or 4,
+        })
+    end
+    return level
+end
+
+exports('GetBattery', function(src) return batteryOf(src) end)
+exports('AddBattery', function(src, delta) return setBattery(src, batteryOf(src) + (tonumber(delta) or 0)) end)
+exports('GetSignal',  function(src) return Signal[src] or 4 end)
+exports('HasSignal',  function(src) return (Signal[src] or 4) > 0 end)
+
+--- The ceiling from any dead zone the player is standing in. Zones overlap on purpose:
+--- the WORST one wins, so a tunnel inside a weak-signal desert is still a tunnel.
+local function signalAt(coords)
+    if GetResourceState('v-world') ~= 'started' then return 4 end
+    local bars = 4
+    for _, z in ipairs(V.Use('v-world').GetDeadZones() or {}) do
+        if z.enabled ~= false and z.enabled ~= 0 then
+            local d = #(coords - vector3(z.x + 0.0, z.y + 0.0, z.z + 0.0))
+            if d <= (z.radius or 60.0) then
+                bars = math.min(bars, math.floor(tonumber(z.bars) or 0))
+            end
+        end
+    end
+    return bars
+end
+
+--- Anywhere that charges: a public charger, any vehicle, or a property this character
+--- holds a key to. The last two follow the player rather than a coordinate, which is
+--- why they are code and not rows.
+local function chargeRateAt(src, ped, coords)
+    if IsPedInAnyVehicle(ped) then return 1.0 end
+
+    if GetResourceState('v-housing') == 'started' then
+        local inside = V.Use('v-housing').IsInside(src)
+        if inside then return 1.0 end
+    end
+
+    if GetResourceState('v-world') == 'started' then
+        for _, c in ipairs(V.Use('v-world').GetChargers() or {}) do
+            if c.enabled ~= false and c.enabled ~= 0 then
+                if #(coords - vector3(c.x + 0.0, c.y + 0.0, c.z + 0.0)) <= (c.radius or 3.0) then
+                    return math.max(0.1, (tonumber(c.rate) or 20) / 20.0)
+                end
+            end
+        end
+    end
+    return 0.0
+end
+
+-- One tick for everybody, every 20 seconds. Per-player timers for a value that changes
+-- this slowly would be sixty threads doing arithmetic.
+local TICK = 20
+local Open = {}          -- [source] = true while the screen is on
+
+CreateThread(function()
+    while true do
+        Wait(TICK * 1000)
+        if V.SettingBool('battery', true) then
+            local hours = math.max(0.25, tonumber(V.Setting('hoursToEmpty', Config.Battery.hoursToEmpty)) or 8.0)
+            local mult  = math.max(1.0, tonumber(V.Setting('screenDrain', Config.Battery.screenMultiplier)) or 3.0)
+            local full  = math.max(1.0, tonumber(V.Setting('chargeMinutes', Config.Battery.chargeMinutes)) or 45.0)
+
+            local drainPerTick  = 100.0 / (hours * 3600.0) * TICK
+            local chargePerTick = 100.0 / (full * 60.0) * TICK
+
+            for _, src in ipairs(GetPlayers()) do
+                src = tonumber(src)
+                local p = Core.GetPlayer(src)
+                if p then
+                    local ped = GetPlayerPed(src)
+                    local coords = GetEntityCoords(ped)
+                    Signal[src] = signalAt(coords)
+
+                    local rate = chargeRateAt(src, ped, coords)
+                    Charging[src] = rate > 0
+                    if rate > 0 then
+                        setBattery(src, batteryOf(src) + chargePerTick * rate)
+                    else
+                        setBattery(src, batteryOf(src) - drainPerTick * (Open[src] and mult or 1.0))
+                    end
+                end
+            end
+        end
+    end
+end)
+
+exports('SetScreenOn', function(src, on) Open[src] = on and true or nil end)
+
+-- ══════════════════════════════════════════════════════════════
 -- Callbacks
 -- ══════════════════════════════════════════════════════════════
 -- Either handset counts. Shipping a setting that only accepts one of the two phone items
@@ -467,12 +606,17 @@ V.Callback('v-phone:open', function(src, resolve)
     local p = Core.GetPlayer(src)
     if not p then resolve({ error = 'x' }) return end
     if not requireItem(src) then resolve({ error = 'nophone' }) return end
+    -- A flat phone does not open. It is the one refusal players understand immediately.
+    if V.SettingBool('battery', true) and batteryOf(src) <= 0 then resolve({ error = 'flat' }) return end
 
     local number = ensureNumber(src, p)
     local available, installed = appsFrom(src, p)
     resolve({
         ok       = true,
         number   = number,
+        battery  = batteryOf(src),
+        charging = Charging[src] or false,
+        signal   = Signal[src] or 4,
         apps      = installed,
         available = available,
         prefs    = prefsOf(p),
@@ -502,6 +646,7 @@ end)
 V.Callback('v-phone:send', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
+    if not hasBars(src) then resolve({ error = 'nosignal' }) return end
     local row, err = sendMessage(p.citizenid, tostring((data and data.number) or ''), data and data.body)
     if not row then resolve({ error = err }) return end
     resolve({ ok = true, id = row.id, body = row.body })
@@ -761,12 +906,42 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Lifecycle
 -- ══════════════════════════════════════════════════════════════
+-- A power bank is one charge, and then it is gone. Registered only if the item exists,
+-- so a server that removed it from the catalogue does not get a usable item pointing at
+-- nothing.
+CreateThread(function()
+    while GetResourceState('v-inventory') ~= 'started' do Wait(200) end
+    Wait(1500)
+    V.Use('v-inventory').RegisterUsableItem('powerbank', function(src)
+        local amount = math.floor(tonumber(V.Setting('powerbankCharge', 45)) or 45)
+        if batteryOf(src) >= 100 then
+            Core.Notify(src, L(src, 'ph.battery_full'), 'info')
+            return
+        end
+        if not V.Use('v-inventory').RemoveItem(src, 'powerbank', 1) then return end
+        setBattery(src, batteryOf(src) + amount)
+        Core.Notify(src, (L(src, 'ph.powerbank_used')):format(amount), 'success')
+    end)
+end)
+
+RegisterNetEvent('v-phone:server:screen', function(on)
+    Open[source] = on and true or nil
+end)
+
 AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
     ensureNumber(src, player)
+    -- Carried over from the last session, because a phone that was flat when you logged
+    -- off is flat when you come back.
+    local saved = player.GetMetadata('battery')
+    Battery[src] = (type(saved) == 'number') and math.max(0, math.min(100, saved)) or 100
+    Signal[src] = 4
 end)
 
 AddEventHandler('playerDropped', function()
     local src = source
+    local p = Core.GetPlayer(src)
+    if p and Battery[src] then p.SetMetadata('battery', math.floor(Battery[src])) end
+    Battery[src], Signal[src], Charging[src], Open[src] = nil, nil, nil, nil
     local id = CallOf[src]
     if id then endCall(id, 'dropped') end
     for n, s in pairs(Online) do if s == src then Online[n] = nil end end
@@ -828,6 +1003,8 @@ CreateThread(function()
     while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
     if exports['v-world']:IsReady() then
         exports['v-world']:SeedApps(Config.Apps)
+        exports['v-world']:SeedChargers(Config.Chargers)
+        exports['v-world']:SeedDeadZones(Config.DeadZones)
     end
     loadWorldApps()
 

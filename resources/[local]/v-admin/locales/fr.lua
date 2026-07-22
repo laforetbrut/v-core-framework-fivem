@@ -253,5 +253,11 @@ local T = {
     ['adm.ed_hasgarage']    = 'Possede un garage',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
+    ['adm.ed_chargers'] = 'Chargeurs téléphone',
+    ['adm.ed_deadzones'] = 'Zones sans réseau',
+    ['adm.ed_chargerate'] = 'Vitesse de charge (%)',
+    ['adm.ed_maxbars'] = 'Barres de signal à l’intérieur (0 = aucun réseau)',
+    ['adm.ed_nosignal'] = 'aucun réseau',
+    ['adm.ed_bars'] = 'barre(s)',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

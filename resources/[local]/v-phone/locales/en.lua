@@ -237,5 +237,13 @@ local T = {
     ['ph.month_oct'] = 'October',
     ['ph.month_nov'] = 'November',
     ['ph.month_dec'] = 'December',
+    ['ph.battery_low'] = 'Battery low',
+    ['ph.battery_critical'] = 'Battery almost flat',
+    ['ph.battery_dead'] = 'Your phone is dead',
+    ['ph.battery_full'] = 'Your phone is already charged',
+    ['ph.powerbank_used'] = 'Power bank used, %d%% back',
+    ['ph.err_flat'] = 'Your phone is dead',
+    ['ph.err_nosignal'] = 'No signal here',
+    ['ph.err_unreachable'] = 'They have no signal',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

@@ -1097,6 +1097,30 @@ anything installed but missing from a saved layout is appended, so an app added 
 appears at the end rather than vanishing. Size and side are per character, because a small
 screen and a left-handed player are not the same person's problem.
 
+**Battery and signal are both decided on the server, from where the player actually is.**
+A client that reported its own signal would report five bars from inside a tunnel, and one
+that reported its own charge would never go flat.
+
+The battery takes eight real hours to empty, configurable, and drains roughly three times
+faster with the screen on. **It only drains while the player is connected** - a phone
+genuinely goes flat in a drawer, but so does the ability to charge it, and coming back from
+a week away to a dead phone with nothing you could have done about it is a punishment for
+logging off rather than a simulation. The level is carried with the character, so a phone
+that was flat when you left is flat when you return. Charging happens at a **charger**
+(a `world_chargers` row), **in any vehicle**, or **inside a property you hold a key to**;
+the last two follow the player rather than a coordinate, which is why they are code and not
+rows. A **power bank** is one charge and then it is spent.
+
+**Dead zones are a ceiling, not a penalty.** `bars = 0` is no service at all; zones overlap
+deliberately and the worst one wins, so a tunnel inside a weak-signal desert is still a
+tunnel. Without a signal nothing leaves the phone: messages refuse, calls refuse, and a call
+to somebody standing in a dead zone refuses as well - checked on the server, so standing in
+the tunnel actually means something. Eight seed zones at places a story would put you:
+Chiliad, Raton Canyon, Fort Zancudo, Humane Labs, the Los Santos tunnels, and three more.
+
+Both are `v-world` domains, edited from **Editor - Phone chargers** and **Editor - Dead
+zones** like every other content list. **Thirty domains.**
+
 **Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot, dock })` and a third
 party ships its own app without touching v-phone. What the operator controls is separate and
 lives in `world_apps`: enabled, ordered, and gated by job or gang, edited from **Editor - Phone
