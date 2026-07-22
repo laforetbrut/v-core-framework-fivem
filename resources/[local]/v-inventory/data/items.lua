@@ -136,6 +136,7 @@ InventoryItems = {
   { name='camera', label='Camera', weight=600, stackable=0, usable=0, category='tech', image='tech/camera.png', itype='misc', rarity='rare', desc='Digital camera.' },
   { name='drone', label='Drone', weight=1200, stackable=0, usable=0, category='tech', image='tech/drone.png', itype='misc', rarity='rare', desc='Remote-controlled surveillance drone.' },
   { name='bodycam', label='Body Cam', weight=150, stackable=0, usable=0, category='tech', image='tech/bodycam.png', itype='misc', rarity='rare', desc='Wearable body camera.' },
+  { name='powerbank', label='Power Bank', weight=280, stackable=1, usable=1, category='tech', image='tech/battery_9v.png', itype='misc', rarity='uncommon', desc='One charge for a phone, and then it is spent.' },
   { name='battery_9v', label='9V Battery', weight=45, stackable=1, usable=0, category='tech', image='tech/battery_9v.png', itype='misc', rarity='rare', desc='9-volt battery.' },
   { name='creditcard', label='Credit Card', weight=5, stackable=0, usable=0, category='tech', image='tech/creditcard_visa_blue.png', itype='misc', rarity='rare', desc='Personal credit card.' },
   { name='hacking_device', label='Hacking Device', weight=300, stackable=0, usable=0, category='tech', image='tech/hackingdevice-1.png', itype='misc', rarity='rare', desc='Electronic hacking tool.' },

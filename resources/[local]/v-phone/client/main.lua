@@ -13,6 +13,7 @@
 local isOpen  = false
 local myNumber = nil
 local call    = nil          -- { id, state = 'out'|'in'|'active', number }
+local power   = { battery = 100, charging = false, signal = 4 }
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -37,9 +38,12 @@ local function openPhone()
         myNumber = state.number
         SetNuiFocus(true, true)          -- focus is per-resource: only the page owner may take it
         exports['v-core']:MenuOpened('v-phone')
+        -- The screen is what drains a phone, so the server has to know it is on.
+        TriggerServerEvent('v-phone:server:screen', true)
         state.action  = 'open'
         state.strings = strings()
         state.call    = call
+        state.power   = power
         SendNUIMessage(state)
     end)
 end
@@ -49,6 +53,7 @@ local function closePhone()
     isOpen = false
     SetNuiFocus(false, false)
     exports['v-core']:MenuClosed('v-phone')
+    TriggerServerEvent('v-phone:server:screen', false)
     SendNUIMessage({ action = 'close' })
 end
 
@@ -309,6 +314,24 @@ RegisterNetEvent('v-phone:client:callEnd', function(reason)
     call = nil
     SendNUIMessage({ action = 'call', call = nil })
     if reason and reason ~= 'hangup' then V.Notify(L('ph.call_' .. reason), 'info') end
+end)
+
+RegisterNetEvent('v-phone:client:power', function(p)
+    local wasLow = power.battery
+    power = p or power
+    SendNUIMessage({ action = 'power', power = power })
+
+    -- Warn once on the way past each threshold, not every tick past it.
+    local low, crit = 20, 5
+    if power.battery <= crit and wasLow > crit then
+        V.Notify(L('ph.battery_critical'), 'error')
+    elseif power.battery <= low and wasLow > low then
+        V.Notify(L('ph.battery_low'), 'warning')
+    end
+    if power.battery <= 0 and wasLow > 0 then
+        closePhone()
+        V.Notify(L('ph.battery_dead'), 'error')
+    end
 end)
 
 -- ══════════════════════════════════════════════════════════════

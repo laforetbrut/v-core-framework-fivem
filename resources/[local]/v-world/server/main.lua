@@ -17,6 +17,7 @@ local Gangs, Turfs, Charges, Drugs, Radio, Jukebox = {}, {}, {}, {}, {}, {}
 local Nodes, Benches, Spawns, Halls, AppSpots = {}, {}, {}, {}, {}
 local Props = {}
 local PhoneApps = {}
+local Chargers, DeadZones = {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -361,6 +362,30 @@ local function ensureTables()
         PRIMARY KEY (`id`), KEY `kind_idx` (`kind`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Somewhere a phone charges. Radius rather than a marker: standing near a socket is
+    -- the interaction, and asking a player to hit an exact point to charge is a chore.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_chargers` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL DEFAULT '',
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `radius` FLOAT NOT NULL DEFAULT 3,
+        `rate` INT NOT NULL DEFAULT 20,            -- percent per in-game charge tick
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Where a phone does not get a signal. `bars` is the CEILING inside the zone, not a
+    -- penalty: 0 is no service at all, 1 is one bar, and the phone behaves accordingly.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_deadzones` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL DEFAULT '',
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `radius` FLOAT NOT NULL DEFAULT 60,
+        `bars` TINYINT NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- Phone apps. The registry lives in v-phone (a resource declares its own app); this
     -- table is the OPERATOR's say over it: enabled, ordered, and gated by job or gang.
     -- An app nobody registered is simply never shown, so a stale row is inert rather than
@@ -500,6 +525,20 @@ local function loadProps()
     for _, r in ipairs(MySQL.query.await('SELECT * FROM world_properties ORDER BY label') or {}) do
         r.garage, r.blip, r.enabled = bool(r.garage), bool(r.blip), bool(r.enabled)
         Props[#Props + 1] = r
+    end
+end
+
+local function loadChargers()
+    Chargers = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_chargers ORDER BY label') or {}) do
+        r.enabled = bool(r.enabled); Chargers[#Chargers + 1] = r
+    end
+end
+
+local function loadDeadZones()
+    DeadZones = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_deadzones ORDER BY label') or {}) do
+        r.enabled = bool(r.enabled); DeadZones[#DeadZones + 1] = r
     end
 end
 
@@ -701,6 +740,8 @@ local function reload(domain)
     if domain == 'nodes'    or not domain then loadNodes() end
     if domain == 'properties' or not domain then loadProps() end
     if domain == 'apps'       or not domain then loadApps() end
+    if domain == 'chargers'   or not domain then loadChargers() end
+    if domain == 'deadzones'  or not domain then loadDeadZones() end
     if domain == 'benches'  or not domain then loadBenches() end
     if domain == 'spawns'   or not domain then loadSpawns() end
     if domain == 'cityhall' or not domain then loadHalls() end
@@ -793,6 +834,8 @@ exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
 exports('GetProperties', function() return Props end)
 exports('GetPhoneApps', function() return PhoneApps end)
+exports('GetChargers', function() return Chargers end)
+exports('GetDeadZones', function() return DeadZones end)
 exports('GetNodes',     function() return Nodes end)
 exports('GetBenches',   function() return Benches end)
 exports('GetSpawns',    function() return Spawns end)
@@ -998,6 +1041,38 @@ exports('SeedVehicleCatalogue', function(defaults)
     seedDone('vehcat', want)
     loadVehCat()
     print(('[v-world] seeded %d catalogue vehicle(s) from config'):format(#VehCat))
+    return true
+end)
+
+-- v-phone: list of { id, label, x, y, z, radius, rate }
+exports('SeedChargers', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('chargers', defaults)
+    if not need then return false end
+    for _, c in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_chargers
+            (id, label, x, y, z, radius, rate, enabled) VALUES (?,?,?,?,?,?,?,1)]],
+            { c.id, c.label or c.id, c.x, c.y, c.z, c.radius or 3.0, c.rate or 20 })
+    end
+    seedDone('chargers', want)
+    loadChargers()
+    print(('[v-world] seeded %d charger(s) from config'):format(#Chargers))
+    return true
+end)
+
+-- v-phone: list of { id, label, x, y, z, radius, bars }
+exports('SeedDeadZones', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('deadzones', defaults)
+    if not need then return false end
+    for _, d in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_deadzones
+            (id, label, x, y, z, radius, bars, enabled) VALUES (?,?,?,?,?,?,?,1)]],
+            { d.id, d.label or d.id, d.x, d.y, d.z, d.radius or 60.0, d.bars or 0 })
+    end
+    seedDone('deadzones', want)
+    loadDeadZones()
+    print(('[v-world] seeded %d dead zone(s) from config'):format(#DeadZones))
     return true
 end)
 
@@ -1265,6 +1340,8 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
     elseif domain == 'properties' then
         resolve({ rows = Props, kinds = Config.PropertyKinds, shells = Config.PropertyShells,
                   tenancies = { 'own', 'rent' } })
+    elseif domain == 'chargers' then resolve({ rows = Chargers })
+    elseif domain == 'deadzones' then resolve({ rows = DeadZones })
     elseif domain == 'apps' then
         local jobs, gangs = {}, {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -1425,6 +1502,28 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'chargers' or d == 'deadzones' then
+        local cid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if cid == '' then resolve({ error = 'id' }); return end
+        if d == 'chargers' then
+            MySQL.query.await([[INSERT INTO world_chargers (id, label, x, y, z, radius, rate, enabled)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE label=VALUES(label), x=VALUES(x), y=VALUES(y), z=VALUES(z),
+                    radius=VALUES(radius), rate=VALUES(rate), enabled=VALUES(enabled)]],
+                { cid, tostring(row.label or ''):sub(1, 80), num(row.x), num(row.y), num(row.z),
+                  math.max(0.5, num(row.radius, 3.0)), math.floor(num(row.rate, 20)),
+                  row.enabled == false and 0 or 1 })
+        else
+            MySQL.query.await([[INSERT INTO world_deadzones (id, label, x, y, z, radius, bars, enabled)
+                VALUES (?,?,?,?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE label=VALUES(label), x=VALUES(x), y=VALUES(y), z=VALUES(z),
+                    radius=VALUES(radius), bars=VALUES(bars), enabled=VALUES(enabled)]],
+                { cid, tostring(row.label or ''):sub(1, 80), num(row.x), num(row.y), num(row.z),
+                  math.max(5.0, num(row.radius, 60.0)),
+                  math.max(0, math.min(3, math.floor(num(row.bars, 0)))),
+                  row.enabled == false and 0 or 1 })
+        end
 
     elseif d == 'apps' then
         local aid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
@@ -1961,6 +2060,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local owned = MySQL.scalar.await('SELECT 1 FROM property_owners WHERE property = ? LIMIT 1', { pid })
         if owned then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_properties WHERE id = ?', { pid })
+    elseif d == 'chargers' then
+        MySQL.query.await('DELETE FROM world_chargers WHERE id = ?', { tostring(id or '') })
+    elseif d == 'deadzones' then
+        MySQL.query.await('DELETE FROM world_deadzones WHERE id = ?', { tostring(id or '') })
     elseif d == 'apps' then
         -- Deleting the row only removes the operator's OVERRIDE. The app itself belongs to
         -- whichever resource registered it, and it comes back on the next seed.

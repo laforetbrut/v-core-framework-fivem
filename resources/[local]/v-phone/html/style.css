@@ -176,8 +176,13 @@ input { font: inherit; }
 .status svg { width: 17px; height: 12px; }
 .battery { width: 25px; height: 12px; border-radius: 3.5px; position: relative;
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
-.battery::before { content: ''; position: absolute; inset: 2px; right: 6px; border-radius: 1.5px;
-  background: #fff; }
+/* The fill is the real charge, and the colour is the real state: white normally,
+   amber under 20, red under 5, green while charging. A battery icon that always
+   showed the same sliver would be decoration. */
+.battery::before { content: ''; position: absolute; top: 2px; bottom: 2px; left: 2px;
+  width: calc((100% - 4px) * var(--batt, 1)); min-width: 1px; border-radius: 1.5px;
+  background: var(--batt-col, #fff);
+  transition: width .4s var(--spring), background .3s ease; }
 .battery::after { content: ''; position: absolute; right: -3px; top: 4px; width: 2px; height: 4px;
   border-radius: 0 1px 1px 0; background: rgba(255,255,255,.4); }
 
@@ -768,3 +773,8 @@ input { font: inherit; }
    app whose surface is its own rather than the system's. */
 .app.black { background: #000; color: #fff; }
 .app.black .calcout { color: #fff; }
+
+.battpct { font-family: var(--ios-num); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+/* A bar the network is not giving you is drawn, but empty. */
+#bars rect.off { opacity: .28; }
+.nosvc { font-size: 11px; font-weight: 700; letter-spacing: .06em; }

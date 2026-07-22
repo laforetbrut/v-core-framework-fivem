@@ -357,6 +357,14 @@ function edRowTitle(r) {
     const gate = r.job || r.gang || '';
     return `${esc(r.label || r.id)} <i class="dim">${esc(r.id)} &middot; #${r.slot}${gate ? ' &middot; ' + esc(gate) : ''}</i>`;
   }
+  if (edDomain === 'chargers') {
+    return `${esc(r.label || r.id)} <i class="dim">${esc(r.id)} &middot; ${Math.round(r.x)}, ${Math.round(r.y)}`
+      + ` &middot; r${Math.round(r.radius)} &middot; ${r.rate}%</i>`;
+  }
+  if (edDomain === 'deadzones') {
+    return `${esc(r.label || r.id)} <i class="dim">${esc(r.id)} &middot; ${Math.round(r.x)}, ${Math.round(r.y)}`
+      + ` &middot; r${Math.round(r.radius)} &middot; ${r.bars === 0 ? esc(t('adm.ed_nosignal')) : r.bars + ' ' + esc(t('adm.ed_bars'))}</i>`;
+  }
   if (edDomain === 'nodes') {
     return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
@@ -732,6 +740,21 @@ function openEdForm(row) {
       `<label class="edf"><span>${esc(t('adm.ed_onlygang'))}</span><select id="ef-gang">` +
         `<option value="">${esc(t('adm.ed_everyone'))}</option>${gangs}</select></label>` +
       check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0 && row.enabled !== false);
+  } else if (edDomain === 'chargers' || edDomain === 'deadzones') {
+    const isNew = !row.id;
+    const dead = edDomain === 'deadzones';
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span>` +
+        `<input id="ef-cid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') +
+      field(t('adm.ed_radius'), 'ef-rad', row.radius ?? (dead ? 60 : 3), 'number') +
+      (dead
+        // 0 is no service at all, which is a different thing from a weak signal.
+        ? field(t('adm.ed_maxbars'), 'ef-bars', row.bars ?? 0, 'number')
+        : field(t('adm.ed_chargerate'), 'ef-rate', row.rate ?? 20, 'number')) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0 && row.enabled !== false);
   } else if (edDomain === 'properties') {
     const isNew = !row.id;
     const opts = (list, sel) => (list || []).map(k =>
@@ -1053,6 +1076,11 @@ function openEdForm(row) {
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
+  if ((edDomain === 'chargers' || edDomain === 'deadzones') && !row.id) {
+    const e = byId('ef-cid');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
+  }
+
   if (edDomain === 'properties' && !row.id) {
     const e = byId('ef-pid');
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
@@ -1174,6 +1202,13 @@ function openEdForm(row) {
                   slot: parseInt(v('ef-slot'), 10) || 99,
                   job: v('ef-job'), job_grade: parseInt(v('ef-grade'), 10) || 0,
                   gang: v('ef-gang'), enabled: ck('ef-en') };
+    } else if (edDomain === 'chargers' || edDomain === 'deadzones') {
+      payload = { id: v('ef-cid'), label: v('ef-label'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  radius: parseFloat(v('ef-rad')) || (edDomain === 'deadzones' ? 60 : 3),
+                  enabled: ck('ef-en') };
+      if (edDomain === 'deadzones') payload.bars = parseInt(v('ef-bars'), 10) || 0;
+      else payload.rate = parseInt(v('ef-rate'), 10) || 20;
     } else if (edDomain === 'properties') {
       payload = { id: v('ef-pid'), label: v('ef-label'), kind: v('ef-kind'), shell: v('ef-shell'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

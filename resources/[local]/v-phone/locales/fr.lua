@@ -239,5 +239,13 @@ local T = {
     ['ph.month_oct'] = 'Octobre',
     ['ph.month_nov'] = 'Novembre',
     ['ph.month_dec'] = 'Décembre',
+    ['ph.battery_low'] = 'Batterie faible',
+    ['ph.battery_critical'] = 'Batterie presque vide',
+    ['ph.battery_dead'] = 'Votre téléphone est déchargé',
+    ['ph.battery_full'] = 'Votre téléphone est déjà chargé',
+    ['ph.powerbank_used'] = 'Batterie externe utilisée, %d%% récupérés',
+    ['ph.err_flat'] = 'Votre téléphone est déchargé',
+    ['ph.err_nosignal'] = 'Aucun réseau ici',
+    ['ph.err_unreachable'] = 'Cette personne n’a pas de réseau',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

@@ -24,9 +24,9 @@
         <div class="status" id="status">
           <span id="clock">00:00</span>
           <span class="sright">
-            <svg viewBox="0 0 20 14" fill="currentColor"><rect x="0" y="9" width="3" height="5" rx="1"/><rect x="5" y="6.5" width="3" height="7.5" rx="1"/><rect x="10" y="3.5" width="3" height="10.5" rx="1"/><rect x="15" y="0" width="3" height="14" rx="1" opacity=".4"/></svg>
+            <svg id="bars" viewBox="0 0 20 14" fill="currentColor"><rect data-b="1" x="0" y="9" width="3" height="5" rx="1"/><rect data-b="2" x="5" y="6.5" width="3" height="7.5" rx="1"/><rect data-b="3" x="10" y="3.5" width="3" height="10.5" rx="1"/><rect data-b="4" x="15" y="0" width="3" height="14" rx="1"/></svg><span class="nosvc hidden" id="nosvc">SOS</span>
             <svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 5.2a11 11 0 0 1 16 0M4.8 8.2a7 7 0 0 1 10.4 0"/><circle cx="10" cy="11.6" r="1.2" fill="currentColor" stroke="none"/></svg>
-            <span class="battery"></span>
+            <span class="battery" id="battery"></span><span class="battpct" id="battpct"></span>
           </span>
         </div>
 
