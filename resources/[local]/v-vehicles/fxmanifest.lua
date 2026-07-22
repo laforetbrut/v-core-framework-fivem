@@ -26,6 +26,7 @@ shared_scripts {
 client_scripts {
     'client/main.lua',
     'client/preview.lua',   -- showroom instance (shared by v-garages and the dealership)
+    'client/seatbelt.lua',  -- seatbelt + windscreen ejection
 }
 
 server_scripts {

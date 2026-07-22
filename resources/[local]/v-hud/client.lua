@@ -172,6 +172,9 @@ CreateThread(function()
             local fuel = safeCall('v-vehicles', function() return exports['v-vehicles']:GetFuel(veh) end)
             local electric = safeCall('v-fuel', function() return exports['v-fuel']:IsElectric(veh) end)
 
+            -- nil when v-vehicles is absent; the field is then omitted below.
+            local belt = safeCall('v-vehicles', function() return exports['v-vehicles']:IsBuckled() end)
+
             local plate = GetVehicleNumberPlateText(veh)
             local miles = plate and safeCall('v-mechanic', function()
                 return exports['v-mechanic']:GetMileage(plate)
@@ -189,11 +192,16 @@ CreateThread(function()
                 odo      = miles and math.floor(miles * (mph and 0.621371 or 1) + 0.5) or nil,
                 odoUnit  = mph and 'mi' or 'km',
             }
+            -- Left unset when v-vehicles is absent, so the NUI omits the field entirely
+            -- rather than accusing every player on a server with no seatbelt system.
+            if belt ~= nil then data.belt = (belt == true) end
+
             -- Speed changes constantly; everything else rarely. Only push a frame when
             -- a value the player can actually see has moved.
             if data.speed ~= last.speed or data.gear ~= last.gear or data.fuel ~= last.fuel
                or data.engine ~= last.engine or data.odo ~= last.odo
-               or data.electric ~= last.electric or data.unit ~= last.unit then
+               or data.electric ~= last.electric or data.unit ~= last.unit
+               or data.belt ~= last.belt then
                 last = data
                 SendNUIMessage(data)
             end
