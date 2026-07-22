@@ -1,7 +1,7 @@
 # v-core — a FiveM Enhanced roleplay framework
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** (the GTA V Enhanced
-next-gen edition). 18 modules, one shared design system, one database, no external framework
+next-gen edition). 19 modules, one shared design system, one database, no external framework
 dependency — it is not an ESX or QBCore add-on pack, it *is* the framework.
 
 Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -50,6 +50,8 @@ in-game** — never by editing Lua on a live server.
   **dealer / launderer** (dirty money). Store positions editable in-game.
 - **`v-target`** — universal interaction eye (hold Left-Alt): entity/zone options **filtered by permission & job**.
 - **`v-jobs`** — jobs, grades, on-duty salaries; the source of truth for every job gate.
+- **`v-cityhall`** — the city hall job desk: apply for any position an admin has left open, or resign.
+  Whitelisted jobs (police, EMS, …) never show up here — they are handed out by their own chain of command.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** · **`v-notify`**
   · **`v-clothing`** · **`v-loadscreen`**.
 - **Economy loops** — legal: gather → craft → sell. Illegal: grow → process → deal → launder.
@@ -109,7 +111,7 @@ Author: vyrriox
 # v-core — un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 18 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 19 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe — ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -159,6 +161,8 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
   **dealer / blanchisseur** illégal (argent sale). Positions modifiables en jeu.
 - **`v-target`** — œil d'interaction universel (maintiens Alt gauche) : options **filtrées par permission & métier**.
 - **`v-jobs`** — métiers, grades, salaires en service ; la référence pour tous les gates métier.
+- **`v-cityhall`** — le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
+  ou démissionner. Les métiers sur whitelist (police, EMS, …) n'y apparaissent jamais.
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** · **`v-notify`**
   · **`v-clothing`** · **`v-loadscreen`**.
 - **Boucles économiques** — légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.

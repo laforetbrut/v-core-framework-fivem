@@ -1,0 +1,27 @@
+-- v-cityhall | English
+Locales.en = Locales.en or {}
+local T = {
+    ['cityhall.blip']      = 'City Hall',
+    ['cityhall.target']    = 'Job desk',
+    ['cityhall.help']      = 'City Hall — jobs',
+    ['cityhall.title']     = 'City Hall',
+    ['cityhall.sub']       = 'Open positions · hired at entry grade',
+    ['cityhall.current']   = 'Current job',
+    ['cityhall.take']      = 'Apply',
+    ['cityhall.resign']    = 'Resign',
+    ['cityhall.fee']       = 'Filing fee',
+    ['cityhall.salary']    = 'Starting pay',
+    ['cityhall.ranks']     = 'ranks',
+    ['cityhall.empty']     = 'No position is open right now.',
+    ['cityhall.hired']     = 'You have been hired: %s.',
+    ['cityhall.resigned']  = 'You resigned. You are now unemployed.',
+    ['cityhall.err_far']   = 'You are no longer at the desk.',
+    ['cityhall.err_wl']    = 'That job is not handed out here.',
+    ['cityhall.err_alr']   = 'You already hold that job.',
+    ['cityhall.err_fund']  = 'You cannot cover the filing fee.',
+    ['cityhall.err']       = 'Request refused.',
+    ['cityhall.ls']        = 'Los Santos City Hall',
+    ['cityhall.sandy']     = 'Sandy Shores Town Office',
+    ['cityhall.paleto']    = 'Paleto Bay Town Office',
+}
+for k, v in pairs(T) do Locales.en[k] = v end

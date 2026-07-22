@@ -44,6 +44,9 @@ Config.ItemTypes = {
 -- Craft stations recipes can be attached to (must match v-crafting's station keys).
 Config.CraftStations = { 'workbench', 'ammo', 'cooking', 'electronics', 'recycler', 'druglab' }
 
+-- Permission tiers a blip's visibility can be gated on (must match v-core's tiers).
+Config.PermTiers = { 'user', 'mod', 'admin', 'superadmin' }
+
 -- Common blip colours for the editor picker (label -> colour id).
 Config.BlipColors = {
     { label = 'White',  color = 0 },  { label = 'Red',    color = 1 },

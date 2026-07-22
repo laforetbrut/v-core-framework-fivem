@@ -31,6 +31,8 @@ function VCore.SetPermission(source, level)
     if not player or not Config.PermissionLevels[level] then return false end
     player.permission = level
     VCore.DB.SetUserPermission(player.license, level)
+    -- Permission-gated content (admin tools, restricted map blips, …) must re-evaluate.
+    TriggerEvent('v-core:server:permissionChanged', source, level)
     return true
 end
 

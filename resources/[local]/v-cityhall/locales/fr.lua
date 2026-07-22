@@ -1,0 +1,27 @@
+-- v-cityhall | Français
+Locales.fr = Locales.fr or {}
+local T = {
+    ['cityhall.blip']      = 'Mairie',
+    ['cityhall.target']    = 'Guichet emploi',
+    ['cityhall.help']      = 'Mairie — emplois',
+    ['cityhall.title']     = 'Mairie',
+    ['cityhall.sub']       = 'Postes ouverts · embauche au grade débutant',
+    ['cityhall.current']   = 'Métier actuel',
+    ['cityhall.take']      = 'Postuler',
+    ['cityhall.resign']    = 'Démissionner',
+    ['cityhall.fee']       = 'Frais de dossier',
+    ['cityhall.salary']    = 'Salaire de départ',
+    ['cityhall.ranks']     = 'grades',
+    ['cityhall.empty']     = 'Aucun poste ouvert pour le moment.',
+    ['cityhall.hired']     = 'Tu as été embauché : %s.',
+    ['cityhall.resigned']  = 'Tu as démissionné. Tu es maintenant sans emploi.',
+    ['cityhall.err_far']   = 'Tu n\'es plus au guichet.',
+    ['cityhall.err_wl']    = 'Ce métier ne se distribue pas ici.',
+    ['cityhall.err_alr']   = 'Tu occupes déjà ce poste.',
+    ['cityhall.err_fund']  = 'Tu ne peux pas payer les frais de dossier.',
+    ['cityhall.err']       = 'Demande refusée.',
+    ['cityhall.ls']        = 'Mairie de Los Santos',
+    ['cityhall.sandy']     = 'Mairie de Sandy Shores',
+    ['cityhall.paleto']    = 'Mairie de Paleto Bay',
+}
+for k, v in pairs(T) do Locales.fr[k] = v end

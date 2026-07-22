@@ -1,0 +1,79 @@
+/* v-cityhall — "EMBER" job desk.
+   Same rounded glass case as v-crafting: shared .v-chamfer panel, glowing tab,
+   rows that lift on hover, a coloured job-type mark and the shared .mini buttons.
+   Tokens + primitives come from v-ui/theme.css.
+   CEF-safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+.hall-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(55% 45% at 12% 0%,   rgba(255,122,26,.10), transparent 62%),
+    radial-gradient(48% 42% at 92% 100%, rgba(240,78,0,.08),  transparent 60%),
+    radial-gradient(135% 115% at 50% 8%, rgba(11,10,8,.42), rgba(11,10,8,.82) 72%, rgba(11,10,8,.94) 100%);
+  animation:v-fade var(--v-t-fast) var(--v-ease); }
+
+.hall { position:relative; z-index:var(--z-raised); width:520px; max-height:82vh;
+  display:flex; flex-direction:column; padding:26px 22px 22px; }
+
+.close { position:absolute; top:12px; right:12px; z-index:var(--z-raised);
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:99px;
+  color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease); }
+.close:hover { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.close svg { width:15px; height:15px; }
+
+.sub { font-family:var(--v-font-display); font-size:11px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); padding-bottom:13px; margin-bottom:12px;
+  border-bottom:1px solid var(--v-line); }
+
+/* ── Current contract strip ── */
+.cur { display:flex; align-items:center; gap:10px; margin-bottom:14px; padding:10px 12px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px; }
+.curlbl { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); }
+.curval { flex:1; font-size:13px; font-weight:600; color:var(--v-accent-300); }
+
+/* ── Job rows ── */
+.list { display:flex; flex-direction:column; gap:8px; overflow-y:auto; padding-right:4px; }
+.empty { padding:26px 0; text-align:center; font-size:12px; color:var(--v-text-faint); }
+
+.jrow { display:flex; align-items:center; gap:12px; padding:11px 13px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px;
+  animation:v-fade-up var(--v-t-base) var(--v-ease) backwards; animation-delay:calc(var(--i) * 22ms);
+  transition:transform var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.jrow:hover { transform:translateY(-1px); border-color:var(--v-accent-line); background:var(--v-panel-3); }
+.jrow.mine { border-color:var(--v-accent-line); background:var(--v-accent-soft); }
+
+.jmark { width:4px; align-self:stretch; border-radius:99px; background:var(--v-text-faint); }
+.jmark.type-leo   { background:#4a8fe0; }
+.jmark.type-ems   { background:#e05a5a; }
+.jmark.type-gang  { background:#a05ad0; }
+.jmark.type-mafia { background:#a05ad0; }
+.jmark.type-civ   { background:var(--v-accent); }
+
+.jinfo { flex:1; display:flex; flex-direction:column; gap:3px; min-width:0; }
+.jname { font-size:13px; font-weight:600; color:var(--v-text); }
+.jmeta { font-size:11px; color:var(--v-text-faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ── Buttons (mirrors the shared admin/shop .mini language) ── */
+.mini { padding:6px 13px; font-family:var(--v-font-display); font-size:11px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--v-text-dim); cursor:pointer;
+  background:var(--v-panel-3); border:1px solid var(--v-line); border-radius:99px;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease); }
+.mini:hover { color:var(--v-text); border-color:var(--v-accent-line); }
+.mini:disabled { opacity:.4; cursor:default; }
+.mini.accent { color:#1a1206; background:linear-gradient(135deg, var(--v-accent) 0%, var(--v-accent-600) 100%); border-color:transparent; }
+.mini.accent:hover { filter:brightness(1.08); }
+.mini.danger { color:#e08a8a; }
+.mini.danger:hover { color:#fff; background:rgba(224,90,90,.22); border-color:rgba(224,90,90,.45); }
+.mini.ok { color:#1a1206; background:linear-gradient(135deg, var(--v-accent) 0%, var(--v-accent-600) 100%); border-color:transparent; }
+.mini.ko { color:#fff; background:rgba(224,90,90,.28); border-color:rgba(224,90,90,.5); }

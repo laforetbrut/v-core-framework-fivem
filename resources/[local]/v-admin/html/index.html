@@ -52,7 +52,23 @@
             <button class="mini" data-self="armor" data-i18n="adm.self_armor">Armor</button>
           </div>
           <div class="toolgrid" id="toolgrid"></div>
-          <p class="toolhint" data-i18n="adm.tools_hint">Noclip: WASD move · Space/Q up-down · Shift fast · Ctrl slow · F6 toggles</p>
+          <p class="toolhint" data-i18n="adm.tools_hint">Noclip: WASD move · Space/Q up-down · Shift fast · Ctrl slow · F9 toggles</p>
+
+          <div class="coords">
+            <div class="chead2">
+              <span class="wlabel" data-i18n="adm.scan_title">Clothing thumbnails</span>
+            </div>
+            <p class="toolhint" data-i18n="adm.scan_hint">Dresses a hidden ped in every garment and captures a thumbnail. Long-running — stay in game.</p>
+            <div class="crow">
+              <span class="clbl" data-i18n="adm.scan_mode">Mode</span>
+              <select id="scan-mode">
+                <option value="new" data-i18n="adm.scan_new">Missing only</option>
+                <option value="all" data-i18n="adm.scan_all">Full catalogue</option>
+              </select>
+              <select id="scan-cat"></select>
+              <button class="mini accent" id="scan-go" data-i18n="adm.scan_start">Start scan</button>
+            </div>
+          </div>
 
           <div class="coords">
             <div class="chead2">

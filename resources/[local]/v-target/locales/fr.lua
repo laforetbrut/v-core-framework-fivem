@@ -25,5 +25,6 @@ local T = {
     ['tgt.dealer']        = 'Parler au dealer',
     ['tgt.launder']       = 'Blanchir de l\'argent',
     ['tgt.scrap']         = 'Vendre des matériaux',
+    ['tgt.cityhall']      = 'Guichet emploi',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

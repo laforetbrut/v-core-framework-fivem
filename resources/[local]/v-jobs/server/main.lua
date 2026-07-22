@@ -74,6 +74,8 @@ exports('SetJob', function(src, name, grade)
     if not gradeDef(name, grade) then grade = 0 end
     p.SetJob(name, grade)
     Duty[src] = true
+    -- Job-gated content (restricted map blips, …) must re-evaluate for this player.
+    TriggerEvent('v-jobs:server:changed', src, name, grade)
     return true
 end)
 
