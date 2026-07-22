@@ -11,6 +11,24 @@ Config = {}
 -- Open / close the phone.
 Config.Key = 'F1'
 
+-- ── In hand ────────────────────────────────────────────────────
+-- A phone you are using is a phone you are holding: a prop in the hand and an animation
+-- to match, while you stay free to walk and drive. Open on foot and you browse one-handed;
+-- open in a car and the prop still shows. A call raises it to the ear.
+Config.Hold = {
+    prop   = 'prop_amb_phone',           -- base-game phone prop, attached to the right hand
+    bone   = 28422,                      -- SKEL_R_Hand
+    pos    = vec3(0.0, 0.0, 0.0),
+    rot    = vec3(0.0, 0.0, 0.0),
+    dict   = 'cellphone@',
+    browse = 'cellphone_text_read_base', -- one-handed, looking at the screen
+    call   = 'cellphone_call_listen_base', -- to the ear
+    -- Disabled while the phone is up so a click on the screen does not fire a gun, and the
+    -- mouse drives the cursor instead of spinning the camera. Movement, sprint, jump and
+    -- every vehicle control are left untouched, so you keep walking and driving.
+    block  = { 1, 2, 24, 25, 47, 257, 263, 264, 45, 140, 141, 142, 143, 37, 44, 68, 69, 70, 91, 92 },
+}
+
 -- ── Numbers ────────────────────────────────────────────────────
 -- A number is how contacts, calls and messages address each other. Never the citizen id:
 -- that is a database key, and a player should not be trading it.
