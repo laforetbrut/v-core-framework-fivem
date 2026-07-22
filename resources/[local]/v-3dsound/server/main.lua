@@ -15,6 +15,7 @@ local function num(v, d) return tonumber(v) or d or 0 end
 V.Module({
     label = '3D sound', category = 'other',
     settings = {
+            { key = 'nativeOnly', label = 'Native sounds only (no custom files)', type = 'bool', default = false },
         { key = 'enabled',  label = 'Positional sound enabled', type = 'bool',   default = true },
         { key = 'maxRange', label = 'Maximum range any caller may ask for (m)', type = 'number', default = Config.MaxRange, min = 5, max = 500, step = 5 },
         { key = 'volume',   label = 'Master volume for custom sounds', type = 'number', default = Config.Volume, min = 0, max = 1, step = 0.05 },
@@ -59,6 +60,8 @@ local function play(name, coords, opts)
     local d = def(name)
     if not d then return false end
     if d.file and not V.SettingBool('custom', true) then return false end
+    -- A server that wants zero downloads refuses the file bank outright.
+    if d.file and V.SettingBool('nativeOnly', false) then return false end
 
     opts = opts or {}
     local cap = num(V.Setting('maxRange', Config.MaxRange), Config.MaxRange)

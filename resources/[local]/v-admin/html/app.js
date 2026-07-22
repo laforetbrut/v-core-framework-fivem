@@ -348,6 +348,23 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'nodes') {
+    return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  }
+  if (edDomain === 'benches') {
+    return `${esc(r.station)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
+      `${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+  }
+  if (edDomain === 'spawns') {
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
+      `${r.sub ? ' · ' + esc(r.sub) : ''}</i>`;
+  }
+  if (edDomain === 'cityhall') {
+    return `${esc(r.label)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  }
+  if (edDomain === 'appspots') {
+    return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  }
   if (edDomain === 'jukebox') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
       `${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
@@ -503,7 +520,8 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'radio' || edDomain === 'jukebox') ? r.id
+      const id = (edDomain === 'spawns') ? r.id
+        : (edDomain === 'radio' || edDomain === 'jukebox') ? r.id
         : (edDomain === 'drugs') ? r.key
         : (edDomain === 'charges') ? r.code
         : (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
@@ -686,6 +704,53 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'nodes') {
+    const kinds = (edData.kinds || []).map(k =>
+      `<option value="${esc(k)}"${k === row.kind ? ' selected' : ''}>${esc(k)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_kind'))}</span><select id="ef-kind">${kinds}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'benches') {
+    const sts = (edData.stations || []).map(k =>
+      `<option value="${esc(k)}"${k === row.station ? ' selected' : ''}>${esc(k)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_station'))}</span><select id="ef-st">${sts}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      // a job lock turns a public bench into a workplace one
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'spawns') {
+    const isNew = !row.id;
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span>` +
+        `<input id="ef-sid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field(t('adm.ed_sub'), 'ef-sub', row.sub ?? '') +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'cityhall') {
+    html =
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'appspots') {
+    const kinds = (edData.kinds || []).map(k =>
+      `<option value="${esc(k)}"${k === row.kind ? ' selected' : ''}>${esc(k)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_kind'))}</span><select id="ef-kind">${kinds}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'jukebox') {
     const isNew = !row.id;
     const jobs = (edData.jobs || []).map(j =>
@@ -874,7 +939,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'rentals' || edDomain === 'turfs' || edDomain === 'jukebox' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'rentals' || edDomain === 'turfs' || edDomain === 'jukebox' || edDomain === 'nodes' || edDomain === 'benches' || edDomain === 'spawns' || edDomain === 'cityhall' || edDomain === 'appspots' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -933,6 +998,11 @@ function openEdForm(row) {
   if (edDomain === 'stations' && !row.id) {
     const st = byId('ef-sid');
     st.oninput = () => { st.value = st.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
+  }
+
+  if (edDomain === 'spawns' && !row.id) {
+    const e = byId('ef-sid');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
   if (edDomain === 'jukebox' && !row.id) {
@@ -1041,6 +1111,26 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'nodes') {
+      payload = { id: row.id, kind: v('ef-kind'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  enabled: ck('ef-en') };
+    } else if (edDomain === 'benches') {
+      payload = { id: row.id, station: v('ef-st'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  h: parseFloat(v('ef-h')) || 0, job: v('ef-job'), enabled: ck('ef-en') };
+    } else if (edDomain === 'spawns') {
+      payload = { id: v('ef-sid'), label: v('ef-label'), sub: v('ef-sub'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  h: parseFloat(v('ef-h')) || 0, enabled: ck('ef-en') };
+    } else if (edDomain === 'cityhall') {
+      payload = { id: row.id, label: v('ef-label'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  h: parseFloat(v('ef-h')) || 0, blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'appspots') {
+      payload = { id: row.id, kind: v('ef-kind'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  h: parseFloat(v('ef-h')) || 0, blip: ck('ef-blip'), enabled: ck('ef-en') };
     } else if (edDomain === 'jukebox') {
       payload = { id: v('ef-jid'), label: v('ef-label'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

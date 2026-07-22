@@ -14,6 +14,7 @@ local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local Gangs, Turfs, Charges, Drugs, Radio, Jukebox = {}, {}, {}, {}, {}, {}
+local Nodes, Benches, Spawns, Halls, AppSpots = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -308,6 +309,56 @@ local function ensureTables()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Gathering nodes: one row per pickable spot. `kind` is the resource key from
+    -- v-gathering's config, so adding a node needs no code at all.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_nodes` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `kind` VARCHAR(30) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`), KEY `kind_idx` (`kind`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Craft benches: a station key plus a place to stand.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_benches` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `station` VARCHAR(30) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `job` VARCHAR(50) DEFAULT NULL,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`), KEY `station_idx` (`station`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Where a new character may choose to start.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_spawns` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `sub` VARCHAR(120) NOT NULL DEFAULT '',
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- City hall desks.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_cityhall` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Barbers, tattooists and the clothing-adjacent stations v-appearance owns.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_appspots` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `kind` VARCHAR(30) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`), KEY `kind_idx` (`kind`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -405,6 +456,41 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadNodes()
+    Nodes = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_nodes ORDER BY kind, id') or {}) do
+        r.enabled = bool(r.enabled); Nodes[#Nodes + 1] = r
+    end
+end
+
+local function loadBenches()
+    Benches = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_benches ORDER BY station, id') or {}) do
+        r.enabled = bool(r.enabled); Benches[#Benches + 1] = r
+    end
+end
+
+local function loadSpawns()
+    Spawns = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_spawns ORDER BY label') or {}) do
+        r.enabled = bool(r.enabled); Spawns[#Spawns + 1] = r
+    end
+end
+
+local function loadHalls()
+    Halls = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_cityhall ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled); Halls[#Halls + 1] = r
+    end
+end
+
+local function loadAppSpots()
+    AppSpots = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_appspots ORDER BY kind, id') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled); AppSpots[#AppSpots + 1] = r
     end
 end
 
@@ -561,6 +647,11 @@ local function reload(domain)
     if domain == 'drugs'   or not domain then loadDrugs() end
     if domain == 'radio'   or not domain then loadRadio() end
     if domain == 'jukebox' or not domain then loadJukebox() end
+    if domain == 'nodes'    or not domain then loadNodes() end
+    if domain == 'benches'  or not domain then loadBenches() end
+    if domain == 'spawns'   or not domain then loadSpawns() end
+    if domain == 'cityhall' or not domain then loadHalls() end
+    if domain == 'appspots' or not domain then loadAppSpots() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -647,6 +738,11 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetNodes',     function() return Nodes end)
+exports('GetBenches',   function() return Benches end)
+exports('GetSpawns',    function() return Spawns end)
+exports('GetCityHalls', function() return Halls end)
+exports('GetAppSpots',  function() return AppSpots end)
 exports('GetJukeboxes', function() return Jukebox end)
 exports('GetRadio',   function() return Radio end)
 exports('GetDrugs',   function() return Drugs end)
@@ -850,6 +946,81 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-gathering: list of { kind, x, y, z }
+exports('SeedNodes', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('nodes', defaults)
+    if not need then return false end
+    for _, n in ipairs(defaults) do
+        MySQL.insert.await('INSERT INTO world_nodes (kind, x, y, z, enabled) VALUES (?,?,?,?,1)',
+            { n.kind, n.x, n.y, n.z })
+    end
+    seedDone('nodes', want)
+    loadNodes()
+    print(('[v-world] seeded %d gathering node(s) from config'):format(#Nodes))
+    return true
+end)
+
+-- v-crafting: list of { station, x, y, z, h, job }
+exports('SeedBenches', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('benches', defaults)
+    if not need then return false end
+    for _, b in ipairs(defaults) do
+        MySQL.insert.await('INSERT INTO world_benches (station, x, y, z, h, job, enabled) VALUES (?,?,?,?,?,?,1)',
+            { b.station, b.x, b.y, b.z, b.h or 0.0, b.job })
+    end
+    seedDone('benches', want)
+    loadBenches()
+    print(('[v-world] seeded %d craft bench(es) from config'):format(#Benches))
+    return true
+end)
+
+-- v-spawn: list of { id, label, sub, x, y, z, h }
+exports('SeedSpawns', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('spawns', defaults)
+    if not need then return false end
+    for _, sp in ipairs(defaults) do
+        MySQL.insert.await('INSERT IGNORE INTO world_spawns (id, label, sub, x, y, z, h, enabled) VALUES (?,?,?,?,?,?,?,1)',
+            { sp.id, sp.label or sp.id, sp.sub or '', sp.x, sp.y, sp.z, sp.h or 0.0 })
+    end
+    seedDone('spawns', want)
+    loadSpawns()
+    print(('[v-world] seeded %d spawn point(s) from config'):format(#Spawns))
+    return true
+end)
+
+-- v-cityhall: list of { label, x, y, z, h }
+exports('SeedCityHalls', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('cityhall', defaults)
+    if not need then return false end
+    for _, h in ipairs(defaults) do
+        MySQL.insert.await('INSERT INTO world_cityhall (label, x, y, z, h, blip, enabled) VALUES (?,?,?,?,?,1,1)',
+            { h.label, h.x, h.y, h.z, h.h or 0.0 })
+    end
+    seedDone('cityhall', want)
+    loadHalls()
+    print(('[v-world] seeded %d city hall desk(s) from config'):format(#Halls))
+    return true
+end)
+
+-- v-appearance: list of { kind, x, y, z, h }
+exports('SeedAppSpots', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('appspots', defaults)
+    if not need then return false end
+    for _, a in ipairs(defaults) do
+        MySQL.insert.await('INSERT INTO world_appspots (kind, x, y, z, h, blip, enabled) VALUES (?,?,?,?,?,1,1)',
+            { a.kind, a.x, a.y, a.z, a.h or 0.0 })
+    end
+    seedDone('appspots', want)
+    loadAppSpots()
+    print(('[v-world] seeded %d appearance station(s) from config'):format(#AppSpots))
+    return true
+end)
+
 -- v-music: list of { id, label, x, y, z, job }
 exports('SeedJukeboxes', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
@@ -998,6 +1169,18 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'nodes' then
+        resolve({ rows = Nodes, kinds = Config.NodeKinds })
+    elseif domain == 'benches' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = Benches, stations = Config.CraftStations, jobs = jobs })
+    elseif domain == 'spawns' then
+        resolve({ rows = Spawns })
+    elseif domain == 'cityhall' then
+        resolve({ rows = Halls })
+    elseif domain == 'appspots' then
+        resolve({ rows = AppSpots, kinds = Config.AppStationKinds })
     elseif domain == 'jukebox' then
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -1141,6 +1324,65 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'nodes' then
+        local kind = tostring(row.kind or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
+        if kind == '' then resolve({ error = 'kind' }); return end
+        if row.id then
+            MySQL.update.await('UPDATE world_nodes SET kind=?, x=?, y=?, z=?, enabled=? WHERE id=?',
+                { kind, num(row.x), num(row.y), num(row.z), bool(row.enabled), math.floor(num(row.id)) })
+        else
+            MySQL.insert.await('INSERT INTO world_nodes (kind, x, y, z, enabled) VALUES (?,?,?,?,?)',
+                { kind, num(row.x), num(row.y), num(row.z), bool(row.enabled == nil or row.enabled) })
+        end
+
+    elseif d == 'benches' then
+        local st = tostring(row.station or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
+        if st == '' then resolve({ error = 'station' }); return end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        if row.id then
+            MySQL.update.await('UPDATE world_benches SET station=?, x=?, y=?, z=?, h=?, job=?, enabled=? WHERE id=?',
+                { st, num(row.x), num(row.y), num(row.z), num(row.h), job, bool(row.enabled), math.floor(num(row.id)) })
+        else
+            MySQL.insert.await('INSERT INTO world_benches (station, x, y, z, h, job, enabled) VALUES (?,?,?,?,?,?,?)',
+                { st, num(row.x), num(row.y), num(row.z), num(row.h), job, bool(row.enabled == nil or row.enabled) })
+        end
+
+    elseif d == 'spawns' then
+        local sid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if sid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        MySQL.query.await([[INSERT INTO world_spawns (id, label, sub, x, y, z, h, enabled)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), sub=VALUES(sub), x=VALUES(x), y=VALUES(y),
+                z=VALUES(z), h=VALUES(h), enabled=VALUES(enabled)]],
+            { sid, label, tostring(row.sub or ''):sub(1, 120), num(row.x), num(row.y), num(row.z),
+              num(row.h), bool(row.enabled == nil or row.enabled) })
+
+    elseif d == 'cityhall' then
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        if row.id then
+            MySQL.update.await('UPDATE world_cityhall SET label=?, x=?, y=?, z=?, h=?, blip=?, enabled=? WHERE id=?',
+                { label, num(row.x), num(row.y), num(row.z), num(row.h), bool(row.blip), bool(row.enabled), math.floor(num(row.id)) })
+        else
+            MySQL.insert.await('INSERT INTO world_cityhall (label, x, y, z, h, blip, enabled) VALUES (?,?,?,?,?,?,?)',
+                { label, num(row.x), num(row.y), num(row.z), num(row.h),
+                  bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
+        end
+
+    elseif d == 'appspots' then
+        local kind = tostring(row.kind or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
+        if kind == '' then resolve({ error = 'kind' }); return end
+        if row.id then
+            MySQL.update.await('UPDATE world_appspots SET kind=?, x=?, y=?, z=?, h=?, blip=?, enabled=? WHERE id=?',
+                { kind, num(row.x), num(row.y), num(row.z), num(row.h), bool(row.blip), bool(row.enabled), math.floor(num(row.id)) })
+        else
+            MySQL.insert.await('INSERT INTO world_appspots (kind, x, y, z, h, blip, enabled) VALUES (?,?,?,?,?,?,?)',
+                { kind, num(row.x), num(row.y), num(row.z), num(row.h),
+                  bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
+        end
 
     elseif d == 'jukebox' then
         local jid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
@@ -1578,6 +1820,21 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'nodes' then
+        MySQL.query.await('DELETE FROM world_nodes WHERE id = ?', { math.floor(num(id)) })
+    elseif d == 'benches' then
+        MySQL.query.await('DELETE FROM world_benches WHERE id = ?', { math.floor(num(id)) })
+    elseif d == 'spawns' then
+        local sid = tostring(id or '')
+        if sid == '' then resolve({ error = 'protected' }); return end
+        -- A server with no spawn point cannot let anybody in.
+        local left = MySQL.scalar.await('SELECT COUNT(*) FROM world_spawns WHERE enabled = 1 AND id <> ?', { sid })
+        if (tonumber(left) or 0) < 1 then resolve({ error = 'lastone' }); return end
+        MySQL.query.await('DELETE FROM world_spawns WHERE id = ?', { sid })
+    elseif d == 'cityhall' then
+        MySQL.query.await('DELETE FROM world_cityhall WHERE id = ?', { math.floor(num(id)) })
+    elseif d == 'appspots' then
+        MySQL.query.await('DELETE FROM world_appspots WHERE id = ?', { math.floor(num(id)) })
     elseif d == 'jukebox' then
         local jid = tostring(id or '')
         if jid == '' then resolve({ error = 'protected' }); return end

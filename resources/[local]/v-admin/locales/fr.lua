@@ -236,6 +236,12 @@ local T = {
     ['adm.ed_openchan']     = 'ouvert a quiconque a une radio',
     ['adm.ed_onlygang']     = 'Gang uniquement',
     ['adm.ed_jukebox']      = 'Juke-box',
+    ['adm.ed_nodes']        = 'Points de recolte',
+    ['adm.ed_benches']      = 'Etablis',
+    ['adm.ed_spawns']       = 'Points de spawn',
+    ['adm.ed_cityhall']     = 'Mairie',
+    ['adm.ed_appspots']     = 'Stations d apparence',
+    ['adm.ed_sub']          = 'Sous-titre',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

@@ -46,6 +46,7 @@ local function declareSettings()
     Core.RegisterModule('v-appearance', {
         label = 'Appearance', category = 'gameplay',
         settings = {
+            { key = 'blips',      label = 'Show barber and tattoo blips', type = 'bool', default = true },
 
             { key = 'distance',      label = 'Salon range (m)',   type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'heightEnabled', label = 'Height (experimental)', type = 'bool', default = Config.Height.enabled,
@@ -69,4 +70,20 @@ end)
 V.Ready(function()
     declareSettings()
     applySettings()
+end)
+
+-- The world content this module owns is seeded from config once, then read from the
+-- database so an operator's edits in the admin panel survive a restart.
+CreateThread(function()
+    while GetResourceState('v-world') ~= 'started' do Wait(200) end
+    local tries = 0
+    while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
+    if not exports['v-world']:IsReady() then return end
+    local spots = {}
+    for kind, st in pairs(Config.Stations or {}) do
+        for _, loc in ipairs(st.locations or {}) do
+            spots[#spots + 1] = { kind = kind, x = loc.x, y = loc.y, z = loc.z, h = loc.w or 0.0 }
+        end
+    end
+    exports['v-world']:SeedAppSpots(spots)
 end)

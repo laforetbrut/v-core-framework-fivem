@@ -208,6 +208,8 @@ local function declareSettings()
     Core.RegisterModule('v-crafting', {
         label = 'Crafting', category = 'economy',
         settings = {
+            { key = 'blips',     label = 'Show craft station blips', type = 'bool', default = true },
+            { key = 'distance',  label = 'Bench reach (m)', type = 'number', default = 2.0, min = 1, max = 10, step = 0.5 },
 
             { key = 'distance', label = 'Bench range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'cooldown', label = 'Craft cooldown (s)',     type = 'number', default = Config.Cooldown, min = 0, max = 60 },
@@ -232,4 +234,20 @@ end)
 V.Ready(function()
     declareSettings()
     applySettings()
+end)
+
+-- The world content this module owns is seeded from config once, then read from the
+-- database so an operator's edits in the admin panel survive a restart.
+CreateThread(function()
+    while GetResourceState('v-world') ~= 'started' do Wait(200) end
+    local tries = 0
+    while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
+    if not exports['v-world']:IsReady() then return end
+    local benches = {}
+    for key, st in pairs(Config.Stations or {}) do
+        for _, b in ipairs(st.benches or {}) do
+            benches[#benches + 1] = { station = key, x = b.x, y = b.y, z = b.z, h = b.w or 0.0, job = st.job }
+        end
+    end
+    exports['v-world']:SeedBenches(benches)
 end)

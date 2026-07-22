@@ -274,6 +274,8 @@ local function declareSettings()
     Core.RegisterModule('v-shops', {
         label = 'Stores', category = 'economy',
         settings = {
+            { key = 'blips',      label = 'Show shop blips', type = 'bool', default = true },
+            { key = 'distance',   label = 'Counter reach (m)', type = 'number', default = 2.0, min = 1, max = 10, step = 0.5 },
 
             { key = 'distance',  label = 'Counter range (m)',    type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'priceMult', label = 'Buy price multiplier', type = 'number', default = 1.0, min = 0.1, max = 10 },

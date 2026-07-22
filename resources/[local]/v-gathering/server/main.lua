@@ -95,6 +95,9 @@ local function declareSettings()
     Core.RegisterModule('v-gathering', {
         label = 'Gathering', category = 'economy',
         settings = {
+            { key = 'blips',     label = 'Show gathering blips', type = 'bool', default = false, hint = 'Off by default: an unmarked node is one you have to know about.' },
+            { key = 'distance',  label = 'Node reach (m)', type = 'number', default = 2.0, min = 1, max = 10, step = 0.5 },
+            { key = 'respawn',   label = 'Node cooldown (s)', type = 'number', default = 90, min = 5, max = 3600, step = 5 },
 
             { key = 'distance',  label = 'Node range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'cooldown',  label = 'Harvest cooldown (s)',  type = 'number', default = Config.Cooldown, min = 0, max = 120 },
@@ -119,4 +122,18 @@ end)
 V.Ready(function()
     declareSettings()
     applySettings()
+end)
+
+-- The world content this module owns is seeded from config once, then read from the
+-- database so an operator's edits in the admin panel survive a restart.
+CreateThread(function()
+    while GetResourceState('v-world') ~= 'started' do Wait(200) end
+    local tries = 0
+    while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
+    if not exports['v-world']:IsReady() then return end
+    local nodes = {}
+    for _, n in ipairs(Config.Nodes or {}) do
+        nodes[#nodes + 1] = { kind = n.type, x = n.coords.x, y = n.coords.y, z = n.coords.z }
+    end
+    exports['v-world']:SeedNodes(nodes)
 end)
