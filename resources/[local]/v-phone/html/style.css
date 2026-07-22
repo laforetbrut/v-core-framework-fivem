@@ -800,7 +800,9 @@ input { font: inherit; }
 .app.black { background: #000; color: #fff; }
 .app.black .calcout { color: #fff; }
 
-.battpct { font-family: var(--ios-num); font-size: 12px; font-weight: 600; letter-spacing: 0; }
+/* The bar carries the charge; the number beside it is noise the real status bar can be
+   set to hide, so it is hidden here. */
+.battpct { display: none; }
 /* A bar the network is not giving you is drawn, but empty. */
 #bars rect.off { opacity: .28; }
 .nosvc { font-size: 11px; font-weight: 700; letter-spacing: .06em; }
@@ -1231,3 +1233,50 @@ input { font: inherit; }
 .airbig svg { width: 40px; height: 40px; }
 .airbig span { font-size: 17px; font-weight: 600; }
 .airfrom { text-align: center; font-size: 14px; color: var(--app-label2); margin: 10px 0 14px; }
+
+/* ── Camera app, iOS style ─────────────────────────────────────── */
+/* Immersive: the app view goes black and loses its title bar and padding. */
+.app.camfull { background: #000; }
+.app.camfull .appbody { padding: 0; background: #000; }
+.camui { position: absolute; inset: 0; display: flex; flex-direction: column;
+  background: #000; color: #fff; }
+.camtop { display: flex; align-items: center; justify-content: space-between;
+  padding: 52px 18px 8px; }
+.camchip { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; background: rgba(60,60,67,.6); color: #fff; }
+.camchip svg { width: 20px; height: 20px; }
+.camchip.back svg { transform: scaleX(-1); }
+.camchip.on { background: #FFCC00; color: #1c1c1e; }
+
+/* The viewfinder: a real camera would show the world here; NUI cannot, so it is a black
+   frame with the corner marks and rule-of-thirds grid the iOS camera draws over it. */
+.camview { position: relative; flex: 1; margin: 4px 12px; border-radius: 8px;
+  background: radial-gradient(130% 90% at 50% 40%, #17171b, #000); overflow: hidden; }
+.cammark { position: absolute; width: 26px; height: 26px; border: 2px solid rgba(255,255,255,.55); }
+.cammark.tl { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 8px 0 0 0; }
+.cammark.tr { right: 12px; top: 12px; border-left: 0; border-bottom: 0; border-radius: 0 8px 0 0; }
+.cammark.bl { left: 12px; bottom: 12px; border-right: 0; border-top: 0; border-radius: 0 0 0 8px; }
+.cammark.br { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 8px 0; }
+.camgrid { position: absolute; inset: 0; opacity: .16;
+  background-image: linear-gradient(#fff 1px, transparent 1px), linear-gradient(90deg, #fff 1px, transparent 1px);
+  background-size: 33.33% 33.33%; background-position: 0 0; }
+.camhint { position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
+  font-size: 12px; color: rgba(255,255,255,.6); padding: 0 24px; }
+
+.cammode { display: flex; justify-content: center; gap: 22px; padding: 10px 0 6px;
+  font-size: 11px; font-weight: 700; letter-spacing: .12em; color: rgba(255,255,255,.5); }
+.cammode .on { color: #FFCC00; }
+
+.camctl { display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 34px 30px; }
+.camctl .camroll { width: 46px; height: 46px; border-radius: 9px; background-size: cover;
+  background-position: center; box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.4); }
+.camctl .camroll.empty { background: rgba(120,120,128,.35); }
+.camshutter { width: 72px; height: 72px; border-radius: 50%; background: transparent;
+  box-shadow: inset 0 0 0 4px #fff; display: flex; align-items: center; justify-content: center; }
+.camshutter span { width: 58px; height: 58px; border-radius: 50%; background: #fff;
+  transition: transform .12s ease; }
+.camshutter:active span { transform: scale(.88); }
+.camflip { width: 46px; height: 46px; border-radius: 50%; background: rgba(60,60,67,.7);
+  display: flex; align-items: center; justify-content: center; color: #fff; }
+.camflip svg { width: 22px; height: 22px; }

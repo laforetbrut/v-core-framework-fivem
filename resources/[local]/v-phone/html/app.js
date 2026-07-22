@@ -464,6 +464,10 @@ function enterApp(a, tile) {
   // Most recent first, no duplicates. This is the switcher's whole model.
   recents = [a.id].concat(recents.filter((id) => id !== a.id)).slice(0, 8);
   const app = byId('app');
+  // Leaving the camera for anywhere else drops its immersive chrome and unrotates.
+  byId('navbar').classList.remove('hidden');
+  app.classList.remove('camfull');
+  if (landscape) setLandscape(false);
   if (tile) {
     const r = tile.getBoundingClientRect();
     const s = byId('screen').getBoundingClientRect();
@@ -494,6 +498,9 @@ function closeApp(instant) {
   emojiClose();
   const app = byId('app');
   if (!app.classList.contains('on')) return;
+  byId('navbar').classList.remove('hidden');
+  app.classList.remove('camfull');
+  if (landscape) setLandscape(false);
   byId('screen').classList.remove('app-open');
   if (instant) { app.classList.remove('on'); openApp = null; thread = null; threadGroup = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null; return; }
   app.classList.remove('on');
@@ -1111,14 +1118,25 @@ function applyTheme() {
   byId('screen').classList.toggle('dark', (state.prefs || {}).dark === true);
 }
 
+let landscape = false;
 function applyDevice() {
   const p = state.prefs || {};
   const d = byId('device');
-  d.style.transform = 'scale(' + (p.size || 1) + ')';
-  d.style.transformOrigin = (p.side === 'left') ? 'left bottom' : 'right bottom';
-  d.style.right = (p.side === 'left') ? 'auto' : '3vw';
-  d.style.left = (p.side === 'left') ? '3vw' : 'auto';
+  const size = p.size || 1;
+  if (landscape) {
+    // The phone lies on its side, centred so it cannot swing off-screen.
+    d.style.left = '50%'; d.style.right = 'auto'; d.style.top = '50%'; d.style.bottom = 'auto';
+    d.style.transformOrigin = 'center center';
+    d.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(' + size + ')';
+  } else {
+    d.style.top = 'auto'; d.style.bottom = '2.5vh';
+    d.style.transformOrigin = (p.side === 'left') ? 'left bottom' : 'right bottom';
+    d.style.transform = 'scale(' + size + ')';
+    d.style.right = (p.side === 'left') ? 'auto' : '3vw';
+    d.style.left = (p.side === 'left') ? '3vw' : 'auto';
+  }
 }
+function setLandscape(on) { landscape = on === true; applyDevice(); }
 
 // -- Maps -------------------------------------------------------
 // Everywhere the map already shows, turned into a waypoint. A phone map that could not
@@ -1791,28 +1809,50 @@ RENDER.reminders = async () => {
 // -- Camera -----------------------------------------------------
 // Real, and only as real as the operator made it: with no upload target configured there
 // is nowhere for a photo to go, and the app says so rather than pretending to save one.
-// Camera shoots. The last frame sits in the corner as a shortcut into the Gallery, the
-// way a real camera app does; everything else about a photo lives in the Gallery.
+// The camera, drawn like the iOS one: a black viewfinder with framing marks, a shutter
+// ring, the last shot as a roll thumbnail, and a control to lay the phone on its side.
 RENDER.camera = async () => {
   if (!state.camera) { body(UI.empty(L('ph.camera_off'), 'camera')); return; }
   const d = await post('photos', { op: 'list' });
   const shots = (d && d.photos) || [];
   const last = shots[0];
+
+  // Immersive: no title bar, no padding, the black fills the screen edge to edge.
+  byId('navbar').classList.add('hidden');
+  byId('app').classList.add('camfull');
+
   body(
-    '<div class="viewfinder"><div class="vfframe"></div>' +
-      '<div class="vfhint">' + esc(L('ph.vf_hint')) + '</div></div>' +
-    '<div class="camrow">' +
-      (last ? '<button class="camroll" id="camroll" type="button" style="background-image:url(' + esc(last) + ')"></button>'
-            : '<span class="camroll empty"></span>') +
-      '<button class="shutter" id="shoot" type="button"></button>' +
-      '<span class="camroll spacer"></span></div>'
+    '<div class="camui">' +
+      '<div class="camtop">' +
+        '<button class="camchip back" id="camback" type="button">' + svg('chevron') + '</button>' +
+        '<button class="camchip ' + (landscape ? 'on' : '') + '" id="camland" type="button">' + svg('landscape') + '</button>' +
+      '</div>' +
+      '<div class="camview">' +
+        '<span class="cammark tl"></span><span class="cammark tr"></span>' +
+        '<span class="cammark bl"></span><span class="cammark br"></span>' +
+        '<div class="camgrid"></div>' +
+        '<div class="camhint">' + esc(L('ph.vf_hint')) + '</div>' +
+      '</div>' +
+      '<div class="cammode"><span class="on">' + esc(L('ph.cam_photo')) + '</span></div>' +
+      '<div class="camctl">' +
+        (last ? '<button class="camroll" id="camroll" type="button" style="background-image:url(' + esc(last) + ')"></button>'
+              : '<span class="camroll empty"></span>') +
+        '<button class="camshutter" id="shoot" type="button"><span></span></button>' +
+        '<button class="camflip" id="camland2" type="button">' + svg('landscape') + '</button>' +
+      '</div>' +
+    '</div>'
   );
+
   byId('shoot').addEventListener('click', async () => {
     toast(L('ph.shooting'));
     const res = await post('shoot');
     if (!res || res.error) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
     RENDER.camera();
   });
+  byId('camback').addEventListener('click', () => closeApp());
+  const toggle = () => { setLandscape(!landscape); RENDER.camera(); };
+  byId('camland').addEventListener('click', toggle);
+  byId('camland2').addEventListener('click', toggle);
   const roll = byId('camroll');
   if (roll) roll.addEventListener('click', () => {
     const a = (state.apps || []).find((x) => x.id === 'gallery');
