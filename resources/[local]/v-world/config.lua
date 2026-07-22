@@ -62,6 +62,11 @@ Config.ClothFramings = { 'head', 'upper', 'lower', 'body' }
 -- Garage kinds (must match v-garages' handling).
 Config.GarageTypes = { 'public', 'job', 'gang', 'impound' }
 
+-- Picker lists for the world-content editor. Kept here rather than read from each
+-- module, so the editor never has to be up at the same time as what it edits.
+Config.NodeKinds = { 'mining', 'salvage', 'textile', 'weed' }
+Config.AppStationKinds = { 'barber', 'tattoo', 'surgery' }
+
 -- Penal code categories (v-police). Charges themselves live in `world_charges`.
 Config.ChargeCategories = {
     'traffic', 'misdemeanour', 'felony', 'drugs', 'weapons', 'misc',

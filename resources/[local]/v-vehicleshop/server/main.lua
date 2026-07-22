@@ -144,8 +144,10 @@ Core.RegisterCallback('v-vehicleshop:testdrive', function(source, resolve, data)
     if TestUntil[p.citizenid] and now < TestUntil[p.citizenid] then
         resolve({ error = 'cooldown', wait = TestUntil[p.citizenid] - now }) return
     end
-    local seconds = math.max(5, math.floor(tonumber(Config.TestDrive.seconds) or 60))
-    TestUntil[p.citizenid] = now + math.max(seconds, math.floor(tonumber(Config.TestDrive.cooldown) or 120))
+    local seconds = math.max(5, math.floor(tonumber(
+        Core.GetSetting('v-vehicleshop', 'testSeconds', Config.TestDrive.seconds)) or 60))
+    TestUntil[p.citizenid] = now + math.max(seconds, math.floor(tonumber(
+        Core.GetSetting('v-vehicleshop', 'testCooldown', Config.TestDrive.cooldown)) or 120))
 
     -- The drive teleports the player twice (into the car, and back afterwards) and
     -- creates a local vehicle; both are ours, so say so.
@@ -302,6 +304,9 @@ local function declareSettings()
     Core.RegisterModule('v-vehicleshop', {
         label = 'Dealerships', category = 'vehicles',
         settings = {
+            { key = 'blips',      label = 'Show dealership blips', type = 'bool', default = true },
+            { key = 'testSeconds', label = 'Test drive (s)', type = 'number', default = 60, min = 10, max = 600, step = 5 },
+            { key = 'testCooldown', label = 'Wait between test drives (s)', type = 'number', default = 120, min = 0, max = 3600, step = 10 },
             { key = 'sellBackRate', label = 'Sell-back rate (0-1)',   type = 'number', default = Config.SellBackRate, min = 0, max = 1 },
             { key = 'testSeconds',  label = 'Test drive (seconds)',   type = 'number', default = Config.TestDrive.seconds, min = 10, max = 600, step = 1 },
             { key = 'defaultGarage',label = 'Garage a new car goes to', type = 'string', default = Config.DefaultGarage, maxLength = 40 },

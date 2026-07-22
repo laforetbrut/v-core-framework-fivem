@@ -107,6 +107,8 @@ local function declareSettings()
     Core.RegisterModule('v-cityhall', {
         label = 'City hall', category = 'civic',
         settings = {
+            { key = 'blips',     label = 'Show city hall blips', type = 'bool', default = true },
+            { key = 'fee',       label = 'Fee to change job ($)', type = 'number', default = 0, min = 0, max = 100000, step = 50 },
             { key = 'hireFee',  label = 'Hiring filing fee ($)', type = 'number', default = Config.HireFee, min = 0, max = 100000, step = 1 },
             { key = 'distance', label = 'Interaction range (m)', type = 'number', default = Config.Distance, min = 1, max = 15 },
         },
@@ -126,4 +128,14 @@ CreateThread(function()
     Wait(2500)
     declareSettings()
     applySettings()
+end)
+
+-- The world content this module owns is seeded from config once, then read from the
+-- database so an operator's edits in the admin panel survive a restart.
+CreateThread(function()
+    while GetResourceState('v-world') ~= 'started' do Wait(200) end
+    local tries = 0
+    while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
+    if not exports['v-world']:IsReady() then return end
+    exports['v-world']:SeedCityHalls(Config.Locations or {})
 end)
