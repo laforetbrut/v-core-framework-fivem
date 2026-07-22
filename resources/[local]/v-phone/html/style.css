@@ -1147,3 +1147,27 @@ input { font: inherit; }
 .shade.manage .ncard .nw { display: none; }
 .nempty { text-align: center; color: rgba(235,235,245,.5); font-size: 15px; padding: 60px 0; }
 
+
+/* ── Home-screen arrangement, rebuilt for a real drag ──────────── */
+/* The tile being carried is a fixed clone that follows the finger; the original
+   position just holds an empty gap so the grid does not collapse under it. */
+.dragghost { position: absolute; z-index: 130; left: 0; top: 0; width: 74px;
+  pointer-events: none; display: none; flex-direction: column; align-items: center; gap: 6px;
+  transform: translate(-50%, -50%) scale(1.14); filter: drop-shadow(0 14px 24px rgba(0,0,0,.5)); }
+.dragghost.on { display: flex; }
+.dragghost .ic { width: 60px; height: 60px; border-radius: 13.5px; overflow: hidden; }
+.dragghost .ic svg { width: 34px; height: 34px; }
+.dragghost .nm { font-size: 11.5px; color: #fff; }
+.tile.ghosted { opacity: 0; pointer-events: none; }
+
+/* A tile that a drop would turn into a folder darkens and rings. */
+.tile.folderready .ic, .tile.folderready .folder { transform: scale(1.16);
+  box-shadow: 0 0 0 3px var(--v-accent), 0 0 0 8px rgba(255,255,255,.14); }
+
+/* The Done pill, the only way out of arrange mode - a drop no longer exits it. */
+.arrangedone { position: absolute; z-index: 62; top: 62px; left: 50%; margin-left: -46px;
+  width: 92px; padding: 8px 0; border-radius: 99px; display: none;
+  font-size: 14px; font-weight: 700; color: #000; text-align: center;
+  background: #fff; box-shadow: 0 8px 22px rgba(0,0,0,.4); }
+.home.arrange .arrangedone { display: block; animation: ph-in .3s var(--spring); }
+
