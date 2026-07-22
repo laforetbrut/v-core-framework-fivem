@@ -1,7 +1,7 @@
 # Writing a script for v-core
 
-Everything a script needs — the core handle, settings that show up in the admin panel,
-safe calls into other modules — comes from one helper. Add one line to your manifest:
+Everything a script needs - the core handle, settings that show up in the admin panel,
+safe calls into other modules - comes from one helper. Add one line to your manifest:
 
 ```lua
 shared_script '@v-core/lib/v.lua'
@@ -84,7 +84,7 @@ admin can change them in game, and your code reads the new value on the next cal
 | `V.name` | Your resource name. |
 
 **Never write `Wait(2500)` hoping v-core has started.** That was how this framework used
-to do it — 28 hand-tuned sleeps, each a guess. `V.Ready` knows.
+to do it - 28 hand-tuned sleeps, each a guess. `V.Ready` knows.
 
 ### Settings
 
@@ -99,7 +99,7 @@ Setting types: `number` (`min`, `max`, `step`), `bool`, `string` (`maxLength`),
 `select` (`options = { { value =, label = } }`), `color`.
 
 > **Read settings where you use them, not at boot.** A module that caches a setting in a
-> local at startup makes that setting do nothing until the server restarts — the operator
+> local at startup makes that setting do nothing until the server restarts - the operator
 > changes it, sees no effect, and reports it as broken. If you must cache (a loop
 > interval, a marker colour), re-read it in `V.OnSetting`.
 
@@ -115,7 +115,7 @@ if fuel.IsElectric(veh) then ... end
 ```
 
 `V.Use` returns a proxy. If the resource is missing, stopped, or does not define that
-export, the call returns `nil` instead of throwing — so an optional dependency needs no
+export, the call returns `nil` instead of throwing - so an optional dependency needs no
 `pcall` and no `GetResourceState` check. When a call *does* fail it prints which export,
 which resource and **which side**, which is how the framework's nastiest class of bug
 (calling a server export from the client) stops being silent.
@@ -127,7 +127,7 @@ which resource and **which side**, which is how the framework's nastiest class o
 | | Server | Client |
 |---|---|---|
 | Player | `V.Player(source)` | `V.Player()` → `PlayerData` |
-| Callback | `V.Callback(name, fn)` — `fn(source, resolve, ...)` | `V.Request(name, cb, ...)` |
+| Callback | `V.Callback(name, fn)` - `fn(source, resolve, ...)` | `V.Request(name, cb, ...)` |
 | Notify | `V.Notify(source, msg, kind)` | `V.Notify(msg, kind)` |
 
 `V.Callback` exists only on the server and `V.Request` only on the client, on purpose:
@@ -181,7 +181,7 @@ change when the operator picks a different palette.
 
 ## Gotchas this framework has actually hit
 
-These are not hypothetical — each one shipped, broke something, and was fixed.
+These are not hypothetical - each one shipped, broke something, and was fixed.
 
 - **`local function f` is only visible after its definition.** A settings block appended
   at the end of a file cannot be called by a thread above it. Five modules failed to boot
@@ -192,7 +192,7 @@ These are not hypothetical — each one shipped, broke something, and was fixed.
   discarded. Assign after building the table instead.
 - **`INSERT IGNORE` only dedupes on a natural key.** On an `AUTO_INCREMENT` table it
   duplicates every row on re-seed.
-- **CEF has no `backdrop-filter`** in this build — it renders as an opaque black box.
+- **CEF has no `backdrop-filter`** in this build - it renders as an opaque black box.
 - **A NUI page can only be messaged by the resource that owns it**, and `SetNuiFocus` is
   resource-scoped.
 - **Enhanced rejects Legacy stream assets.** One `.ytd` in RSC7 format stops the whole
@@ -216,8 +216,8 @@ error in the console.
 
 # Écrire un script pour v-core (version française)
 
-Tout ce dont un script a besoin — le handle du core, des réglages qui apparaissent dans
-le panneau admin, des appels sûrs vers les autres modules — vient d'un seul helper. Une
+Tout ce dont un script a besoin - le handle du core, des réglages qui apparaissent dans
+le panneau admin, des appels sûrs vers les autres modules - vient d'un seul helper. Une
 ligne dans votre manifest :
 
 ```lua
@@ -229,10 +229,10 @@ de démarrage à respecter.
 
 ## L'API
 
-**Cycle de vie** — `V.Ready(fn)` exécute `fn` dès que v-core est prêt (jamais un `Wait`
+**Cycle de vie** - `V.Ready(fn)` exécute `fn` dès que v-core est prêt (jamais un `Wait`
 au jugé), `V.Core()` renvoie le core ou `nil`, `V.name` votre ressource.
 
-**Réglages** — `V.Module(info)` déclare le module et ses réglages, `V.Setting(clé,
+**Réglages** - `V.Module(info)` déclare le module et ses réglages, `V.Setting(clé,
 défaut)` les lit (jamais `nil`), `V.SettingNumber` / `V.SettingBool` les convertissent,
 `V.OnSetting(fn)` réagit quand un admin en change un.
 
@@ -242,13 +242,13 @@ défaut)` les lit (jamais `nil`), `V.SettingNumber` / `V.SettingBool` les conver
 
 > **Un réglage que personne ne lit est pire que pas de réglage : il ment à l'admin.**
 
-**Communication** — `V.Use('v-fuel')` renvoie un proxy : si la ressource est absente,
+**Communication** - `V.Use('v-fuel')` renvoie un proxy : si la ressource est absente,
 arrêtée, ou n'expose pas cet export, l'appel renvoie `nil` au lieu de planter. Aucun
 `pcall`, aucun `GetResourceState`. Et quand un appel échoue vraiment, il **dit** lequel
-et de quel côté — c'est ainsi que la pire classe de bug du framework (appeler un export
+et de quel côté - c'est ainsi que la pire classe de bug du framework (appeler un export
 serveur depuis le client) cesse d'être silencieuse.
 
-**Joueurs, callbacks, notifications** — `V.Player(source)` côté serveur et `V.Player()`
+**Joueurs, callbacks, notifications** - `V.Player(source)` côté serveur et `V.Player()`
 côté client, `V.Callback(nom, fn)` côté serveur uniquement, `V.Request(nom, cb, …)` côté
 client uniquement, `V.Notify(…)` des deux côtés.
 

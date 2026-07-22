@@ -1,8 +1,8 @@
-# v-core — API reference
+# v-core - API reference
 
 > **Writing a new script? Start with [DEVELOPERS.md](DEVELOPERS.md).** One manifest line
 > (`shared_script '@v-core/lib/v.lua'`) gives you `V.Ready`, `V.Module`, `V.Setting`,
-> `V.Use`, `V.Callback` and `V.Notify` — this file is the raw surface underneath.
+> `V.Use`, `V.Callback` and `V.Notify` - this file is the raw surface underneath.
 >
 > **Vous écrivez un nouveau script ?** Commencez par [DEVELOPERS.md](DEVELOPERS.md) :
 > une ligne de manifest remplace tout le passe-plat décrit ici.
@@ -22,7 +22,7 @@ New to the framework? Start with **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 ---
 
-## v-core — framework
+## v-core - framework
 
 ```lua
 local Core = exports['v-core']:GetCore()          -- server or client
@@ -39,7 +39,7 @@ The player object: `source`, `citizenid`, `license`, `charinfo{firstname,lastnam
 `inventory`, `appearance`, and:
 ```lua
 player.AddMoney(account, amount, reason)     -- true/false
-player.RemoveMoney(account, amount, reason)  -- true/false — ALWAYS check the return
+player.RemoveMoney(account, amount, reason)  -- true/false - ALWAYS check the return
 player.GetMoney(account)
 player.SetJob(name, grade)
 player.SetMetadata(key, value) / player.GetMetadata(key)
@@ -82,7 +82,7 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 ### Events
 | Event | Side | Fired when |
 |---|---|---|
-| `v-core:server:onPlayerLoaded` | server | a character finished loading — `(src, player)` |
+| `v-core:server:onPlayerLoaded` | server | a character finished loading - `(src, player)` |
 | `v-core:server:onMoneyChange` | server | `(src, account, amount, reason)` |
 | `v-core:server:onJobChange` | server | job assigned |
 | `v-core:server:permissionChanged` | server | `(src, level)` |
@@ -94,7 +94,7 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 
 ---
 
-## v-world — admin-editable content
+## v-world - admin-editable content
 
 The single owner of every content table. 14 domains: `blips`, `shops`, `jobs`, `items`,
 `recipes`, `clothstores`, `clothcats`, `garages`, `stations`, `mechshops`, `dealers`,
@@ -115,7 +115,7 @@ exports['v-world']:SeedVehicleCatalogue(t) / SeedLicenseTypes(t)
 exports['v-world']:SeedClothStores(t) / SeedClothCategories(t)
 ```
 
-**`v-world:server:changed(domain)`** — fired after any edit. Rebuild your runtime tables here:
+**`v-world:server:changed(domain)`** - fired after any edit. Rebuild your runtime tables here:
 ```lua
 AddEventHandler('v-world:server:changed', function(domain)
     if domain == nil or domain == 'items' then rebuild() end
@@ -126,7 +126,7 @@ Admin callbacks (permission-gated): `v-world:list` / `v-world:save` / `v-world:d
 
 ---
 
-## v-inventory — items
+## v-inventory - items
 
 ```lua
 exports['v-inventory']:AddItem(src, name, count, metadata)   -- false if it doesn't fit
@@ -143,7 +143,7 @@ Client-side a container is opened with
 
 ---
 
-## v-jobs / v-licenses — employment and the law
+## v-jobs / v-licenses - employment and the law
 
 ```lua
 exports['v-jobs']:GetJob(src)                  -- { name, grade }
@@ -167,7 +167,7 @@ exports['v-licenses']:LicenseForClass(gtaClass)
 
 ## v-vehicles / v-garages / v-vehicleshop / v-fuel / v-mechanic
 
-### v-vehicles — ownership, keys, persistence (server)
+### v-vehicles - ownership, keys, persistence (server)
 ```lua
 exports['v-vehicles']:CreateOwned(cid, model, garage, props)  -- plate | nil, err
 exports['v-vehicles']:SpawnOwned(src, plate, coords, heading) -- netid | nil, err
@@ -180,13 +180,13 @@ exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage)
 ```
 **Nothing else may spawn an owned vehicle.** `SpawnOwned` creates the entity server-side.
 
-### v-vehicles — client
+### v-vehicles - client
 ```lua
 exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
 exports['v-vehicles']:GetFuel(veh) / SetFuel(veh, pct)
 exports['v-vehicles']:IsBuckled()     -- client: seatbelt state, for HUDs and EMS scripts
 
--- v-factions (server) — a faction is (name, kind) with kind = 'job' | 'gang'
+-- v-factions (server) - a faction is (name, kind) with kind = 'job' | 'gang'
 exports['v-factions']:Get(name, kind)              -- definition, or nil
 exports['v-factions']:GetGrades(name, kind)        -- [{ grade, name, salary, isboss }]
 exports['v-factions']:GetMembers(name, kind)       -- [{ citizenid, names, grade, gradeLabel, online }]
@@ -209,10 +209,10 @@ exports['v-police']:JailLeft(cid)       -- minutes remaining, 0 if free
 exports['v-police']:HasWarrant(cid)
 exports['v-police']:GetCharges()        -- the live penal code
 
--- v-licenses (server) — added for the MDT: every licence of an OFFLINE citizen
+-- v-licenses (server) - added for the MDT: every licence of an OFFLINE citizen
 exports['v-licenses']:GetAllByCid(cid)
 
--- v-gangs (server) — territory only; membership and treasury are v-factions
+-- v-gangs (server) - territory only; membership and treasury are v-factions
 exports['v-gangs']:TurfAt(coords)      -- turfId, owner (or nil)
 exports['v-gangs']:GetOwner(turfId)
 exports['v-gangs']:InOwnTurf(src)      -- true, turfId when standing in own gang territory
@@ -251,7 +251,7 @@ exports['v-mechanic']:GetLocalParts(plate) / GetMileage(plate) / ScanNearby()  -
 
 ```lua
 -- v-status (server)
-exports['v-status']:Get(src)          -- { hunger, thirst, stress, bleed, sick } — LIVE ref
+exports['v-status']:Get(src)          -- { hunger, thirst, stress, bleed, sick } - LIVE ref
 exports['v-status']:Add(src, 'hunger', 25)
 exports['v-status']:Set(src, key, value)
 exports['v-status']:SetBleed(src, n) / SetSick(src, n) / Heal(src)
@@ -268,7 +268,7 @@ exports['v-appearance']:ApplyAppearance(a) / GetCurrentAppearance()
 exports['v-appearance']:CaptureRef(kind, id) / ApplyRef(kind, id, ref)
 exports['v-appearance']:OpenEditor(mode)      -- 'barber' | 'surgery' | 'tattoo'
 
--- v-target (client) — options are filtered by permission, job and a predicate
+-- v-target (client) - options are filtered by permission, job and a predicate
 exports['v-target']:AddGlobalPlayer(opts) / AddGlobalPed(opts) / AddGlobalVehicle(opts)
 exports['v-target']:AddGlobalObject(opts) / AddModel(models, opts) / AddEntity(ent, opts)
 exports['v-target']:AddBoxZone(name, coords, len, wid, opts)
@@ -289,8 +289,8 @@ exports['v-world']:GetUiThemes()   -- server: the per-module overrides
 
 ### Theming your page
 The global theme lives in `v-ui/config.lua` + **Admin -> Settings -> Interface**. A single
-module can override it in **Admin -> Editor -> Look -> Module themes** — preset, accent,
-panel transparency, backdrop, roundness, motion, font scale — and **anything left blank is
+module can override it in **Admin -> Editor -> Look -> Module themes** - preset, accent,
+panel transparency, backdrop, roundness, motion, font scale - and **anything left blank is
 inherited**.
 
 `theme.js` stamps the owning resource onto `<html data-vmod="…">`, and the generated
@@ -299,7 +299,7 @@ stylesheet carries a scoped block per module:
 :root { /* global */ }
 :root[data-vmod="my-script"] { /* only the overrides */ }
 ```
-So your page is themeable the moment it links the three files — including per-module, with
+So your page is themeable the moment it links the three files - including per-module, with
 no change to v-ui.
 
 ---
@@ -312,14 +312,14 @@ no change to v-ui.
 <script src="https://cfx-nui-v-ui/theme.js"></script>                 <!-- live re-theme -->
 ```
 Then compose the shared primitives: `.v-panel`, `.v-chamfer`, `.v-tab`, `.v-brk`,
-`.v-progress` + `.v-progress__fill`, `.v-scroll`, `.v-glass`. **Never hardcode a colour** —
+`.v-progress` + `.v-progress__fill`, `.v-scroll`, `.v-glass`. **Never hardcode a colour** -
 use the `--v-*` variables, or an admin's theme change will skip your page.
 
 The resource that owns the page calls `SetNuiFocus` itself; focus is per-resource.
 
 ---
 
-# v-core — Référence API (Version Française)
+# v-core - Référence API (Version Française)
 
 Chaque export, callback et événement exposé par le framework. Généré depuis les sources :
 ce qui est listé ici existe.
@@ -332,7 +332,7 @@ ce qui est listé ici existe.
 | Métier `v-jobs` | *Est-ce un employé ?* | `exports['v-jobs']:GetJob(src)` |
 | Licence `v-licenses` | *En a-t-il légalement le droit ?* | `exports['v-licenses']:Has(src, 'driving')` |
 
-Les signatures sont identiques dans les deux langues — la section anglaise ci-dessus fait
+Les signatures sont identiques dans les deux langues - la section anglaise ci-dessus fait
 foi pour les noms. Ce qui suit en résume l'usage.
 
 ## L'essentiel
@@ -369,7 +369,7 @@ Types : `number`, `bool`, `string`, `select`, `color`. Guide : **[DEVELOPERS.md]
 
 Un *réglage* est un nombre. Une *liste* est un **domaine `v-world`** avec son sous-onglet
 dans l'Éditeur. Amorce toujours avec `INSERT IGNORE`, jamais
-`ON DUPLICATE KEY UPDATE` — sinon un redémarrage efface les modifications de l'admin.
+`ON DUPLICATE KEY UPDATE` - sinon un redémarrage efface les modifications de l'admin.
 
 ```lua
 AddEventHandler('v-world:server:changed', function(domain)
@@ -381,6 +381,6 @@ end)
 
 - Locales **fr et en** pour chaque texte joueur.
 - **Aucune commande chat** : touches, œil de ciblage, téléphone ou NUI.
-- **Revérifier chaque contrôle côté serveur** — un test de distance client est de l'UX.
+- **Revérifier chaque contrôle côté serveur** - un test de distance client est de l'UX.
 - **Aucune couleur en dur** dans une NUI : utilise les variables `--v-*`, sinon le
   changement de thème d'un admin ignorera ta page.

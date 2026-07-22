@@ -1,4 +1,4 @@
-# v-core — a roleplay framework built for FiveM Enhanced
+# v-core - a roleplay framework built for FiveM Enhanced
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
@@ -6,7 +6,7 @@
 [![Modules](https://img.shields.io/badge/modules-25-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
-**v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** — the GTA V
+**v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
 Enhanced next-gen edition. 25 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
@@ -23,13 +23,13 @@ Built and tested on `cfx-server.exe`, OneSync, MariaDB via `oxmysql`.
 git clone https://github.com/laforetbrut/v-core-framework-fivem.git
 ```
 
-Then follow [Installation](#installation) — five steps, no build toolchain.
+Then follow [Installation](#installation) - five steps, no build toolchain.
 
 > **Status:** in active development on `main`.
 >
 > | Document | What it is |
 > |---|---|
-> | **[API.md](API.md)** | Every export, callback and event — the reference |
+> | **[API.md](API.md)** | Every export, callback and event - the reference |
 > | **[DEVELOPERS.md](DEVELOPERS.md)** | Write a script for v-core: the `V` helper, conventions, gotchas |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | What each module does today, and the roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | What shipped |
@@ -40,82 +40,82 @@ Then follow [Installation](#installation) — five steps, no build toolchain.
 Most FiveM frameworks are a core plus fifty third-party scripts that each bring their own UI, their own
 config format and their own idea of who is allowed to do what. v-core is the opposite bet: **one
 codebase, one look, one permission model**, and **everything an operator needs to tune is editable
-in-game** — never by editing Lua on a live server.
+in-game** - never by editing Lua on a live server.
 
 ## Features
 
-- **FiveM Enhanced native** — runs on `cfx-server.exe`, `gamename: gta5enhanced`. No `sv_enforceGameBuild`
+- **FiveM Enhanced native** - runs on `cfx-server.exe`, `gamename: gta5enhanced`. No `sv_enforceGameBuild`
   (those are Legacy build numbers and lock Enhanced clients out). CEF 140-safe NUI (`https://cfx-nui-…`).
-- **`v-core`** — DB-persistent players, server/client callback system, permission tiers, structured audit
+- **`v-core`** - DB-persistent players, server/client callback system, permission tiers, structured audit
   log, multi-character selection. Every module goes through it.
-- **`v-ui` design system, fully themeable** — one canonical stylesheet every NUI page shares, driven by
+- **`v-ui` design system, fully themeable** - one canonical stylesheet every NUI page shares, driven by
   `v-ui/config.lua`: **6 colour presets**, an accent override the whole highlight family is derived
   from, corner roundness, density, animation speed (0 disables motion), panel opacity and font scale.
-  Changing any of it in **Admin -> Settings -> Interface** restyles **every module at once** — no
+  Changing any of it in **Admin -> Settings -> Interface** restyles **every module at once** - no
   module hardcodes a colour.
-- **Configurable loading screen** — `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
+- **Configurable loading screen** - `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
   split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
   toggleable, and all copy + tips in one place.
-- **In-game content editor** — the admin panel creates, edits and deletes **map blips, store locations,
+- **In-game content editor** - the admin panel creates, edits and deletes **map blips, store locations,
   jobs & grades, items, craft recipes, clothing stores & wearable slots, garages, fuel stations,
   mechanic shops, dealerships, the vehicle catalogue and licence types**, backed by `v-world`.
   Changes apply **live**, no restart.
-- **Module registry & settings** — every module declares its tunables to `v-core`; the admin panel's
+- **Module registry & settings** - every module declares its tunables to `v-core`; the admin panel's
   **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
-  adds `v_module 'yes'` to its manifest and appears there too — see [DEVELOPERS.md](DEVELOPERS.md).
-- **No player chat commands** — the interaction surface is the target eye, keybinds and NUI, by design.
-- **Bilingual out of the box** — every player-facing string exists in English and French; players pick
+  adds `v_module 'yes'` to its manifest and appears there too - see [DEVELOPERS.md](DEVELOPERS.md).
+- **No player chat commands** - the interaction surface is the target eye, keybinds and NUI, by design.
+- **Bilingual out of the box** - every player-facing string exists in English and French; players pick
   their language on first join.
-- **Server-authoritative by default** — proximity, funds, ownership and permissions are re-derived
+- **Server-authoritative by default** - proximity, funds, ownership and permissions are re-derived
   server-side on every action. Client-side gates are treated as UX, not security.
-- **On-demand local MariaDB** — never runs as a Windows service, never starts with Windows.
+- **On-demand local MariaDB** - never runs as a Windows service, never starts with Windows.
 
 ### Gameplay modules
 
-- **`v-inventory`** — grid inventory (weight, use/drop/give), **302-item catalogue**, functional weapons
+- **`v-inventory`** - grid inventory (weight, use/drop/give), **302-item catalogue**, functional weapons
   (ammo, serial, **durability/jamming**, **attachments**), backpacks & armor, a hidden pocket, vehicle
   trunks & shared/gang stashes, and player **frisk/steal + hands-up**.
-- **`v-world`** — the admin-editable world content layer (blips, store locations, jobs, items, recipes).
-- **`v-admin`** — in-game panel (F10): dashboard, players, scripts, world, logs, **Editor**, and tools
+- **`v-world`** - the admin-editable world content layer (blips, store locations, jobs, items, recipes).
+- **`v-admin`** - in-game panel (F10): dashboard, players, scripts, world, logs, **Editor**, and tools
   (noclip, god, invisible, player blips, spectate, open a player's inventory).
-- **`v-appearance` / `v-spawn`** — appearance engine with stable clothing identity, multi-character
+- **`v-appearance` / `v-spawn`** - appearance engine with stable clothing identity, multi-character
   selection, barber / plastic surgeon / tattoo parlour.
-- **`v-crafting`** — **105 recipes** across 6 stations (workbench, reloading, kitchen, electronics,
+- **`v-crafting`** - **105 recipes** across 6 stations (workbench, reloading, kitchen, electronics,
   **recycling/refining**, hidden **drug lab**), server-authoritative, recipes editable in-game.
-- **`v-gathering`** — resource nodes (mining, salvage, textile, hidden cannabis grows) feeding the crafting tier.
-- **`v-shops`** — stores with **buy & sell**, vending machines, a scrap dealer, and an illegal
+- **`v-gathering`** - resource nodes (mining, salvage, textile, hidden cannabis grows) feeding the crafting tier.
+- **`v-shops`** - stores with **buy & sell**, vending machines, a scrap dealer, and an illegal
   **dealer / launderer** (dirty money). Store positions editable in-game.
-- **`v-target`** — universal interaction eye (hold Left-Alt): entity/zone options **filtered by permission & job**.
-- **`v-jobs`** — jobs, grades, on-duty salaries; the source of truth for every job gate.
-- **`v-vehicles` / `v-garages`** — owned-vehicle persistence (mods, fuel, damage), server-minted
+- **`v-target`** - universal interaction eye (hold Left-Alt): entity/zone options **filtered by permission & job**.
+- **`v-jobs`** - jobs, grades, on-duty salaries; the source of truth for every job gate.
+- **`v-vehicles` / `v-garages`** - owned-vehicle persistence (mods, fuel, damage), server-minted
   plates, a key system, a **3D showroom preview**, and 9 garages incl. an impound lot and job motor
-  pools — all editable in-game.
-- **`v-fuel`** — four fuel types (regular / premium / diesel / electric), load-based consumption,
+  pools - all editable in-game.
+- **`v-fuel`** - four fuel types (regular / premium / diesel / electric), load-based consumption,
   18 stations incl. EV charging points with connector levels and a charge curve, jerry cans;
   stations and prices editable in-game.
-- **`v-mechanic`** — 20-part wear model (12 for an EV) driven by distance, abuse and crashes, a real
-  odometer, 27 craftable parts, roadside repair kits and job-locked shops — all editable in-game.
-- **`v-vehicleshop`** — 6 dealerships, a 56-vehicle catalogue with a 3D showroom preview, test drives,
+- **`v-mechanic`** - 20-part wear model (12 for an EV) driven by distance, abuse and crashes, a real
+  odometer, 27 craftable parts, roadside repair kits and job-locked shops - all editable in-game.
+- **`v-vehicleshop`** - 6 dealerships, a 56-vehicle catalogue with a 3D showroom preview, test drives,
   licence-gated purchases and sell-back; dealers and catalogue editable in-game.
-- **`v-licenses`** — 12 licences & permits (ID, driving, HGV, boat, pilot, weapon…) with suspension,
+- **`v-licenses`** - 12 licences & permits (ID, driving, HGV, boat, pilot, weapon…) with suspension,
   revocation, expiry and demerit points; the single source of truth for character capabilities.
-- **`v-cityhall`** — the city hall job desk: apply for any position an admin has left open, or resign.
-  Whitelisted jobs (police, EMS, …) never show up here — they are handed out by their own chain of command.
+- **`v-cityhall`** - the city hall job desk: apply for any position an admin has left open, or resign.
+  Whitelisted jobs (police, EMS, …) never show up here - they are handed out by their own chain of command.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
-- **Economy loops** — legal: gather → craft → sell. Illegal: grow → process → deal → launder.
+- **Economy loops** - legal: gather → craft → sell. Illegal: grow → process → deal → launder.
 
 ## Installation
 
-1. **Artifacts** — the server binaries live in `artifacts/` (not tracked by git). Download
+1. **Artifacts** - the server binaries live in `artifacts/` (not tracked by git). Download
    **`cfx-server_win_x64.zip`** (Windows) or **`cfx-server_linux_x64.tar.xz`** (Linux) from the cfx.re
-   artifacts and extract it into `artifacts/`. It must contain **`cfx-server.exe`** — `server.zip` /
+   artifacts and extract it into `artifacts/`. It must contain **`cfx-server.exe`** - `server.zip` /
    `FXServer.exe` is the **Legacy** branch and will reject Enhanced clients with `bad_request`.
-2. **License key** — get a free key at [keymaster.fivem.net](https://keymaster.fivem.net/) and set
+2. **License key** - get a free key at [keymaster.fivem.net](https://keymaster.fivem.net/) and set
    `sv_licenseKey` in `server.cfg`.
-3. **Database** — point `mysql_connection_string` in `server.cfg` at your MySQL/MariaDB, then import `database/schema.sql`.
-4. **Run** — `./start.ps1`.
-5. **Connect** — in FiveM press `F8` and type `connect localhost:30120`.
+3. **Database** - point `mysql_connection_string` in `server.cfg` at your MySQL/MariaDB, then import `database/schema.sql`.
+4. **Run** - `./start.ps1`.
+5. **Connect** - in FiveM press `F8` and type `connect localhost:30120`.
 
 ## The core: v-core
 
@@ -130,13 +130,13 @@ To add a feature resource:
 1. Create `resources/[local]/<your-resource>/` with an `fxmanifest.lua`.
 2. Grab the core with `exports['v-core']:GetCore()` and build on `Core.GetPlayer`, `Core.Notify`, etc.
 3. Add `ensure <your-resource>` in `server.cfg` **after** `v-core`.
-4. Ship a permission-gated management UI in `v-admin` for anything an operator will want to tune —
+4. Ship a permission-gated management UI in `v-admin` for anything an operator will want to tune -
    see the `v-world` pattern in [ARCHITECTURE.md](ARCHITECTURE.md) §7.
 5. In the server console: `refresh` then `ensure <your-resource>`.
 
 ## Database (on-demand)
 
-Any MySQL or MariaDB instance works — the framework only talks to it through `oxmysql`, so how you run
+Any MySQL or MariaDB instance works - the framework only talks to it through `oxmysql`, so how you run
 it is your call (a service, Docker, or an on-demand local install).
 
 Set the connection in `server.cfg`:
@@ -152,7 +152,7 @@ Then import **`database/schema.sql`** (24 tables). Migrations run automatically 
 - [FiveM / cfx.re](https://fivem.net/) · [FiveM natives](https://docs.fivem.net/natives/) ·
   [Server manual](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) ·
   [MariaDB](https://mariadb.org/) · [oxmysql](https://github.com/overextended/oxmysql) ·
-  [screenshot-basic](https://github.com/citizenfx/screenshot-basic) — clothing catalogue thumbnails
+  [screenshot-basic](https://github.com/citizenfx/screenshot-basic) - clothing catalogue thumbnails
 
 ## Credits
 
@@ -160,11 +160,11 @@ Author: vyrriox
 
 ---
 
-# v-core — un framework roleplay pour FiveM Enhanced (Version Française)
+# v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
 GTA V). 25 modules, un seul design system, une seule base de données, aucune dépendance à un framework
-externe — ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
+externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
 
@@ -172,7 +172,7 @@ Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSyn
 >
 > | Document | Contenu |
 > |---|---|
-> | **[API.md](API.md)** | Tous les exports, callbacks et événements — la référence |
+> | **[API.md](API.md)** | Tous les exports, callbacks et événements - la référence |
 > | **[DEVELOPERS.md](DEVELOPERS.md)** | Écrire un script pour v-core : le helper `V`, conventions, pièges |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ce que fait chaque module, et la roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | Ce qui est livré |
@@ -183,83 +183,83 @@ Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSyn
 La plupart des frameworks FiveM, c'est un core plus cinquante scripts tiers qui apportent chacun leur UI,
 leur format de config et leur propre idée de qui a le droit de faire quoi. v-core fait le pari inverse :
 **une seule base de code, un seul look, un seul modèle de permissions**, et **tout ce qu'un opérateur doit
-régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en production.
+régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en production.
 
 ## Caractéristiques
 
-- **Natif FiveM Enhanced** — tourne sur `cfx-server.exe`, `gamename: gta5enhanced`. Pas de
+- **Natif FiveM Enhanced** - tourne sur `cfx-server.exe`, `gamename: gta5enhanced`. Pas de
   `sv_enforceGameBuild` (ce sont des numéros de build Legacy, qui bloquent les clients Enhanced).
   NUI compatible CEF 140 (`https://cfx-nui-…`).
-- **`v-core`** — joueurs persistés en BDD, système de callbacks serveur/client, paliers de permission,
+- **`v-core`** - joueurs persistés en BDD, système de callbacks serveur/client, paliers de permission,
   log d'audit structuré, sélection multi-personnages. Tous les modules passent par lui.
-- **Design system `v-ui`, entièrement thémable** — une feuille de style canonique partagée par toutes
+- **Design system `v-ui`, entièrement thémable** - une feuille de style canonique partagée par toutes
   les pages NUI, pilotée par `v-ui/config.lua` : **6 presets de couleurs**, un accent d'où toute la
   famille de surbrillance est dérivée, arrondi des angles, densité, vitesse d'animation (0 = aucune),
   opacité des panneaux, échelle de police. Changer l'un d'eux dans **Admin -> Réglages -> Interface**
-  restyle **tous les modules d'un coup** — aucun module ne code une couleur en dur.
-- **Écran de chargement configurable** — `v-loadscreen/html/config.js` : **7 dispositions** (centre,
+  restyle **tous les modules d'un coup** - aucun module ne code une couleur en dur.
+- **Écran de chargement configurable** - `v-loadscreen/html/config.js` : **7 dispositions** (centre,
   gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
   effet activable, et tous les textes + astuces au même endroit.
-- **Éditeur de contenu en jeu** — le menu admin crée, modifie et supprime **blips, boutiques, métiers &
+- **Éditeur de contenu en jeu** - le menu admin crée, modifie et supprime **blips, boutiques, métiers &
   grades, items, recettes de craft, boutiques de vêtements & emplacements, garages, stations-service,
   ateliers, concessions, catalogue véhicules et types de licence**, adossé à `v-world`. À chaud, sans restart.
-- **Registre de modules & réglages** — chaque module déclare ses réglages à `v-core` ; l'onglet
+- **Registre de modules & réglages** - chaque module déclare ses réglages à `v-core` ; l'onglet
   **Réglages** du menu admin affiche ce qu'on lui donne, il n'a donc jamais à changer. Un script tiers
-  ajoute `v_module 'yes'` à son manifest et y apparaît aussi — voir [DEVELOPERS.md](DEVELOPERS.md).
-- **Aucune commande chat joueur** — la surface d'interaction, c'est l'œil de ciblage, les touches et la NUI.
-- **Bilingue nativement** — chaque texte joueur existe en anglais et en français ; le joueur choisit sa
+  ajoute `v_module 'yes'` à son manifest et y apparaît aussi - voir [DEVELOPERS.md](DEVELOPERS.md).
+- **Aucune commande chat joueur** - la surface d'interaction, c'est l'œil de ciblage, les touches et la NUI.
+- **Bilingue nativement** - chaque texte joueur existe en anglais et en français ; le joueur choisit sa
   langue à la première connexion.
-- **Autoritaire serveur par défaut** — proximité, fonds, propriété et permissions sont revérifiés côté
+- **Autoritaire serveur par défaut** - proximité, fonds, propriété et permissions sont revérifiés côté
   serveur à chaque action. Les contrôles côté client sont de l'UX, pas de la sécurité.
-- **MariaDB locale à la demande** — jamais en service Windows, ne démarre jamais avec Windows.
+- **MariaDB locale à la demande** - jamais en service Windows, ne démarre jamais avec Windows.
 
 ### Modules de gameplay
 
-- **`v-inventory`** — inventaire grille (poids, utiliser/jeter/donner), **catalogue de 302 items**, armes
+- **`v-inventory`** - inventaire grille (poids, utiliser/jeter/donner), **catalogue de 302 items**, armes
   fonctionnelles (munitions, série, **durabilité/enrayage**, **accessoires**), sacs & armure, poche cachée,
   coffres de véhicule & stashes partagés/gang, et **fouille/vol de joueur + mains en l'air**.
-- **`v-world`** — la couche de contenu modifiable par les admins (blips, boutiques, métiers, items, recettes).
-- **`v-admin`** — panneau en jeu (F10) : tableau de bord, joueurs, scripts, monde, logs, **Éditeur**, et
+- **`v-world`** - la couche de contenu modifiable par les admins (blips, boutiques, métiers, items, recettes).
+- **`v-admin`** - panneau en jeu (F10) : tableau de bord, joueurs, scripts, monde, logs, **Éditeur**, et
   outils (noclip, mode dieu, invisible, blips joueurs, observation, ouvrir l'inventaire d'un joueur).
-- **`v-appearance` / `v-spawn`** — moteur d'apparence à identité vêtement stable, sélection
+- **`v-appearance` / `v-spawn`** - moteur d'apparence à identité vêtement stable, sélection
   multi-personnages, coiffeur / chirurgien / salon de tatouage.
-- **`v-crafting`** — **105 recettes** sur 6 stations (établi, rechargement, cuisine, électronique,
+- **`v-crafting`** - **105 recettes** sur 6 stations (établi, rechargement, cuisine, électronique,
   **recyclage/raffinage**, **labo de drogue** caché), autoritaire serveur, recettes éditables en jeu.
-- **`v-gathering`** — points de ressources (minage, casse, textile, cultures de cannabis cachées).
-- **`v-shops`** — boutiques avec **achat & vente**, distributeurs, revendeur de ferraille, et
+- **`v-gathering`** - points de ressources (minage, casse, textile, cultures de cannabis cachées).
+- **`v-shops`** - boutiques avec **achat & vente**, distributeurs, revendeur de ferraille, et
   **dealer / blanchisseur** illégal (argent sale). Positions modifiables en jeu.
-- **`v-target`** — œil d'interaction universel (maintiens Alt gauche) : options **filtrées par permission & métier**.
-- **`v-jobs`** — métiers, grades, salaires en service ; la référence pour tous les gates métier.
-- **`v-vehicles` / `v-garages`** — persistance des véhicules possédés (mods, carburant, dégâts),
+- **`v-target`** - œil d'interaction universel (maintiens Alt gauche) : options **filtrées par permission & métier**.
+- **`v-jobs`** - métiers, grades, salaires en service ; la référence pour tous les gates métier.
+- **`v-vehicles` / `v-garages`** - persistance des véhicules possédés (mods, carburant, dégâts),
   plaques générées par le serveur, système de clés, et 9 garages dont une fourrière et les garages
-  de métier, et un **aperçu 3D showroom** — le tout modifiable en jeu.
-- **`v-fuel`** — quatre carburants (91 / 98 / gazole / électrique), consommation selon la charge
+  de métier, et un **aperçu 3D showroom** - le tout modifiable en jeu.
+- **`v-fuel`** - quatre carburants (91 / 98 / gazole / électrique), consommation selon la charge
   moteur, 18 stations dont des bornes de recharge à plusieurs niveaux avec courbe de charge,
   jerricans ; stations et prix modifiables en jeu.
-- **`v-mechanic`** — usure sur 20 pièces (12 en électrique) selon la distance, la conduite et les
+- **`v-mechanic`** - usure sur 20 pièces (12 en électrique) selon la distance, la conduite et les
   accidents, vrai compteur kilométrique, 27 pièces fabricables, kits de réparation et ateliers
-  verrouillés par métier — le tout modifiable en jeu.
-- **`v-vehicleshop`** — 6 concessions, catalogue de 56 véhicules avec aperçu 3D showroom, essais
+  verrouillés par métier - le tout modifiable en jeu.
+- **`v-vehicleshop`** - 6 concessions, catalogue de 56 véhicules avec aperçu 3D showroom, essais
   routiers, achats conditionnés au permis et revente ; concessions et catalogue modifiables en jeu.
-- **`v-licenses`** — 12 licences & permis (identité, conduite, poids lourd, bateau, pilote, port
+- **`v-licenses`** - 12 licences & permis (identité, conduite, poids lourd, bateau, pilote, port
   d'arme…) avec suspension, retrait, expiration et points ; la référence unique des droits du perso.
-- **`v-cityhall`** — le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
+- **`v-cityhall`** - le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
   ou démissionner. Les métiers sur whitelist (police, EMS, …) n'y apparaissent jamais.
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
-- **Boucles économiques** — légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.
+- **Boucles économiques** - légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.
 
 ## Installation
 
-1. **Artifacts** — les binaires serveur vont dans `artifacts/` (non suivi par git). Télécharge
+1. **Artifacts** - les binaires serveur vont dans `artifacts/` (non suivi par git). Télécharge
    **`cfx-server_win_x64.zip`** (Windows) ou **`cfx-server_linux_x64.tar.xz`** (Linux) depuis les artifacts
-   cfx.re et extrais-les dans `artifacts/`. L'archive doit contenir **`cfx-server.exe`** — `server.zip` /
+   cfx.re et extrais-les dans `artifacts/`. L'archive doit contenir **`cfx-server.exe`** - `server.zip` /
    `FXServer.exe` est la branche **Legacy** et refusera les clients Enhanced avec `bad_request`.
-2. **Clé de licence** — récupère une clé gratuite sur [keymaster.fivem.net](https://keymaster.fivem.net/)
+2. **Clé de licence** - récupère une clé gratuite sur [keymaster.fivem.net](https://keymaster.fivem.net/)
    et renseigne `sv_licenseKey` dans `server.cfg`.
-3. **Base de données** — fais pointer `mysql_connection_string` dans `server.cfg` vers ton MySQL/MariaDB, puis importe `database/schema.sql`.
-4. **Lancement** — `./start.ps1`.
-5. **Connexion** — dans FiveM, appuie sur `F8` et tape `connect localhost:30120`.
+3. **Base de données** - fais pointer `mysql_connection_string` dans `server.cfg` vers ton MySQL/MariaDB, puis importe `database/schema.sql`.
+4. **Lancement** - `./start.ps1`.
+5. **Connexion** - dans FiveM, appuie sur `F8` et tape `connect localhost:30120`.
 
 ## Le core : v-core
 
@@ -275,12 +275,12 @@ Pour ajouter une ressource :
 2. Récupère le core avec `exports['v-core']:GetCore()` et bâtis sur `Core.GetPlayer`, `Core.Notify`, etc.
 3. Ajoute `ensure <ta-ressource>` dans `server.cfg` **après** `v-core`.
 4. Livre une UI de gestion protégée par permission dans `v-admin` pour tout ce qu'un opérateur voudra
-   régler — voir le pattern `v-world` dans [ARCHITECTURE.md](ARCHITECTURE.md) §7.
+   régler - voir le pattern `v-world` dans [ARCHITECTURE.md](ARCHITECTURE.md) §7.
 5. Dans la console serveur : `refresh` puis `ensure <ta-ressource>`.
 
 ## Base de données (à la demande)
 
-N'importe quelle instance MySQL ou MariaDB convient — le framework ne lui parle qu'à travers `oxmysql`,
+N'importe quelle instance MySQL ou MariaDB convient - le framework ne lui parle qu'à travers `oxmysql`,
 donc la façon de la lancer t'appartient (service, Docker, ou installation locale à la demande).
 
 Configure la connexion dans `server.cfg` :
@@ -296,7 +296,7 @@ Puis importe **`database/schema.sql`** (24 tables). Les migrations s'appliquent 
 - [FiveM / cfx.re](https://fivem.net/) · [Natives FiveM](https://docs.fivem.net/natives/) ·
   [Manuel serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) ·
   [MariaDB](https://mariadb.org/) · [oxmysql](https://github.com/overextended/oxmysql) ·
-  [screenshot-basic](https://github.com/citizenfx/screenshot-basic) — miniatures du catalogue de vêtements
+  [screenshot-basic](https://github.com/citizenfx/screenshot-basic) - miniatures du catalogue de vêtements
 
 ## Credits
 
