@@ -212,6 +212,9 @@ end)
 
 -- ── Frisk / steal the nearest player (server gates: hands-up / downed / police) ──
 RegisterCommand('search_player', function()
+    -- H is also GTA's headlight key. Searching somebody from the driver's seat is not a
+    -- thing, so the press belongs to the lights while you are in a vehicle.
+    if IsPedInAnyVehicle(PlayerPedId(), false) then return end
     if isOpen then return end
     local target = closestPlayer(3.0)
     if not target then Core.Notify(strings()['inv.no_target'], 'error'); return end

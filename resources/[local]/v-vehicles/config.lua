@@ -17,6 +17,31 @@ Config.SaveInterval = 120
 -- is roughly 45 minutes of continuous driving.
 Config.FuelDrain = 2.2
 
+-- Driver controls. Headlights and high beams are deliberately absent: GTA already cycles
+-- them on `H`, and rebinding a control the player already knows is worse than leaving it
+-- alone. All of these are rebindable by the player in the FiveM settings.
+Config.Controls = {
+    left     = 'OEM_4',      -- [
+    right    = 'OEM_6',      -- ]
+    hazards  = 'OEM_5',      -- backslash
+    engine   = 'K',
+    seat     = 'G',
+    lock     = 'L',
+    lockpick = 'OEM_MINUS',  -- -
+    lockRange = 6.0,         -- how far a key reaches; a wand is not a key
+}
+
+-- Lockpicking: the illegal counterpart of a key. Everything here is a starting point an
+-- operator will want to tune, so all of it is a setting too.
+Config.Lockpick = {
+    item        = 'lockpick',
+    seconds     = 8,
+    chance      = 0.45,      -- per attempt
+    breakChance = 0.30,      -- the pick snaps on a failure
+    alertPolice = true,
+    alertChance = 0.5,       -- a failure is what draws attention, not a clean job
+}
+
 -- Keys.
 Config.Keys = {
     -- A driver without keys cannot start the engine. They can still sit in the seat

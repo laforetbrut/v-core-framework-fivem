@@ -142,7 +142,7 @@ no-op** - no error, no log.
 
 ## 3.6 Interaction & Management principles - MANDATORY
 
-1. **No player chat commands.** Players interact only through the phone (iFruitz), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
+1. **No player chat commands.** Players interact only through the phone (iFruit), radial menu, custom pause menu, and target/context UI. Keybinds are fine; typed commands are not. Admin/dev commands may exist but must be permission-gated.
 2. **Everything manageable in-game via permissions.** Every content system must let an authorized user create/modify/delete its data live in-game (jobs, grades, prices, shops, items, vehicles, weather…). Build management UIs, not console commands; gate them with the v-core permission tiers (`user < mod < admin < superadmin`) and surface them in `v-admin`.
 3. **Respect GTA lore.** Use real GTA companies/brands (Fleeca, Maze Bank, Ammu-Nation, Los Santos Customs, LSPD, iFruit…). Never invent brands. Modules keep the dominant orange accent and the EMBER language (§3.5) - subject-specific variation happens in iconography and copy, not in the palette.
 

@@ -1177,6 +1177,33 @@ distinct answers on purpose: `nil` = this server does not use treasury pay, `tru
 treasury covered it, `false` = it could not. Only the last withholds the wage - collapsing
 `nil` and `true` would silently double every salary the moment the feature was switched on.
 
+### `v-vehicles` - driver controls, locks and lockpicking
+
+**Indicators and hazards** have no native, so the blink is ours: one timer for every
+vehicle rather than one per light. **Headlights and high beams are deliberately not
+rebound** - GTA already cycles them on `H`, and taking a control the player already knows
+is worse than leaving it. What did change is that `v-inventory`'s search now ignores `H`
+while you are in a vehicle: frisking somebody from the driver's seat was never a thing, and
+the key belongs to the lights.
+
+**The engine is a server answer.** With `lockEngine` on, no keys means no engine, and that
+is not a decision a client makes about a car it does not own. **Getting out leaves it
+running**: GTA cuts the engine on exit, and a driver who left it idling expects to find it
+idling, so the script puts it back.
+
+**Seats cycle to the next free one** rather than opening a menu - the choice is almost
+always "somewhere else in this car".
+
+**The lock lives on the server**, keyed by plate and mirrored to clients, because whichever
+client happens to own the entity is not the right authority. A key reaches six metres:
+unlocking a car across a car park is how a key becomes a wand.
+
+**Lockpicking is the illegal counterpart**, and everything that decides anything is
+server-side - including the wait, so a client that skips its own animation gains nothing. A
+failure can snap the pick, and **a failure is what draws attention**: a clean job should be
+quiet, or there is no reason to be good at it. The alert reaches police only, through
+`v-police:IsCop`. Eight settings cover the whole of it.
+
 ### `v-rentals` ✅ - short-term vehicle hire
 
 Rental counters at four real GTA V locations (LSIA, Vespucci, Sandy Shores airfield, Paleto
@@ -1346,15 +1373,16 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-phone` | high | **iFruitz** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
+| `v-phone` | high | **iFruit** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
+| `v-forgery` | medium | Fake papers and fake plates. The illegal counterpart of `v-licenses` and the plate registry. |
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
 | `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
 | `v-motel` | medium | Short-term rented rooms. A **tenancy type inside `v-housing`**, not a second housing system. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
 
-#### `v-phone` - iFruitz, the primary interaction surface
+#### `v-phone` - iFruit, the primary interaction surface
 
 The framework has **no player chat commands** by design, which makes the phone the surface
 most of the game is actually played through. It is also the module most likely to go wrong
@@ -1366,7 +1394,7 @@ app calls `v-garages`; it does not know what a vehicle state is. The moment an a
 its own copy of anything, there are two sources of truth and one of them is wrong.
 
 **Look:** iPhone-inspired - a lock screen, a home grid, app switching, notification
-banners, a status bar - branded **iFruitz**, riffing on GTA's own iFruit. The chrome is the
+banners, a status bar - branded **iFruit**, GTA's own phone brand. The chrome is the
 phone's; the **accent, panel and radius come from `v-ui`**, so a server that themes the
 framework purple gets a purple phone rather than an orange rectangle in a purple world.
 
@@ -1408,6 +1436,51 @@ retention, whether the camera can upload and where, and per-app job or gang gati
 transfer, every purchase and every job action goes through the module that owns it, so the
 audit log stays in one place and the anticheat keeps seeing the same events it already
 watches.
+
+#### `v-forgery` - fake papers, fake plates
+
+The illegal counterpart of the two registries this framework already treats as truth:
+`v-licenses` decides what you are allowed to do, and `character_vehicles.plate` decides
+what a car is. Forgery is the module that makes both **lie convincingly**, and the reason
+it is worth building is that it gives the police something to *find out*.
+
+**A forgery is a real record with a `forged` flag**, not a fake object in an inventory. A
+counterfeit ID that is only an item is a piece of paper nobody can check; a counterfeit
+that lives in `character_licenses` with `forged = 1` is one that passes an ordinary lookup
+and fails a careful one. That difference is the whole game:
+
+- **Casual checks pass.** A shop, a dealership, a traffic stop that just asks "does this
+  person hold a driving licence" gets a yes.
+- **A deliberate check can fail.** `v-police`'s MDT compares against the issuing authority
+  and rolls against the forgery's **quality**; a cheap job shows up, a good one holds.
+- **Quality is what you pay for**, and it is what a forger's skill buys.
+
+**Fake plates** work the same way. A plate is swapped on the *vehicle*, not on the
+ownership row, so:
+- the car still belongs to whoever owns it (a fake plate is not a transfer of title);
+- `v-police` running the plate sees the **plate's** registration, which is somebody else's
+  car or nobody's at all;
+- **`v-vehicles` must be the one place that knows**, because it already owns the plate,
+  the persistence and the spawn path. A second module writing plates is how a framework
+  ends up with two vehicles claiming the same registration.
+
+**Where forgery happens** is a `v-world` domain: a back-room location, a required item, a
+job or gang gate. Not a menu anyone can open anywhere - a forger is a person you have to
+find.
+
+**Integration that has to be right:**
+- `v-licenses` gains a `forged` column and a `VerifyDeep(cid, type)` export. Nothing else
+  changes: `Has()` keeps answering the casual question, which is exactly why the fake works.
+- `v-police` gets the deliberate check, and a successful detection is evidence - a charge
+  code already exists for it in the penal code.
+- `v-anticheat` needs telling: a plate change is a legitimate action here, so it declares
+  itself through `Expect` like every other module that does something flaggable.
+- `v-drugs`' heat model is the right shape to reuse for forger reputation, if a server
+  wants a bad forger to attract attention.
+
+**The trap:** a forged licence that is indistinguishable from a real one forever is not a
+feature, it is a bug in the police module's favour. Every forgery carries a quality and a
+detection roll, so the answer to "will this hold" is *probably*, never *always*.
 
 #### `v-chat` - local, OOC and emotes, without becoming a command surface
 
@@ -1469,7 +1542,10 @@ housing does not want - not because a motel is fundamentally different from a fl
    shell over a module that already owns its data; building the phone first would mean each app
    inventing its own copy and then unpicking it. Messages and contacts are the only thing it
    owns outright.
-10. **`v-chat` whenever, but not as a shortcut.** It is small, and the temptation the moment it
+10. **`v-forgery` after `v-police`, which now ships.** A forged document is only interesting
+    if somebody can catch it; building the fake before the check means shipping a document
+    that always works, which is a bug rather than a feature.
+11. **`v-chat` whenever, but not as a shortcut.** It is small, and the temptation the moment it
    exists is to hang gameplay commands off it. The no-player-commands rule is what keeps the
    phone and the radial menu worth building.
 
