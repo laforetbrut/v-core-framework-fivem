@@ -202,6 +202,15 @@ exports['v-factions']:GetTransactions(name, kind, limit)
 exports['v-factions']:TrySalary(name, kind, amount, cid)  -- nil = not on treasury pay, true/false = paid or not
 exports['v-factions']:ListFactions(kind)
 
+-- v-gangs (server) — territory only; membership and treasury are v-factions
+exports['v-gangs']:TurfAt(coords)      -- turfId, owner (or nil)
+exports['v-gangs']:GetOwner(turfId)
+exports['v-gangs']:InOwnTurf(src)      -- true, turfId when standing in own gang territory
+exports['v-gangs']:GetState()          -- { [turfId] = { owner, influence, contested } }
+exports['v-gangs']:GetTurfs()
+exports['v-gangs']:SetOwner(turfId, gang, byCid)   -- hand over without a capture, logged
+-- client: exports['v-gangs']:LocalTurf() -> turfId, owner
+
 -- v-bossmenu owns no data: it is a rank gate over v-factions, and exposes no exports.
 -- Open it from your own script with the same callbacks the NUI uses, e.g.
 --   Core.TriggerCallback('v-bossmenu:open', function(data) end)
