@@ -33,5 +33,6 @@ local T = {
     ['alert.thirsty_t'] = 'Soif',
     ['alert.thirsty_m'] = 'Tu as soif — trouve de quoi boire.',
     ['set.map_hint'] = 'Glisse aussi la minimap pour la placer',
+    ['hud.nobelt'] = 'PAS DE CEINTURE',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

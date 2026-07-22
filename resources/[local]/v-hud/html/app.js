@@ -373,6 +373,10 @@ applySettings();
     gauge(el('g-fuel'), el('veh-fuel-bar'), el('veh-fuel-val'), d.fuel, d.lowFuel != null ? d.lowFuel : 15);
     gauge(el('g-eng'), el('veh-eng-bar'), el('veh-eng-val'), d.engine, 25);
 
+    // The belt warning is the only thing here the player must not be able to miss.
+    const belt = el('veh-belt');
+    belt.classList.toggle('hidden', d.belt !== false);
+
     const odo = el('veh-odo');
     odo.textContent = (d.odo != null && d.odoUnit) ? (d.odo + ' ' + d.odoUnit) : '';
   });

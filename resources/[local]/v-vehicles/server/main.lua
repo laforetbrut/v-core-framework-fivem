@@ -297,6 +297,10 @@ local function declareSettings()
             { key = 'saveInterval', label = 'Condition save interval (s)', type = 'number', default = Config.SaveInterval, min = 15, max = 900, step = 1 },
             { key = 'lockEngine',   label = 'No keys, no engine',         type = 'bool',   default = Config.Keys.lockEngine },
             { key = 'platePrefix',  label = 'Plate prefix',               type = 'string', default = Config.PlatePrefix, maxLength = 3 },
+            { key = 'seatbelt',     label = 'Seatbelt enabled',           type = 'bool',   default = true },
+            { key = 'ejectDrop',    label = 'Eject on speed drop over (km/h)', type = 'number', default = 55, min = 20, max = 200, step = 1 },
+            { key = 'ejectMinSpeed', label = 'No ejection below (km/h)',  type = 'number', default = 60, min = 10, max = 200, step = 1 },
+            { key = 'ejectDamage',  label = 'Ejection damage (HP)',       type = 'number', default = 22, min = 0, max = 100, step = 1 },
         },
     })
 end

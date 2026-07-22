@@ -177,6 +177,7 @@ exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage)
 ```lua
 exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
 exports['v-vehicles']:GetFuel(veh) / SetFuel(veh, pct)
+exports['v-vehicles']:IsBuckled()     -- client: seatbelt state, for HUDs and EMS scripts
 exports['v-vehicles']:OpenPreview(model, props)   -- showroom instance (local entity)
 exports['v-vehicles']:RotatePreview(dx) / ZoomPreview(dz) / ClosePreview() / IsPreviewOpen()
 ```

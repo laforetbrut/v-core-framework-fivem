@@ -8,6 +8,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **Seatbelt and windscreen ejection** — `B` buckles up. Without a belt, a hard enough impact throws the driver through the windscreen with real damage, so speed finally carries a cost. The trigger is deceleration rather than a collision event, which catches every kind of impact with one rule; bikes, boats and aircraft are excluded. The belt resets on every new vehicle — carrying it over is how players end up protected without ever buckling. The HUD shows a blinking **NO BELT** warning, and the threshold, the minimum speed and the damage are all settings.
+
 - **Vehicle cluster in the HUD** — v-fuel tracked the fuel and v-mechanic tracked the wear and the odometer, and the player could see **neither** without opening a menu. The HUD now shows speed, gear, a fuel gauge that turns into a battery icon on an electric vehicle, engine condition and the odometer, all of it while driving only. Speed unit (km/h or mph), the low-fuel threshold and the whole cluster are settings; players can also switch it off in their own HUD panel.
 - **Real economy levers on the bank** — transfer fee (charged on top, so the recipient always receives the exact amount), minimum and maximum transfer, and a per-withdrawal ATM ceiling.
 - **Garage fees** — a flat retrieval fee and a parking fee for public garages, on top of the per-lot impound fee.
@@ -60,6 +62,8 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **125 new items + 60 new recipes** — the catalogue grows from 175 to **302 items**: 20 more dishes, 13 drinks, 9 medical supplies, 17 hand tools, 16 industrial materials, 11 tech components, 9 pieces of jewellery, 20 real base-game weapons and 10 misc props (evidence bag, press pass, keycard…). All of them are reachable: 60 new recipes wire the new material tier (steel, titanium, carbon fibre, kevlar), the tool bench, field medicine, the electronics tier (motherboard → CPU → GPU, scanners, jammers) and the expanded kitchen menu — **105 recipes** in total.
 
 ### Ajouts (miroir français)
+
+- **Ceinture de sécurité et éjection par le pare-brise** — `B` attache la ceinture. Sans ceinture, un choc assez violent projette le conducteur à travers le pare-brise avec de vrais dégâts : la vitesse a enfin un coût. Le déclencheur est la décélération et non un événement de collision, ce qui couvre tous les types d'impact avec une seule règle ; motos, bateaux et aéronefs sont exclus. La ceinture se remet à zéro à chaque nouveau véhicule — la reporter est exactement ce qui fait qu'un joueur se retrouve protégé sans jamais l'avoir attachée. Le HUD affiche un avertissement clignotant **PAS DE CEINTURE**, et le seuil, la vitesse minimale et les dégâts sont des réglages.
 
 - **Bloc véhicule dans le HUD** — v-fuel suivait le carburant et v-mechanic l'usure et le kilométrage, et le joueur ne voyait **ni l'un ni l'autre** sans ouvrir un menu. Le HUD affiche désormais la vitesse, le rapport, une jauge de carburant qui devient une batterie sur un véhicule électrique, l'état moteur et le compteur, uniquement au volant. L'unité de vitesse (km/h ou mph), le seuil de carburant bas et le bloc entier sont des réglages ; le joueur peut aussi le désactiver depuis son propre panneau HUD.
 - **Vrais leviers économiques sur la banque** — frais de virement (prélevés en plus, le destinataire reçoit donc toujours le montant exact), virement minimum et maximum, et plafond de retrait par opération au distributeur.
