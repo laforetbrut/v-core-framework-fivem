@@ -89,21 +89,25 @@ Core.RegisterCallback('v-garages:take', function(source, resolve, data)
     if exports['v-vehicles']:IsLive(plate) then resolve({ error = 'already' }); return end
 
     -- Re-derive the parking state instead of trusting the list the NUI showed.
+    -- Impound keeps its own per-lot fee; a public garage can charge a flat retrieval
+    -- fee set once for the whole server.
+    local fee
     if g.type == 'impound' then
         if row.state ~= S.IMPOUND then resolve({ error = 'notparked' }); return end
-        local fee = math.max(0, math.floor(tonumber(g.fee) or 0))
-        if fee > 0 and not p.RemoveMoney('bank', fee, 'impound-release') then
-            resolve({ error = 'funds' }); return
-        end
+        fee = math.max(0, math.floor(tonumber(g.fee) or 0))
     else
         if row.state ~= S.GARAGED or row.garage ~= g.id then resolve({ error = 'notparked' }); return end
+        fee = math.max(0, math.floor(tonumber(Core.GetSetting('v-garages', 'retrieveFee', 0)) or 0))
+    end
+    if fee > 0 and not p.RemoveMoney('bank', fee, 'garage-release') then
+        resolve({ error = 'funds' }); return
     end
 
     local netid, err = exports['v-vehicles']:SpawnOwned(source, plate,
         vector3(g.sx + 0.0, g.sy + 0.0, g.sz + 0.0), g.sh)
     if not netid then
-        -- the charge must never survive a failed spawn
-        if g.type == 'impound' and (g.fee or 0) > 0 then p.AddMoney('bank', g.fee, 'impound-refund') end
+        -- the charge must never survive a failed spawn, whichever garage took it
+        if fee > 0 then p.AddMoney('bank', fee, 'garage-refund') end
         resolve({ error = err or 'spawn' }); return
     end
 
@@ -134,6 +138,22 @@ Core.RegisterCallback('v-garages:store', function(source, resolve, data)
     if GetVehicleNumberPlateText(ent):gsub('%s+$', '') ~= plate then resolve({ error = 'novehicle' }); return end
     if #(GetEntityCoords(ent) - vector3(g.x + 0.0, g.y + 0.0, g.z + 0.0)) > (Config.Distance + 6.0) then
         resolve({ error = 'far' }); return
+    end
+
+    -- Config.StoreMaxDamage: a burning or destroyed wreck cannot be parked, otherwise
+    -- the garage is a free repair shop — store it broken, take it out pristine.
+    if Core.GetSetting('v-garages', 'storeMaxDamage', Config.StoreMaxDamage) then
+        -- Server-side FiveM exposes engine/body/tank health but NOT IsEntityOnFire,
+        -- so "on fire" is inferred from the tank, which is what actually burns.
+        if GetVehicleEngineHealth(ent) <= 0.0 or GetVehicleBodyHealth(ent) <= 0.0
+           or GetVehiclePetrolTankHealth(ent) <= 0.0 then
+            resolve({ error = 'wrecked' }); return
+        end
+    end
+
+    local storeFee = math.floor(tonumber(Core.GetSetting('v-garages', 'storeFee', 0)) or 0)
+    if storeFee > 0 and not p.RemoveMoney('bank', storeFee, 'garage-store') then
+        resolve({ error = 'fee' }); return
     end
 
     exports['v-vehicles']:SetGarage(plate, g.id)
@@ -171,6 +191,10 @@ local function declareSettings()
         label = 'Garages', category = 'vehicles',
         settings = {
             { key = 'distance', label = 'Interaction range (m)', type = 'number', default = Config.Distance, min = 1, max = 15 },
+            { key = 'retrieveFee', label = 'Retrieval fee, public garages ($)', type = 'number', default = 0, min = 0, max = 100000, step = 10 },
+            { key = 'storeFee',    label = 'Parking fee ($)', type = 'number', default = 0, min = 0, max = 100000, step = 10 },
+            { key = 'storeMaxDamage', label = 'Refuse to park a wreck', type = 'bool', default = Config.StoreMaxDamage },
+            { key = 'blips',       label = 'Show garage blips', type = 'bool', default = true },
         },
     })
 end

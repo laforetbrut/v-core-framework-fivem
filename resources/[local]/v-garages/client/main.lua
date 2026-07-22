@@ -19,6 +19,9 @@ end
 
 local function buildBlips()
     clearBlips()
+    -- guarded: blips can be rebuilt before v-core finishes starting
+    local ok, Core = pcall(function() return exports['v-core']:GetCore() end)
+    if ok and Core and Core.GetSetting and Core.GetSetting('v-garages', 'blips', true) == false then return end
     for _, g in ipairs(Garages) do
         if g.blip ~= 0 then
             local b = AddBlipForCoord(g.x + 0.0, g.y + 0.0, g.z + 0.0)

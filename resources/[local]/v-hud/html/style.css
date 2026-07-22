@@ -249,3 +249,43 @@ body.hud-hidden .vitals,
 body.hud-hidden .money,
 body.hud-hidden .compass,
 body.hud-hidden .minimap-frame { opacity:0 !important; pointer-events:none !important; }
+
+/* ── Vehicle cluster ─────────────────────────────────────────────────────── */
+.vehicle {
+  position: absolute; right: 2.2vh; bottom: 2.2vh;
+  display: flex; flex-direction: column; align-items: flex-end; gap: .5vh;
+  padding: 1vh 1.3vh;
+  background: var(--v-panel); border: 1px solid var(--v-line);
+  border-radius: var(--v-r-md);
+  font-family: var(--v-font-display);
+  opacity: 1; transition: opacity var(--v-t-base) ease;
+}
+.vehicle.hidden { opacity: 0; pointer-events: none; }
+.veh__speed { display: flex; align-items: baseline; gap: .5vh; line-height: 1; }
+.veh__num {
+  font-size: 4.2vh; font-weight: 700; letter-spacing: -.02em;
+  color: var(--v-text); font-variant-numeric: tabular-nums;
+}
+.veh__unit { font-size: 1.2vh; text-transform: uppercase; letter-spacing: .14em; color: var(--v-text-dim); }
+.veh__gear {
+  min-width: 2.4vh; text-align: center; font-size: 1.4vh; font-weight: 600;
+  color: var(--v-accent); padding: .2vh .5vh; border: 1px solid var(--v-line);
+  border-radius: calc(var(--v-r-md) * .5);
+}
+.veh__gauges { display: flex; flex-direction: column; gap: .4vh; width: 18vh; }
+.gauge { display: flex; align-items: center; gap: .7vh; }
+.gauge__ico { font-size: 1.3vh; width: 1.8vh; text-align: center; color: var(--v-text-dim); }
+.gauge .v-progress { flex: 1; height: .6vh; }
+.gauge__val {
+  font-size: 1.1vh; width: 3.6vh; text-align: right;
+  color: var(--v-text-dim); font-variant-numeric: tabular-nums;
+}
+.gauge.is-low .gauge__ico,
+.gauge.is-low .gauge__val { color: var(--v-danger); }
+.gauge.is-low .v-progress__fill { background: var(--v-danger); }
+.gauge.is-low .gauge__ico { animation: veh-blink 1s steps(2, end) infinite; }
+@keyframes veh-blink { 50% { opacity: .25; } }
+.veh__odo {
+  font-size: 1.05vh; letter-spacing: .08em; color: var(--v-text-dim);
+  font-variant-numeric: tabular-nums;
+}

@@ -44,7 +44,7 @@ const ACCENTS = [
 ];
 
 const DEFAULTS = {
-  elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true },
+  elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true, vehicle: true },
   positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: false, minimapVehicleOnly: false, minimapSize: 100,
 };
 const MM_SIZE_MIN = 60, MM_SIZE_MAX = 200;   // minimap size range (%)
@@ -342,3 +342,38 @@ window.addEventListener('message', (event) => {
 buildRings();
 buildCompassTape();
 applySettings();
+
+// ── Vehicle cluster ────────────────────────────────────────────────────────
+// One handler, no per-frame DOM churn: the client only sends what changed.
+(function () {
+  const el = id => document.getElementById(id);
+  const box = el('vehicle');
+  if (!box) return;
+
+  // Fuel warns at the level the client tells us; engine warns under a quarter.
+  function gauge(wrap, bar, val, pct, low, suffix) {
+    const p = Math.max(0, Math.min(100, Number(pct) || 0));
+    bar.style.width = p + '%';
+    val.textContent = Math.round(p) + (suffix || '%');
+    wrap.classList.toggle('is-low', p <= low);
+  }
+
+  window.addEventListener('message', ev => {
+    const d = ev.data || {};
+    if (d.action !== 'vehicle') return;
+    if (!d.show) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+
+    el('veh-speed').textContent = d.speed != null ? d.speed : 0;
+    if (d.unit) el('veh-unit').textContent = d.unit;
+    el('veh-gear').textContent = d.gear != null ? d.gear : '';
+
+    // An EV has no petrol pump — showing one is the kind of detail players notice.
+    el('veh-fuel-ico').textContent = d.electric ? '\u26a1' : '\u26fd';
+    gauge(el('g-fuel'), el('veh-fuel-bar'), el('veh-fuel-val'), d.fuel, d.lowFuel != null ? d.lowFuel : 15);
+    gauge(el('g-eng'), el('veh-eng-bar'), el('veh-eng-val'), d.engine, 25);
+
+    const odo = el('veh-odo');
+    odo.textContent = (d.odo != null && d.odoUnit) ? (d.odo + ' ' + d.odoUnit) : '';
+  });
+})();

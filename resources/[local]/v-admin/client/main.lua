@@ -235,7 +235,10 @@ local function doHeal(silent)
     SetEntityHealth(ped, GetEntityMaxHealth(ped))
     SetPedArmour(ped, 100)
     ClearPedBloodDamage(ped)
-    pcall(function() exports['v-status']:Heal() end)
+    -- v-status:Heal is a SERVER export: calling it here silently did nothing (the pcall
+    -- swallowed it), so an admin heal never cleared bleeding or illness. The cleanse is
+    -- done server-side now; self-heal asks for it explicitly.
+    TriggerServerEvent('v-admin:server:selfCleanse')
     if not silent then Core.Notify(strings()['adm.healed'] or 'You have been healed.', 'success') end
 end
 
