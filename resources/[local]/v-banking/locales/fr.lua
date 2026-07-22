@@ -26,5 +26,12 @@ local T = {
     ['tx.withdraw']      = 'Retrait',
     ['tx.transfer_in']   = 'Virement reçu',
     ['tx.transfer_out']  = 'Virement envoyé',
+    ['bank.card'] = 'Carte',
+    ['bank.order_card'] = 'Commander une carte',
+    ['bank.card_none'] = "Vous n'avez pas encore de carte. Vous pouvez en commander une ici.",
+    ['bank.card_have'] = 'Utilisez ce numéro pour être payé sans donner votre identifiant citoyen.',
+    ['bank.card_ordered'] = 'Carte émise',
+    ['bank.err_hascard'] = 'Vous avez déjà une carte',
+    ['bank.err_x'] = "Quelque chose s'est mal passé",
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

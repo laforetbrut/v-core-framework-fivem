@@ -1076,6 +1076,27 @@ collision, and a transfer accepts it as a destination - for exactly the reason p
 numbers exist: a citizen id is a database key, and asking players to trade one so they can
 be paid is asking them to hand over an internal identifier.
 
+**The card is ordered, not issued.** It used to be minted the first time somebody opened
+their wallet, which meant every character silently had one they never asked for. It is now
+a counter errand at the bank, charged a configurable fee, refunded if the mint fails - and
+the wallet says where to get one rather than drawing an empty rectangle.
+
+**A wallpaper can be a link, and the hosts are the operator's decision.** A linked image is
+a URL a client fetches, so it goes through an allow-list exactly as music does, and it
+ships narrow. Rejected rather than silently rewritten: quietly turning somebody's link into
+one that works is worse than telling them it is not permitted.
+
+**The camera is as real as the operator made it.** It uses `screenshot-basic`, which
+already ships, and uploads to the destination the `cameraUpload` setting names. With no
+destination configured there is nowhere for a photo to go, and the app says so - a data URI
+in a metadata column would be megabytes per shot.
+
+**Folders, arrangement and the shape of the device.** Hold a tile to arrange, drop one onto
+another to make a folder; the layout is a list of items rather than a list of apps, and
+anything installed but missing from a saved layout is appended, so an app added next month
+appears at the end rather than vanishing. Size and side are per character, because a small
+screen and a left-handed player are not the same person's problem.
+
 **Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot, dock })` and a third
 party ships its own app without touching v-phone. What the operator controls is separate and
 lives in `world_apps`: enabled, ordered, and gated by job or gang, edited from **Editor - Phone

@@ -26,7 +26,7 @@ const post = (n, b) => fetch(`https://v-phone/${n}`, {
 const TINT = { phone: 't-green', messages: 't-green', contacts: 't-grey', bank: 't-green',
   garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey',
   map: 't-blue', music: 't-green', house: 't-blue', shield: 't-dark', calc: 't-dark',
-  store: 't-blue' };
+  store: 't-blue', heart: 't-dark', check: 't-green', camera: 't-grey' };
 
 // ══ State ══════════════════════════════════════════════════════
 let S = {};             // strings
@@ -40,6 +40,8 @@ let page = 0;
 let notifs = [];        // lock-screen stack
 let recents = [];       // app ids, most recently opened first
 let available = [];     // what the operator permits; the store lists these
+let editing = false;    // home screen in arrange mode
+let folderOpen = null;
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -98,13 +100,21 @@ function renderHome() {
   const dockApps = apps.filter((a) => a.dock).slice(0, 4);
   const gridApps = apps.filter((a) => !dockApps.includes(a));
 
+  const items = layoutItems();
   const perPage = 24;
   const pages = [];
-  for (let i = 0; i < gridApps.length; i += perPage) pages.push(gridApps.slice(i, i + perPage));
+  for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
   if (!pages.length) pages.push([]);
 
+  let idx = -1;
   byId('pages').innerHTML = pages.map((p) =>
-    `<div class="page">${p.map((a, i) => tileHTML(a, i)).join('')}</div>`).join('');
+    '<div class="page">' + p.map((it, i) => {
+      idx += 1;
+      const html = it.t === 'folder' ? folderTile(it, idx)
+                                     : tileHTML(appById(it.id) || { id: it.id, icon: 'dot', label: it.id }, i);
+      // The index into the layout, so a drop knows what it moved.
+      return html.replace('<button class="tile"', '<button class="tile" data-idx="' + idx + '"');
+    }).join('') + '</div>').join('');
   byId('dock').innerHTML = dockApps.map((a, i) => tileHTML(a, i)).join('');
   byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
   byId('pages').style.transform = `translateX(${-page * 100}%)`;
@@ -112,9 +122,142 @@ function renderHome() {
 
   [...document.querySelectorAll('.tile')].forEach((t) => {
     t.addEventListener('click', () => {
+      // A tap that ended an arrange drag must not also launch the app it landed on.
+      if (editing) return;
+      if (t.dataset.folder !== undefined) { openFolder(Number(t.dataset.folder)); return; }
       const a = (state.apps || []).find((x) => x.id === t.dataset.app);
       if (a) enterApp(a, t);
     });
+  });
+  wireArrange();
+}
+
+// ══ Home layout ════════════════════════════════════════════════
+// The player's arrangement is a list of ITEMS, each an app or a folder. Anything
+// installed but not in the list is appended, so an app added next month appears at the
+// end rather than vanishing because it was not in a saved layout.
+function layoutItems() {
+  const apps = (state.apps || []).filter((a) => !a.dock);
+  const byId2 = {};
+  apps.forEach((a) => { byId2[a.id] = a; });
+
+  const saved = ((state.prefs || {}).layout || {}).items;
+  const items = [];
+  const seen = new Set();
+
+  (Array.isArray(saved) ? saved : []).forEach((it) => {
+    if (!it) return;
+    if (it.t === 'folder') {
+      const inside = (it.apps || []).filter((id) => byId2[id] && !seen.has(id));
+      inside.forEach((id) => seen.add(id));
+      // A folder that lost every app it held is not a folder any more.
+      if (inside.length) items.push({ t: 'folder', name: it.name || L('ph.folder'), apps: inside });
+    } else if (byId2[it.id] && !seen.has(it.id)) {
+      seen.add(it.id);
+      items.push({ t: 'app', id: it.id });
+    }
+  });
+
+  apps.forEach((a) => { if (!seen.has(a.id)) items.push({ t: 'app', id: a.id }); });
+  return items;
+}
+
+function saveLayout(items) {
+  state.prefs = state.prefs || {};
+  state.prefs.layout = { items };
+  return post('prefs', { layout: state.prefs.layout });
+}
+
+function appById(id) { return (state.apps || []).find((a) => a.id === id); }
+
+function folderTile(it, i) {
+  const four = it.apps.slice(0, 4).map((id) => {
+    const a = appById(id);
+    return '<span>' + (a ? svg(a.icon) : '') + '</span>';
+  }).join('');
+  return '<button class="tile" type="button" data-folder="' + i + '" style="--i:' + i + '">' +
+    '<span class="wrap"><span class="folder glass">' + four + '</span></span>' +
+    '<span class="nm">' + esc(it.name) + '</span></button>';
+}
+
+function openFolder(i) {
+  const it = layoutItems()[i];
+  if (!it || it.t !== 'folder') return;
+  folderOpen = i;
+  byId('foldername').textContent = it.name;
+  byId('folderapps').innerHTML = it.apps.map((id, k) => {
+    const a = appById(id);
+    return a ? tileHTML(a, k) : '';
+  }).join('');
+  byId('folderview').classList.add('on');
+  [...byId('folderapps').querySelectorAll('.tile')].forEach((t) =>
+    t.addEventListener('click', () => {
+      byId('folderview').classList.remove('on');
+      const a = appById(t.dataset.app);
+      if (a) enterApp(a, t);
+    }));
+}
+
+byId('folderview').addEventListener('click', (e) => {
+  if (e.target.id === 'folderview') { byId('folderview').classList.remove('on'); folderOpen = null; }
+});
+
+// ══ Arrange mode ═══════════════════════════════════════════════
+// Hold a tile to start, exactly as on the real thing. Dropping one tile onto another
+// makes a folder; dropping it on a gap moves it there.
+function wireArrange() {
+  const grid = byId('pages').querySelector('.page');
+  if (!grid) return;
+  let hold = null, from = null, moved = false;
+
+  grid.addEventListener('pointerdown', (e) => {
+    const tile = e.target.closest('.tile');
+    if (!tile) return;
+    moved = false;
+    from = tile;
+    hold = setTimeout(() => {
+      editing = true;
+      tile.classList.add('dragging');
+      toast(L('ph.arrange_on'));
+    }, 420);
+  });
+
+  grid.addEventListener('pointermove', (e) => {
+    if (!editing || !from) return;
+    moved = true;
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const over = el && el.closest ? el.closest('.tile') : null;
+    [...grid.querySelectorAll('.tile')].forEach((t) => t.classList.remove('dropinto'));
+    if (over && over !== from) over.classList.add('dropinto');
+  });
+
+  grid.addEventListener('pointerup', (e) => {
+    clearTimeout(hold);
+    if (!editing || !from) { from = null; return; }
+    const el = document.elementFromPoint(e.clientX, e.clientY);
+    const over = el && el.closest ? el.closest('.tile') : null;
+    [...grid.querySelectorAll('.tile')].forEach((t) => t.classList.remove('dropinto', 'dragging'));
+
+    if (over && over !== from && moved) {
+      const items = layoutItems();
+      const a = Number(from.dataset.idx), b = Number(over.dataset.idx);
+      if (!Number.isNaN(a) && !Number.isNaN(b)) {
+        const src = items[a], dst = items[b];
+        if (src.t === 'app' && dst.t === 'folder') {
+          dst.apps.push(src.id);
+          items.splice(a, 1);
+        } else if (src.t === 'app' && dst.t === 'app') {
+          // Two apps become a folder, which is the only way iOS makes one either.
+          items[b] = { t: 'folder', name: L('ph.folder'), apps: [dst.id, src.id] };
+          items.splice(a, 1);
+        } else {
+          items.splice(b, 0, items.splice(a, 1)[0]);
+        }
+        saveLayout(items).then(renderHome);
+      }
+    }
+    editing = false;
+    from = null;
   });
 }
 
@@ -376,12 +519,14 @@ RENDER.wallet = async () => {
   const d = await post('app', { app: 'wallet' });
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'wallet')); return; }
   const list = Array.isArray(d) ? d : (d.licenses || []);
-  const cardHtml = (card && card.ok)
+  // No card until one has been ordered from the bank, so say where to get one rather
+  // than drawing an empty rectangle.
+  const cardHtml = (card && card.ok && card.card)
     ? '<div class="bankcard"><div class="brand"><span>FLEECA</span><span class="chip"></span></div>' +
       '<div class="num">' + esc(card.card || '') + '</div>' +
       '<div class="foot"><span>' + esc(card.holder || '') + '</span>' +
       '<span class="bal">' + esc(money(card.bank)) + '</span></div></div>'
-    : '';
+    : (card && card.ok ? UI.group([UI.row({ icon: 'bank', title: L('ph.no_card'), subtitle: L('ph.no_card_hint') })]) : '');
   if (!list.length) { body(cardHtml + UI.empty(L('ph.no_licenses'), 'wallet')); return; }
   body(cardHtml + UI.group(list.map((l) => UI.row({
     icon: 'wallet', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
@@ -413,10 +558,31 @@ RENDER.settings = () => {
   const p = state.prefs || {};
   body(
     UI.group([UI.row({ icon: 'phone', title: L('ph.my_number'), value: state.number || '' })]) +
+    (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
+    (state.customWallpaper === false ? '' :
+      UI.field('wurl', L('ph.wall_url'), p.wallpaperUrl || '') +
+      '<div class="seg">' +
+        '<button class="' + (p.wallFit !== 'contain' ? 'on' : '') + '" data-fit="cover">' + esc(L('ph.fit_cover')) + '</button>' +
+        '<button class="' + (p.wallFit === 'contain' ? 'on' : '') + '" data-fit="contain">' + esc(L('ph.fit_contain')) + '</button>' +
+      '</div>' +
+      UI.button(L('ph.wall_apply'), 'wapply') +
+      (p.wallpaperUrl ? UI.button(L('ph.wall_clear'), 'wclear', 'plain') : '') +
+      '<div class="groupfoot">' + esc(L('ph.wall_hint')) + '</div>') +
     UI.group((state.wallpapers || []).map((w) => UI.row({
-      icon: 'wall', title: L('ph.wall_' + w), value: p.wallpaper === w ? L('ph.on') : '',
+      icon: 'wall', title: L('ph.wall_' + w),
+      value: (!p.wallpaperUrl && p.wallpaper === w) ? L('ph.on') : '',
       data: { w },
     })), { header: L('ph.wallpaper') }) +
+    // The device itself: how big, and which side it sits on.
+    '<div class="grouphead">' + esc(L('ph.device')) + '</div>' +
+    '<div class="sliderow">' +
+      '<div class="sl"><span>' + esc(L('ph.size')) + '</span><span>' + Math.round((p.size || 1) * 100) + '%</span></div>' +
+      '<input type="range" id="dsize" min="75" max="115" step="1" value="' + Math.round((p.size || 1) * 100) + '" />' +
+      '<div class="seg" style="margin-top:12px">' +
+        '<button class="' + (p.side !== 'left' ? 'on' : '') + '" data-side="right">' + esc(L('ph.side_right')) + '</button>' +
+        '<button class="' + (p.side === 'left' ? 'on' : '') + '" data-side="left">' + esc(L('ph.side_left')) + '</button>' +
+      '</div>' +
+    '</div>' +
     UI.group([UI.row({ icon: 'moon', title: L('ph.dnd'), toggle: !!p.dnd, data: { t: 'dnd' } })],
       { footer: L('ph.dnd_hint') }) +
     // iOS 27's headline user-facing change. It is a stored preference every layer of
@@ -433,6 +599,41 @@ RENDER.settings = () => {
       value: p.actionApp === a.id ? L('ph.on') : '', data: { act: a.id },
     })), { header: L('ph.action_button'), footer: L('ph.action_hint') })
   );
+  const wa = byId('wapply');
+  if (wa) wa.addEventListener('click', async () => {
+    const res = await post('prefs', { wallpaperUrl: byId('wurl').value.trim() });
+    if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+    else toast(L('ph.err_' + ((res && res.error) || 'x')));
+  });
+  const wc = byId('wclear');
+  if (wc) wc.addEventListener('click', async () => {
+    const res = await post('prefs', { wallpaperUrl: '' });
+    if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+  });
+  [...byId('appbody').querySelectorAll('[data-fit]')].forEach((b) =>
+    b.addEventListener('click', async () => {
+      const res = await post('prefs', { wallFit: b.dataset.fit });
+      if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+    }));
+  [...byId('appbody').querySelectorAll('[data-side]')].forEach((b) =>
+    b.addEventListener('click', async () => {
+      const res = await post('prefs', { side: b.dataset.side });
+      if (res && res.ok) { state.prefs = res.prefs; applyDevice(); RENDER.settings(); }
+    }));
+  const ds = byId('dsize');
+  if (ds) {
+    ds.addEventListener('input', () => {
+      state.prefs.size = Number(ds.value) / 100;
+      applyDevice();
+      ds.style.setProperty('--fill-pct', ((Number(ds.value) - 75) / 40 * 100) + '%');
+    });
+    ds.addEventListener('change', async () => {
+      const res = await post('prefs', { size: Number(ds.value) / 100 });
+      if (res && res.ok) state.prefs = res.prefs;
+    });
+    ds.style.setProperty('--fill-pct', (((p.size || 1) * 100 - 75) / 40 * 100) + '%');
+  }
+
   const gl = byId('glass');
   if (gl) {
     // Repaint live while dragging so the value is judged by looking at it, and only
@@ -472,8 +673,33 @@ function applyGlass(v) {
 
 function applyWallpaper() {
   const w = byId('wallpaper');
+  const p = state.prefs || {};
   (state.wallpapers || []).forEach((x) => w.classList.remove('wall-' + x));
-  w.classList.add('wall-' + ((state.prefs || {}).wallpaper || 'ember'));
+  if (p.wallpaperUrl) {
+    // A linked image replaces the gradient rather than sitting on top of it, so the
+    // class list cannot leave a stripe of the old one showing at the edges.
+    w.style.backgroundImage = 'url("' + p.wallpaperUrl + '")';
+    w.style.backgroundSize = (p.wallFit === 'contain') ? 'contain' : 'cover';
+    w.style.backgroundPosition = 'center';
+    w.style.backgroundRepeat = 'no-repeat';
+    w.style.backgroundColor = '#000';
+  } else {
+    w.style.backgroundImage = '';
+    w.style.backgroundSize = '';
+    w.style.backgroundColor = '';
+    w.classList.add('wall-' + (p.wallpaper || 'ember'));
+  }
+}
+
+// The device's own shape. Both are per character, because a small screen and a
+// left-handed player are not the same person's problem.
+function applyDevice() {
+  const p = state.prefs || {};
+  const d = byId('device');
+  d.style.transform = 'scale(' + (p.size || 1) + ')';
+  d.style.transformOrigin = (p.side === 'left') ? 'left bottom' : 'right bottom';
+  d.style.right = (p.side === 'left') ? 'auto' : '3vw';
+  d.style.left = (p.side === 'left') ? '3vw' : 'auto';
 }
 
 // -- Maps -------------------------------------------------------
@@ -863,6 +1089,130 @@ RENDER.store = () => {
 };
 
 
+// -- Health -----------------------------------------------------
+// v-status already tracks every one of these. A second copy here would drift the first
+// time either side changed, so this reads and never stores.
+function ringHtml(label, value, max, colour) {
+  const pct = Math.max(0, Math.min(1, (Number(value) || 0) / max));
+  const C = 2 * Math.PI * 31;
+  return '<div class="ring"><div class="dial">' +
+    '<svg viewBox="0 0 78 78"><circle class="bg" cx="39" cy="39" r="31"/>' +
+    '<circle cx="39" cy="39" r="31" stroke="' + colour + '" stroke-dasharray="' + C + '" ' +
+    'stroke-dashoffset="' + (C * (1 - pct)) + '"/></svg>' +
+    '<span class="val">' + Math.round(pct * 100) + '</span></div>' +
+    '<div class="lab">' + esc(label) + '</div></div>';
+}
+
+RENDER.health = async () => {
+  loading();
+  const d = await post('health');
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'heart')); return; }
+  const rows = [];
+  if (d.bleed > 0) rows.push(UI.row({ icon: 'heart', title: L('ph.bleeding'), value: String(d.bleed), tone: 'neg' }));
+  if (d.sick > 0) rows.push(UI.row({ icon: 'heart', title: L('ph.illness'), value: String(d.sick), tone: 'neg' }));
+  body(
+    '<div class="rings">' +
+      ringHtml(L('ph.vitality'), d.health, 100, '#ff453a') +
+      ringHtml(L('ph.armour'), d.armour, 100, '#0a84ff') +
+      ringHtml(L('ph.hunger'), d.hunger, 100, '#ff9f0a') +
+      ringHtml(L('ph.thirst'), d.thirst, 100, '#64d2ff') +
+    '</div>' +
+    ringHtml(L('ph.stress'), d.stress, 100, '#bf5af2').replace('class="ring"', 'class="ring" style="margin-bottom:20px"') +
+    (rows.length ? UI.group(rows, { header: L('ph.attention') })
+                 : UI.group([UI.row({ icon: 'heart', title: L('ph.all_well') })]))
+  );
+};
+
+// -- Reminders --------------------------------------------------
+// Owned by the phone, and stored the same way a third-party app would store it: through
+// the per-app storage the SDK exposes. If the example app's path were not good enough
+// for a built-in one, it would not be good enough to hand to anybody else either.
+let reminders = null;
+
+async function loadReminders() {
+  if (reminders) return reminders;
+  const r = await post('sdkStorage', { app: 'reminders', op: 'get', key: 'items' });
+  try { reminders = JSON.parse((r && r.value) || '[]') || []; } catch (e) { reminders = []; }
+  return reminders;
+}
+
+function saveReminders() {
+  return post('sdkStorage', { app: 'reminders', op: 'set', key: 'items', value: JSON.stringify(reminders) });
+}
+
+RENDER.reminders = async () => {
+  setNav(L('app.reminders'), null, { icon: 'add', onClick: () => {
+    sheet(L('ph.new_reminder'), UI.field('rtext', L('ph.reminder_ph')) + UI.button(L('ph.save'), 'rsave'),
+      () => byId('rsave').addEventListener('click', async () => {
+        const v = byId('rtext').value.trim();
+        if (!v) return;
+        reminders.unshift({ t: v, done: false });
+        await saveReminders(); closeSheet(); RENDER.reminders();
+      }));
+  } });
+  await loadReminders();
+  if (!reminders.length) { body(UI.empty(L('ph.no_reminders'), 'check')); return; }
+  const open = reminders.filter((r) => !r.done);
+  const done = reminders.filter((r) => r.done);
+  body(
+    (open.length ? UI.group(open.map((r) => UI.row({
+      icon: 'check', title: r.t, data: { i: reminders.indexOf(r) },
+    })), { header: L('ph.to_do') }) : '') +
+    (done.length ? UI.group(done.map((r) => UI.row({
+      icon: 'check', title: r.t, value: L('ph.done'), tone: 'pos', data: { i: reminders.indexOf(r) },
+    })), { header: L('ph.done') }) : '')
+  );
+  rows('.row[data-i]', (el) => el.addEventListener('click', async () => {
+    const r = reminders[Number(el.dataset.i)];
+    if (!r) return;
+    // Ticking a done one removes it: a list you can never shorten stops being a list.
+    if (r.done) reminders.splice(Number(el.dataset.i), 1); else r.done = true;
+    await saveReminders(); RENDER.reminders();
+  }));
+};
+
+// -- Camera -----------------------------------------------------
+// Real, and only as real as the operator made it: with no upload target configured there
+// is nowhere for a photo to go, and the app says so rather than pretending to save one.
+RENDER.camera = async () => {
+  if (!state.camera) { body(UI.empty(L('ph.camera_off'), 'camera')); return; }
+  const d = await post('photos', { op: 'list' });
+  const shots = (d && d.photos) || [];
+  body(
+    (shots.length
+      ? '<div class="shots">' + shots.map((u, i) =>
+          '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>'
+      : UI.empty(L('ph.no_photos'), 'camera')) +
+    '<button class="shutter" id="shoot" type="button"></button>'
+  );
+  byId('shoot').addEventListener('click', async () => {
+    toast(L('ph.shooting'));
+    const res = await post('shoot');
+    if (!res || res.error) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+    RENDER.camera();
+  });
+  rows('.shot', (el) => el.addEventListener('click', () => {
+    const url = shots[Number(el.dataset.i)];
+    sheet(L('app.camera'),
+      '<img class="shotbig" src="' + esc(url) + '" />' +
+      UI.button(L('ph.set_wallpaper'), 'swall') +
+      UI.button(L('ph.delete'), 'sdel', 'destructive'),
+      () => {
+        byId('swall').addEventListener('click', async () => {
+          const r = await post('prefs', { wallpaperUrl: url });
+          closeSheet();
+          if (r && r.ok) { state.prefs = r.prefs; applyWallpaper(); toast(L('ph.wall_set')); }
+          else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        });
+        byId('sdel').addEventListener('click', async () => {
+          await post('photos', { op: 'del', index: Number(el.dataset.i) + 1 });
+          closeSheet(); RENDER.camera();
+        });
+      });
+  }));
+};
+
+
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 function sheet(title, html, after) {
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
@@ -1103,6 +1453,7 @@ window.addEventListener('message', (e) => {
     byId('device').classList.remove('hidden');
     byId('locknum').textContent = d.number || '';
     applyWallpaper();
+    applyDevice();
     applyGlass((d.prefs && d.prefs.glass) ?? 55);
     tick();
     paintNotifs();

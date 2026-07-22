@@ -70,11 +70,17 @@ local function mintCard()
     return table.concat(out, ' ')
 end
 
+--- Read only. A character has a card because they ordered one, not because they once
+--- opened their wallet.
 local function cardOf(player)
     if not player then return nil end
     local m = player.GetMetadata('bankcard')
-    if type(m) == 'string' and m ~= '' then return m end
+    return (type(m) == 'string' and m ~= '') and m or nil
+end
 
+--- Mint one, retried on collision. Two characters made in the same second would otherwise
+--- share an account number, which is the one mistake a bank cannot make.
+local function issueCard(player)
     for _ = 1, 40 do
         local n = mintCard()
         local taken = MySQL.scalar.await(
@@ -102,10 +108,35 @@ Core.RegisterCallback('v-banking:card', function(source, resolve)
     if not p then resolve(false) return end
     resolve({
         ok = true,
-        card = cardOf(p),
+        card = cardOf(p),                       -- nil until one has been ordered
+        fee = math.floor(tonumber(Core.GetSetting('v-banking', 'cardFee', Config.CardFee)) or 0),
         holder = ((p.firstname or '') .. ' ' .. (p.lastname or '')):upper(),
         bank = p.money.bank,
     })
+end)
+
+--- Order a card. Charged, logged, and refused if it would leave the account short --
+--- a bank that issues a card it could not charge for has given one away.
+Core.RegisterCallback('v-banking:requestCard', function(source, resolve)
+    local p = Core.GetPlayer(source)
+    if not p then resolve(false) return end
+    if cardOf(p) then resolve({ error = 'hascard' }) return end
+
+    local fee = math.floor(tonumber(Core.GetSetting('v-banking', 'cardFee', Config.CardFee)) or 0)
+    if fee > 0 and not p.RemoveMoney('bank', fee, 'bank-card') then
+        resolve({ error = 'funds' }) return
+    end
+
+    local card = issueCard(p)
+    if not card then
+        -- Could not mint: give the money back rather than charging for nothing.
+        if fee > 0 then p.AddMoney('bank', fee, 'bank-card-refund') end
+        resolve({ error = 'x' }) return
+    end
+
+    if fee > 0 then recordTx(p.citizenid, 'fee', fee, p.money.bank, 'card') end
+    Core.Log('bank', ('%s ordered a card for %d'):format(p.citizenid, fee), nil, p.citizenid)
+    resolve({ ok = true, card = card, bank = p.money.bank })
 end)
 
 
@@ -173,6 +204,9 @@ local function declareSettings()
 
             { key = 'distance',     label = 'ATM range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'historyLimit', label = 'Transactions shown',   type = 'number', default = Config.HistoryLimit, min = 5, max = 200, step = 1 },
+            { key = 'cardFee', label = 'Cost of a bank card ($)', type = 'number',
+              default = Config.CardFee, min = 0, max = 100000, step = 10,
+              hint = 'Charged when a character orders their card. 0 makes them free, but still ordered rather than issued automatically.' },
             { key = 'transferFee',  label = 'Transfer fee (0.02 = 2%)', type = 'number', default = Config.TransferFee, min = 0, max = 1, step = 0.005 },
             { key = 'minTransfer',  label = 'Minimum transfer ($)',  type = 'number', default = Config.MinTransfer, min = 1, max = 100000, step = 1 },
             { key = 'maxTransfer',  label = 'Maximum transfer ($, 0 = unlimited)', type = 'number', default = Config.MaxTransfer, min = 0, max = 100000000, step = 100 },

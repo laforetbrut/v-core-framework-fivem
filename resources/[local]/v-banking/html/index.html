@@ -30,6 +30,7 @@
         <button class="tab on" data-tab="deposit" data-i18n="bank.deposit">Deposit</button>
         <button class="tab" data-tab="withdraw" data-i18n="bank.withdraw">Withdraw</button>
         <button class="tab" data-tab="transfer" data-i18n="bank.transfer">Transfer</button>
+        <button class="tab" data-tab="card" data-i18n="bank.card">Card</button>
       </div>
 
       <div class="form" style="--i:2">
@@ -43,6 +44,12 @@
         </div>
         <div class="msg" id="msg" role="status" aria-live="polite"></div>
         <button class="v-btn v-btn--accent full" id="confirm" data-i18n="bank.confirm">Confirm</button>
+      </div>
+
+      <div class="cardpane hidden" style="--i:2" id="cardpane">
+        <div class="cardview" id="cardview"></div>
+        <div class="msg" id="cardmsg" role="status" aria-live="polite"></div>
+        <button class="v-btn v-btn--accent full" id="ordercard" data-i18n="bank.order_card">Order a card</button>
       </div>
 
       <div class="history" style="--i:3">

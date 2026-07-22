@@ -156,6 +156,57 @@ RegisterNUICallback('mdt', function(data, cb)
 end)
 
 -- ══════════════════════════════════════════════════════════════
+-- Camera, health and layout
+-- ══════════════════════════════════════════════════════════════
+
+--- v-status already tracks hunger, thirst, stress, bleeding and illness, so the Health
+--- app reads them rather than keeping a second set that would drift.
+RegisterNUICallback('health', function(_, cb)
+    if GetResourceState('v-status') ~= 'started' then cb({ error = 'off' }) return end
+    local st = exports['v-status']:Get() or {}
+    cb({
+        ok = true,
+        hunger = st.hunger, thirst = st.thirst, stress = st.stress,
+        bleed = st.bleed, sick = st.sick,
+        armour = GetPedArmour(PlayerPedId()),
+        health = GetEntityHealth(PlayerPedId()) - 100,   -- GTA floors a living ped at 100
+    })
+end)
+
+RegisterNUICallback('photos', relay('v-phone:photo'))
+
+--- Take a picture.
+---
+--- screenshot-basic uploads it and hands back a URL; the phone stores the URL. There is
+--- deliberately no path for a data URI: a photo kept as base64 in a metadata column is
+--- megabytes per shot, and the operator's upload target is the whole reason the camera
+--- setting has one.
+RegisterNUICallback('shoot', function(_, cb)
+    if GetResourceState('screenshot-basic') ~= 'started' then cb({ error = 'nocam' }) return end
+    local target = tostring(V.Setting('cameraUpload', '') or '')
+    if target == '' then cb({ error = 'noupload' }) return end
+
+    -- Hide the phone for the shot, or every photo is a picture of the phone.
+    SendNUIMessage({ action = 'shutter' })
+    SetNuiFocus(false, false)
+    Wait(120)
+
+    exports['screenshot-basic']:requestScreenshotUpload(target, 'files[]', { encoding = 'jpg', quality = 0.85 },
+        function(data)
+            SetNuiFocus(true, true)
+            local ok, res = pcall(json.decode, data)
+            -- Upload targets disagree about where they put the URL, so look in the two
+            -- shapes that cover almost all of them and fail honestly otherwise.
+            local url = ok and res and (
+                (res.attachments and res.attachments[1] and res.attachments[1].url)
+                or res.url or res.link or (res.data and res.data.link))
+            if not url then cb({ error = 'upload' }) return end
+            V.Request('v-phone:photo', function(r) cb(r or { error = 'x' }) end,
+                { op = 'add', url = url })
+        end)
+end)
+
+-- ══════════════════════════════════════════════════════════════
 -- App SDK relays
 -- ══════════════════════════════════════════════════════════════
 -- A third-party app talks to its OWN server code and nothing else. The full callback
