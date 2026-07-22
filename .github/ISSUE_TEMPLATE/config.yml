@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Writing a script for v-core
+    url: https://github.com/laforetbrut/v-core-framework-fivem/blob/main/DEVELOPERS.md
+    about: The V helper, conventions and the gotchas this framework actually hit.
+  - name: API reference
+    url: https://github.com/laforetbrut/v-core-framework-fivem/blob/main/API.md
+    about: Every export, callback and event.
