@@ -1289,8 +1289,6 @@ byId('c-refresh').onclick = () => renderCoords();
 document.querySelectorAll('.sub[data-dom]').forEach(b => b.onclick = () => {
   edDomain = b.dataset.dom;
   document.querySelectorAll('.sub[data-dom]').forEach(x => x.classList.toggle('on', x === b));
-  // With 22 domains the strip scrolls, so the tab you just picked can be half off-screen.
-  if (b.scrollIntoView) b.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' });
   loadEditor();
 });
 byId('ed-new').onclick = () => openEdForm(null);

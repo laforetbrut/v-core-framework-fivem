@@ -298,21 +298,18 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .cmeta { font-family:var(--v-font-body); font-size:11px; color:var(--v-text-faint); letter-spacing:.03em; min-height:14px; }
 
 /* ── World editor (blips / stores / jobs) ── */
-/* 22 domains do not fit on one line at any width, so the strip scrolls rather than
-   overflowing off the panel. The scroll fix used to live only in the <=900px media query,
-   which meant a full-width panel clipped the last few tabs with no way to reach them. */
-.subtabs { display:flex; align-items:center; gap:8px; margin-bottom:14px;
-  flex-wrap:nowrap; overflow-x:auto; overflow-y:hidden;
-  scrollbar-width:thin; scrollbar-color:var(--v-line-2) transparent;
-  /* room for the scrollbar so it never sits on top of the buttons */
-  padding-bottom:6px;
-  /* the fade tells you there is more to the right without adding a control */
-  -webkit-mask-image:linear-gradient(to right, #000 calc(100% - 28px), transparent 100%);
-  mask-image:linear-gradient(to right, #000 calc(100% - 28px), transparent 100%); }
-.subtabs::-webkit-scrollbar { height:5px; }
-.subtabs::-webkit-scrollbar-thumb { background:var(--v-line-2); border-radius:99px; }
-.subtabs::-webkit-scrollbar-track { background:transparent; }
-.subtabs .spacer { flex:1; }
+/* 27 domains do not fit on one line, and scrolling them was worse than clipping them:
+   only about seven were ever on screen, the strip stayed where it was last left, and the
+   other twenty were invisible unless you knew to drag. Wrapping shows all of them at once,
+   which is what the group labels were for. */
+.subtabs { display:flex; align-items:center; gap:6px; margin-bottom:14px;
+  flex-wrap:wrap; row-gap:6px; }
+.subtabs .spacer { display:none; }
+
+/* Search and "new" sit under the tabs on their own line: inside a wrapping strip they
+   would land somewhere different every time the tab count changed. */
+.edbar { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.edbar .search { flex:1; }
 .sub { flex:0 0 auto; white-space:nowrap;
   padding:7px 14px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
   background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
@@ -402,8 +399,10 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 
 /* ── Editor subtabs: grouped ──
    11 domains in one flat row wrapped badly and gave no sense of what belonged together. */
-.subgroup { flex:0 0 auto; white-space:nowrap;
-  display:flex; align-items:center; padding:0 4px 0 10px;
+/* Each group starts a new line, so the row reads as four labelled blocks rather than a
+   wall of buttons. */
+.subgroup { flex:0 0 100%; white-space:nowrap; margin-top:4px;
+  display:flex; align-items:center; padding:0;
   font-family:var(--v-font-display); font-size:9px; font-weight:700; letter-spacing:.14em;
   text-transform:uppercase; color:var(--v-text-faint); opacity:.75; }
 .subgroup:first-child { padding-left:0; }
