@@ -4,14 +4,18 @@
 
 | Field | Value |
 |-------|-------|
-| Project name | FiveM Vanilla Dev Server |
-| Type | FiveM (GTA V) server - vanilla development base |
-| Framework | v-core (custom, in-house - `resources/[local]/v-core`) |
-| Server runtime | FXServer (cfx.re) - build 25770 (recommended) |
+| Project name | v-core - a roleplay framework for FiveM Enhanced |
+| Repository | `laforetbrut/v-core-framework-fivem` (public) |
+| Version | 0.1.0 - every module reads the same number |
+| Type | FiveM **Enhanced** (GTA V Enhanced) roleplay framework |
+| Framework | v-core (custom, in-house - `resources/[local]/v-core`), 30 modules |
+| Server runtime | **`cfx-server.exe`** - the Enhanced binary. `FXServer.exe` is Legacy and rejects Enhanced clients |
+| Game build | **Never set `sv_enforceGameBuild`** - those are Legacy build numbers and lock Enhanced clients out |
 | Base resources | Official cfx-server-data defaults |
-| Scripting | Lua (primary), JS/NUI for UI |
+| Scripting | Lua 5.4 (primary), JS/NUI for UI |
+| Shared helper | `shared_script '@v-core/lib/v.lua'` - see DEVELOPERS.md |
 | Sync | OneSync enabled |
-| Database | None yet (add `oxmysql` + MariaDB when persistence is needed) |
+| Database | MariaDB / MySQL via `oxmysql`. `database/schema.sql` plus per-module tables created at boot |
 | Author | vyrriox |
 | License | MIT (our code) / cfx defaults keep their own licenses |
 
@@ -19,7 +23,8 @@
 
 - **Branches:** `main` (stable) · `develop` (integration) · `feat/<name>` · `fix/<name>` · `hotfix/<name>`.
 - **Commit convention:** `type: short message` - types: `feat`, `fix`, `chore`, `refactor`, `perf`, `docs`.
-- **Never commit:** `artifacts/`, `cache/`, `.claude/`, `CLAUDE.md`, `test-procedures/`, any real `sv_licenseKey`.
+- **Never commit:** `artifacts/`, `cache/`, `.claude/`, `CLAUDE.md`, `test-procedures/`,
+  the local database launchers (`start-db.bat`, `stop-db.bat`, `database/*-db.ps1`), any real `sv_licenseKey`.
 
 ## 3. Code Conventions
 
@@ -154,15 +159,23 @@ Whenever a script is created or modified:
 
 ```
 fivem/
-├── artifacts/                 # FXServer binaries (gitignored, redownloadable)
+├── artifacts/                 # Enhanced binaries, cfx-server.exe (gitignored, redownloadable)
 ├── cache/                     # runtime cache (gitignored)
+├── database/
+│   └── schema.sql             # base tables; modules create their own at boot
 ├── resources/
-│   ├── [cfx-default]/         # official cfx default resources (the vanilla base) - do not edit
-│   └── [local]/               # ← our custom development scripts live here
-│       └── v-core/            # our roleplay framework core (exports GetCore)
-├── server.cfg                 # server configuration (license key here)
+│   ├── [cfx-default]/         # official cfx default resources - do not edit
+│   ├── [standalone]/          # oxmysql, screenshot-basic
+│   └── [local]/               # our 30 modules
+│       ├── v-core/            # the framework core, and lib/v.lua (the shared helper)
+│       ├── v-ui/              # the design system: theme.css + generated theme-vars.css
+│       ├── v-world/           # admin-editable world content, 19 domains
+│       ├── v-admin/           # the in-game panel (F10)
+│       └── …                  # one folder per module, see ARCHITECTURE.md
+├── server.cfg                 # server config; sv_licenseKey lives in license.cfg (gitignored)
 ├── start.ps1                  # server launcher
-├── README.md · CHANGELOG.md · RULES.md · ERROR_LOG.md
+├── README.md · ARCHITECTURE.md · API.md · DEVELOPERS.md · CONTRIBUTING.md
+├── CHANGELOG.md · RULES.md · ERROR_LOG.md · IDEAS.md · LICENSE
 └── .gitignore
 ```
 
@@ -170,7 +183,10 @@ fivem/
 
 1. `git checkout -b feat/<name>` from `develop`.
 2. Create `resources/[local]/<your-resource>/` with an `fxmanifest.lua`.
-3. Consume the core: `local Core = exports['v-core']:GetCore()` - build on its functions.
+3. Load the helper: `shared_script '@v-core/lib/v.lua'`, then use `V.Ready`, `V.Module`,
+   `V.Setting`, `V.Use`, `V.Callback` and `V.Notify`. See **DEVELOPERS.md** for a complete
+   module in 40 lines. `exports['v-core']:GetCore()` still works, but the helper is shorter
+   and removes the boot-order guesswork.
 4. Add `ensure <your-resource>` in `server.cfg` **after** `v-core`.
 5. Test in-game: `refresh` + `ensure <resource>` (or `restart <resource>`) from the server console.
 6. Update `CHANGELOG.md`. Commit with `feat: ...` and open a PR into `develop`.
