@@ -1,5 +1,6 @@
 # ─────────────────────────────────────────────────────────────
-#  QBCore development server launcher (PowerShell)
+#  Projet R — FiveM Enhanced server launcher (PowerShell)
+#  Start the database first (start-db.bat), then run this.
 #  Author: vyrriox
 # ─────────────────────────────────────────────────────────────
 $ErrorActionPreference = 'Stop'
