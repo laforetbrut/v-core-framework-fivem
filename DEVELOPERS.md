@@ -254,6 +254,8 @@ V.Ready(function()
         slot  = 20,           -- home-screen position; the operator can change it
         dock  = false,        -- true puts it in the dock instead of the grid
         desc  = 'One line for its FruitStore page',
+        category = 'utilities',  -- social | finance | utilities | travel | work | entertainment | health
+        optional = true,         -- absent until downloaded from the store, which is what a third-party app is
         page  = 'https://cfx-nui-v-phone-notes/html/index.html',
     })
 end)

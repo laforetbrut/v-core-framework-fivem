@@ -42,34 +42,60 @@ Config.Calls = {
 -- `owner` is the module the app is a view of, and an app whose owner is stopped is not
 -- shown: an app that opens onto nothing is worse than an app that is not there.
 Config.Apps = {
-    { id = 'phone',    label = 'app.phone',    icon = 'phone',    owner = 'v-phone',    slot = 1, dock = true, required = true },
-    { id = 'messages', label = 'app.messages', icon = 'messages', owner = 'v-phone',    slot = 2, dock = true, required = true },
-    { id = 'contacts', label = 'app.contacts', icon = 'contacts', owner = 'v-phone',    slot = 3, dock = true },
-    { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4, dock = true },
-    { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 5 },
-    { id = 'wallet',   label = 'app.wallet',   icon = 'wallet',   owner = 'v-licenses', slot = 6 },
-    { id = 'jobs',     label = 'app.jobs',     icon = 'jobs',     owner = 'v-cityhall', slot = 7 },
-    { id = 'maps',     label = 'app.maps',     icon = 'map',      owner = 'v-world',    slot = 8 },
-    { id = 'music',    label = 'app.music',    icon = 'music',    owner = 'v-music',    slot = 9 },
-    { id = 'property', label = 'app.property', icon = 'house',    owner = 'v-housing',  slot = 10 },
+    -- `required` cannot be removed: a phone with no Phone app is a brick, and a phone
+    -- with no store cannot get anything back.
+    -- `optional` is NOT installed to begin with - it has to be downloaded, which is the
+    -- only honest way to make a store mean something.
+    -- `category` is what the store sorts by.
+    { id = 'phone',    label = 'app.phone',    icon = 'phone',    owner = 'v-phone',    slot = 1, dock = true,
+      required = true, category = 'essentials' },
+    { id = 'messages', label = 'app.messages', icon = 'messages', owner = 'v-phone',    slot = 2, dock = true,
+      required = true, category = 'essentials' },
+    { id = 'contacts', label = 'app.contacts', icon = 'contacts', owner = 'v-phone',    slot = 3, dock = true,
+      required = true, category = 'essentials' },
+    { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4, dock = true,
+      category = 'finance' },
+    { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 5,
+      category = 'travel' },
+    { id = 'wallet',   label = 'app.wallet',   icon = 'wallet',   owner = 'v-licenses', slot = 6,
+      category = 'finance' },
+    { id = 'jobs',     label = 'app.jobs',     icon = 'jobs',     owner = 'v-cityhall', slot = 7,
+      category = 'work' },
+    { id = 'maps',     label = 'app.maps',     icon = 'map',      owner = 'v-world',    slot = 8,
+      category = 'travel' },
+    { id = 'music',    label = 'app.music',    icon = 'music',    owner = 'v-music',    slot = 9,
+      category = 'entertainment' },
+    { id = 'property', label = 'app.property', icon = 'house',    owner = 'v-housing',  slot = 10,
+      category = 'utilities' },
     -- Police only by default. The operator can open it up, or gate something else the
     -- same way, from Editor -> Phone apps.
     { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
-      job = 'police' },
-    { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12 },
-    { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13 },
-    { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 14 },
-    { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15 },
-    -- The social apps. Rockstar's own brands, because the world already has them, and
-    -- every one is a view over v-social: an app whose module is stopped is not shown.
-    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 16 },
-    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 17 },
-    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 18 },
+      job = 'police', category = 'work' },
+    { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12,
+      category = 'utilities' },
+    { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13,
+      category = 'health' },
+    { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 14,
+      category = 'utilities' },
+    { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15,
+      category = 'utilities' },
+    -- The social apps ship as downloads. A network you joined is worth more than one you
+    -- woke up already signed into.
+    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 16,
+      optional = true, category = 'social' },
+    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 17,
+      optional = true, category = 'social' },
+    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 18,
+      optional = true, category = 'social' },
     { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 19,
-      required = true },
+      required = true, category = 'essentials' },
     { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20,
-      required = true },
+      required = true, category = 'essentials' },
 }
+
+-- What the store groups by. The order here is the order of the sections.
+Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'entertainment',
+                      'health', 'essentials' }
 
 -- ── Look ───────────────────────────────────────────────────────
 -- The chrome is the phone's; the accent, panel and radius come from v-ui, so a server that

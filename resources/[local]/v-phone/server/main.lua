@@ -173,6 +173,9 @@ local function registerApp(id, info, owner)
         job   = info.job, jobGrade = info.jobGrade, gang = info.gang,
         -- A phone with no Phone app is a brick, so a few apps refuse to be removed.
         required = info.required == true,
+        -- Not installed until it is downloaded. The store is the only way in.
+        optional = info.optional == true,
+        category = info.category and tostring(info.category) or 'utilities',
         -- One sentence for the store page. Optional, because forcing an empty string on
         -- every app would just fill the store with empty strings.
         desc  = info.desc and tostring(info.desc):sub(1, 300) or nil,
@@ -230,6 +233,7 @@ local function appsFor(src, p)
                 id = id, label = a.label, icon = a.icon, page = a.page, dock = a.dock or nil,
                 slot = (w and num(w.slot, a.slot)) or a.slot,
                 required = a.required or nil,
+                optional = a.optional or nil, category = a.category,
                 desc = a.desc, owner = a.owner,
             }
         end
@@ -284,6 +288,9 @@ local function prefsOf(p)
         -- means a new app an operator adds later is there without every existing
         -- character having to go and find it in the store.
         removed   = (type(m.removed) == 'table') and m.removed or {},
+        -- Optional apps are tracked by what was ADDED, not by what was left alone:
+        -- absent is their starting state, so a missing entry has to mean "not yet".
+        added     = (type(m.added) == 'table') and m.added or {},
         actionApp = m.actionApp and tostring(m.actionApp) or nil,
         -- A linked wallpaper, its fit, and the shape of the device itself.
         wallpaperUrl = m.wallpaperUrl and tostring(m.wallpaperUrl) or nil,
@@ -300,11 +307,18 @@ end
 --- keep. The store shows the first, the home screen shows the second.
 local function appsFrom(src, p)
     local available = appsFor(src, p)
-    local removed = {}
-    for _, id in ipairs(prefsOf(p).removed or {}) do removed[id] = true end
+    local prefs = prefsOf(p)
+    local removed, added = {}, {}
+    for _, id in ipairs(prefs.removed or {}) do removed[id] = true end
+    for _, id in ipairs(prefs.added or {}) do added[id] = true end
+
     local installed = {}
     for _, a in ipairs(available) do
-        if not removed[a.id] or a.required then installed[#installed + 1] = a end
+        local on
+        if a.required then on = true                 -- never leaves
+        elseif a.optional then on = added[a.id]       -- absent until downloaded
+        else on = not removed[a.id] end               -- there unless removed
+        if on then installed[#installed + 1] = a end
     end
     return available, installed
 end
@@ -956,12 +970,17 @@ V.Callback('v-phone:install', function(src, resolve, data)
     if found.required and not want then resolve({ error = 'required' }) return end
 
     local prefs = prefsOf(p)
+    -- Two lists because the two kinds start from opposite defaults: a stock app is
+    -- recorded when it LEAVES, an optional one when it ARRIVES.
+    local key = found.optional and 'added' or 'removed'
+    local keep = found.optional and want or (not want)
+
     local out = {}
-    for _, rid in ipairs(prefs.removed or {}) do
+    for _, rid in ipairs(prefs[key] or {}) do
         if rid ~= id then out[#out + 1] = rid end
     end
-    if not want then out[#out + 1] = id end
-    prefs.removed = out
+    if keep then out[#out + 1] = id end
+    prefs[key] = out
     p.SetMetadata('phone', prefs)
     resolve({ ok = true })
 end)

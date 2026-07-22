@@ -1311,77 +1311,158 @@ function descOf(a) {
 
 function storeDetail(a) {
   storeView = a.id;
-  const installed = (state.apps || []).some((x) => x.id === a.id);
+  const has = isInstalled(a.id);
   setNav(L('app.store'), null);
   body(
-    '<div class="storehero">' + UI.appIcon(a.icon) +
-      '<div><div class="shname">' + esc(L(a.label)) + '</div>' +
-      '<div class="shsub">' + esc(a.required ? L('ph.store_required') : (a.owner || 'iFruit')) + '</div></div>' +
-    '</div>' +
-    (installed
-      ? UI.button(L('ph.store_open'), 'sopen') +
-        (a.required ? '' : UI.button(L('ph.store_delete'), 'sdel', 'destructive'))
-      : UI.button(L('ph.store_install'), 'sget')) +
+    '<div class="sthead">' + UI.appIcon(a.icon) +
+      '<div class="stinfo"><div class="stbig">' + esc(L(a.label)) + '</div>' +
+      '<div class="stcat">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div>' +
+      '<div class="stact">' +
+        (a.required
+          ? '<span class="stget have">' + esc(L('ph.store_required')) + '</span>'
+          : (has
+              ? '<button class="stget have" id="stopen" type="button">' + esc(L('ph.store_open')) + '</button>' +
+                '<button class="stdel" id="stdel" type="button">' + esc(L('ph.store_delete')) + '</button>'
+              : '<button class="stget" id="stget" type="button">' + esc(L('ph.store_install')) + '</button>')) +
+      '</div></div></div>' +
+    '<div class="group"><div class="stmeta">' +
+      '<div><div class="mk">' + esc(L('ph.store_dev')) + '</div>' +
+        '<div class="mv">' + esc(a.owner || 'iFruit') + '</div></div>' +
+      '<div><div class="mk">' + esc(L('ph.store_cat')) + '</div>' +
+        '<div class="mv">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div></div>' +
+      '<div><div class="mk">' + esc(L('ph.store_state')) + '</div>' +
+        '<div class="mv">' + esc(has ? L('ph.store_installed') : L('ph.store_get')) + '</div></div>' +
+    '</div></div>' +
     '<div class="grouphead">' + esc(L('ph.about')) + '</div>' +
     '<div class="storedesc">' + esc(descOf(a)) + '</div>'
   );
   pushAnim();
 
-  const so = byId('sopen');
+  const so = byId('stopen');
   if (so) so.addEventListener('click', () => {
     const app = (state.apps || []).find((x) => x.id === a.id);
     if (app) { storeView = null; enterApp(app, null); }
   });
-  const act = async (install) => {
-    const r = await post('install', { app: a.id, install });
-    if (!r || r.error) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
-    await refresh();
-    available = state.available || available;
-    renderHome();
-    storeDetail(a);
-    toast(L(install ? 'ph.store_added' : 'ph.store_removed'));
-  };
-  const sg = byId('sget');
-  if (sg) sg.addEventListener('click', () => act(true));
-  const sd = byId('sdel');
-  if (sd) sd.addEventListener('click', () => act(false));
+  const sg = byId('stget');
+  if (sg) sg.addEventListener('click', async () => { if (await storeInstall(a.id, true)) storeDetail(a); });
+  const sd = byId('stdel');
+  if (sd) sd.addEventListener('click', async () => { if (await storeInstall(a.id, false)) storeDetail(a); });
+}
+
+let storeCat = 'all';
+
+function isInstalled(id) { return (state.apps || []).some((x) => x.id === id); }
+
+// Only the categories that actually have an app in them, in a fixed order so the store
+// does not reshuffle itself every time somebody installs something.
+const CAT_ORDER = ['social', 'finance', 'utilities', 'travel', 'work', 'entertainment',
+                   'health', 'essentials'];
+
+function storeCats(all) {
+  const present = new Set(all.map((a) => a.category || 'utilities'));
+  return CAT_ORDER.filter((c) => present.has(c));
+}
+
+async function storeInstall(id, install) {
+  const r = await post('install', { app: id, install });
+  if (!r || r.error) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return false; }
+  await refresh();
+  available = state.available || available;
+  renderHome();
+  toast(L(install ? 'ph.store_added' : 'ph.store_removed'));
+  return true;
+}
+
+function storeRow(a) {
+  const has = isInstalled(a.id);
+  const label = a.required ? L('ph.store_required')
+    : (has ? L('ph.store_open') : L('ph.store_install'));
+  return '<div class="strowitem" data-app="' + esc(a.id) + '">' + UI.appIcon(a.icon) +
+    '<div class="stmid"><div class="stt">' + esc(L(a.label)) + '</div>' +
+    '<div class="stc">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div></div>' +
+    '<button class="stget ' + (has || a.required ? 'have' : '') + '" data-act="' +
+      (a.required ? 'none' : (has ? 'open' : 'get')) + '" type="button">' + esc(label) + '</button></div>';
 }
 
 RENDER.store = () => {
   storeView = null;
-  const installed = new Set((state.apps || []).map((a) => a.id));
-  const list = (available || []).slice().sort((a, b) => a.slot - b.slot);
-  if (!list.length) { body(UI.empty(L('ph.store_empty'), 'store')); return; }
+  setNav(L('app.store'), null);
 
-  body(UI.group(list.map((a) => {
-    const has = installed.has(a.id);
-    return '<div class="row lead" data-app="' + esc(a.id) + '">' +
-      UI.appIcon(a.icon, 'appx') +
-      '<span class="rmain"><span class="rt">' + esc(L(a.label)) + '</span>' +
-      '<span class="rs">' + esc(a.required ? L('ph.store_required') : (has ? L('ph.store_installed') : L('ph.store_get'))) + '</span></span>' +
-      (a.required ? '' : '<button class="storebtn ' + (has ? '' : 'get') + '" data-act="' +
-        (has ? 'del' : 'get') + '" type="button">' +
-        esc(has ? L('ph.store_delete') : L('ph.store_install')) + '</button>') +
-      '</div>';
-  }), { header: L('ph.store_all'), footer: L('ph.store_hint') }));
+  const all = (available || []).slice().sort((a, b) => a.slot - b.slot);
+  if (!all.length) { body(UI.empty(L('ph.store_empty'), 'store')); return; }
 
-  rows('.row[data-app]', (r) => r.addEventListener('click', () => {
-    const a = (available || []).find((x) => x.id === r.dataset.app);
-    if (a) storeDetail(a);
-  }));
-  rows('.storebtn', (b) => b.addEventListener('click', async (e) => {
-    e.stopPropagation();
-    const id = b.closest('.row').dataset.app;
-    const res = await post('install', { app: id, install: b.dataset.act === 'get' });
-    if (!res || res.error) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
-    await refresh();
-    available = state.available || available;
-    renderHome();
-    RENDER.store();
-    toast(L(b.dataset.act === 'get' ? 'ph.store_added' : 'ph.store_removed'));
-  }));
+  // The featured slot goes to something you do NOT have yet: a shop window showing what
+  // you already own is a shelf, not a window.
+  const feat = all.find((a) => a.optional && !isInstalled(a.id)) || all[0];
+  const cats = storeCats(all);
+
+  body(
+    searchHtml(L('ph.store_search')) +
+    '<div class="seg">' +
+      '<button class="' + (storeCat === 'all' ? 'on' : '') + '" data-c="all">' + esc(L('ph.all')) + '</button>' +
+      cats.map((c) => '<button class="' + (storeCat === c ? 'on' : '') + '" data-c="' + esc(c) + '">' +
+        esc(L('ph.cat_' + c)) + '</button>').join('') +
+    '</div><div id="stbody"></div>'
+  );
+
+  const wire = () => {
+    rows('.stfeat, .strowitem', (el) => el.addEventListener('click', (e) => {
+      if (e.target.closest('.stget')) return;
+      const a = all.find((x) => x.id === el.dataset.app);
+      if (a) storeDetail(a);
+    }));
+    rows('.stget', (b) => b.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const act = b.dataset.act;
+      if (act === 'none') return;
+      const id = b.closest('[data-app]').dataset.app;
+      if (act === 'open') {
+        const app = (state.apps || []).find((x) => x.id === id);
+        if (app) enterApp(app, null);
+        return;
+      }
+      if (await storeInstall(id, true)) paint(byId('q') ? byId('q').value.trim().toLowerCase() : '');
+    }));
+  };
+
+  const paint = (q) => {
+    const shown = storeCat === 'all' ? all : all.filter((a) => (a.category || 'utilities') === storeCat);
+    const list = q ? all.filter((a) => L(a.label).toLowerCase().includes(q)) : shown;
+    let html = '';
+
+    if (!q && storeCat === 'all') {
+      html += '<div class="stfeat" data-app="' + esc(feat.id) + '">' +
+        '<div class="stkick">' + esc(L('ph.store_featured')) + '</div>' +
+        '<div class="strow">' + UI.appIcon(feat.icon) +
+        '<div><div class="stname">' + esc(L(feat.label)) + '</div>' +
+        '<div class="stsub">' + esc(descOf(feat)) + '</div></div></div></div>';
+    }
+
+    if (!list.length) {
+      byId('stbody').innerHTML = html + UI.empty(L('ph.store_none'), 'store');
+      wire(); return;
+    }
+
+    if (q || storeCat !== 'all') {
+      html += '<div class="group" style="padding:0 14px">' + list.map(storeRow).join('') + '</div>';
+    } else {
+      cats.forEach((c) => {
+        const inCat = list.filter((a) => (a.category || 'utilities') === c);
+        if (!inCat.length) return;
+        html += '<div class="stsection">' + esc(L('ph.cat_' + c)) + '</div>' +
+          '<div class="group" style="padding:0 14px;margin-bottom:20px">' +
+          inCat.map(storeRow).join('') + '</div>';
+      });
+    }
+    byId('stbody').innerHTML = html;
+    wire();
+  };
+
+  [...byId('appbody').querySelectorAll('.seg button')].forEach((b) =>
+    b.addEventListener('click', () => { storeCat = b.dataset.c; RENDER.store(); }));
+  paint('');
+  onSearch(paint);
 };
-
 
 // -- Health -----------------------------------------------------
 // v-status already tracks every one of these. A second copy here would drift the first
