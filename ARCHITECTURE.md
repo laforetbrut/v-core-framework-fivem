@@ -1064,6 +1064,20 @@ playing" when there is nothing - rather than moving a number attached to silence
 Action button opens an app the player chose in Settings, and says so when they have not
 chosen one.
 
+**An app is in one of three states, and the third is what makes a store mean anything.**
+`required` cannot be removed - a phone with no Phone app is a brick, and one with no store
+cannot get anything back. `stock` is there unless the player removed it. **`optional` is
+absent until it is downloaded**, which is where the social apps live: a network you joined
+is worth more than one you woke up already signed into. The two lists behind it start from
+opposite defaults, so they are stored separately - a stock app is recorded when it LEAVES,
+an optional one when it ARRIVES. That is also why an app an operator adds next month
+appears by itself while a new optional one waits to be found.
+
+The store front is a store front: a featured card holding something you do **not** have
+yet (a shop window showing what you already own is a shelf), rows grouped by category in a
+fixed order so it does not reshuffle when you install something, a search field, and a
+product page per app with its icon, category, developer, status and description.
+
 **FruitStore separates two decisions that look like one.** The **operator** decides what is
 available (Editor - Phone apps, plus the job and gang gates); the **player** decides what
 to keep. What is stored is what they *removed*, not what they installed, so an app an

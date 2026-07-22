@@ -945,3 +945,56 @@ input { font: inherit; }
 .gpick { display: flex; align-items: center; gap: 10px; padding: 9px 4px; font-size: 15px;
   color: var(--app-label); }
 .gpick input { width: 20px; height: 20px; accent-color: var(--app-tint); }
+
+
+/* ══ FruitStore ═══════════════════════════════════════════════
+   A store front, not a settings list: one featured card, then rows grouped by
+   category, then a product page per app. */
+.stfeat { position: relative; border-radius: 18px; overflow: hidden; margin-bottom: 22px;
+  padding: 16px; min-height: 168px; display: flex; flex-direction: column;
+  justify-content: flex-end; color: #fff;
+  background: linear-gradient(135deg, #1D9BF0 0%, #5856D6 55%, #FF2D55 100%);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .28); }
+.stfeat .stkick { font-size: 11px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: rgba(255, 255, 255, .8); margin-bottom: auto; }
+.stfeat .strow { display: flex; align-items: center; gap: 13px; }
+.stfeat .strow .ic { width: 62px; height: 62px; border-radius: 14px; flex: 0 0 auto;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .3); }
+.stfeat .stname { font-size: 19px; font-weight: 700; letter-spacing: -.02em; }
+.stfeat .stsub { font-size: 12.5px; color: rgba(255, 255, 255, .84); margin-top: 2px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; }
+
+/* A store row: icon, name, category, and the button that does the one thing. */
+.strowitem { display: flex; align-items: center; gap: 12px; padding: 9px 0; }
+.strowitem + .strowitem { border-top: .5px solid var(--app-sep); }
+.strowitem .ic { width: 56px; height: 56px; border-radius: 13px; flex: 0 0 auto;
+  box-shadow: 0 3px 9px rgba(0, 0, 0, .2); }
+.strowitem .stmid { flex: 1; min-width: 0; }
+.strowitem .stt { font-size: 15px; font-weight: 600; color: var(--app-label);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.strowitem .stc { font-size: 12.5px; color: var(--app-label2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stsection { font-size: 21px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--app-label); margin: 4px 0 6px; }
+
+/* The product page. */
+.sthead { display: flex; gap: 15px; padding: 4px 0 18px; }
+.sthead .ic { width: 108px; height: 108px; border-radius: 24px; flex: 0 0 auto;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, .26); }
+.sthead .stinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.sthead .stbig { font-size: 21px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--app-label); line-height: 1.15; }
+.sthead .stcat { font-size: 13px; color: var(--app-label2); margin-top: 3px; }
+.sthead .stact { margin-top: auto; display: flex; gap: 8px; align-items: center; }
+.stget { padding: 6px 22px; border-radius: 99px; font-size: 15px; font-weight: 700;
+  letter-spacing: .02em; background: var(--app-tint); color: #fff; }
+.stget.have { background: var(--app-fill); color: var(--app-tint); }
+.stdel { padding: 6px 14px; border-radius: 99px; font-size: 14px; font-weight: 600;
+  background: var(--app-fill); color: #FF3B30; }
+.stmeta { display: flex; }
+.stmeta div { flex: 1; text-align: center; padding: 10px 4px; }
+.stmeta div + div { border-left: .5px solid var(--app-sep); }
+.stmeta .mk { font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--app-label2); }
+.stmeta .mv { font-size: 15px; font-weight: 600; color: var(--app-label); margin-top: 2px; }
