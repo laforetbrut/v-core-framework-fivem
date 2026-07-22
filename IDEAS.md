@@ -67,7 +67,7 @@ by value/effort. Tick items as they ship.
       materials (`iron`, `copper`, `cloth`…) crafting consumes. Closes the loop: gather → craft → sell.
       *Next:* tool-gated gathering (pickaxe/durability), gathering XP, more node types (wood, oil, chemicals
       for `gunpowder`), processing stations (ore → ingot).
-- [ ] **`v-phone`** (high) - iFruit NUI: primary interaction surface (marketplace to sell crafted items,
+- [ ] **`v-phone`** (high) - **iFruitz** NUI: primary interaction surface (marketplace to sell crafted items,
       messages, bank, job apps). Gameplay never happens through chat (see `v-chat` in ARCHITECTURE §5.5: local, OOC and
       emotes only), so the phone is a keystone.
 - [ ] **`v-radial`** (high) - context radial menu (the other main interaction surface): frisk, give,
