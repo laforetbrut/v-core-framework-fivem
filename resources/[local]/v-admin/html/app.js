@@ -140,6 +140,23 @@ function renderTools() {
     };
     wrap.appendChild(b);
   });
+  renderScan();
+}
+
+// ── Clothing thumbnail scan (was a keybind + a chat command) ──
+let scanCats = null;
+async function renderScan() {
+  const sel = byId('scan-cat'), go = byId('scan-go');
+  if (!sel || !go) return;
+  if (scanCats === null) scanCats = (await post('scanCats')) || [];
+  sel.innerHTML = `<option value="">${esc(t('adm.scan_allcats'))}</option>` +
+    scanCats.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  go.onclick = async () => {
+    go.disabled = true;
+    const ok = await post('scan', { mode: byId('scan-mode').value, cat: sel.value });
+    flash(go, !!ok);
+    setTimeout(() => { go.disabled = false; }, 3000);
+  };
 }
 
 // ── Coordinates copy tool ──
@@ -172,14 +189,17 @@ async function loadEditor() {
 }
 
 function edRowTitle(r) {
-  if (edDomain === 'blips') return `${esc(r.label)} <i class="dim">sprite ${r.sprite} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  if (edDomain === 'blips') {
+    const gate = [r.job ? `${r.job}${r.grade ? '+' + r.grade : ''}` : '', r.perm || ''].filter(Boolean).join(' / ');
+    return `${esc(r.label)} <i class="dim">sprite ${r.sprite} · ${Math.round(r.x)}, ${Math.round(r.y)}${gate ? ' · 🔒 ' + esc(gate) : ''}</i>`;
+  }
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
   if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
   if (edDomain === 'recipes') {
     const ing = Object.entries(r.inputs || {}).map(([k, v]) => `${v}× ${k}`).join(', ');
     return `${esc(r.output)} ×${r.count} <i class="dim">${esc(r.station)} · ${esc(ing)}</i>`;
   }
-  return `${esc(r.label || r.name)} <i class="dim">${esc(r.name)} · ${(r.grades || []).length} ${t('adm.ed_grades')}</i>`;
+  return `${esc(r.label || r.name)} <i class="dim">${esc(r.name)} · ${esc(r.type || 'civ')} · ${(r.grades || []).length} ${t('adm.ed_grades')}${r.whitelisted ? ' · 🔒 ' + esc(t('adm.ed_wl')) : ''}</i>`;
 }
 
 function edFilter(rows) {
@@ -227,6 +247,16 @@ function openEdForm(row) {
       `<label class="edf"><span>${esc(t('adm.ed_color'))}</span><select id="ef-color">${colors}</select></label>` +
       field(t('adm.ed_scale'), 'ef-scale', row.scale ?? 0.8, 'number') +
       field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
+      // Visibility gate — empty option = visible to everyone.
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      field(t('adm.ed_mingrade'), 'ef-grade', row.grade ?? 0, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyperm'))}</span><select id="ef-perm">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.perms || []).map(p => `<option value="${esc(p)}"${p === row.perm ? ' selected' : ''}>${esc(p)}</option>`).join('') +
+      `</select></label>` +
       check(t('adm.ed_short'), 'ef-short', row.shortrange !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'shops') {
     const shops = (edData.shops || []).map(s => `<option value="${esc(s.id)}"${s.id === row.shop ? ' selected' : ''}>${esc(s.label)} (${esc(s.id)})</option>`).join('');
@@ -262,6 +292,7 @@ function openEdForm(row) {
   } else {
     html = field(t('adm.ed_jobid'), 'ef-name', row.name) + field(t('adm.ed_label'), 'ef-label', row.label) +
       field(t('adm.ed_type'), 'ef-type', row.type || 'civ') +
+      check(t('adm.ed_wl'), 'ef-wl', row.whitelisted === 1 || row.whitelisted === true) +
       `<div class="grades" id="ef-grades"></div><button class="mini" id="ef-addgrade">+ ${esc(t('adm.ed_grade'))}</button>`;
   }
   f.innerHTML = `<div class="edfields">${html}</div>
@@ -328,7 +359,8 @@ function openEdForm(row) {
     if (edDomain === 'blips') {
       payload = { id: row.id, label: v('ef-label'), sprite: +v('ef-sprite'), color: +v('ef-color'),
                   scale: parseFloat(v('ef-scale')) || 0.8, x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
-                  z: parseFloat(v('ef-z')), shortrange: ck('ef-short'), enabled: ck('ef-en') };
+                  z: parseFloat(v('ef-z')), job: v('ef-job'), grade: parseInt(v('ef-grade'), 10) || 0,
+                  perm: v('ef-perm'), shortrange: ck('ef-short'), enabled: ck('ef-en') };
     } else if (edDomain === 'shops') {
       payload = { id: row.id, shop: v('ef-shop'), x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
                   z: parseFloat(v('ef-z')), h: parseFloat(v('ef-h')) || 0, ped: v('ef-ped'),
@@ -349,7 +381,8 @@ function openEdForm(row) {
         const i = d.querySelectorAll('.gin');
         return { grade: +i[0].value || 0, name: i[1].value, salary: +i[2].value || 0 };
       });
-      payload = { name: v('ef-name'), label: v('ef-label'), type: v('ef-type'), grades };
+      payload = { name: v('ef-name'), label: v('ef-label'), type: v('ef-type'),
+                  whitelisted: ck('ef-wl'), grades };
     }
     const res = await post('worldSave', { domain: edDomain, row: payload });
     if (res && res.ok) { f.classList.add('hidden'); loadEditor(); }

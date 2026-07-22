@@ -239,21 +239,14 @@ local function beginScan(src, mode, onlyCat)
 end
 
 -- Keybind entry point (this server has no chat) — F9 twice in-game.
-RegisterNetEvent('v-clothing:server:requestScan', function(mode)
-    beginScan(source, (mode == 'all') and 'all' or 'new', nil)
+-- Started from the admin panel (v-admin → Tools → Clothing scan). `beginScan` re-checks
+-- the permission server-side, so the event is safe to expose.
+--   mode = 'new'  → only the missing thumbnails      mode = 'all' → the whole catalogue
+--   cat           → restrict to a single category (masks, tops, …)
+RegisterNetEvent('v-clothing:server:requestScan', function(mode, cat)
+    local onlyCat = (type(cat) == 'string' and cat ~= '' and catByKey(cat)) and cat or nil
+    beginScan(source, (mode == 'all') and 'all' or 'new', onlyCat)
 end)
-
--- Chat/console command kept for setups that have a chat.  /scanclothes → all
---   /scanclothes new            → only missing (newly-added clothing)
---   /scanclothes <category>     → a single category (masks, tops, …)
-RegisterCommand('scanclothes', function(src, args)
-    if src == 0 then print('[v-clothing] /scanclothes must be run in-game'); return end
-    local a1 = (args[1] or ''):lower()
-    local mode, onlyCat = 'all', nil
-    if a1 == 'new' then mode = 'new'
-    elseif a1 ~= '' and a1 ~= 'all' and catByKey(a1) then onlyCat = a1 end
-    beginScan(src, mode, onlyCat)
-end, false)
 
 AddEventHandler('playerDropped', function() clearScanner(source) end)
 

@@ -292,21 +292,14 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
     end)
 end)
 
--- Admin keybind (this server has no chat): F9 twice within 5s starts a scan
--- of the missing thumbnails ('new' mode). Rebindable in GTA key settings.
-local scanArmedAt = 0
-RegisterCommand('vclothing_scan', function()
-    if scanning or isOpen then return end
-    local now = GetGameTimer()
-    if now - scanArmedAt < 5000 then
-        scanArmedAt = 0
-        TriggerServerEvent('v-clothing:server:requestScan', 'new')
-    else
-        scanArmedAt = now
-        Core.Notify(strings()['cl.scan_confirm'] or 'Press again to confirm the clothing scan', 'warning')
-    end
-end, false)
-RegisterKeyMapping('vclothing_scan', 'Clothing: scan thumbnails (admin)', 'keyboard', 'F9')
+-- The thumbnail scan is started from the admin panel (Tools → Clothing scan), not from a
+-- keybind: it freed F9 for noclip and keeps every admin action in one permission-gated place.
+-- Category keys for the admin panel's picker (Config is a shared_script, so this is client-side).
+exports('GetScanCategories', function()
+    local out = {}
+    for _, c in ipairs(Config.Categories) do out[#out + 1] = c.key end
+    return out
+end)
 
 -- ── Store ──────────────────────────────────────────────────────
 local function openStore()

@@ -25,5 +25,6 @@ local T = {
     ['tgt.dealer']        = 'Talk to the dealer',
     ['tgt.launder']       = 'Launder money',
     ['tgt.scrap']         = 'Sell materials',
+    ['tgt.cityhall']      = 'Job desk',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

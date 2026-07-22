@@ -30,7 +30,7 @@ Config.Categories = {
 -- Component ids to reset when a piece is unequipped (nude / bare defaults).
 Config.NudeDefaults = { [1] = 0, [11] = 15, [8] = 15, [3] = 15, [4] = 21, [6] = 34 }
 
--- ── Thumbnail generation (admin scan: /scanclothes) ────────────────
+-- ── Thumbnail generation (admin panel → Tools → Clothing scan) ─────
 -- Captures each drawable on the admin's ped via screenshot-basic and stores
 -- the image so the catalogue shows a real preview instead of a number.
 Config.Thumbs = {

@@ -37,11 +37,17 @@ overwritten on restart.
 Guard rails: item internal `name` is immutable after creation (renaming would orphan every stack);
 deleting an item is refused if a recipe references it, and `money` can never be deleted.
 
+**Visibility gating:** a blip row carries `job` + `grade` + `perm`. The filtering runs **server-side, per
+player** (`blipsFor(src)`) — a restricted location is never sent to a client that isn't allowed to see
+it, so it can't be read out of client memory. The set is re-pushed on `v-jobs:server:changed` and
+`v-core:server:permissionChanged`. A job row carries `whitelisted`: whitelisted jobs are hidden from the
+city hall and handed out by their own chain of command.
+
 **Remaining for the editor:** vehicles, gangs, gathering nodes, crafting *stations* (only recipes are
 editable, the benches are still `config.lua`), shop price lists / sell lists, and a live map-picker
 instead of "use my position".
 
-Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progress · ⬜ not started`.
+The two other in-flight workstreams. `✅ done · 🔨 in progress · ⬜ not started`.
 
 ### Appearance suite (rebuild — full plan in `memory/appearance-suite-plan.md`)
 
@@ -186,7 +192,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (14 tables). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (14 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -524,6 +530,22 @@ clamped, item `name` immutable after create, an item referenced by a recipe cann
 **Remaining.** Vehicles / gangs / gathering nodes / craft stations / price lists domains; a map-picker
 UI instead of "use my position"; per-domain import & export.
 
+### `v-cityhall` ✅ — city hall job desk
+
+**Done.** New module. Three real civic buildings (LS City Hall, Sandy Shores, Paleto Bay) with a blip, a
+clerk ped on a clipboard scenario, a ground marker + E prompt and a **v-target** zone. The NUI lists the
+**open positions** — every job in the `jobs` table that is **not** `whitelisted` and not in
+`Config.NeverPublic` — with its entry grade, starting pay and rank count, plus the player's current
+contract and a **Resign** button.
+
+Server-authoritative: `atCityHall(src)` re-derives the player's real distance from the server-owned ped,
+and `take` **re-computes the open set server-side** rather than trusting the list the NUI was shown, so a
+patched client cannot hand itself a police badge. The optional `Config.HireFee` is refunded if `SetJob`
+then fails. Hires at grade 0 only. Both actions are audit-logged. fr+en.
+
+**Remaining.** No application/interview flow (it's instant hire), no per-job player cap, no ID card or
+civic paperwork — the desk only does jobs today.
+
 ### `v-admin` ✅ — management panel (F10)
 **Done.** Permission-gated NUI. **Dashboard** (uptime, players, resources, characters). **Players**
 (searchable roster; goto / bring / heal / freeze / kick with reason / give money / give item /
@@ -539,9 +561,11 @@ client over `v-world:list` / `v-world:save` / `v-world:delete` — the admin pan
 of its own. Item forms lock the internal `name` when editing; recipe forms build ingredient rows
 dynamically. Every write is permission-gated and audit-logged server-side.
 
-**Tools tab ✅** — noclip (F6), god mode, invisible, player blips (ESP), spectate, self heal / revive /
-armor, copy coordinates, and open any player's inventory. Admin tools are revoked automatically when a
-player is demoted.
+**Tools tab ✅** — noclip (**F9**), god mode, invisible, player blips (ESP), spectate, self heal / revive /
+armor, copy coordinates, open any player's inventory, and the **clothing thumbnail scan** (mode + category
+picker). Admin tools are revoked automatically when a player is demoted. The scan used to be a double-press
+F9 keybind plus a `/scanclothes` chat command; both are gone — that freed F9 for noclip and put every admin
+action behind one permission gate.
 
 **Remaining.**
 - Editor coverage is not complete: **vehicles, gangs, gathering nodes, craft stations, shop price /
@@ -605,9 +629,9 @@ Ordered by how much damage it can do.
    `v-loadscreen` status line; hardcoded English `aria-label`s in `v-hud`; DB-sourced content strings
    (item labels, shop names) have no translation path at all.
 8. **`RegisterKeyMapping` requires a backing `RegisterCommand`**, so `vinv`, `vhotbar1..5`,
-   `vhud_settings`, `vadmin_panel` and `vclothing_scan` are technically typeable in chat. Server-side
+   `vhud_settings` and `vadmin_panel` are technically typeable in chat. Server-side
    gating makes the admin ones inert for players. This is an accepted platform constraint, not a
-   violation — but `giveitem` (v-inventory) and `scanclothes` / `status` / `givemoney` / `setperm`
+   violation — but `giveitem` (v-inventory) and `status` / `givemoney` / `setperm`
    are genuine console commands that should migrate into `v-admin`.
 9. **Dead config keys** in almost every module (`Config.Debug` in six of them, `Config.Accounts`,
    `Config.DefaultSpawn`, `Config.Max`).

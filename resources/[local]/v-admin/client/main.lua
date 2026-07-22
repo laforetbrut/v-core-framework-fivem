@@ -121,7 +121,7 @@ CreateThread(function()
 end)
 
 RegisterCommand('vadmin_noclip', function() if amAdmin then setNoclip(not noclipOn) end end, false)
-RegisterKeyMapping('vadmin_noclip', 'Admin: toggle noclip', 'keyboard', 'F6')
+RegisterKeyMapping('vadmin_noclip', 'Admin: toggle noclip', 'keyboard', 'F9')
 
 -- ── God mode / invisible ───────────────────────────────────────
 local function setGod(on)
@@ -242,6 +242,20 @@ RegisterNUICallback('coords', function(_, cb)
         street  = street,
         model   = (veh ~= 0) and GetDisplayNameFromVehicleModel(GetEntityModel(veh)) or '',
     })
+end)
+
+-- Clothing thumbnail scan — moved here from a keybind + a chat command so every admin
+-- action lives in one permission-gated place. v-clothing re-checks the permission itself.
+RegisterNUICallback('scanCats', function(_, cb)
+    if not amAdmin then cb(false); return end
+    cb(exports['v-clothing']:GetScanCategories() or {})
+end)
+
+RegisterNUICallback('scan', function(data, cb)
+    if not amAdmin then cb(false); return end
+    closePanel()   -- the scan needs a clean screen and its own NUI
+    TriggerServerEvent('v-clothing:server:requestScan', (data and data.mode) or 'new', data and data.cat)
+    cb(true)
 end)
 
 RegisterNUICallback('self', function(data, cb)
