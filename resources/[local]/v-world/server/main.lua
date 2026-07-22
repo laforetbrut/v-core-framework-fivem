@@ -753,6 +753,15 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
     elseif domain == 'shops' then
         local shops = MySQL.query.await('SELECT id, label FROM shops ORDER BY id') or {}
         resolve({ rows = ShopLocs, shops = shops })
+    elseif domain == 'factions' then
+        -- Delegated to v-factions: it owns the accounts and the audit trail. V.Use keeps
+        -- the tab harmless on a server that does not run the module.
+        local fac = V.Use('v-factions')
+        local rows = {}
+        for _, kind in ipairs({ 'job', 'gang' }) do
+            for _, r in ipairs(fac.ListFactions(kind) or {}) do rows[#rows + 1] = r end
+        end
+        resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'items' then resolve({ rows = Items, categories = Config.ItemCategories, types = Config.ItemTypes })
     elseif domain == 'recipes' then
@@ -852,6 +861,22 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                 { shop, num(row.x), num(row.y), num(row.z), num(row.h), ped,
                   bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
         end
+
+    elseif d == 'factions' then
+        -- An ADJUSTMENT, not a balance overwrite: a treasury whose history does not add
+        -- up to its balance is indistinguishable from a duplication bug.
+        local fac = V.Use('v-factions')
+        local name = tostring(row.faction or ''):sub(1, 50)
+        local kind = (tostring(row.kind or 'job') == 'gang') and 'gang' or 'job'
+        local delta = math.floor(num(row.delta))
+        if name == '' then resolve({ error = 'faction' }); return end
+        if delta == 0 then resolve({ error = 'amount' }); return end
+        local reason = tostring(row.reason or ''):sub(1, 60)
+        if reason == '' then reason = 'admin adjustment' end
+        local after
+        if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
+        else after = fac.Withdraw(name, kind, -delta, reason, cid) end
+        if after == nil then resolve({ error = 'funds' }); return end
 
     elseif d == 'jobs' then
         local name = tostring(row.name or ''):lower():gsub('[^%w_]', ''):sub(1, 50)

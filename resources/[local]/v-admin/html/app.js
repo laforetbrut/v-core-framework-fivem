@@ -348,6 +348,10 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'factions') {
+    return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.kind)} · ` +
+      `${esc(t('adm.ed_balance'))} ${fmt(r.balance)}</i>`;
+  }
   if (edDomain === 'rentals') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
       `${r.cats ? ' · ' + esc(r.cats) : ' · ' + esc(t('adm.ed_anycat'))}` +
@@ -467,10 +471,11 @@ function renderEdList() {
     row.innerHTML = `<span class="edname${off ? ' off' : ''}">${edRowTitle(r)}</span>
       <span class="edacts">
         <button class="mini" data-act="edit">${esc(t('adm.ed_edit'))}</button>
-        <button class="mini danger" data-act="del">${esc(t('adm.ed_del'))}</button>
+        ${edDomain === 'factions' ? '' : `<button class="mini danger" data-act="del">${esc(t('adm.ed_del'))}</button>`}
       </span>`;
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
-    row.querySelector('[data-act="del"]').onclick = async () => {
+    const delBtn = row.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = async () => {
       const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
         : (edDomain === 'vehcat') ? r.model
@@ -651,6 +656,16 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'factions') {
+    // The balance is shown, never typed: the only way it moves is a signed adjustment
+    // that lands in the transaction log with a reason next to it.
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_faction'))}</span>` +
+        `<input id="ef-fac" value="${esc(row.label ?? '')}" disabled /></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_balance'))}</span>` +
+        `<input id="ef-bal" value="${fmt(row.balance ?? 0)}" disabled /></label>` +
+      field(t('adm.ed_adjust'), 'ef-delta', '', 'number') +
+      field(t('adm.ed_reason'), 'ef-reason', '');
   } else if (edDomain === 'rentals') {
     const isNew = !row.id;
     html =
@@ -870,6 +885,9 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'factions') {
+      payload = { faction: row.name, kind: row.kind,
+                  delta: parseInt(v('ef-delta'), 10) || 0, reason: v('ef-reason') };
     } else if (edDomain === 'rentals') {
       payload = { id: v('ef-rid'), isNew: !row.id, label: v('ef-label'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

@@ -2,17 +2,21 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'v-world'
+name 'v-factions'
 author 'vyrriox'
-description 'v-world — admin-editable world content: blips, shop locations and jobs (DB-backed, live-synced)'
+description 'v-factions — shared organisation layer: membership, ranks and treasuries (v-core module)'
 version '0.1.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
-v_module_label 'World'
-v_module_category 'other'
+v_module_label 'Factions'
+v_module_category 'people'
+
 dependencies {
     'v-core',
+    'v-jobs',
+    'v-world',
+    'oxmysql',
 }
 
 shared_script '@v-core/lib/v.lua'
@@ -23,8 +27,6 @@ shared_scripts {
     'locales/fr.lua',
     'config.lua',
 }
-
-client_script 'client/main.lua'
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
