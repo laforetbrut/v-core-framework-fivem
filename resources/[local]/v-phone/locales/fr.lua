@@ -91,5 +91,14 @@ local T = {
     ['ph.err_dnd']      = 'Cette personne ne prend pas les appels',
     ['ph.err_fields']   = 'Un nom et un numéro sont nécessaires',
     ['ph.err_unknown']  = 'Application inconnue',
+    ['ph.home'] = 'Accueil',
+    ['ph.unread'] = 'Non lus',
+    ['ph.mute'] = 'muet',
+    ['ph.keypad'] = 'clavier',
+    ['ph.speaker'] = 'haut-parleur',
+    ['ph.new_message_to'] = 'Nouveau message',
+    ['ph.dnd_hint'] = 'Les appels sont refusés et les messages arrivent sans bannière.',
+    ['ph.camera_off'] = "L'appareil photo est désactivé sur ce serveur",
+    ['ph.torch_hint'] = 'Rien à éclairer ici',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

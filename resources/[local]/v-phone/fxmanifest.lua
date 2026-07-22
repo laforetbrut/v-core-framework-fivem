@@ -41,4 +41,7 @@ files {
     'html/index.html',
     'html/style.css',
     'html/app.js',
+    -- The app SDK. Served to any resource that ships a phone app, which is why it
+    -- is a file rather than a copied snippet.
+    'html/sdk.js',
 }

@@ -1041,13 +1041,36 @@ to `v-voice`, which owns the Mumble channel, and the hang-up releases it even if
 saw the start, because a call that ends without releasing the channel leaves a player audible
 to strangers across the map.
 
-**Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot })` and a third
+**Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot, dock })` and a third
 party ships its own app without touching v-phone. What the operator controls is separate and
 lives in `world_apps`: enabled, ordered, and gated by job or gang, edited from **Editor - Phone
 apps** like every other content list. Three gates decide whether an icon appears, and they are
 not interchangeable - the operator's switch, the owning module actually running, and the
 job/gang on the row. An app whose owner is stopped is hidden, because an app that opens onto
 nothing is worse than an app that is not there.
+
+**The shell is iOS 26, and the glass is composed rather than sampled.** Lock screen with a
+notification stack, a Dynamic Island that expands into a live activity for a call, a paging
+home grid with a dock, iOS inset-grouped lists, large titles that collapse on scroll,
+sheets, banners and a control centre. `backdrop-filter` is not available - FiveM's CEF
+renders it as an opaque black box - so every glass surface is built from a translucent
+tint, a bright half-pixel rim, a specular sheen along the top edge and an inner shadow.
+Against the gradient wallpapers that reads as glass and costs nothing to draw. An app opens
+by scaling out of the icon that launched it, which is most of what separates "an iPhone"
+from "a list on a dark background".
+
+**The control centre contains only real controls.** A tile that toggles nothing is
+decoration, and decoration shaped like a switch is a lie about what the phone can do.
+
+**A third-party app is one HTML file and eight lines of Lua.** `sdk.js` exports `PhoneUI`,
+the component kit - and it is the *same object the built-in apps draw themselves with*, so
+an app somebody else ships cannot drift out of looking native - plus `Phone`, the bridge:
+title, toast, notify, badge, storage, contacts, message, call, and calls into the app's own
+server code. `Phone.request('save', x)` becomes `V.Callback('<appId>:save')`, with the id
+supplied by the phone rather than the message, so an app cannot reach
+`v-banking:withdraw` - not because the phone refuses, but because the name cannot be
+formed. Per-app, per-character storage means most apps need no table and no server file at
+all. `v-phone-notes` ships as the worked example.
 
 Ten settings. The conversation list is three plain queries rather than one with window
 functions: MariaDB only grew those in 10.2, and working on the operator's database matters

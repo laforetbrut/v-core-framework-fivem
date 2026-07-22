@@ -8,55 +8,104 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- The chrome is the phone's; every colour, radius and font below comes from v-ui, so a
-       server that themes the framework purple gets a purple phone. -->
+  <!-- The chrome is a phone's. The accent, panel and radius tokens come from v-ui,
+       so a server that themes the framework purple gets a purple iPhone. -->
   <div id="device" class="device hidden">
     <div class="bezel">
-      <span class="notch"></span>
-      <div class="screen" id="screen">
+      <span class="btn-side action"></span>
+      <span class="btn-side vol-up"></span>
+      <span class="btn-side vol-down"></span>
+      <span class="btn-side power"></span>
 
+      <div class="screen" id="screen">
+        <div class="wallpaper" id="wallpaper"></div>
+
+        <!-- Status bar -->
         <div class="status" id="status">
-          <span class="carrier">iFruit</span>
-          <span class="sbits"><span id="clock">00:00</span><span class="batt"></span></span>
+          <span id="clock">00:00</span>
+          <span class="sright">
+            <svg viewBox="0 0 20 14" fill="currentColor"><rect x="0" y="9" width="3" height="5" rx="1"/><rect x="5" y="6.5" width="3" height="7.5" rx="1"/><rect x="10" y="3.5" width="3" height="10.5" rx="1"/><rect x="15" y="0" width="3" height="14" rx="1" opacity=".4"/></svg>
+            <svg viewBox="0 0 20 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M2 5.2a11 11 0 0 1 16 0M4.8 8.2a7 7 0 0 1 10.4 0"/><circle cx="10" cy="11.6" r="1.2" fill="currentColor" stroke="none"/></svg>
+            <span class="battery"></span>
+          </span>
+        </div>
+
+        <!-- Dynamic Island. It expands for a live activity, which is the single most
+             recognisable thing about a modern iPhone. -->
+        <div class="island" id="island">
+          <div class="icontent">
+            <span class="idot" id="islandIcon"></span>
+            <span class="itxt"><span class="it1" id="islandT1"></span><span class="it2" id="islandT2"></span></span>
+            <span class="iwave"><i></i><i></i><i></i><i></i></span>
+          </div>
         </div>
 
         <!-- Lock screen -->
         <section class="lock" id="lock">
-          <div class="lockclock" id="lockclock">00:00</div>
           <div class="lockdate" id="lockdate"></div>
-          <div class="locknum" id="locknum"></div>
-          <button class="unlock" id="unlock" type="button"></button>
+          <div class="lockclock" id="lockclock">00:00</div>
+          <div class="lockmeta" id="locknum"></div>
+          <div class="locknotifs" id="locknotifs"></div>
         </section>
+        <div class="lockquick" id="lockquick">
+          <button class="qbtn glass" id="qtorch" type="button" aria-label="torch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2h6v4l-1.5 2v12h-3V8L9 6z"/></svg>
+          </button>
+          <button class="qbtn glass" id="qcam" type="button" aria-label="camera">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8h3l2-3h6l2 3h3v12H4z"/><circle cx="12" cy="14" r="3.6"/></svg>
+          </button>
+        </div>
 
-        <!-- Home -->
-        <section class="home hidden" id="home">
-          <div class="grid" id="grid"></div>
+        <!-- Home screen -->
+        <section class="home behind" id="home">
+          <div class="pages" id="pages"></div>
+          <div class="dots" id="dots"></div>
+          <div class="dock glass" id="dock"></div>
         </section>
 
         <!-- An app -->
-        <section class="app hidden" id="app">
-          <header class="apphead">
-            <button class="back" id="appback" type="button" aria-label="back">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                   stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-            </button>
-            <span class="apptitle" id="apptitle"></span>
+        <section class="app" id="app">
+          <header class="navbar" id="navbar">
+            <div class="navrow">
+              <button class="navback" id="navback" type="button">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+                <span id="navbacktxt"></span>
+              </button>
+              <span class="navspacer"></span>
+              <button class="navact hidden" id="navact" type="button"></button>
+            </div>
+            <div class="navtitle-sm" id="navtitlesm"></div>
+            <h1 class="navtitle" id="navtitle"></h1>
           </header>
           <div class="appbody" id="appbody"></div>
+          <div id="appfoot"></div>
         </section>
 
-        <!-- Call overlay -->
-        <section class="callui hidden" id="callui">
+        <!-- Call -->
+        <section class="callui" id="callui">
+          <div class="callav" id="callav"></div>
           <div class="callnum" id="callnum"></div>
           <div class="callstate" id="callstate"></div>
+          <div class="callpad" id="callpad"></div>
           <div class="callbtns" id="callbtns"></div>
         </section>
 
-        <div class="banner hidden" id="banner"></div>
+        <!-- Control centre -->
+        <section class="cc" id="cc">
+          <div class="ccgrid" id="ccgrid"></div>
+        </section>
+
+        <div class="scrim" id="scrim"></div>
+        <div class="sheet glass-solid" id="sheet"></div>
+        <div class="banner glass-solid" id="banner"></div>
+        <div class="toast glass-solid" id="toast"></div>
         <div class="homebar" id="homebar"></div>
       </div>
     </div>
   </div>
+  <!-- The kit lives in sdk.js so the built-in apps and a third-party app draw
+       themselves with the same code. Two copies would drift. -->
+  <script src="sdk.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

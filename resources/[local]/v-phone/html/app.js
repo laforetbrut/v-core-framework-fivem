@@ -1,41 +1,41 @@
-// v-phone — iFruit
+// v-phone — iFruit, iOS 26 shell
 //
-// Every app below is a VIEW. It renders what the owning module answered and sends actions
-// back to that module; it never keeps a copy. The moment an app caches a balance or a
-// vehicle list there are two sources of truth, and one of them is wrong.
+// Every built-in app below is a VIEW. It renders what the owning module answered and
+// sends actions back to that module; it never keeps a copy. The moment an app caches a
+// balance or a vehicle list there are two sources of truth, and one of them is wrong.
+//
+// The same UI kit that draws the built-in apps is handed to third-party apps through
+// sdk.js, so an app somebody else ships looks native without copying a stylesheet.
 
 const byId = (id) => document.getElementById(id);
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// The escaper, the icon set and the component kit all live in sdk.js, so the built-in
+// apps and any app a third party ships are drawing themselves with the same code. Two
+// copies of a design system drift the first time either side is touched.
+const esc = PhoneUI.esc;
+const svg = PhoneUI.svg;
+const UI = PhoneUI;
+
+// Every call into Lua goes through here. The rejection is swallowed into an error
+// object rather than left to reject: an app that awaits this must get an answer it can
+// render, not a promise that never settles behind a loading spinner.
 const post = (n, b) => fetch(`https://v-phone/${n}`, {
   method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}),
 }).then((r) => r.json()).catch(() => ({ error: 'x' }));
 
-const ICONS = {
-  phone: 'M7 2h10v20H7zM10 5h4M12 19h.01',
-  messages: 'M4 5h16v11H9l-5 4V5Z',
-  contacts: 'M5 3h14v18H5zM12 9a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5ZM8 18c1-2.6 7-2.6 8 0M3 7h2M3 12h2M3 17h2',
-  bank: 'M3 10h18L12 4 3 10ZM5 10v8M10 10v8M14 10v8M19 10v8M3 20h18',
-  garage: 'M3 20V9l9-5 9 5v11M7 20v-7h10v7M7 16h10',
-  wallet: 'M3 7h15a2 2 0 0 1 2 2v9H3zM3 7V5h13M17 12h3v3h-3z',
-  jobs: 'M4 8h16v12H4zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16',
-  settings: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3H9.8l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4.4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.06-.4.1-.8.1-1.2Z',
-  camera: 'M4 8h3l2-3h6l2 3h3v12H4zM12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
-  hangup: 'M3 11c5-4 13-4 18 0l-2 3-4-1v-2a12 12 0 0 0-6 0v2l-4 1-2-3ZM4 4l16 16',
-  answer: 'M6 3l3 5-2 2a12 12 0 0 0 7 7l2-2 5 3-2 4C11 22 2 13 2 5l4-2Z',
-  dot: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
-};
-const svg = (n, cls) =>
-  `<svg ${cls ? `class="${cls}" ` : ''}viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="${ICONS[n] || ICONS.dot}"/></svg>`;
+// Icon tints, so the home grid is not eight identical squares.
+const TINT = { phone: 't-green', messages: 't-green', contacts: 't-grey', bank: 't-green',
+  garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey' };
 
-// ── State ──────────────────────────────────────────────────────
-// `state` is what the server last told us. Apps read from it and re-fetch rather than
-// mutating it, so a stale render is impossible by construction.
+// ══ State ══════════════════════════════════════════════════════
 let S = {};             // strings
 let state = {};         // number, apps, prefs, contacts, conversations
 let call = null;
+let callStart = 0, callTimer = null;
 let openApp = null;
-let thread = null;      // number of the conversation being read
+let thread = null;
 let dialed = '';
+let page = 0;
+let notifs = [];        // lock-screen stack
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -52,16 +52,26 @@ function tick() {
 setInterval(tick, 10000);
 
 // ══ Screens ════════════════════════════════════════════════════
-function show(which) {
-  byId('lock').classList.toggle('hidden', which !== 'lock');
-  byId('home').classList.toggle('hidden', which !== 'home');
-  byId('app').classList.toggle('hidden', which !== 'app');
+function unlock() {
+  byId('lock').classList.add('out');
+  byId('lockquick').classList.add('hidden');
+  byId('home').classList.remove('behind');
+  renderHome();
+}
+
+function lockScreen() {
+  closeApp(true);
+  byId('lock').classList.remove('out');
+  byId('lockquick').classList.remove('hidden');
+  byId('home').classList.add('behind');
 }
 
 function goHome() {
-  openApp = null; thread = null;
-  show('home');
-  renderHome();
+  if (byId('cc').classList.contains('on')) { byId('cc').classList.remove('on'); return; }
+  if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
+  if (byId('app').classList.contains('on')) { closeApp(); return; }
+  if (!byId('lock').classList.contains('out')) return;
+  lockScreen();
 }
 
 // ══ Home ═══════════════════════════════════════════════════════
@@ -69,103 +79,189 @@ function unreadTotal() {
   return (state.conversations || []).reduce((n, c) => n + (c.unread || 0), 0);
 }
 
+function tileHTML(a, i) {
+  const badge = a.id === 'messages' ? unreadTotal() : (a.badge || 0);
+  return `<button class="tile" type="button" data-app="${esc(a.id)}" style="--i:${i}">` +
+    `<span class="wrap"><span class="ic ${TINT[a.icon] || ''}">${svg(a.icon)}</span>` +
+    (badge > 0 ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '') +
+    `</span><span class="nm">${esc(L(a.label))}</span></button>`;
+}
+
 function renderHome() {
-  const grid = byId('grid');
-  grid.innerHTML = '';
-  (state.apps || []).forEach((a, i) => {
-    const badge = a.id === 'messages' ? unreadTotal() : 0;
-    const t = document.createElement('button');
-    t.className = 'tile'; t.type = 'button';
-    t.style.setProperty('--i', i);
-    t.innerHTML =
-      `<span class="wrap"><span class="ic">${svg(a.icon)}</span>` +
-      (badge > 0 ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '') +
-      `</span><span class="nm">${esc(L(a.label))}</span>`;
-    t.addEventListener('click', () => enterApp(a));
-    grid.appendChild(t);
+  const apps = (state.apps || []).slice();
+  // The last four go in the dock, the way iOS ships: the apps you reach for without
+  // thinking stay put while the grid pages move.
+  const dockApps = apps.filter((a) => a.dock).slice(0, 4);
+  const gridApps = apps.filter((a) => !dockApps.includes(a));
+
+  const perPage = 24;
+  const pages = [];
+  for (let i = 0; i < gridApps.length; i += perPage) pages.push(gridApps.slice(i, i + perPage));
+  if (!pages.length) pages.push([]);
+
+  byId('pages').innerHTML = pages.map((p) =>
+    `<div class="page">${p.map((a, i) => tileHTML(a, i)).join('')}</div>`).join('');
+  byId('dock').innerHTML = dockApps.map((a, i) => tileHTML(a, i)).join('');
+  byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
+  byId('pages').style.transform = `translateX(${-page * 100}%)`;
+  byId('pages').style.transition = 'transform .34s cubic-bezier(.32,.72,0,1)';
+
+  [...document.querySelectorAll('.tile')].forEach((t) => {
+    t.addEventListener('click', () => {
+      const a = (state.apps || []).find((x) => x.id === t.dataset.app);
+      if (a) enterApp(a, t);
+    });
   });
 }
 
-// ══ Apps ═══════════════════════════════════════════════════════
-// An app that another resource registered carries a `page`: it is iframed rather than
-// rendered here, which is the whole point of the registry.
-const RENDER = {};
+function flipPage(dir) {
+  const n = byId('pages').children.length;
+  page = Math.max(0, Math.min(n - 1, page + dir));
+  byId('pages').style.transform = `translateX(${-page * 100}%)`;
+  byId('dots').innerHTML = [...Array(n)].map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
+}
 
-function enterApp(a) {
-  openApp = a;
-  thread = null;
-  byId('apptitle').textContent = L(a.label);
-  show('app');
+// ══ App shell ══════════════════════════════════════════════════
+// The zoom origin is taken from the icon that launched it. That one detail is most of
+// what makes opening an app feel like iOS rather than a page swap.
+function enterApp(a, tile) {
+  openApp = a; thread = null;
+  const app = byId('app');
+  if (tile) {
+    const r = tile.getBoundingClientRect();
+    const s = byId('screen').getBoundingClientRect();
+    app.style.transformOrigin = `${r.left + r.width / 2 - s.left}px ${r.top + r.height / 2 - s.top}px`;
+  }
+  app.classList.remove('closing');
+  app.classList.add('on');
+  byId('screen').classList.add('app-open');
+  setNav(L(a.label), null);
+  byId('appfoot').innerHTML = '';
+
   if (a.page) {
-    byId('appbody').innerHTML = `<iframe src="${esc(a.page)}" style="width:100%;height:100%;border:0"></iframe>`;
+    // A third-party app is iframed and talks to us through sdk.js.
+    byId('appbody').innerHTML = `<iframe class="appframe" id="appframe" src="${esc(a.page)}"></iframe>`;
+    byId('appbody').style.padding = '0';
+    byId('navbar').classList.add('hidden');
     return;
   }
+  byId('appbody').style.padding = '';
+  byId('navbar').classList.remove('hidden');
   const fn = RENDER[a.id];
-  if (fn) fn(); else byId('appbody').innerHTML = `<div class="empty">${esc(L('ph.no_app'))}</div>`;
+  if (fn) fn(); else body(UI.empty(L('ph.no_app')));
+}
+
+function closeApp(instant) {
+  const app = byId('app');
+  if (!app.classList.contains('on')) return;
+  byId('screen').classList.remove('app-open');
+  if (instant) { app.classList.remove('on'); openApp = null; thread = null; return; }
+  app.classList.remove('on');
+  app.classList.add('closing');
+  setTimeout(() => { app.classList.remove('closing'); }, 300);
+  openApp = null; thread = null;
+}
+
+function setNav(title, backLabel, action) {
+  byId('navtitle').textContent = title || '';
+  byId('navtitlesm').textContent = title || '';
+  byId('navbacktxt').textContent = backLabel || L('ph.home');
+  const act = byId('navact');
+  if (action) {
+    act.classList.remove('hidden');
+    act.className = 'navact' + (action.icon ? ' round' : '');
+    act.innerHTML = action.icon ? svg(action.icon) : esc(action.label);
+    act.onclick = action.onClick;
+  } else {
+    act.classList.add('hidden');
+    act.onclick = null;
+  }
+  byId('navbar').classList.remove('collapsed');
 }
 
 const body = (html) => { byId('appbody').innerHTML = html; };
-const loading = () => body(`<div class="empty">${esc(L('ph.loading'))}</div>`);
+const foot = (html) => { byId('appfoot').innerHTML = html || ''; };
+const loading = () => body(UI.empty(L('ph.loading')));
+const rows = (sel, fn) => [...byId('appbody').querySelectorAll(sel)].forEach(fn);
 
-// ── Phone (keypad) ─────────────────────────────────────────────
+// The large title collapses into the bar on scroll, as it does on iOS.
+byId('appbody').addEventListener('scroll', (e) => {
+  byId('navbar').classList.toggle('collapsed', e.target.scrollTop > 22);
+});
+
+// ══ Built-in apps ══════════════════════════════════════════════
+const RENDER = {};
+
+// ── Phone ──────────────────────────────────────────────────────
+const KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'],
+  ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['*', ''], ['0', '+'], ['#', '']];
+
 RENDER.phone = () => {
-  const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
+  const known = (state.contacts || []).find((c) => c.number === dialed);
   body(
     `<div class="dialed" id="dialed">${esc(dialed)}</div>` +
-    `<div class="keypad">${keys.map((k) => `<button class="key" data-k="${k}" type="button">${k}</button>`).join('')}</div>` +
-    `<button class="btn" id="dial" type="button">${esc(L('ph.call'))}</button>` +
-    `<div class="btnrow"><button class="btn ghost" id="delkey" type="button">${esc(L('ph.delete'))}</button></div>`
+    `<div class="dialsub" id="dialsub">${esc(known ? known.name : '')}</div>` +
+    `<div class="keypad">${KEYS.map(([k, l]) =>
+      `<button class="key" data-k="${k}" type="button"><b>${k}</b><i>${l}</i></button>`).join('')}</div>` +
+    `<div class="dialrow">` +
+      `<span style="width:74px"></span>` +
+      `<button class="callbtn" id="dial" type="button">${svg('answer')}</button>` +
+      `<button class="delbtn ${dialed ? '' : 'hidden'}" id="delkey" type="button">${svg('del')}</button>` +
+    `</div>`
   );
-  byId('appbody').querySelectorAll('.key').forEach((b) => {
-    b.addEventListener('click', () => { dialed = (dialed + b.dataset.k).slice(0, 20); byId('dialed').textContent = dialed; });
-  });
-  byId('delkey').addEventListener('click', () => { dialed = dialed.slice(0, -1); byId('dialed').textContent = dialed; });
+  const paint = () => {
+    byId('dialed').textContent = dialed;
+    const c = (state.contacts || []).find((x) => x.number === dialed);
+    byId('dialsub').textContent = c ? c.name : '';
+    byId('delkey').classList.toggle('hidden', !dialed);
+  };
+  rows('.key', (b) => b.addEventListener('click', () => {
+    dialed = (dialed + b.dataset.k).slice(0, 20); paint();
+  }));
+  byId('delkey').addEventListener('click', () => { dialed = dialed.slice(0, -1); paint(); });
   byId('dial').addEventListener('click', () => { if (dialed) post('call', { number: dialed }); });
 };
 
 // ── Messages ───────────────────────────────────────────────────
 function nameOfNumber(number) {
   const c = (state.contacts || []).find((x) => x.number === number);
-  return c ? c.name : number;
+  return c ? c.name : (number || L('ph.unknown'));
 }
 
 RENDER.messages = () => {
+  setNav(L('app.messages'), null, { icon: 'add', onClick: newMessageSheet });
   const list = state.conversations || [];
-  if (!list.length) { body(`<div class="empty">${esc(L('ph.no_messages'))}</div>`); return; }
-  body(`<div class="rowlist">${list.map((c) => `
-    <button class="item" data-n="${esc(c.number)}" type="button">
-      <span class="av">${esc(nameOfNumber(c.number).slice(0, 1).toUpperCase())}</span>
-      <span class="main"><span class="t">${esc(nameOfNumber(c.number))}</span>
-      <span class="s">${esc(c.body)}</span></span>
-      ${c.unread > 0 ? `<span class="unread">${c.unread}</span>` : ''}
-    </button>`).join('')}</div>`);
-  byId('appbody').querySelectorAll('.item').forEach((b) =>
-    b.addEventListener('click', () => openThread(b.dataset.n)));
+  if (!list.length) { body(UI.empty(L('ph.no_messages'), 'messages')); return; }
+  body(UI.group(list.map((c) => UI.row({
+    avatar: nameOfNumber(c.number), title: nameOfNumber(c.number), subtitle: c.body,
+    badge: c.unread > 0 ? c.unread : null, chevron: true, data: { n: c.number },
+  }))));
+  rows('.row', (r) => r.addEventListener('click', () => openThread(r.dataset.n)));
 };
 
 async function openThread(number) {
   thread = number;
-  byId('apptitle').textContent = nameOfNumber(number);
+  setNav(nameOfNumber(number), L('app.messages'), {
+    icon: 'phone', onClick: () => post('call', { number }),
+  });
   loading();
   const res = await post('conversation', { number });
-  if (!res || res.error) { body(`<div class="empty">${esc(L('ph.err_' + ((res && res.error) || 'x')))}</div>`); return; }
+  if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
   paintThread(res.messages || []);
-
-  // Read: clear the badge locally as well, or the home screen keeps claiming unread mail
-  // the player just looked at.
   const c = (state.conversations || []).find((x) => x.number === number);
   if (c) c.unread = 0;
 }
 
 function paintThread(messages) {
-  body(
-    `<div class="thread" id="thread">${messages.map((m) =>
-      `<div class="bub ${m.mine ? 'me' : 'them'}">${esc(m.body)}</div>`).join('')}</div>` +
-    `<div class="compose"><input class="fld" id="msg" maxlength="250" placeholder="${esc(L('ph.write'))}" />` +
-    `<button class="btn" id="sendmsg" type="button">${esc(L('ph.send'))}</button></div>`
-  );
+  body(`<div class="thread" id="thread">${messages.map((m) =>
+    `<div class="bub ${m.mine ? 'me' : 'them'}">${esc(m.body)}</div>`).join('')}</div>`);
+  foot(`<div class="compose">` +
+    UI.field('msg', L('ph.write'), '', 'maxlength="250"') +
+    `<button class="sendbtn" id="sendmsg" type="button">${svg('send')}</button></div>`);
   const el = byId('thread');
   el.scrollTop = el.scrollHeight;
+  byId('appbody').scrollTop = byId('appbody').scrollHeight;
+
   const send = async () => {
     const input = byId('msg');
     const text = input.value.trim();
@@ -174,124 +270,126 @@ function paintThread(messages) {
     const res = await post('send', { number: thread, body: text });
     if (res && res.ok) {
       el.insertAdjacentHTML('beforeend', `<div class="bub me">${esc(res.body)}</div>`);
-      el.scrollTop = el.scrollHeight;
+      byId('appbody').scrollTop = byId('appbody').scrollHeight;
+    } else {
+      toast(L('ph.err_' + ((res && res.error) || 'x')));
     }
   };
   byId('sendmsg').addEventListener('click', send);
   byId('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
 }
 
+function newMessageSheet() {
+  sheet(L('ph.new_message_to'),
+    UI.field('nmnum', L('ph.number')) + UI.button(L('ph.write'), 'nmgo'),
+    () => { byId('nmgo').addEventListener('click', () => {
+      const n = byId('nmnum').value.trim();
+      closeSheet();
+      if (n) openThread(n);
+    }); });
+}
+
 // ── Contacts ───────────────────────────────────────────────────
 RENDER.contacts = () => {
+  setNav(L('app.contacts'), null, { icon: 'add', onClick: () => contactSheet({}) });
   const list = state.contacts || [];
-  body(
-    `<button class="btn" id="newcontact" type="button">${esc(L('ph.new_contact'))}</button>` +
-    `<div class="sechead">${esc(L('ph.contacts'))}</div>` +
-    (list.length
-      ? `<div class="rowlist">${list.map((c) => `
-        <div class="item" data-id="${c.id}">
-          <span class="av">${esc((c.name || '?').slice(0, 1).toUpperCase())}</span>
-          <span class="main"><span class="t">${esc(c.name)}</span><span class="s">${esc(c.number)}</span></span>
-          <button class="pill act" data-a="call" data-n="${esc(c.number)}" type="button">${esc(L('ph.call'))}</button>
-          <button class="pill act" data-a="msg" data-n="${esc(c.number)}" type="button">${esc(L('ph.message'))}</button>
-          <button class="pill act" data-a="del" data-id="${c.id}" type="button">${esc(L('ph.delete'))}</button>
-        </div>`).join('')}</div>`
-      : `<div class="empty">${esc(L('ph.no_contacts'))}</div>`)
-  );
-  byId('newcontact').addEventListener('click', contactForm);
-  byId('appbody').querySelectorAll('.act').forEach((b) => b.addEventListener('click', async () => {
-    if (b.dataset.a === 'call') post('call', { number: b.dataset.n });
-    else if (b.dataset.a === 'msg') { openApp = (state.apps || []).find((a) => a.id === 'messages') || openApp; openThread(b.dataset.n); }
-    else { await post('contactDelete', { id: Number(b.dataset.id) }); await refresh(); RENDER.contacts(); }
+  if (!list.length) { body(UI.empty(L('ph.no_contacts'), 'contacts')); return; }
+  body(UI.group(list.map((c) => UI.row({
+    avatar: c.name, title: c.name, subtitle: c.number, chevron: true,
+    data: { id: c.id, n: c.number },
+  }))));
+  rows('.row', (r) => r.addEventListener('click', () => {
+    const c = (state.contacts || []).find((x) => String(x.id) === r.dataset.id);
+    if (c) contactSheet(c);
   }));
 };
 
-function contactForm() {
-  body(
-    `<input class="fld" id="cname" maxlength="40" placeholder="${esc(L('ph.name'))}" />` +
-    `<input class="fld" id="cnum" maxlength="20" placeholder="${esc(L('ph.number'))}" />` +
-    `<button class="btn" id="csave" type="button">${esc(L('ph.save'))}</button>`
-  );
-  byId('csave').addEventListener('click', async () => {
-    const res = await post('contactSave', { name: byId('cname').value, number: byId('cnum').value });
-    if (res && res.ok) { await refresh(); RENDER.contacts(); }
-  });
+function contactSheet(c) {
+  const isNew = !c.id;
+  sheet(isNew ? L('ph.new_contact') : c.name,
+    UI.field('cname', L('ph.name'), c.name, 'maxlength="40"') +
+    UI.field('cnum', L('ph.number'), c.number, 'maxlength="20"') +
+    UI.button(L('ph.save'), 'csave') +
+    (isNew ? '' : UI.button(L('ph.call'), 'ccall', 'tinted')) +
+    (isNew ? '' : UI.button(L('ph.message'), 'cmsg', 'plain')) +
+    (isNew ? '' : UI.button(L('ph.delete'), 'cdel', 'destructive')),
+    () => {
+      byId('csave').addEventListener('click', async () => {
+        const res = await post('contactSave', { id: c.id, name: byId('cname').value, number: byId('cnum').value });
+        if (res && res.ok) { closeSheet(); await refresh(); RENDER.contacts(); }
+        else toast(L('ph.err_' + ((res && res.error) || 'x')));
+      });
+      if (isNew) return;
+      byId('ccall').addEventListener('click', () => { closeSheet(); post('call', { number: c.number }); });
+      byId('cmsg').addEventListener('click', () => { closeSheet(); openThread(c.number); });
+      byId('cdel').addEventListener('click', async () => {
+        await post('contactDelete', { id: c.id });
+        closeSheet(); await refresh(); RENDER.contacts();
+      });
+    });
 }
 
 // ── Bank ───────────────────────────────────────────────────────
 RENDER.bank = async () => {
   loading();
   const d = await post('app', { app: 'bank' });
-  if (!d || d.error) { body(`<div class="empty">${esc(L('ph.err_off'))}</div>`); return; }
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'bank')); return; }
   const tx = d.transactions || [];
   body(
-    `<div class="hero"><span class="lab">${esc(L('ph.balance'))}</span>` +
-    `<span class="val">${money(d.bank)}</span>` +
-    `<span class="sub">${esc(L('ph.cash'))} ${money(d.cash)}</span></div>` +
-    `<div class="sechead">${esc(L('ph.history'))}</div>` +
+    UI.bigNumber(L('ph.balance'), money(d.bank), `${L('ph.cash')} ${money(d.cash)}`) +
     (tx.length
-      ? `<div class="rowlist">${tx.map((t) => `
-        <div class="item"><span class="main">
-          <span class="t">${esc(t.label || t.type || '')}</span>
-          <span class="s">${esc(t.at || '')}</span></span>
-          <span class="amt ${Number(t.amount) < 0 ? 'neg' : 'pos'}">${money(t.amount)}</span>
-        </div>`).join('')}</div>`
-      : `<div class="empty">${esc(L('ph.no_history'))}</div>`)
+      ? UI.group(tx.map((t) => UI.row({
+          title: t.label || t.type || '', subtitle: t.at || '',
+          value: money(t.amount), mono: true, tone: Number(t.amount) < 0 ? 'neg' : 'pos',
+        })), { header: L('ph.history') })
+      : UI.empty(L('ph.no_history')))
   );
 };
 
 // ── Garage ─────────────────────────────────────────────────────
 // Where a car is, not how to spawn one: taking it out is the garage's job and needs the
-// player to be standing at one.
+// player standing at one.
 RENDER.garage = async () => {
   loading();
   const d = await post('app', { app: 'garage' });
-  if (!d || d.error) { body(`<div class="empty">${esc(L('ph.err_off'))}</div>`); return; }
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'garage')); return; }
   const list = Array.isArray(d) ? d : (d.vehicles || []);
-  if (!list.length) { body(`<div class="empty">${esc(L('ph.no_vehicles'))}</div>`); return; }
-  body(`<div class="rowlist">${list.map((v) => `
-    <div class="item"><span class="main">
-      <span class="t">${esc(v.model || '')}</span>
-      <span class="s">${esc(v.plate || '')} &middot; ${esc(v.garage || L('ph.out'))}</span></span>
-      <span class="pill ${v.live ? 'on' : ''}">${esc(v.live ? L('ph.veh_out') : L('ph.veh_stored'))}</span>
-    </div>`).join('')}</div>`);
+  if (!list.length) { body(UI.empty(L('ph.no_vehicles'), 'garage')); return; }
+  body(UI.group(list.map((v) => UI.row({
+    icon: 'garage', title: v.model || '', subtitle: `${v.plate || ''}  ${v.garage || L('ph.out')}`,
+    value: v.live ? L('ph.veh_out') : L('ph.veh_stored'),
+  }))));
 };
 
 // ── Wallet ─────────────────────────────────────────────────────
 RENDER.wallet = async () => {
   loading();
   const d = await post('app', { app: 'wallet' });
-  if (!d || d.error) { body(`<div class="empty">${esc(L('ph.err_off'))}</div>`); return; }
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'wallet')); return; }
   const list = Array.isArray(d) ? d : (d.licenses || []);
-  if (!list.length) { body(`<div class="empty">${esc(L('ph.no_licenses'))}</div>`); return; }
-  body(`<div class="rowlist">${list.map((l) => `
-    <div class="item"><span class="main">
-      <span class="t">${esc(L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key))}</span>
-      <span class="s">${esc(l.issuer || '')}</span></span>
-      <span class="pill ${l.held ? 'on' : ''}">${esc(l.held ? L('ph.lic_held') : L('ph.lic_none'))}</span>
-    </div>`).join('')}</div>`);
+  if (!list.length) { body(UI.empty(L('ph.no_licenses'), 'wallet')); return; }
+  body(UI.group(list.map((l) => UI.row({
+    icon: 'wallet', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
+    subtitle: l.issuer || '', value: l.held ? L('ph.lic_held') : L('ph.lic_none'),
+    tone: l.held ? 'pos' : '',
+  }))));
 };
 
 // ── Jobs ───────────────────────────────────────────────────────
-// Read only, and deliberately: signing on happens at a desk. Browsing vacancies from a
-// sofa is fine; being hired from one is not.
+// Read only, and deliberately: signing on happens at a desk.
 RENDER.jobs = async () => {
   loading();
   const d = await post('app', { app: 'jobs' });
-  if (!d || d.error) { body(`<div class="empty">${esc(L('ph.err_off'))}</div>`); return; }
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'jobs')); return; }
   const list = d.jobs || [];
   body(
-    `<div class="hero"><span class="lab">${esc(L('ph.current_job'))}</span>` +
-    `<span class="val" style="font-size:17px">${esc(d.current || '')}</span></div>` +
-    `<div class="sechead">${esc(L('ph.openings'))}</div>` +
+    UI.bigNumber(L('ph.current_job'), d.current || '') +
     (list.length
-      ? `<div class="rowlist">${list.map((j) => `
-        <div class="item"><span class="main">
-          <span class="t">${esc(j.label || j.name)}</span>
-          <span class="s">${esc(j.grade || '')} &middot; ${money(j.salary)}</span></span>
-        </div>`).join('')}</div>`
-      : `<div class="empty">${esc(L('ph.no_jobs'))}</div>`) +
-    `<div class="empty">${esc(L('ph.jobs_hint'))}</div>`
+      ? UI.group(list.map((j) => UI.row({
+          icon: 'jobs', title: j.label || j.name, subtitle: j.grade || '',
+          value: money(j.salary), mono: true,
+        })), { header: L('ph.openings'), footer: L('ph.jobs_hint') })
+      : UI.empty(L('ph.no_jobs'), 'jobs'))
   );
 };
 
@@ -299,41 +397,132 @@ RENDER.jobs = async () => {
 RENDER.settings = () => {
   const p = state.prefs || {};
   body(
-    `<div class="hero"><span class="lab">${esc(L('ph.my_number'))}</span>` +
-    `<span class="val" style="font-size:20px">${esc(state.number || '')}</span></div>` +
-    `<div class="sechead">${esc(L('ph.wallpaper'))}</div>` +
-    `<div class="rowlist">${(state.wallpapers || []).map((w) => `
-      <button class="item wp" data-w="${esc(w)}" type="button">
-        <span class="main"><span class="t">${esc(L('ph.wall_' + w))}</span></span>
-        <span class="pill ${p.wallpaper === w ? 'on' : ''}">${esc(p.wallpaper === w ? L('ph.on') : '')}</span>
-      </button>`).join('')}</div>` +
-    `<div class="sechead">${esc(L('ph.dnd'))}</div>` +
-    `<button class="btn ${p.dnd ? '' : 'ghost'}" id="dnd" type="button">${esc(p.dnd ? L('ph.dnd_on') : L('ph.dnd_off'))}</button>`
+    UI.group([UI.row({ icon: 'phone', title: L('ph.my_number'), value: state.number || '' })]) +
+    UI.group((state.wallpapers || []).map((w) => UI.row({
+      icon: 'wall', title: L('ph.wall_' + w), value: p.wallpaper === w ? L('ph.on') : '',
+      data: { w },
+    })), { header: L('ph.wallpaper') }) +
+    UI.group([UI.row({ icon: 'moon', title: L('ph.dnd'), toggle: !!p.dnd, data: { t: 'dnd' } })],
+      { footer: L('ph.dnd_hint') })
   );
-  byId('appbody').querySelectorAll('.wp').forEach((b) => b.addEventListener('click', async () => {
-    const res = await post('prefs', { wallpaper: b.dataset.w });
-    if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+  rows('.row', (r) => r.addEventListener('click', async () => {
+    if (r.dataset.w) {
+      const res = await post('prefs', { wallpaper: r.dataset.w });
+      if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+    } else if (r.dataset.t === 'dnd') {
+      const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
+      if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
+    }
   }));
-  byId('dnd').addEventListener('click', async () => {
-    const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
-    if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
-  });
 };
 
 function applyWallpaper() {
-  const s = byId('screen');
-  (state.wallpapers || []).forEach((w) => s.classList.remove('wall-' + w));
-  s.classList.add('wall-' + ((state.prefs || {}).wallpaper || 'ember'));
+  const w = byId('wallpaper');
+  (state.wallpapers || []).forEach((x) => w.classList.remove('wall-' + x));
+  w.classList.add('wall-' + ((state.prefs || {}).wallpaper || 'ember'));
+}
+
+// ══ Sheet, toast, banner ═══════════════════════════════════════
+function sheet(title, html, after) {
+  byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
+  byId('sheet').classList.add('on');
+  byId('scrim').classList.add('on');
+  if (after) after();
+}
+function closeSheet() {
+  byId('sheet').classList.remove('on');
+  byId('scrim').classList.remove('on');
+}
+byId('scrim').addEventListener('click', closeSheet);
+
+let toastTimer = null;
+function toast(text) {
+  const t = byId('toast');
+  t.textContent = text;
+  t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+}
+
+let bannerTimer = null;
+function banner(b) {
+  const el = byId('banner');
+  el.innerHTML = `<span class="bic">${svg(b.icon || 'messages')}</span>` +
+    `<span class="btext"><span class="bt">${esc(b.title || '')}</span>` +
+    `<span class="bb">${esc(b.body || '')}</span></span>`;
+  el.classList.add('on');
+  el.onclick = () => { el.classList.remove('on'); if (b.onClick) b.onClick(); };
+  clearTimeout(bannerTimer);
+  bannerTimer = setTimeout(() => el.classList.remove('on'), 4500);
+
+  notifs.unshift({ icon: b.icon || 'messages', title: b.title, body: b.body });
+  notifs = notifs.slice(0, 4);
+  paintNotifs();
+}
+
+function paintNotifs() {
+  byId('locknotifs').innerHTML = notifs.map((n, i) =>
+    `<div class="lnotif glass" style="--i:${i}"><span class="lic">${svg(n.icon)}</span>` +
+    `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
+    `<span class="lb">${esc(n.body || '')}</span></span></div>`).join('');
 }
 
 // ══ Calls ══════════════════════════════════════════════════════
+let callMuted = false, callSpeaker = false;
+
+function fmtDuration(s) {
+  const m = Math.floor(s / 60), r = s % 60;
+  return `${m}:${String(r).padStart(2, '0')}`;
+}
+
 function renderCall() {
   const ui = byId('callui');
-  if (!call) { ui.classList.add('hidden'); return; }
-  ui.classList.remove('hidden');
-  byId('callnum').textContent = call.number ? nameOfNumber(call.number) : L('ph.unknown');
+  const island = byId('island');
+  if (!call) {
+    ui.classList.remove('on');
+    island.classList.remove('live');
+    clearInterval(callTimer); callTimer = null;
+    return;
+  }
+  ui.classList.add('on');
+  const name = call.number ? nameOfNumber(call.number) : L('ph.unknown');
+  byId('callav').textContent = name.slice(0, 1).toUpperCase();
+  byId('callnum').textContent = name;
   byId('callstate').textContent =
-    call.state === 'in' ? L('ph.incoming') : call.state === 'out' ? L('ph.calling') : L('ph.in_call');
+    call.state === 'in' ? L('ph.incoming') : call.state === 'out' ? L('ph.calling') : '';
+
+  // Live activity in the island, which is what a modern iPhone does with a call.
+  island.classList.add('live');
+  byId('islandIcon').innerHTML = svg('phone');
+  byId('islandT1').textContent = name;
+  byId('islandT2').textContent = call.state === 'active' ? L('ph.in_call')
+    : call.state === 'in' ? L('ph.incoming') : L('ph.calling');
+
+  if (call.state === 'active') {
+    if (!callTimer) {
+      callStart = Date.now();
+      byId('callstate').innerHTML = `<span class="calltimer" id="ctimer">0:00</span>`;
+      callTimer = setInterval(() => {
+        const s = Math.floor((Date.now() - callStart) / 1000);
+        const el = byId('ctimer'); if (el) el.textContent = fmtDuration(s);
+        byId('islandT2').textContent = fmtDuration(s);
+      }, 1000);
+    }
+    byId('callpad').innerHTML =
+      `<div class="cpad ${callMuted ? 'on' : ''}" data-a="mute"><span>${svg('mute')}</span><em>${esc(L('ph.mute'))}</em></div>` +
+      `<div class="cpad" data-a="keypad"><span>${svg('keypad')}</span><em>${esc(L('ph.keypad'))}</em></div>` +
+      `<div class="cpad ${callSpeaker ? 'on' : ''}" data-a="speaker"><span>${svg('speaker')}</span><em>${esc(L('ph.speaker'))}</em></div>`;
+    [...byId('callpad').querySelectorAll('.cpad')].forEach((p) => p.addEventListener('click', () => {
+      // Local comfort toggles only: the audio itself belongs to v-voice, and a phone
+      // that pretended to mute a Mumble channel would be lying about being heard.
+      if (p.dataset.a === 'mute') callMuted = !callMuted;
+      else if (p.dataset.a === 'speaker') callSpeaker = !callSpeaker;
+      else return;
+      renderCall();
+    }));
+  } else {
+    byId('callpad').innerHTML = '';
+  }
 
   byId('callbtns').innerHTML =
     (call.state === 'in' ? `<button class="cbtn ok" id="cans" type="button">${svg('answer')}</button>` : '') +
@@ -343,66 +532,163 @@ function renderCall() {
   byId('chang').addEventListener('click', () => post('hangup'));
 }
 
+// ══ Control centre ═════════════════════════════════════════════
+// Only real controls. A tile that toggles nothing is decoration, and decoration that
+// looks like a switch is a lie about what the phone can do.
+function renderCC() {
+  const p = state.prefs || {};
+  byId('ccgrid').innerHTML =
+    `<div class="cctile glass w2 h2"><div class="cch">${svg('wall')}<span>${esc(L('ph.wallpaper'))}</span></div>` +
+      `<div class="ccv" id="ccwall">${esc(L('ph.wall_' + (p.wallpaper || 'ember')))}</div></div>` +
+    `<div class="cctile glass"><div class="cch">${svg('moon')}</div>` +
+      `<button class="ccpill ${p.dnd ? 'on' : ''}" id="ccdnd" type="button">${svg('moon')}</button></div>` +
+    `<div class="cctile glass"><div class="cch">${svg('phone')}</div>` +
+      `<div class="ccv" style="font-size:12px">${esc(state.number || '')}</div></div>` +
+    `<div class="cctile glass w2"><div class="cch">${svg('messages')}<span>${esc(L('ph.unread'))}</span></div>` +
+      `<div class="ccv">${unreadTotal()}</div></div>`;
+
+  byId('ccdnd').addEventListener('click', async () => {
+    const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
+    if (res && res.ok) { state.prefs = res.prefs; renderCC(); }
+  });
+  byId('ccwall').parentElement.addEventListener('click', () => {
+    byId('cc').classList.remove('on');
+    const a = (state.apps || []).find((x) => x.id === 'settings');
+    if (a) enterApp(a, null);
+  });
+}
+
+// ══ Third-party app bridge ═════════════════════════════════════
+// sdk.js inside an app frame posts here. Everything it can ask for is listed once, so
+// what an app is allowed to do is readable in one place rather than inferred.
+const SDK_ALLOWED = {
+  request:  (d) => post('sdkRequest', d),         // <appId>:<method>, composed by Lua
+  emit:     (d) => post('sdkEmit', d),            // <appId>:<event>, composed by Lua
+  storage:  (d) => post('sdkStorage', d),         // per app, per character
+  contacts: () => Promise.resolve({ ok: true, contacts: state.contacts || [] }),
+  me:       () => Promise.resolve({ ok: true, number: state.number, apps: state.apps }),
+  message:  (d) => post('send', d),
+  call:     (d) => post('call', d),
+};
+
+window.addEventListener('message', async (e) => {
+  const d = e.data || {};
+  if (d.__phone !== 'sdk') return;
+  const frame = byId('appframe');
+  const reply = (payload) => {
+    if (frame && frame.contentWindow) {
+      frame.contentWindow.postMessage({ __phone: 'reply', id: d.id, payload }, '*');
+    }
+  };
+
+  if (d.op === 'title') { setNav(d.data && d.data.title, null); byId('navbar').classList.remove('hidden'); return reply({ ok: true }); }
+  if (d.op === 'close') { closeApp(); return reply({ ok: true }); }
+  if (d.op === 'toast') { toast((d.data && d.data.text) || ''); return reply({ ok: true }); }
+  if (d.op === 'notify') { banner({ icon: (openApp && openApp.icon) || 'dot', title: d.data.title, body: d.data.body }); return reply({ ok: true }); }
+  if (d.op === 'badge') {
+    const a = (state.apps || []).find((x) => openApp && x.id === openApp.id);
+    if (a) {
+      a.badge = Number(d.data && d.data.count) || 0;
+      // Repaint, or the count only appears the next time something else happens to
+      // rebuild the grid - which from the app's side looks like badge() did nothing.
+      renderHome();
+    }
+    return reply({ ok: true });
+  }
+  const fn = SDK_ALLOWED[d.op];
+  if (!fn) return reply({ error: 'forbidden' });
+  // The app id is stamped LAST, so a page cannot claim to be a different app by
+  // putting its own `app` in the payload. Everything an app is allowed to reach is
+  // namespaced under this id.
+  reply(await fn(Object.assign({}, d.data || {}, { app: openApp && openApp.id })));
+});
+
 // ══ Refresh ════════════════════════════════════════════════════
 // Re-asks the server for everything it owns. Called after any write, because re-rendering
 // from a locally patched copy is how a UI starts disagreeing with the database.
 async function refresh() {
   const res = await post('refresh');
-  if (res && res.ok) { Object.assign(state, res); }
+  if (res && res.ok) Object.assign(state, res);
 }
 
 // ══ Wiring ═════════════════════════════════════════════════════
-byId('unlock').addEventListener('click', goHome);
-byId('appback').addEventListener('click', () => {
-  // Inside a thread, back returns to the conversation list rather than to the home grid.
+byId('lock').addEventListener('click', unlock);
+byId('homebar').addEventListener('click', goHome);
+byId('island').addEventListener('click', () => { if (call) renderCall(); });
+byId('status').style.pointerEvents = 'auto';
+byId('status').addEventListener('click', () => {
+  if (!byId('lock').classList.contains('out')) return;
+  const cc = byId('cc');
+  cc.classList.toggle('on');
+  if (cc.classList.contains('on')) renderCC();
+});
+
+byId('navback').addEventListener('click', () => {
   if (openApp && openApp.id === 'messages' && thread) {
-    thread = null;
-    byId('apptitle').textContent = L(openApp.label);
+    thread = null; foot('');
     RENDER.messages();
     return;
   }
-  goHome();
+  closeApp();
 });
+
+byId('qcam').addEventListener('click', () => toast(L('ph.camera_off')));
+byId('qtorch').addEventListener('click', () => toast(L('ph.torch_hint')));
 
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') post('close');
+  if (e.key === 'Escape') {
+    if (byId('cc').classList.contains('on')) { byId('cc').classList.remove('on'); return; }
+    if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
+    if (byId('app').classList.contains('on')) { closeApp(); return; }
+    post('close');
+    return;
+  }
+  if (e.key === 'ArrowLeft') flipPage(-1);
+  if (e.key === 'ArrowRight') flipPage(1);
 });
 
-let bannerTimer = null;
-function banner(b) {
-  const el = byId('banner');
-  el.innerHTML = `<div class="bt">${esc(b.title || '')}</div><div class="bb">${esc(b.body || '')}</div>`;
-  el.classList.remove('hidden');
-  clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => el.classList.add('hidden'), 4500);
-}
+byId('pages').addEventListener('wheel', (e) => { flipPage(e.deltaY > 0 ? 1 : -1); }, { passive: true });
 
+// ══ Lua → page ═════════════════════════════════════════════════
 window.addEventListener('message', (e) => {
   const d = e.data || {};
+  if (d.__phone) return;                       // SDK traffic, handled above
   if (d.action === 'open') {
     S = d.strings || {};
     state = d;
     call = d.call || null;
-    dialed = ''; thread = null; openApp = null;
+    dialed = ''; thread = null; openApp = null; page = 0;
     byId('device').classList.remove('hidden');
     byId('locknum').textContent = d.number || '';
     applyWallpaper();
     tick();
-    show('lock');
+    paintNotifs();
+    byId('lock').classList.remove('out');
+    byId('lockquick').classList.remove('hidden');
+    byId('home').classList.add('behind');
+    closeApp(true);
     renderCall();
   } else if (d.action === 'close') {
     byId('device').classList.add('hidden');
+    byId('cc').classList.remove('on');
+    closeSheet();
   } else if (d.action === 'call') {
+    const was = call && call.state;
     call = d.call || null;
+    if (!call || call.state !== 'active') { clearInterval(callTimer); callTimer = null; }
+    if (call && call.state !== was) { callMuted = false; callSpeaker = false; }
     renderCall();
   } else if (d.action === 'message') {
-    // A message that arrives while the thread it belongs to is open lands in the thread;
-    // otherwise it bumps the badge, which is what the conversation list is refreshed for.
     if (thread && d.message && d.message.from === thread) {
       const el = byId('thread');
-      if (el) { el.insertAdjacentHTML('beforeend', `<div class="bub them">${esc(d.message.body)}</div>`); el.scrollTop = el.scrollHeight; }
+      if (el) {
+        el.insertAdjacentHTML('beforeend', `<div class="bub them">${esc(d.message.body)}</div>`);
+        byId('appbody').scrollTop = byId('appbody').scrollHeight;
+      }
     } else {
-      banner({ title: nameOfNumber(d.message.from), body: d.message.body });
+      banner({ icon: 'messages', title: nameOfNumber(d.message.from), body: d.message.body,
+               onClick: () => { const a = (state.apps || []).find((x) => x.id === 'messages');
+                                if (a) { enterApp(a, null); openThread(d.message.from); } } });
       refresh().then(() => { if (!openApp) renderHome(); });
     }
   } else if (d.action === 'banner') {

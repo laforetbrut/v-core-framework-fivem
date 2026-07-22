@@ -235,6 +235,120 @@ which is the question every integrator starts with.
 
 ---
 
+## Shipping a phone app
+
+The phone is the surface most of the game is played through, so an app is the shortest
+route from an idea to something players actually use. There is no build step, no
+framework and no bundler: an app is **one HTML file and eight lines of Lua**.
+
+`resources/[local]/v-phone-notes` is a complete worked example that ships with the
+framework. Copy it.
+
+### The eight lines
+
+```lua
+V.Ready(function()
+    exports['v-phone']:RegisterApp('notes', {
+        label = 'Notes',      -- a literal, or a locale key your resource ships
+        icon  = 'note',       -- any key from PhoneUI.icons
+        slot  = 20,           -- home-screen position; the operator can change it
+        dock  = false,        -- true puts it in the dock instead of the grid
+        page  = 'https://cfx-nui-v-phone-notes/html/index.html',
+    })
+end)
+```
+
+That is the whole server side, unless your app needs logic of its own.
+
+The operator's control over your app is separate and lives in **Admin -> Editor -> Phone
+apps**: enabled, ordered, and gated by job or gang. You do not implement any of that, and
+you should not try to: an app that decided for itself whether it was installed would be
+ignoring the person running the server.
+
+### The page
+
+```html
+<link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+<link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+<link rel="stylesheet" href="https://cfx-nui-v-phone/style.css" />
+<script src="https://cfx-nui-v-phone/sdk.js"></script>
+<div id="appbody"></div>
+<script>
+Phone.ready(function (me) {
+    Phone.title('Notes');
+    PhoneUI.render(
+        PhoneUI.group([
+            PhoneUI.row({ title: 'My number', value: me.number }),
+            PhoneUI.row({ title: 'Write one', icon: 'note', chevron: true, data: { act: 'new' } }),
+        ], { header: 'Notes', footer: 'Kept on your character.' })
+    );
+    PhoneUI.on('[data-act="new"]', 'click', function () { Phone.toast('Hello'); });
+});
+</script>
+```
+
+**Link the phone's stylesheet rather than writing your own.** `PhoneUI` is the same object
+the built-in apps draw themselves with - one definition, so your app cannot drift out of
+looking native, and it follows the server's v-ui theme for free.
+
+### The kit - `PhoneUI`
+
+| Call | What you get |
+|---|---|
+| `group(rows, { header, footer })` | An inset, rounded iOS list section |
+| `row({ ... })` | One row: `icon`/`avatar`, `title`, `subtitle`, `value` (plus `tone: 'pos'` / `'neg'`, `mono`), `badge`, `time`, `toggle`, `chevron`, `data` |
+| `bigNumber(label, value, sub)` | The large centred figure a balance screen wants |
+| `button(label, id, style)` | `''` accent, `'tinted'`, `'plain'`, `'destructive'` |
+| `field(id, placeholder, value, attrs)` | A rounded input |
+| `empty(text, icon)` | The empty state |
+| `render(html)` | Replace the app body |
+| `on(selector, event, handler)` | Delegated events that survive a re-render |
+| `icons`, `svg(name)`, `esc(text)` | The icon set, and the escaper everything goes through |
+
+Every helper returns an **HTML string**. An app is a template, not a component tree,
+because somebody writing their first app should not have to learn a framework first.
+
+### The bridge - `Phone`
+
+Every call returns a Promise.
+
+| Call | What it does |
+|---|---|
+| `Phone.ready(fn)` | Runs once the phone answers with `{ number, apps }` |
+| `Phone.title(text)` | The title in the phone's navigation bar |
+| `Phone.close()` | Close the app, back to the home screen |
+| `Phone.toast(text)` | A transient message at the bottom |
+| `Phone.notify(title, body)` | A banner, and an entry in the lock-screen stack |
+| `Phone.badge(count)` | The red count on your icon; `0` clears it |
+| `Phone.request(method, data)` | Call **your own** server callback |
+| `Phone.emit(event, data)` | Fire **your own** server event |
+| `Phone.storage.get/set/all` | Per app, per character, persisted server-side |
+| `Phone.contacts()` | The player's contact list, read only |
+| `Phone.message(number, body)` | Send a message as the player |
+| `Phone.call(number)` | Start a call, routed and validated like the dialler |
+
+### What an app can and cannot reach
+
+`Phone.request('save', data)` calls `V.Callback('notes:save', ...)` - the full name is
+composed as `<yourAppId>:<method>` **by the phone**, and the app id comes from the phone's
+own state rather than from your message. There is therefore no way to spell
+`v-banking:withdraw`: it is not that the phone refuses, it is that the name cannot be
+formed.
+
+If your app needs another module, call that module **from your own server callback**,
+where you can check whatever you like first:
+
+```lua
+V.Callback('notes:balance', function(src, resolve)
+    if not somethingYouCareAbout(src) then resolve({ error = 'no' }) return end
+    resolve({ ok = true, bank = V.Use('v-banking').GetBalance(src) })
+end)
+```
+
+`Phone.storage` means most apps need no table, no migration and no server file at all.
+Values are text; anything structured is your own JSON, because guessing at a schema for
+somebody else's data helps nobody.
+
 ## Conventions
 
 **Exports are `PascalCase`.** `exports('GetFuel', …)`, not `getFuel`. The framework has

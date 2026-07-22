@@ -104,6 +104,42 @@ RegisterNUICallback('refresh', function(_, cb)
 end)
 
 -- ══════════════════════════════════════════════════════════════
+-- App SDK relays
+-- ══════════════════════════════════════════════════════════════
+-- A third-party app talks to its OWN server code and nothing else. The full callback
+-- and event names are composed here from the app id the phone supplies, so a page has
+-- no way to spell `v-banking:withdraw` even if it tries: the id never comes from the
+-- page's payload.
+local function sdkApp(data)
+    local app = tostring((data and data.app) or ''):gsub('[^%w_-]', '')
+    if app == '' then return nil end
+    return app
+end
+
+RegisterNUICallback('sdkRequest', function(data, cb)
+    local app = sdkApp(data)
+    local method = tostring((data and data.method) or ''):gsub('[^%w_-]', '')
+    if not app or method == '' then cb({ error = 'forbidden' }) return end
+    V.Request(app .. ':' .. method, function(res) cb(res == nil and { ok = true } or res) end, data.payload)
+end)
+
+RegisterNUICallback('sdkEmit', function(data, cb)
+    local app = sdkApp(data)
+    local event = tostring((data and data.event) or ''):gsub('[^%w_-]', '')
+    if not app or event == '' then cb({ error = 'forbidden' }) return end
+    TriggerServerEvent(app .. ':' .. event, data.payload)
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('sdkStorage', function(data, cb)
+    local app = sdkApp(data)
+    if not app then cb({ error = 'forbidden' }) return end
+    V.Request('v-phone:storage', function(res) cb(res or { error = 'x' }) end, {
+        app = app, op = data.op, key = data.key, value = data.value,
+    })
+end)
+
+-- ══════════════════════════════════════════════════════════════
 -- Calls
 -- ══════════════════════════════════════════════════════════════
 -- The audio is v-voice's; these four handlers only start and stop it at the right moments.

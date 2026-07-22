@@ -128,6 +128,10 @@ end
 --- The same bet the module registry made: a script ships its own app without touching
 --- v-phone. `page` is a URL the phone iframes; a Lua-only app just omits it and handles
 --- its own NUI when opened.
+-- Forward declaration: `local function` is only in scope AFTER its definition, and the
+-- RegisterApp export below is written before it.
+local loadWorldApps
+
 local function registerApp(id, info, owner)
     id = tostring(id or '')
     if id == '' then return false end
@@ -138,19 +142,32 @@ local function registerApp(id, info, owner)
         page  = info.page,
         owner = owner or info.owner,
         slot  = num(info.slot, 99),
+        -- Four apps sit in the dock rather than the paging grid: the ones a player
+        -- reaches for without thinking should not move when the page does.
+        dock  = info.dock == true,
     }
     return true
 end
 
 exports('RegisterApp', function(id, info)
-    return registerApp(id, info or {}, GetInvokingResource())
+    info = info or {}
+    local ok = registerApp(id, info, GetInvokingResource())
+    -- Give the operator a row to edit. Without one, a third-party app is visible but
+    -- ungovernable: to disable or gate it they would have to guess its id and create the
+    -- row by hand. INSERT IGNORE, so an operator's existing edits are never overwritten.
+    if ok and GetResourceState('v-world') == 'started' and exports['v-world']:IsReady() then
+        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
+            VALUES (?,?,?,1)]], { tostring(id), tostring(info.label or id), num(info.slot, 99) })
+        loadWorldApps()
+    end
+    return ok
 end)
 
 exports('UnregisterApp', function(id) Apps[tostring(id or '')] = nil end)
 
 -- v-world owns the table; asking it rather than reading `world_apps` here keeps one
 -- module responsible for the content layer, which is the whole point of having one.
-local function loadWorldApps()
+function loadWorldApps()  -- assigns the forward-declared local above
     WorldApps = {}
     if GetResourceState('v-world') ~= 'started' then return end
     for _, r in ipairs(V.Use('v-world').GetPhoneApps() or {}) do WorldApps[r.id] = r end
@@ -177,7 +194,7 @@ local function appsFor(src, p)
 
         if ok then
             out[#out + 1] = {
-                id = id, label = a.label, icon = a.icon, page = a.page,
+                id = id, label = a.label, icon = a.icon, page = a.page, dock = a.dock or nil,
                 slot = (w and num(w.slot, a.slot)) or a.slot,
             }
         end
@@ -487,6 +504,44 @@ V.Callback('v-phone:jobs', function(src, resolve)
     })
 end)
 
+--- Per app, per character. An app that wants to remember something needs no table, no
+--- migration and no server file: it calls Phone.storage.set and the value is here next
+--- session. Values are stored as text; anything structured is the app's own JSON,
+--- because guessing at a schema for somebody else's data helps nobody.
+V.Callback('v-phone:storage', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or ''):gsub('[^%w_-]', ''):sub(1, 40)
+    if app == '' then resolve({ error = 'forbidden' }) return end
+    local op = tostring((data and data.op) or 'get')
+
+    if op == 'all' then
+        local out = {}
+        for _, r in ipairs(MySQL.query.await(
+            'SELECT k, v FROM phone_app_data WHERE citizenid = ? AND app = ?',
+            { p.citizenid, app }) or {}) do out[r.k] = r.v end
+        resolve({ ok = true, values = out })
+        return
+    end
+
+    local key = tostring((data and data.key) or ''):sub(1, 60)
+    if key == '' then resolve({ error = 'key' }) return end
+
+    if op == 'set' then
+        local value = data.value
+        if type(value) == 'table' then value = json.encode(value) end
+        value = tostring(value == nil and '' or value):sub(1, 4000)
+        MySQL.query.await([[INSERT INTO phone_app_data (citizenid, app, k, v) VALUES (?,?,?,?)
+            ON DUPLICATE KEY UPDATE v = VALUES(v)]], { p.citizenid, app, key, value })
+        resolve({ ok = true })
+        return
+    end
+
+    resolve({ ok = true, value = MySQL.scalar.await(
+        'SELECT v FROM phone_app_data WHERE citizenid = ? AND app = ? AND k = ?',
+        { p.citizenid, app, key }) })
+end)
+
 V.Callback('v-phone:call', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -572,6 +627,14 @@ CreateThread(function()
         KEY `to_cid` (`to_cid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_app_data` (
+        `citizenid` VARCHAR(16) NOT NULL,
+        `app`       VARCHAR(40) NOT NULL,
+        `k`         VARCHAR(60) NOT NULL,
+        `v`         TEXT,
+        PRIMARY KEY (`citizenid`, `app`, `k`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- The number lives on the character, not in a table of its own: it identifies the
     -- character the same way their name does. Added idempotently so an existing database
     -- upgrades without a migration step nobody would run.
@@ -590,6 +653,15 @@ CreateThread(function()
     while not exports['v-world']:IsReady() and tries < 150 do Wait(100); tries = tries + 1 end
     if exports['v-world']:IsReady() then
         exports['v-world']:SeedApps(Config.Apps)
+    end
+    loadWorldApps()
+
+    -- Any app that registered before v-world was ready still needs its editor row.
+    for id, a in pairs(Apps) do
+        if not WorldApps[id] then
+            MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
+                VALUES (?,?,?,1)]], { id, a.label or id, a.slot or 99 })
+        end
     end
     loadWorldApps()
 
