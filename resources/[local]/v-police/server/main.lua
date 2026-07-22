@@ -87,6 +87,7 @@ V.Callback('v-police:cuff', function(src, resolve, data)
     setCuffed(target, on)
     if not on then Escort[target] = nil; TriggerClientEvent('v-police:client:escort', target, nil) end
 
+    V.Use('v-3dsound').PlayFromPlayer(target, 'cuff')
     Core.Notify(target, L(target, on and 'pol.you_cuffed' or 'pol.you_uncuffed'), on and 'error' or 'success')
     Core.Log('police', ('%s %s player %d'):format(copJob(src) or '?', on and 'cuffed' or 'uncuffed', target),
         { by = src })

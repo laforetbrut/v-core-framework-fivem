@@ -44,6 +44,7 @@ Core.RegisterCallback('v-banking:withdraw', function(source, resolve, amount)
     if maxW > 0 and amount > maxW then resolve({ error = 'maxwithdraw', limit = maxW }) return end
     if not p.RemoveMoney('bank', amount, 'bank-withdraw') then resolve({ error = 'funds' }) return end
     p.AddMoney('cash', amount, 'bank-withdraw')
+    V.Use('v-3dsound').PlayFor(src, 'money')
     recordTx(p.citizenid, 'withdraw', amount, p.money.bank, nil)
     Core.Log('bank', ('%s withdraw %d'):format(p.citizenid, amount), nil, p.citizenid)
     resolve(state(p))

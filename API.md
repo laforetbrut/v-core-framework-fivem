@@ -255,6 +255,14 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
 exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
+-- v-3dsound (server) - the wire carries a name and a place, never audio
+exports['v-3dsound']:Play(name, coords, opts)        -- a world position
+exports['v-3dsound']:PlayFromPlayer(src, name, opts) -- position taken from the ped, not a payload
+exports['v-3dsound']:PlayOnEntity(entity, name, opts)-- follows a moving vehicle
+exports['v-3dsound']:PlayFor(src, name, opts)        -- one person, not positional
+exports['v-3dsound']:GetBank() / Has(name)
+-- opts = { range, volume }; the bank lives in v-3dsound/config.lua
+
 -- v-anticheat (server)
 exports['v-anticheat']:Expect(src, kind, seconds)  -- declare an action a detector would flag
 exports['v-anticheat']:Flag(src, kind, detail)     -- report something your module caught

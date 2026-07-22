@@ -161,6 +161,7 @@ V.Callback('v-drugs:plant', function(src, resolve, data)
     local id = MySQL.insert.await([[INSERT INTO drug_plants (citizenid, drug, x, y, z, health)
         VALUES (?,?,?,?,?,100)]], { p.citizenid, key, coords.x, coords.y, coords.z - 0.9 })
     refreshPlant(id)
+    V.Use('v-3dsound').PlayFromPlayer(src, 'dig')
     Core.Log('drugs', ('%s planted %s'):format(p.citizenid, key), nil, p.citizenid)
     resolve({ ok = true })
 end)
@@ -212,6 +213,7 @@ V.Callback('v-drugs:harvest', function(src, resolve, data)
     end
 
     MySQL.query.await('DELETE FROM drug_plants WHERE id = ?', { row.id })
+    V.Use('v-3dsound').PlayFromPlayer(src, 'dig')
     Plants[row.id] = nil
     pushPlants()
 
