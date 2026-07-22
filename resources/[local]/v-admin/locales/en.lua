@@ -180,6 +180,10 @@ local T = {
     ['adm.veh_import']      = 'Import selected',
     ['adm.veh_scan_more']   = 'and more:',
     ['adm.veh_scan_hint']   = 'Finds every model this client can spawn, including addon packs.',
+    ['adm.ed_showmore']     = 'Show more',
+    ['adm.grp_world']       = 'World',
+    ['adm.grp_economy']     = 'Economy',
+    ['adm.grp_people']      = 'People',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }

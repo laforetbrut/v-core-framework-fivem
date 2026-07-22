@@ -180,6 +180,10 @@ local T = {
     ['adm.veh_import']      = 'Importer la sélection',
     ['adm.veh_scan_more']   = 'et encore :',
     ['adm.veh_scan_hint']   = 'Trouve tous les modèles que ce client peut faire apparaître, packs addon compris.',
+    ['adm.ed_showmore']     = 'Afficher plus',
+    ['adm.grp_world']       = 'Monde',
+    ['adm.grp_economy']     = 'Économie',
+    ['adm.grp_people']      = 'Personnes',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

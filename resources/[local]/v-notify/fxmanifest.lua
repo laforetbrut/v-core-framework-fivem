@@ -21,3 +21,6 @@ files {
     'html/style.css',
     'html/app.js',
 }
+
+-- registers this module's settings with v-core (see INTEGRATION.md)
+server_script 'server/settings.lua'

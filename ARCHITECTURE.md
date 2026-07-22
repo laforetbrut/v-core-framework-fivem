@@ -149,9 +149,16 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab — §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-Declared so far: `v-vehicles`, `v-garages`, `v-vehicleshop`, `v-fuel`, `v-mechanic`,
-`v-licenses`, `v-cityhall`. **Remaining:** every other module still keeps its tunables in
-`config.lua` — they work, but they are not yet operator-editable.
+**21 of 25 modules declare their settings** — every one that has a meaningful tunable.
+The four that do not (`v-ui`, `v-loadscreen`, `v-world`, `v-admin`) are infrastructure with
+nothing an operator would sensibly change at runtime; `v-core` itself is listed so an
+operator sees it running.
+
+A caveat worth stating: a declared setting is only real if something **reads** it. The
+first sweep declared five multipliers (`v-shops` buy/sell, `v-crafting` duration,
+`v-gathering` yield, `v-clothing` price) and a salary multiplier that nothing consumed —
+they have since been wired into their actual code paths. A setting that does nothing is
+worse than no setting: it lies to the operator.
 
 ---
 
@@ -804,6 +811,15 @@ then fails. Hires at grade 0 only. Both actions are audit-logged. fr+en.
 civic paperwork — the desk only does jobs today.
 
 ### `v-admin` ✅ — management panel (F10)
+**Performance.** The panel grew to 8 rail tabs, 13 editor domains and a settings registry,
+and four things scaled badly: every keystroke in a search box rebuilt the whole list
+synchronously; rows were appended one at a time (one reflow each); saving one setting
+refetched the entire registry; and the editor truncated at 300 rows **silently**, which
+reads as "that is everything". All four are fixed — searches are debounced (140 ms), lists
+paint through a `DocumentFragment`, a saved setting is patched in place (one round trip
+instead of two), and the list pages at 200 with an explicit **"show more (N)"**. The editor
+subtabs are grouped **World / Economy / People** rather than 13 buttons in one wrapping row.
+
 **Done.** Permission-gated NUI. **Dashboard** (uptime, players, resources, characters). **Players**
 (searchable roster; goto / bring / heal / freeze / kick with reason / give money / give item /
 set permission — superadmin only). **Scripts** (state of every module, restart / stop / start,

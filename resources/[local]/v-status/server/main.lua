@@ -147,3 +147,55 @@ RegisterCommand('status', function(source, args)
     elseif key == 'sick' then exports['v-status']:SetSick(source, value)
     else setNeed(source, key, value) end
 end, false)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-status', {
+        label = 'Survival needs', category = 'gameplay',
+        settings = {
+
+            { key = 'hungerDrain', label = 'Hunger drain per tick',  type = 'number', default = Config.Drain.hunger, min = 0, max = 25 },
+            { key = 'thirstDrain', label = 'Thirst drain per tick',  type = 'number', default = Config.Drain.thirst, min = 0, max = 25 },
+            { key = 'needsTick',   label = 'Needs tick (seconds)',   type = 'number', default = Config.NeedsTick / 1000, min = 5, max = 600, step = 1 },
+            { key = 'starveDamage',label = 'Damage at 0 need',       type = 'number', default = Config.StarveDamage, min = 0, max = 50, step = 1 },
+            { key = 'floorHealth', label = 'Needs never kill below', type = 'number', default = Config.NeedsFloorHealth, min = 101, max = 200, step = 1 },
+            { key = 'bleedTick',   label = 'Bleed tick (seconds)',   type = 'number', default = Config.BleedTick / 1000, min = 5, max = 300, step = 1 },
+            { key = 'sickTick',    label = 'Illness tick (seconds)', type = 'number', default = Config.SickTick / 1000, min = 5, max = 600, step = 1 },
+            { key = 'stressBlur',  label = 'Stress blur from (%)',   type = 'number', default = Config.StressBlurFrom, min = 0, max = 100, step = 1 },
+            { key = 'stressShake', label = 'Stress shake from (%)',  type = 'number', default = Config.StressShakeFrom, min = 0, max = 100, step = 1 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-status', key, fallback) end
+
+local function applySettings()
+
+    Config.Drain.hunger      = S('hungerDrain', Config.Drain.hunger)
+    Config.Drain.thirst      = S('thirstDrain', Config.Drain.thirst)
+    Config.NeedsTick         = math.floor(S('needsTick', Config.NeedsTick / 1000) * 1000)
+    Config.StarveDamage      = S('starveDamage', Config.StarveDamage)
+    Config.NeedsFloorHealth  = S('floorHealth', Config.NeedsFloorHealth)
+    Config.BleedTick         = math.floor(S('bleedTick', Config.BleedTick / 1000) * 1000)
+    Config.SickTick          = math.floor(S('sickTick', Config.SickTick / 1000) * 1000)
+    Config.StressBlurFrom    = S('stressBlur', Config.StressBlurFrom)
+    Config.StressShakeFrom   = S('stressShake', Config.StressShakeFrom)
+    TriggerClientEvent('v-status:client:tunables', -1, {
+        stressBlur = Config.StressBlurFrom, stressShake = Config.StressShakeFrom,
+    })
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-status' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
+end)

@@ -88,18 +88,20 @@ exports('GetGradeLabel', function(name, grade) local g = gradeDef(name, grade); 
 
 -- ── Salary loop ────────────────────────────────────────────────
 CreateThread(function()
-    local interval = (Config.PayInterval or 10) * 60000
     while true do
-        Wait(interval)
+        -- read the interval EVERY loop: it is admin-tunable, and caching it here meant a
+        -- change only took effect after a restart
+        Wait(math.max(1, (Config.PayInterval or 10)) * 60000)
         local account = Config.PayAccount or 'bank'
         for _, sid in ipairs(GetPlayers()) do
             local src = tonumber(sid)
             local p = src and Core.GetPlayer(src)
             if p and p.job and isOnDuty(src) then
                 local g = gradeDef(p.job.name, p.job.grade)
-                if g and (g.salary or 0) > 0 then
-                    p.AddMoney(account, g.salary, 'salary')
-                    Core.Notify(src, LP(src, 'jobs.paid', g.salary), 'success')
+                local pay = math.floor((g and g.salary or 0) * (Config.SalaryMult or 1.0))
+                if pay > 0 then
+                    p.AddMoney(account, pay, 'salary')
+                    Core.Notify(src, LP(src, 'jobs.paid', pay), 'success')
                 end
             end
         end
@@ -127,3 +129,40 @@ RegisterCommand('setjob', function(source, args)
 end, false)
 
 AddEventHandler('playerDropped', function() Duty[source] = nil end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-jobs', {
+        label = 'Jobs & salaries', category = 'civic',
+        settings = {
+
+            { key = 'payInterval', label = 'Pay every (minutes)', type = 'number', default = Config.PayInterval, min = 1, max = 240, step = 1 },
+            { key = 'payAccount',  label = 'Paid into',          type = 'select', default = Config.PayAccount, options = { 'bank', 'cash' } },
+            { key = 'salaryMult',  label = 'Salary multiplier',  type = 'number', default = 1.0, min = 0, max = 10 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-jobs', key, fallback) end
+
+local function applySettings()
+
+    Config.PayInterval = S('payInterval', Config.PayInterval)
+    Config.PayAccount  = S('payAccount', Config.PayAccount)
+    Config.SalaryMult  = S('salaryMult', 1.0)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-jobs' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
+end)

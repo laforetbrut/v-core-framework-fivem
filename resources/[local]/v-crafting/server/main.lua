@@ -92,7 +92,11 @@ local function recipesFor(source, stationId)
             table.sort(inputs, function(a, b) return a.item < b.item end)
             local d = defOf(r.output)
             out[#out + 1] = { idx = i, output = r.output, label = d.label, image = d.image,
-                category = d.category, rarity = d.rarity, count = r.count, time = r.time, inputs = inputs }
+                category = d.category, rarity = d.rarity, count = r.count,
+                -- the client's progress bar is driven by this, so the multiplier has to be
+                -- applied where the recipe is SENT, not only where the cooldown is derived
+                time = math.max(200, math.floor((r.time or 3000) * (Config.TimeMult or 1.0))),
+                inputs = inputs }
         end
     end
     return out
@@ -145,7 +149,8 @@ Core.RegisterCallback('v-crafting:craft', function(source, resolve, data)
     end
     -- Enforce the recipe's OWN craft time server-side (the progress bar is client-side
     -- and bypassable) plus the flat floor, so a scripted client can't craft instantly.
-    local minGap = math.max(Config.Cooldown or 1, math.ceil((recipe.time or 0) / 1000))
+    local minGap = math.max(Config.Cooldown or 1,
+        math.ceil(((recipe.time or 0) * (Config.TimeMult or 1.0)) / 1000))
     if os.time() - (LastAt[source] or 0) < minGap then resolve({ error = 'cooldown' }); return end
 
     Busy[source] = true
@@ -187,4 +192,41 @@ end)
 AddEventHandler('playerDropped', function()
     local src = source
     Busy[src] = nil; LastAt[src] = nil
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Admin-tunable settings (v-core module registry)
+-- ══════════════════════════════════════════════════════════════════
+-- Declared to v-core, which stores the values and serves them to the admin panel.
+-- Applied back onto Config so the existing code paths see an operator's change without
+-- a restart. See INTEGRATION.md.
+local function declareSettings()
+    Core.RegisterModule('v-crafting', {
+        label = 'Crafting', category = 'economy',
+        settings = {
+
+            { key = 'distance', label = 'Bench range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
+            { key = 'cooldown', label = 'Craft cooldown (s)',     type = 'number', default = Config.Cooldown, min = 0, max = 60 },
+            { key = 'timeMult', label = 'Craft duration multiplier', type = 'number', default = 1.0, min = 0.1, max = 5 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-crafting', key, fallback) end
+
+local function applySettings()
+
+    Config.Distance = S('distance', Config.Distance)
+    Config.Cooldown = S('cooldown', Config.Cooldown)
+    Config.TimeMult = S('timeMult', 1.0)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-crafting' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2600)          -- let v-core's registry come up first
+    declareSettings()
+    applySettings()
 end)

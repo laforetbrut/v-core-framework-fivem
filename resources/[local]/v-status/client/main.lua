@@ -82,3 +82,10 @@ CreateThread(function()
         end
     end
 end)
+
+-- An admin changed a threshold: the client owns the visual effects, so it needs the value.
+RegisterNetEvent('v-status:client:tunables', function(t)
+    if type(t) ~= 'table' then return end
+    Config.StressBlurFrom  = tonumber(t.stressBlur) or Config.StressBlurFrom
+    Config.StressShakeFrom = tonumber(t.stressShake) or Config.StressShakeFrom
+end)
