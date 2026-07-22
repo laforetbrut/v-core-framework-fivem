@@ -1281,7 +1281,7 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-phone` | high | iFruit phone NUI - a primary interaction surface. Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
+| `v-phone` | high | **iFruitz** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
 | `v-radio` | high | The handheld radio **device**: multi-channel listening, presets, per-channel volume. The transport is `v-voice`; this is the thing in your hand. |
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
@@ -1290,6 +1290,61 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 | `v-music` | medium | Boomboxes, jukeboxes and vehicle radio, positional through `v-3dsound`. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
+
+#### `v-phone` - iFruitz, the primary interaction surface
+
+The framework has **no player chat commands** by design, which makes the phone the surface
+most of the game is actually played through. It is also the module most likely to go wrong
+in one specific way, so the rule comes first.
+
+**The phone is a shell, not a feature.** Every app is a thin view over a module that
+already owns its data. A bank app calls `v-banking`; it does not keep a balance. A garage
+app calls `v-garages`; it does not know what a vehicle state is. The moment an app holds
+its own copy of anything, there are two sources of truth and one of them is wrong.
+
+**Look:** iPhone-inspired - a lock screen, a home grid, app switching, notification
+banners, a status bar - branded **iFruitz**, riffing on GTA's own iFruit. The chrome is the
+phone's; the **accent, panel and radius come from `v-ui`**, so a server that themes the
+framework purple gets a purple phone rather than an orange rectangle in a purple world.
+
+**Identity:** a phone number is a column on the character, unique and minted server-side in
+a configurable format. Numbers are how contacts, calls and messages address each other -
+never the citizen id, which is a database key a player should not be trading.
+
+**Apps, and what each one is a view of:**
+
+| App | Owned by | Notes |
+|---|---|---|
+| Phone | `v-voice` | Calls are `PhoneCallStart` / `PhoneCallEnd`. The phone does **no audio**. |
+| Messages | `v-phone` | The one thing it does own. Persisted server-side; a client is never sent a conversation it is not in. |
+| Contacts | `v-phone` | Per character, name plus number. |
+| Bank | `v-banking` | Balance, transfers, history - the existing callbacks. |
+| Garage | `v-garages` / `v-vehicles` | Where a car is, not how to spawn one. |
+| Wallet | `v-licenses` | ID, driving, weapon permits - read only. |
+| Jobs | `v-cityhall` / `v-jobs` | Open positions, resign. |
+| Faction | `v-factions` / `v-bossmenu` | Members and treasury, gated on the same rank. |
+| Contacts (illegal) | `v-drugs` / `v-gangs` | Unlocked by knowing somebody, not by an app store. |
+| Camera | `v-phone` | Screenshot to a gallery; **an upload target is an operator decision**, so it is a setting with no default. |
+| Settings | `v-phone` | Wallpaper, ringtone, do-not-disturb. |
+
+**Third parties get an app registry**, the same bet the module registry made:
+`RegisterApp(name, { label, icon, page })` and a script ships its own app without touching
+v-phone. An app that is not installed is not on the home screen, and installation is an
+admin domain like every other content list.
+
+**Server-authoritative in the two places it matters:** a message is stored and relayed by
+the server (a client that could write another player's history could forge it), and a call
+is routed by the server, so ringing somebody does not depend on the caller knowing where
+they are.
+
+**Admin surface:** which apps exist and which are enabled, the number format, message
+retention, whether the camera can upload and where, and per-app job or gang gating - a
+`v-world` domain, edited like everything else.
+
+**The trap:** a phone is where a framework accidentally grows a second economy. Every
+transfer, every purchase and every job action goes through the module that owns it, so the
+audit log stays in one place and the anticheat keeps seeing the same events it already
+watches.
 
 #### `v-radio` - the device, not the transport
 
@@ -1420,7 +1475,11 @@ the part that needs balancing once players are on the server.
    existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
    reason to exist on the illegal side, and it needs the police module that now ships. Building
    housing first would mean shipping it twice.
-9. **`v-chat` whenever, but not as a shortcut.** It is small, and the temptation the moment it
+9. **`v-phone` after the modules it is a view of, which is now most of them.** Every app is a
+   shell over a module that already owns its data; building the phone first would mean each app
+   inventing its own copy and then unpicking it. Messages and contacts are the only thing it
+   owns outright.
+10. **`v-chat` whenever, but not as a shortcut.** It is small, and the temptation the moment it
    exists is to hang gameplay commands off it. The no-player-commands rule is what keeps the
    phone and the radial menu worth building.
 
