@@ -149,8 +149,8 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab - §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-**31 of 34 modules declare their settings** - every one that has a meaningful tunable.
-The three that do not (`v-loadscreen`, `v-world`, `v-admin`) are infrastructure with
+**32 of 34 modules declare their settings** - every one that has a meaningful tunable.
+The two that do not (`v-loadscreen`, `v-admin`) are infrastructure with
 nothing an operator would sensibly change at runtime; `v-core` itself is listed so an
 operator sees it running.
 
@@ -828,6 +828,29 @@ fuel/engine/body bars. fr+en.
 **Remaining.** No per-garage capacity, and no shared/gang garage listing (it lists *your* cars only).
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
+
+### `v-core` - world policy
+
+**World policy lives in the core** (`v-core/client/world.lua`). GTA's built-in police are
+the single biggest thing standing between a server and immersive roleplay: an NPC cruiser
+that spawns out of nowhere, a wanted star that paints the minimap red, a dispatch
+helicopter overhead - none of it is played by anyone, and all of it overrides whatever the
+actual police module was doing. **So it ships off**, and an operator turns back on only the
+pieces they want.
+
+`SetPoliceIgnorePlayer` alone is not enough - dispatch keeps running and keeps drawing
+blips - so the twelve police dispatch services are disabled too, while the two emergency
+ones (fire, ambulance) are a **separate** setting: a server can have NPC ambulances and no
+NPC police at all. The wanted **ceiling** is what stops a star appearing; clearing one
+after the fact still flashes the minimap, which is the immersion break being removed.
+
+Ambient traffic is the same idea: random cops, GTA's scripted street events, trains, boats
+and garbage trucks are each their own switch. Eight settings, applied live on every client.
+
+A module can suspend the policy for a scripted chase or a heist through
+`SetWorldPolicy` / `ClearWorldPolicy`; an override wins over the setting until cleared, and
+`GetWorldPolicy` reports the two separately so a forgotten override is visible rather than
+silently overruling the admin panel.
 
 ### `v-3dsound` ✅ - the positional sound primitive
 

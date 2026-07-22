@@ -65,6 +65,8 @@ in-game** - never by editing Lua on a live server.
 - **Module registry & settings** - every module declares its tunables to `v-core`; the admin panel's
   **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
   adds `v_module 'yes'` to its manifest and appears there too - see [DEVELOPERS.md](DEVELOPERS.md).
+- **NPC police off by default** - no ambient cruisers, no wanted stars, no dispatch helicopter, because
+  none of it is played by anyone. Every piece is its own switch in the admin panel.
 - **No player chat commands** - the interaction surface is the target eye, keybinds and NUI, by design.
 - **Bilingual out of the box** - every player-facing string exists in English and French; players pick
   their language on first join.
