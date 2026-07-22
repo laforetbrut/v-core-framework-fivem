@@ -117,6 +117,15 @@ function renderHome() {
   const items = layoutItems();
   paintPages(items);
   byId('dock').innerHTML = dockApps.map((a, i) => tileHTML(a, i)).join('');
+  // The dock lives outside #pages, so paintPages does not reach it - it needs its own
+  // click wiring or the four apps at the bottom stop opening (which they did).
+  [...byId('dock').querySelectorAll('.tile')].forEach((t) => {
+    t.addEventListener('click', () => {
+      if (editing) return;
+      const a = (state.apps || []).find((x) => x.id === t.dataset.app);
+      if (a) enterApp(a, t);
+    });
+  });
   byId('pages').style.transition = 'transform .34s cubic-bezier(.32,.72,0,1)';
 
   // Arrange mode survives a re-render: a drop stays in the jiggle until Done.
@@ -786,7 +795,12 @@ RENDER.contacts = () => {
     const c = (state.contacts || []).find((x) => String(x.id) === r.dataset.id);
     if (c) contactSheet(c);
   }));
-  body(searchHtml(L('ph.search_contacts')) + '<div id="clist"></div>');
+  body(searchHtml(L('ph.search_contacts')) +
+    UI.group([UI.row({ icon: 'airdrop', tint: '#0A84FF', title: L('ph.share_my_number'),
+      subtitle: state.number || '', chevron: true, data: { me: '1' } })]) +
+    '<div id="clist"></div>');
+  rows('.row', (r) => { if (r.dataset.me) r.addEventListener('click',
+    () => airdropShare('number', { name: '', number: state.number })); });
   draw('');
   onSearch(draw);
 };
@@ -799,6 +813,7 @@ function contactSheet(c) {
     UI.button(L('ph.save'), 'csave') +
     (isNew ? '' : UI.button(L('ph.call'), 'ccall', 'tinted')) +
     (isNew ? '' : UI.button(L('ph.message'), 'cmsg', 'plain')) +
+    (isNew ? '' : UI.button(L('ph.airdrop_share'), 'cshare', 'plain')) +
     (isNew ? '' : UI.button(L('ph.delete'), 'cdel', 'destructive')),
     () => {
       byId('csave').addEventListener('click', async () => {
@@ -808,6 +823,7 @@ function contactSheet(c) {
       });
       if (isNew) return;
       byId('ccall').addEventListener('click', () => { closeSheet(); post('call', { number: c.number }); });
+      byId('cshare').addEventListener('click', () => airdropShare('contact', { name: c.name, number: c.number }));
       byId('cmsg').addEventListener('click', () => { closeSheet(); openThread(c.number); });
       byId('cdel').addEventListener('click', async () => {
         await post('contactDelete', { id: c.id });
@@ -1775,16 +1791,21 @@ RENDER.reminders = async () => {
 // -- Camera -----------------------------------------------------
 // Real, and only as real as the operator made it: with no upload target configured there
 // is nowhere for a photo to go, and the app says so rather than pretending to save one.
+// Camera shoots. The last frame sits in the corner as a shortcut into the Gallery, the
+// way a real camera app does; everything else about a photo lives in the Gallery.
 RENDER.camera = async () => {
   if (!state.camera) { body(UI.empty(L('ph.camera_off'), 'camera')); return; }
   const d = await post('photos', { op: 'list' });
   const shots = (d && d.photos) || [];
+  const last = shots[0];
   body(
-    (shots.length
-      ? '<div class="shots">' + shots.map((u, i) =>
-          '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>'
-      : UI.empty(L('ph.no_photos'), 'camera')) +
-    '<button class="shutter" id="shoot" type="button"></button>'
+    '<div class="viewfinder"><div class="vfframe"></div>' +
+      '<div class="vfhint">' + esc(L('ph.vf_hint')) + '</div></div>' +
+    '<div class="camrow">' +
+      (last ? '<button class="camroll" id="camroll" type="button" style="background-image:url(' + esc(last) + ')"></button>'
+            : '<span class="camroll empty"></span>') +
+      '<button class="shutter" id="shoot" type="button"></button>' +
+      '<span class="camroll spacer"></span></div>'
   );
   byId('shoot').addEventListener('click', async () => {
     toast(L('ph.shooting'));
@@ -1792,26 +1813,97 @@ RENDER.camera = async () => {
     if (!res || res.error) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
     RENDER.camera();
   });
-  rows('.shot', (el) => el.addEventListener('click', () => {
-    const url = shots[Number(el.dataset.i)];
-    sheet(L('app.camera'),
-      '<img class="shotbig" src="' + esc(url) + '" />' +
-      UI.button(L('ph.set_wallpaper'), 'swall') +
-      UI.button(L('ph.delete'), 'sdel', 'destructive'),
-      () => {
-        byId('swall').addEventListener('click', async () => {
-          const r = await post('prefs', { wallpaperUrl: url });
-          closeSheet();
-          if (r && r.ok) { state.prefs = r.prefs; applyWallpaper(); toast(L('ph.wall_set')); }
-          else toast(L('ph.err_' + ((r && r.error) || 'x')));
-        });
-        byId('sdel').addEventListener('click', async () => {
-          await post('photos', { op: 'del', index: Number(el.dataset.i) + 1 });
-          closeSheet(); RENDER.camera();
-        });
-      });
-  }));
+  const roll = byId('camroll');
+  if (roll) roll.addEventListener('click', () => {
+    const a = (state.apps || []).find((x) => x.id === 'gallery');
+    if (a) enterApp(a, null); else photoSheet(shots, 0);
+  });
 };
+
+// The Gallery: every photo, tap to view, and from there set it as wallpaper, AirDrop it,
+// or delete it. Same store as the camera - one shoots, one keeps.
+RENDER.gallery = async () => {
+  const d = await post('photos', { op: 'list' });
+  const shots = (d && d.photos) || [];
+  if (!shots.length) { body(UI.empty(L('ph.no_photos'), 'images')); return; }
+  body('<div class="shots">' + shots.map((u, i) =>
+    '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>');
+  rows('.shot', (el) => el.addEventListener('click', () => photoSheet(shots, Number(el.dataset.i))));
+};
+
+function photoSheet(shots, i) {
+  const url = shots[i];
+  sheet(L('app.gallery'),
+    '<img class="shotbig" src="' + esc(url) + '" />' +
+    UI.button(L('ph.airdrop_share'), 'sshare', 'tinted') +
+    UI.button(L('ph.set_wallpaper'), 'swall') +
+    UI.button(L('ph.delete'), 'sdel', 'destructive'),
+    () => {
+      byId('sshare').addEventListener('click', () => airdropShare('photo', { url }));
+      byId('swall').addEventListener('click', async () => {
+        const r = await post('prefs', { wallpaperUrl: url });
+        closeSheet();
+        if (r && r.ok) { state.prefs = r.prefs; applyWallpaper(); toast(L('ph.wall_set')); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+      byId('sdel').addEventListener('click', async () => {
+        await post('photos', { op: 'del', index: i + 1 });
+        closeSheet();
+        if (openApp && openApp.id === 'gallery') RENDER.gallery(); else RENDER.camera();
+      });
+    });
+}
+
+// ══ AirDrop ════════════════════════════════════════════════════
+// Pick a nearby device and send. The scan and the send are both gated server-side on
+// Bluetooth and range, so this only ever draws what the server says is reachable.
+function airdropShare(kind, payload) {
+  sheet(L('ph.airdrop'),
+    '<div class="airhint">' + esc(L('ph.airdrop_hint')) + '</div><div id="airlist"></div>',
+    async () => {
+      byId('airlist').innerHTML = '<div class="airscan">' + esc(L('ph.airdrop_scanning')) + '</div>';
+      const r = await post('airdropScan');
+      const host = byId('airlist');
+      if (!host) return;
+      if (!r || r.error) { host.innerHTML = UI.empty(L('ph.airdrop_' + ((r && r.error) || 'x')), 'airdrop'); return; }
+      const devs = r.devices || [];
+      if (!devs.length) { host.innerHTML = UI.empty(L('ph.airdrop_none'), 'airdrop'); return; }
+      host.innerHTML = UI.group(devs.map((dv) => UI.row({
+        icon: 'airdrop', tint: '#0A84FF', title: dv.name, subtitle: L('ph.airdrop_nearby'),
+        chevron: true, data: { to: dv.id },
+      })));
+      [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+        const res = await post('airdropSend', { to: Number(el.dataset.to), kind, payload });
+        closeSheet();
+        toast(res && res.ok ? L('ph.airdrop_sent') : L('ph.airdrop_' + ((res && res.error) || 'x')));
+      }));
+    });
+}
+
+// The receiver's prompt. Nothing is written until they accept.
+function airdropOffer(o) {
+  o = o || {};
+  const preview = o.kind === 'photo'
+    ? '<img class="shotbig" src="' + esc(o.preview || '') + '" />'
+    : '<div class="airbig">' + svg(o.kind === 'photo' ? 'images' : 'contacts') + '<span>' + esc(o.preview || '') + '</span></div>';
+  sheet(L('ph.airdrop_incoming'),
+    preview +
+    '<div class="airfrom">' + esc(L('ph.airdrop_from')) + ' <b>' + esc(o.from || '') + '</b></div>' +
+    UI.button(L('ph.airdrop_accept'), 'airok', 'tinted') +
+    UI.button(L('ph.airdrop_decline'), 'airno', 'plain'),
+    () => {
+      byId('airok').addEventListener('click', async () => {
+        const r = await post('airdropRespond', { offerId: o.offerId, accept: true });
+        closeSheet();
+        if (r && r.ok) { await refresh(); toast(L('ph.airdrop_saved')); }
+        else toast(L('ph.airdrop_' + ((r && r.error) || 'x')));
+      });
+      byId('airno').addEventListener('click', async () => {
+        await post('airdropRespond', { offerId: o.offerId, accept: false });
+        closeSheet();
+      });
+    });
+}
 
 
 // ══ Clipboard ══════════════════════════════════════════════════
@@ -2485,6 +2577,11 @@ window.addEventListener('message', (e) => {
     applyPower(d.power);
   } else if (d.action === 'banner') {
     banner(d.banner || {});
+  } else if (d.action === 'airdrop') {
+    airdropOffer(d.offer || {});
+  } else if (d.action === 'airdropResult') {
+    const r = d.result || {};
+    toast(r.ok ? (L('ph.airdrop_took') + (r.name ? ' ' + r.name : '')) : L('ph.airdrop_declined'));
   }
 });
 

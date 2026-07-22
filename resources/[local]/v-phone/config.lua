@@ -81,17 +81,20 @@ Config.Apps = {
       category = 'utilities' },
     { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15,
       category = 'utilities' },
+    -- Camera shoots, Gallery keeps: the same photo store, two apps, as on a real phone.
+    { id = 'gallery',  label = 'app.gallery',  icon = 'images',   owner = 'v-phone',    slot = 16,
+      category = 'utilities' },
     -- The social apps ship as downloads. A network you joined is worth more than one you
     -- woke up already signed into.
-    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 16,
+    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 17,
       optional = true, category = 'social' },
-    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 17,
+    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 18,
       optional = true, category = 'social' },
-    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 18,
+    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 19,
       optional = true, category = 'social' },
-    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 19,
+    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 20,
       required = true, category = 'essentials' },
-    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20,
+    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 21,
       required = true, category = 'essentials' },
 }
 
@@ -129,6 +132,12 @@ Config.WallpaperFit = 'cover'
 -- on the other side; neither is worth making them live without.
 Config.DeviceSize = 1.0        -- 0.75 .. 1.15
 Config.DeviceSide = 'right'    -- right | left
+
+-- ── AirDrop ────────────────────────────────────────────────────
+-- Send a contact, your number or a photo to a nearby phone. Both ends must have
+-- Bluetooth on in the control centre, and be within range - the same two conditions the
+-- real thing needs to see a device at all.
+Config.Airdrop = { range = 12.0, offerTtl = 30 }
 
 -- ── Battery ────────────────────────────────────────────────────
 -- Eight real-world hours from full to flat, which is roughly what a phone does. The

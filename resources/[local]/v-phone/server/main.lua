@@ -980,6 +980,136 @@ V.Callback('v-phone:photo', function(src, resolve, data)
     resolve({ ok = true, photos = shots })
 end)
 
+-- ══════════════════════════════════════════════════════════════
+-- AirDrop
+-- Send a contact, a number or a photo to a nearby phone. Both ends need Bluetooth on and
+-- to be within range - the two conditions the real feature needs to see a device at all.
+-- Every offer is a handshake: the sender proposes, the receiver accepts, and only then
+-- does anything land. Nothing is written to a phone that did not say yes.
+-- ══════════════════════════════════════════════════════════════
+local AirOffers = {}     -- [offerId] = { from, to, kind, payload, at }
+local airSeq = 0
+
+local function btOn(pl)
+    if not pl then return false end
+    local m = pl.GetMetadata('phone')
+    return type(m) == 'table' and m.bluetooth == true
+end
+
+local function coordsOf(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return nil end
+    return GetEntityCoords(ped)
+end
+
+local function airRange()
+    return (Config.Airdrop and Config.Airdrop.range) or 12.0
+end
+
+-- Who this player could AirDrop to right now: online, Bluetooth on, and close enough.
+V.Callback('v-phone:airdropScan', function(src, resolve)
+    local me = Core.GetPlayer(src)
+    if not me then resolve(false) return end
+    if not btOn(me) then resolve({ error = 'bt' }) return end
+    local c0 = coordsOf(src)
+    if not c0 then resolve({ ok = true, devices = {} }) return end
+
+    local out = {}
+    for _, sid in ipairs(GetPlayers()) do
+        local tid = tonumber(sid)
+        if tid and tid ~= src then
+            local tp = Core.GetPlayer(tid)
+            if tp and btOn(tp) then
+                local c = coordsOf(tid)
+                if c and #(c0 - c) <= airRange() then
+                    out[#out + 1] = { id = tid, name = tp.name or 'iPhone' }
+                end
+            end
+        end
+    end
+    resolve({ ok = true, devices = out })
+end)
+
+-- Propose a transfer. Validated at BOTH ends: the receiver has to still be discoverable
+-- and in range, so a stale device list cannot push anything onto a phone that walked off.
+V.Callback('v-phone:airdropSend', function(src, resolve, data)
+    local me = Core.GetPlayer(src)
+    if not me then resolve(false) return end
+    if not btOn(me) then resolve({ error = 'bt' }) return end
+
+    local to = tonumber(data and data.to)
+    local tp = to and Core.GetPlayer(to)
+    if not tp or not btOn(tp) then resolve({ error = 'gone' }) return end
+
+    local c0, c1 = coordsOf(src), coordsOf(to)
+    if not c0 or not c1 or #(c0 - c1) > airRange() then resolve({ error = 'range' }) return end
+
+    local kind = tostring((data and data.kind) or '')
+    local pin = (data and data.payload) or {}
+    local payload
+    if kind == 'contact' or kind == 'number' then
+        payload = { name = tostring(pin.name or ''):sub(1, 40), number = tostring(pin.number or ''):sub(1, 20) }
+        if payload.number == '' then resolve({ error = 'x' }) return end
+    elseif kind == 'photo' then
+        payload = { url = tostring(pin.url or ''):sub(1, 400) }
+        if payload.url == '' then resolve({ error = 'x' }) return end
+    else
+        resolve({ error = 'x' }) return
+    end
+
+    airSeq = airSeq + 1
+    local offerId = airSeq
+    AirOffers[offerId] = { from = src, to = to, kind = kind, payload = payload, at = os.time() }
+
+    local preview = (kind == 'photo') and payload.url
+        or (payload.name ~= '' and (payload.name .. ' - ' .. payload.number) or payload.number)
+    TriggerClientEvent('v-phone:client:airdrop', to,
+        { offerId = offerId, from = me.name or 'iPhone', kind = kind, preview = preview })
+    resolve({ ok = true })
+end)
+
+-- Accept or decline. On accept the payload is applied to the RECEIVER, never the sender's
+-- word for it: a contact/number becomes a row in their book, a photo enters their gallery.
+V.Callback('v-phone:airdropRespond', function(src, resolve, data)
+    local id = tonumber(data and data.offerId)
+    local o = id and AirOffers[id]
+    if not o or o.to ~= src then resolve({ error = 'gone' }) return end
+    AirOffers[id] = nil
+
+    -- Expired offers are simply dropped.
+    if (os.time() - o.at) > ((Config.Airdrop and Config.Airdrop.offerTtl) or 30) then
+        resolve({ error = 'gone' }) return
+    end
+
+    if not (data and data.accept) then
+        if o.from and GetPlayerName(o.from) then
+            TriggerClientEvent('v-phone:client:airdropResult', o.from, { ok = false })
+        end
+        resolve({ ok = true, declined = true }) return
+    end
+
+    local rp = Core.GetPlayer(src)
+    if not rp then resolve(false) return end
+
+    if o.kind == 'photo' then
+        local shots = rp.GetMetadata('photos')
+        if type(shots) ~= 'table' then shots = {} end
+        table.insert(shots, 1, o.payload.url)
+        while #shots > 30 do table.remove(shots) end
+        rp.SetMetadata('photos', shots)
+    else
+        local nm = o.payload.name ~= '' and o.payload.name or o.payload.number
+        MySQL.insert.await(
+            'INSERT INTO phone_contacts (citizenid, name, number, favourite) VALUES (?, ?, ?, 0)',
+            { rp.citizenid, nm, o.payload.number })
+    end
+
+    if o.from and GetPlayerName(o.from) then
+        TriggerClientEvent('v-phone:client:airdropResult', o.from, { ok = true, name = rp.name or '' })
+    end
+    resolve({ ok = true })
+end)
+
 V.Callback('v-phone:install', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
