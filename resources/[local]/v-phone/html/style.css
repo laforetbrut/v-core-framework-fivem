@@ -186,9 +186,10 @@ input { font: inherit; }
 /* ══ Status bar & Dynamic Island ══════════════════════════════ */
 .status { position: absolute; top: 0; left: 0; right: 0; height: 54px; z-index: 40;
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 30px 0; font-family: var(--ios-num); font-size: 15px; font-weight: 600;
+  /* Both groups sit OUTSIDE the pill, which is what the padding is for. */
+  padding: 16px 20px 0; font-family: var(--ios-num); font-size: 15px; font-weight: 600;
   letter-spacing: .01em; pointer-events: none; }
-.status .sright { display: flex; align-items: center; gap: 6px; }
+.status .sright { display: flex; align-items: center; gap: 5px; }
 .status svg { width: 17px; height: 12px; }
 .battery { width: 25px; height: 12px; border-radius: 3.5px; position: relative;
   box-shadow: inset 0 0 0 1px var(--sb-dim, rgba(255,255,255,.4)); }
@@ -205,7 +206,9 @@ input { font: inherit; }
 /* The island: a pill, and it EXPANDS for a live activity (a call). That expansion
    is the single most recognisable thing about a modern iPhone. */
 .island { position: absolute; left: 50%; top: 13px; z-index: 45;
-  width: 124px; height: 36px; margin-left: -62px; border-radius: 22px;
+  /* 108, not 124: at 124 the pill was 35% of the screen and its right edge ran
+     6px under the signal bars. The hardware one is nearer 31%. */
+  width: 108px; height: 36px; margin-left: -54px; border-radius: 22px;
   background: #000; display: flex; align-items: center; justify-content: center;
   overflow: hidden; cursor: pointer;
   transition: width .44s var(--spring), height .44s var(--spring),
