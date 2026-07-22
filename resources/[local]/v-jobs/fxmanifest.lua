@@ -7,6 +7,10 @@ author 'vyrriox'
 description 'v-jobs — jobs, grades, duty & salaries; the source of truth for job-gated shops/stashes/benches (v-core module)'
 version '0.1.0'
 
+-- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+v_module 'yes'
+v_module_label 'Jobs'
+v_module_category 'civic'
 dependencies {
     'v-core',
 }

@@ -7,6 +7,10 @@ author 'vyrriox'
 description 'v-core — custom roleplay framework core'
 version '0.2.0'
 
+-- v-core is the registry itself, but it lists too so an operator sees it running.
+v_module 'yes'
+v_module_label 'Core'
+v_module_category 'other'
 shared_scripts {
     'config/config.lua',
     'locale/shared.lua',
@@ -29,6 +33,7 @@ server_scripts {
     'server/callbacks.lua',
     'server/permissions.lua',
     'server/logs.lua',
+    'server/modules.lua',   -- module registry + live settings (self-describing to v-admin)
     'server/player.lua',
     'server/main.lua',
 }

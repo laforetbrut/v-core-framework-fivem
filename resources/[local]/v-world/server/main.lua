@@ -407,6 +407,13 @@ CreateThread(function()
 end)
 
 exports('IsReady', function() return ready end)
+--- Reload one domain from outside v-world (a module that wrote to a v-world table
+--- itself — the vehicle scan importer, for instance — and needs the cache refreshed).
+exports('RefreshDomain', function(domain)
+    if not ready then return false end
+    reload(domain); broadcast(domain)
+    return true
+end)
 exports('GetBlips', function() return Blips end)
 exports('GetShopLocations', function() return ShopLocs end)
 exports('GetJobs', function() return Jobs end)

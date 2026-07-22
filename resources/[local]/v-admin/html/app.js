@@ -39,6 +39,8 @@ async function loadTab() {
     renderCoords();
   } else if (curTab === 'editor') {
     loadEditor();
+  } else if (curTab === 'settings') {
+    loadSettings();
   } else if (curTab === 'res') {
     const res = await post('resources');
     renderResources(Array.isArray(res) ? res : []);
@@ -159,6 +161,94 @@ async function renderScan() {
   };
 }
 
+// ── Settings ──
+// This renders whatever the server describes. It has no knowledge of any module's
+// settings, which is precisely what lets a third-party script appear here for free.
+let setData = null;
+
+async function loadSettings() {
+  const res = await post('settings');
+  setData = (res && res.modules) ? res : { modules: [] };
+  renderSettings();
+}
+
+function setInput(mod, s) {
+  const id = `st_${mod}_${s.key}`;
+  if (s.type === 'bool') {
+    return `<label class="swrap"><input type="checkbox" id="${id}"${s.value ? ' checked' : ''} /></label>`;
+  }
+  if (s.type === 'select') {
+    return `<select id="${id}">` + (s.options || []).map(o =>
+      `<option value="${esc(o)}"${o === s.value ? ' selected' : ''}>${esc(o)}</option>`).join('') + `</select>`;
+  }
+  if (s.type === 'color') return `<input type="color" id="${id}" value="${esc(s.value || '#ff7a1a')}" />`;
+  if (s.type === 'number') {
+    return `<input type="number" id="${id}" value="${esc(s.value)}"` +
+      (s.min !== undefined ? ` min="${s.min}"` : '') + (s.max !== undefined ? ` max="${s.max}"` : '') +
+      ` step="${s.step === 1 ? 1 : 'any'}" />`;
+  }
+  return `<input type="text" id="${id}" value="${esc(s.value ?? '')}" />`;
+}
+
+function renderSettings() {
+  const wrap = byId('setlist'); wrap.innerHTML = '';
+  const q = (byId('setsearch').value || '').trim().toLowerCase();
+  const mods = (setData && setData.modules) || [];
+  const shown = mods.filter(m => !q || m.label.toLowerCase().includes(q) || m.name.toLowerCase().includes(q)
+    || (m.settings || []).some(s => (s.label || '').toLowerCase().includes(q) || s.key.toLowerCase().includes(q)));
+  if (!shown.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.set_none'))}</div>`; return; }
+
+  shown.forEach((m, i) => {
+    const box = document.createElement('div');
+    box.className = 'setmod'; box.style.setProperty('--i', i);
+    const rows = (m.settings || []).filter(s => !q || (s.label || '').toLowerCase().includes(q)
+      || s.key.toLowerCase().includes(q) || m.label.toLowerCase().includes(q) || m.name.toLowerCase().includes(q));
+    box.innerHTML = `
+      <div class="sethead">
+        <span class="setname">${esc(m.label)}</span>
+        <span class="setcat">${esc(m.category)}</span>
+        <span class="setres">${esc(m.name)}</span>
+        <span class="setdot ${m.running ? 'on' : 'off'}"></span>
+      </div>
+      ${rows.length ? '' : `<div class="setempty">${esc(t(m.silent ? 'adm.set_silent' : 'adm.set_nokeys'))}</div>`}
+      <div class="setrows"></div>`;
+    const rowsBox = box.querySelector('.setrows');
+
+    rows.forEach(s => {
+      const r = document.createElement('div');
+      r.className = 'setrow' + (s.overridden ? ' over' : '');
+      r.innerHTML = `
+        <span class="setlbl">${esc(s.label)}${s.hint ? `<i>${esc(s.hint)}</i>` : ''}</span>
+        <span class="setval">${setInput(m.name, s)}</span>
+        <button class="mini setsave">${esc(t('adm.ed_save'))}</button>
+        <button class="mini setreset"${s.overridden ? '' : ' disabled'}>${esc(t('adm.set_reset'))}</button>`;
+
+      // one control per row: no need to escape a module name into a CSS selector
+      const el = r.querySelector('input, select');
+      r.querySelector('.setsave').onclick = async (e) => {
+        const b = e.currentTarget; b.disabled = true;
+        const value = s.type === 'bool' ? el.checked
+          : s.type === 'number' ? parseFloat(el.value)
+          : el.value;
+        const res = await post('setSetting', { module: m.name, key: s.key, value });
+        flash(b, !!(res && res.ok));
+        b.disabled = false;
+        if (res && res.ok) loadSettings();
+      };
+      r.querySelector('.setreset').onclick = async (e) => {
+        const b = e.currentTarget; b.disabled = true;
+        const res = await post('setSetting', { module: m.name, key: s.key, reset: true });
+        flash(b, !!(res && res.ok));
+        if (res && res.ok) loadSettings(); else b.disabled = false;
+      };
+      rowsBox.appendChild(r);
+    });
+    wrap.appendChild(box);
+  });
+}
+
+byId('setsearch').oninput = renderSettings;
+
 // ── Coordinates copy tool ──
 function copyText(txt) {
   try { navigator.clipboard.writeText(txt); return; } catch (e) {}
@@ -232,8 +322,80 @@ function edFilter(rows) {
   return rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
 }
 
+// The vehicle catalogue gets a scan bar: it enumerates every model this client can spawn
+// (base game + any addon pack) and offers the ones missing from the catalogue.
+let scanRows = null;
+
+function renderScanBar(wrap) {
+  const bar = document.createElement('div');
+  bar.className = 'scanbar';
+  bar.innerHTML = `
+    <span class="sblbl">${esc(t('adm.veh_scan_hint'))}</span>
+    <span class="spacer"></span>
+    <button class="mini" id="vs-run">${esc(t('adm.veh_scan'))}</button>
+    <button class="mini" id="vs-show"${scanRows ? '' : ' disabled'}>${esc(t('adm.veh_scan_review'))}${scanRows ? ' (' + scanRows.length + ')' : ''}</button>`;
+  wrap.appendChild(bar);
+
+  bar.querySelector('#vs-run').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    b.textContent = t('adm.veh_scanning');
+    await post('vehScan');
+    // the scan runs on this client and reports to the server; poll once it has had time
+    setTimeout(async () => {
+      const res = await post('vehScanList');
+      scanRows = (res && res.rows) || [];
+      b.disabled = false; b.textContent = t('adm.veh_scan');
+      renderEdList();
+    }, 4000);
+  };
+  bar.querySelector('#vs-show').onclick = () => { if (scanRows) renderScanReview(); };
+}
+
+function renderScanReview() {
+  const wrap = byId('ed-list'); wrap.innerHTML = '';
+  const back = document.createElement('div');
+  back.className = 'scanbar';
+  back.innerHTML = `<span class="sblbl">${esc(t('adm.veh_scan_found'))} ${scanRows.length}</span>
+    <span class="spacer"></span>
+    <button class="mini" id="vs-back">${esc(t('adm.cancel'))}</button>
+    <button class="mini accent" id="vs-import">${esc(t('adm.veh_import'))}</button>`;
+  wrap.appendChild(back);
+  back.querySelector('#vs-back').onclick = () => { renderEdList(); };
+  back.querySelector('#vs-import').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    const picked = [...wrap.querySelectorAll('.vs-row')]
+      .filter(r => r.querySelector('.vs-cb').checked)
+      .map(r => ({ model: r.dataset.model, cat: r.querySelector('.vs-cat').value,
+                   price: parseInt(r.querySelector('.vs-price').value, 10) || 0 }));
+    const res = await post('vehScanImport', { rows: picked });
+    flash(b, !!(res && res.ok));
+    if (res && res.ok) { scanRows = null; loadEditor(); }
+    else b.disabled = false;
+  };
+
+  scanRows.slice(0, 400).forEach((r, i) => {
+    const el = document.createElement('div');
+    el.className = 'edrow vs-row'; el.dataset.model = r.model; el.style.setProperty('--i', i);
+    el.innerHTML = `
+      <label class="vs-pick"><input type="checkbox" class="vs-cb" checked /></label>
+      <span class="edname">${esc(r.label)} <i class="dim">${esc(r.model)}${r.top ? ' · ' + r.top + ' km/h' : ''}${r.seats ? ' · ' + r.seats + 'p' : ''}</i></span>
+      <span class="edacts">
+        <select class="vs-cat">${(edData.cats || []).map(c => `<option value="${esc(c)}"${c === r.cat ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>
+        <input class="vs-price" type="number" value="${r.price}" />
+      </span>`;
+    wrap.appendChild(el);
+  });
+  if (scanRows.length > 400) {
+    const more = document.createElement('div');
+    more.className = 'empty-ed';
+    more.textContent = t('adm.veh_scan_more') + ' ' + (scanRows.length - 400);
+    wrap.appendChild(more);
+  }
+}
+
 function renderEdList() {
   const wrap = byId('ed-list'); wrap.innerHTML = '';
+  if (edDomain === 'vehcat') renderScanBar(wrap);
   const rows = edFilter(edData.rows || []);
   if (!rows.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.ed_empty'))}</div>`; return; }
   rows.slice(0, 300).forEach((r, i) => {

@@ -153,6 +153,8 @@ CreateThread(function()
         exports['v-world']:SeedGarages(Config.Garages)
     end
     rebuildGarages()
+    declareSettings()
+    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -164,3 +166,21 @@ RegisterNetEvent('v-garages:server:request', function()
 end)
 
 exports('GetGarages', function() return Garages end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-garages', {
+        label = 'Garages', category = 'vehicles',
+        settings = {
+            { key = 'distance', label = 'Interaction range (m)', type = 'number', default = Config.Distance, min = 1, max = 15 },
+        },
+    })
+end
+
+local function applySettings()
+    Config.Distance = Core.GetSetting('v-garages', 'distance', Config.Distance)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-garages' then applySettings() end
+end)

@@ -298,6 +298,8 @@ CreateThread(function()
         exports['v-world']:SeedLicenseTypes(seed)
     end
     rebuildTypes()
+    declareSettings()
+    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -306,4 +308,24 @@ end)
 
 RegisterNetEvent('v-licenses:server:request', function()
     TriggerClientEvent('v-licenses:client:types', source, Types)
+end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-licenses', {
+        label = 'Licences & permits', category = 'law',
+        settings = {
+            { key = 'pointLimit',  label = 'Points before suspension', type = 'number', default = Config.Points.limit, min = 1, max = 50, step = 1 },
+            { key = 'suspendDays', label = 'Suspension length (days)', type = 'number', default = Config.Points.suspendDays, min = 1, max = 365, step = 1 },
+        },
+    })
+end
+
+local function applySettings()
+    Config.Points.limit       = Core.GetSetting('v-licenses', 'pointLimit', Config.Points.limit)
+    Config.Points.suspendDays = Core.GetSetting('v-licenses', 'suspendDays', Config.Points.suspendDays)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-licenses' then applySettings() end
 end)

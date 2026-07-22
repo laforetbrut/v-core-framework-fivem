@@ -7,6 +7,10 @@ author 'vyrriox'
 description 'v-licenses — licences and permits: the single source of truth for "may this character do this" (v-core module)'
 version '0.1.0'
 
+-- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+v_module 'yes'
+v_module_label 'Licenses'
+v_module_category 'law'
 dependencies {
     'v-core',
     'v-world',

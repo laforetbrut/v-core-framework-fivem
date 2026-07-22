@@ -214,6 +214,8 @@ CreateThread(function()
         exports['v-world']:SeedStations(Config.Stations)
     end
     rebuildStations()
+    declareSettings()
+    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -231,3 +233,52 @@ exports('GetTypes', function() return Config.Types end)
 -- v-mechanic mirrors this list to pick the electric part set for a vehicle row
 -- (server-side there is no entity to ask, only the stored model name).
 exports('GetElectricModels', function() return Config.ElectricModels end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+-- Declared to v-core, which stores them and serves them to the admin panel. Read them
+-- through S() so an operator's change takes effect without a restart.
+local function declareSettings()
+    Core.RegisterModule('v-fuel', {
+        label = 'Fuel & charging', category = 'vehicles',
+        settings = {
+            { key = 'baseDrain',   label = 'Base drain per minute (%)', type = 'number', default = Config.BaseDrain, min = 0, max = 20 },
+            { key = 'idleDrain',   label = 'Idle drain per minute (%)', type = 'number', default = Config.IdleDrain, min = 0, max = 10 },
+            { key = 'flowRate',    label = 'Pump flow (L/s)',           type = 'number', default = Config.FlowRate, min = 0.2, max = 20 },
+            { key = 'priceRegular',label = 'Price: regular ($/L)',      type = 'number', default = Config.Types.regular.price, min = 0, max = 50 },
+            { key = 'pricePremium',label = 'Price: premium ($/L)',      type = 'number', default = Config.Types.premium.price, min = 0, max = 50 },
+            { key = 'priceDiesel', label = 'Price: diesel ($/L)',       type = 'number', default = Config.Types.diesel.price, min = 0, max = 50 },
+            { key = 'priceElectric', label = 'Price: electric ($/kWh)', type = 'number', default = Config.Types.electric.price, min = 0, max = 50 },
+            { key = 'jerryCost',   label = 'Jerry can fill ($/L)',      type = 'number', default = Config.JerryCan.fillCost, min = 0, max = 50 },
+            { key = 'taperFrom',   label = 'EV taper starts at (%)',    type = 'number', default = Config.EV.taperFrom, min = 30, max = 100, step = 1 },
+            { key = 'regen',       label = 'EV regenerative braking',   type = 'bool',   default = Config.EV.regen.enabled },
+        },
+    })
+end
+
+--- Live read of a setting, with the config value as the floor.
+local function S(key, fallback) return Core.GetSetting('v-fuel', key, fallback) end
+
+--- Apply the tunables back onto the shared Config so the existing code paths (and the
+--- client, which reads Config) see the operator's values.
+local function applySettings()
+    Config.BaseDrain = S('baseDrain', Config.BaseDrain)
+    Config.IdleDrain = S('idleDrain', Config.IdleDrain)
+    Config.FlowRate  = S('flowRate', Config.FlowRate)
+    Config.Types.regular.price  = S('priceRegular', Config.Types.regular.price)
+    Config.Types.premium.price  = S('pricePremium', Config.Types.premium.price)
+    Config.Types.diesel.price   = S('priceDiesel', Config.Types.diesel.price)
+    Config.Types.electric.price = S('priceElectric', Config.Types.electric.price)
+    Config.JerryCan.fillCost    = S('jerryCost', Config.JerryCan.fillCost)
+    Config.EV.taperFrom         = S('taperFrom', Config.EV.taperFrom)
+    Config.EV.regen.enabled     = S('regen', Config.EV.regen.enabled)
+    -- the client owns consumption, so push the drain figures to it
+    TriggerClientEvent('v-fuel:client:tunables', -1, {
+        baseDrain = Config.BaseDrain, idleDrain = Config.IdleDrain,
+        flowRate = Config.FlowRate, taperFrom = Config.EV.taperFrom,
+        regen = Config.EV.regen.enabled,
+    })
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-fuel' then applySettings() end
+end)

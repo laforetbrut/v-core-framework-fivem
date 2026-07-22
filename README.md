@@ -25,7 +25,12 @@ in-game** — never by editing Lua on a live server.
 - **`v-ui` "EMBER" design system** — one canonical `theme.css` (dark glass, dominant orange) that all 13
   NUI pages share, so nothing looks bolted on.
 - **In-game content editor** — the admin panel creates, edits and deletes **map blips, store locations,
-  jobs & grades, items and craft recipes**, backed by `v-world`. Changes apply **live**, no restart.
+  jobs & grades, items, craft recipes, clothing stores & wearable slots, garages, fuel stations,
+  mechanic shops, dealerships, the vehicle catalogue and licence types**, backed by `v-world`.
+  Changes apply **live**, no restart.
+- **Module registry & settings** — every module declares its tunables to `v-core`; the admin panel's
+  **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
+  adds `v_module 'yes'` to its manifest and appears there too — see [INTEGRATION.md](INTEGRATION.md).
 - **No player chat commands** — the interaction surface is the target eye, keybinds and NUI, by design.
 - **Bilingual out of the box** — every player-facing string exists in English and French; players pick
   their language on first join.
@@ -147,8 +152,12 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
   log d'audit structuré, sélection multi-personnages. Tous les modules passent par lui.
 - **Design system `v-ui` « EMBER »** — un `theme.css` canonique (verre sombre, orange dominant) partagé
   par les 13 pages NUI, pour que rien n'ait l'air rapporté.
-- **Éditeur de contenu en jeu** — le menu admin crée, modifie et supprime **blips, positions de boutique,
-  métiers & grades, items, recettes de craft, boutiques de vêtements et emplacements portables**, adossé à `v-world`. Application **à chaud**, sans restart.
+- **Éditeur de contenu en jeu** — le menu admin crée, modifie et supprime **blips, boutiques, métiers &
+  grades, items, recettes de craft, boutiques de vêtements & emplacements, garages, stations-service,
+  ateliers, concessions, catalogue véhicules et types de licence**, adossé à `v-world`. À chaud, sans restart.
+- **Registre de modules & réglages** — chaque module déclare ses réglages à `v-core` ; l'onglet
+  **Réglages** du menu admin affiche ce qu'on lui donne, il n'a donc jamais à changer. Un script tiers
+  ajoute `v_module 'yes'` à son manifest et y apparaît aussi — voir [INTEGRATION.md](INTEGRATION.md).
 - **Aucune commande chat joueur** — la surface d'interaction, c'est l'œil de ciblage, les touches et la NUI.
 - **Bilingue nativement** — chaque texte joueur existe en anglais et en français ; le joueur choisit sa
   langue à la première connexion.

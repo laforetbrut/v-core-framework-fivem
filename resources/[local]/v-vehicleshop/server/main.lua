@@ -235,6 +235,8 @@ CreateThread(function()
         exports['v-world']:SeedVehicleCatalogue(Config.Catalogue)
     end
     rebuild()
+    declareSettings()
+    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -249,3 +251,121 @@ AddEventHandler('playerDropped', function() buying[source] = nil end)
 
 exports('GetCatalogue', function() return Cat end)
 exports('GetDealers', function() return Dealers end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-vehicleshop', {
+        label = 'Dealerships', category = 'vehicles',
+        settings = {
+            { key = 'sellBackRate', label = 'Sell-back rate (0-1)',   type = 'number', default = Config.SellBackRate, min = 0, max = 1 },
+            { key = 'testSeconds',  label = 'Test drive (seconds)',   type = 'number', default = Config.TestDrive.seconds, min = 10, max = 600, step = 1 },
+            { key = 'defaultGarage',label = 'Garage a new car goes to', type = 'string', default = Config.DefaultGarage, maxLength = 40 },
+            { key = 'priceMult',    label = 'Global price multiplier', type = 'number', default = 1.0, min = 0.1, max = 10 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-vehicleshop', key, fallback) end
+
+local function applySettings()
+    Config.SellBackRate      = S('sellBackRate', Config.SellBackRate)
+    Config.TestDrive.seconds = S('testSeconds', Config.TestDrive.seconds)
+    Config.DefaultGarage     = S('defaultGarage', Config.DefaultGarage)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-vehicleshop' then applySettings() end
+end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Automatic vehicle scan
+-- ══════════════════════════════════════════════════════════════════
+-- The client enumerates the models it can actually spawn (base game + any addon pack) and
+-- sends back what it found. The server keeps only the rows that are NOT already in the
+-- catalogue, re-validates every field, and holds the result until an admin imports it.
+-- Nothing reaches `vehicle_catalogue` because a client said so.
+local scanResults = {}     -- src -> { rows, at }
+
+local VALID_CAT = {}
+for _, c in ipairs(Config.Categories) do VALID_CAT[c] = true end
+
+RegisterNetEvent('v-vehicleshop:server:scanResult', function(rows)
+    local src = source
+    if not Core.HasPermission(src, 'admin') or type(rows) ~= 'table' then return end
+
+    local known = {}
+    for _, v in ipairs(Cat) do known[v.model] = true end
+    -- a model already owned by somebody is known too, even if it left the catalogue
+    for _, r in ipairs(MySQL.query.await('SELECT DISTINCT model FROM character_vehicles') or {}) do
+        known[r.model] = true
+    end
+
+    local out, seen = {}, {}
+    for _, r in ipairs(rows) do
+        if type(r) == 'table' then
+            local model = tostring(r.model or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
+            local cat = tostring(r.cat or '')
+            if model ~= '' and not known[model] and not seen[model] and VALID_CAT[cat] then
+                seen[model] = true
+                out[#out + 1] = {
+                    model = model,
+                    label = tostring(r.label or model):sub(1, 80),
+                    cat = cat,
+                    price = math.max(1000, math.min(5000000, math.floor(tonumber(r.price) or 20000))),
+                    top = math.max(0, math.floor(tonumber(r.top) or 0)),
+                    seats = math.max(0, math.min(20, math.floor(tonumber(r.seats) or 0))),
+                }
+            end
+        end
+        if #out >= 2000 then break end   -- a scan is a helper, not a bulk-import weapon
+    end
+    table.sort(out, function(a, b)
+        if a.cat ~= b.cat then return a.cat < b.cat end
+        return a.label < b.label
+    end)
+
+    scanResults[src] = { rows = out, at = os.time() }
+    Core.Log('admin', ('vehicle scan: %d new model(s) found'):format(#out), nil, nil)
+    TriggerClientEvent('v-vehicleshop:client:scanDone', src, #out)
+end)
+
+--- What the last scan found, for the admin panel to review.
+Core.RegisterCallback('v-vehicleshop:scanList', function(source, resolve)
+    if not Core.HasPermission(source, 'admin') then resolve(false); return end
+    local r = scanResults[source]
+    resolve({ rows = (r and r.rows) or {}, at = r and r.at or nil, cats = Config.Categories })
+end)
+
+--- Import a reviewed selection into the catalogue. The rows are taken from the SERVER's
+--- own stored scan, never from the payload — the client only names which models to keep,
+--- and may adjust the category and price it was shown.
+Core.RegisterCallback('v-vehicleshop:scanImport', function(source, resolve, data)
+    if not Core.HasPermission(source, 'admin') or type(data) ~= 'table' then resolve(false); return end
+    local stored = scanResults[source]
+    if not stored then resolve({ error = 'noscan' }); return end
+
+    local byModel = {}
+    for _, r in ipairs(stored.rows) do byModel[r.model] = r end
+
+    local n = 0
+    for _, pick in ipairs(data.rows or {}) do
+        local base = type(pick) == 'table' and byModel[tostring(pick.model or '')] or nil
+        if base then
+            local cat = VALID_CAT[tostring(pick.cat or '')] and pick.cat or base.cat
+            local price = math.max(1000, math.min(5000000, math.floor(tonumber(pick.price) or base.price)))
+            MySQL.insert.await([[INSERT IGNORE INTO vehicle_catalogue (model, label, cat, price, stock, license, job, enabled)
+                VALUES (?,?,?,?,-1,NULL,NULL,1)]], { base.model, base.label, cat, price })
+            n = n + 1
+        end
+    end
+
+    if n > 0 then
+        exports['v-world']:RefreshDomain('vehcat')
+        rebuild()
+    end
+    local p = Core.GetPlayer(source)
+    Core.Log('admin', ('imported %d vehicle(s) into the catalogue'):format(n), nil, p and p.citizenid or nil)
+    resolve({ ok = true, imported = n })
+end)
+
+AddEventHandler('playerDropped', function() scanResults[source] = nil end)

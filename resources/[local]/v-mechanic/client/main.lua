@@ -218,6 +218,15 @@ RegisterNetEvent('v-mechanic:client:state', function(plate, parts, mileage, serv
     st.service = tonumber(service) or 0
 end)
 
+-- Admin changed a tunable: the client owns the wear observation, so it needs the numbers.
+RegisterNetEvent('v-mechanic:client:tunables', function(t)
+    if type(t) ~= 'table' then return end
+    Config.WearPer100km = tonumber(t.wearPer100km) or Config.WearPer100km
+    Config.DegradeBelow = tonumber(t.degradeBelow) or Config.DegradeBelow
+    Config.WarnBelow    = tonumber(t.warnBelow) or Config.WarnBelow
+    Config.Odometer.service = tonumber(t.service) or Config.Odometer.service
+end)
+
 exports('GetLocalParts', function(plate) return tracked[plate] and tracked[plate].parts or nil end)
 exports('GetMileage', function(plate) return tracked[plate] and tracked[plate].mileage or 0 end)
 

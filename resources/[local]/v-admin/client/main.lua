@@ -49,6 +49,32 @@ RegisterNUICallback('action', function(data, cb)
 end)
 
 -- ── World editor relays (blips / shop locations / jobs) -> v-world ──
+-- Settings: v-core owns the registry; we only relay. The panel never learns what a
+-- module's settings are — that is what makes a third-party module free to add.
+RegisterNUICallback('settings', function(_, cb)
+    Core.TriggerCallback('v-core:settings:list', function(res) cb(res or false) end)
+end)
+
+RegisterNUICallback('setSetting', function(data, cb)
+    Core.TriggerCallback('v-core:settings:set', function(res) cb(res or false) end, data)
+end)
+
+-- Vehicle auto-scan: the enumeration happens on the ADMIN's own client (only a client has
+-- the model natives), the server keeps the result and re-validates the import.
+RegisterNUICallback('vehScan', function(_, cb)
+    if not amAdmin then cb(false); return end
+    TriggerEvent('v-vehicleshop:client:doScan')
+    cb('ok')
+end)
+
+RegisterNUICallback('vehScanList', function(_, cb)
+    Core.TriggerCallback('v-vehicleshop:scanList', function(res) cb(res or false) end)
+end)
+
+RegisterNUICallback('vehScanImport', function(data, cb)
+    Core.TriggerCallback('v-vehicleshop:scanImport', function(res) cb(res or false) end, data)
+end)
+
 RegisterNUICallback('worldList', function(data, cb)
     Core.TriggerCallback('v-world:list', function(res) cb(res or false) end, data and data.domain)
 end)

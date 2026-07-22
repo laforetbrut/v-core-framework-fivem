@@ -6,6 +6,10 @@ author 'vyrriox'
 description 'v-hud — money HUD for Projet R (v-core module)'
 version '0.1.0'
 
+-- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+v_module 'yes'
+v_module_label 'Hud'
+v_module_category 'gameplay'
 dependencies {
     'v-core',
     'v-status',
