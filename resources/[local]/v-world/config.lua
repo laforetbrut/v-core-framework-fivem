@@ -58,3 +58,6 @@ Config.BlipColors = {
 
 -- Thumbnail camera framings a clothing category can use (must match v-clothing's Config.Framing).
 Config.ClothFramings = { 'head', 'upper', 'lower', 'body' }
+
+-- Garage kinds (must match v-garages' handling).
+Config.GarageTypes = { 'public', 'job', 'gang', 'impound' }

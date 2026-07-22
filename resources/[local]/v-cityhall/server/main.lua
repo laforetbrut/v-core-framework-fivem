@@ -46,11 +46,14 @@ Core.RegisterCallback('v-cityhall:getJobs', function(source, resolve)
     if not atCityHall(source) then resolve(false); return end
     local p = Core.GetPlayer(source)
     if not p then resolve(false); return end
+    -- player.job is a table { name, grade }
+    local cur   = (p.job and p.job.name) or 'unemployed'
+    local grade = (p.job and p.job.grade) or 0
     resolve({
         jobs    = openJobs(),
-        current = p.job or 'unemployed',
-        label   = exports['v-jobs']:GetJobLabel(p.job or 'unemployed'),
-        grade   = exports['v-jobs']:GetGradeLabel(p.job or 'unemployed', p.grade or 0),
+        current = cur,
+        label   = exports['v-jobs']:GetJobLabel(cur),
+        grade   = exports['v-jobs']:GetGradeLabel(cur, grade),
         fee     = Config.HireFee or 0,
         cash    = p.money and p.money.cash or 0,
     })
@@ -63,7 +66,7 @@ Core.RegisterCallback('v-cityhall:take', function(source, resolve, data)
 
     local want = type(data) == 'table' and tostring(data.job or '') or ''
     if want == '' or never[want] then resolve({ error = 'invalid' }); return end
-    if p.job == want then resolve({ error = 'already' }); return end
+    if p.job and p.job.name == want then resolve({ error = 'already' }); return end
 
     -- Re-derive the allowed set server-side: never trust the list the NUI was shown.
     local ok = false
@@ -91,9 +94,8 @@ Core.RegisterCallback('v-cityhall:resign', function(source, resolve)
     if not atCityHall(source) then resolve({ error = 'far' }); return end
     local p = Core.GetPlayer(source)
     if not p then resolve(false); return end
-    if (p.job or 'unemployed') == 'unemployed' then resolve({ error = 'already' }); return end
-
-    local was = p.job
+    local was = (p.job and p.job.name) or 'unemployed'
+    if was == 'unemployed' then resolve({ error = 'already' }); return end
     if not exports['v-jobs']:SetJob(source, 'unemployed', 0) then resolve(false); return end
     Core.Log('jobs', ('resigned from %s at the city hall'):format(was), nil, p.citizenid)
     Core.Notify(source, LP(source, 'cityhall.resigned'), 'info')

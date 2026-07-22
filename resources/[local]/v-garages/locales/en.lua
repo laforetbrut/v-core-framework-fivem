@@ -1,0 +1,29 @@
+-- v-garages | English
+Locales.en = Locales.en or {}
+local T = {
+    ['gar.blip']        = 'Garage',
+    ['gar.help_open']   = 'Open the garage',
+    ['gar.help_store']  = 'Store this vehicle',
+    ['gar.title']       = 'Garage',
+    ['gar.sub']         = 'Your vehicles parked here',
+    ['gar.take']        = 'Take out',
+    ['gar.empty']       = 'Nothing parked here.',
+    ['gar.fuel']        = 'Fuel',
+    ['gar.engine']      = 'Engine',
+    ['gar.body']        = 'Body',
+    ['gar.fee']         = 'Release fee',
+    ['gar.stored']      = 'Vehicle stored.',
+    ['gar.nojob']       = 'This garage is not for you.',
+    ['gar.err_far']     = 'You are too far from the garage.',
+    ['gar.err_nojob']   = 'This garage is not for you.',
+    ['gar.err_notyours']= 'That vehicle is not yours.',
+    ['gar.err_notparked']= 'That vehicle is not parked here.',
+    ['gar.err_notout']  = 'That vehicle is not out.',
+    ['gar.err_already'] = 'That vehicle is already out.',
+    ['gar.err_novehicle']= 'No vehicle to store.',
+    ['gar.err_funds']   = 'You cannot cover the release fee.',
+    ['gar.err_noimpound']= 'You cannot park at the impound.',
+    ['gar.err_spawn']   = 'The vehicle could not be brought out.',
+    ['gar.err_x']       = 'Request refused.',
+}
+for k, v in pairs(T) do Locales.en[k] = v end

@@ -1,7 +1,7 @@
 # v-core — a FiveM Enhanced roleplay framework
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** (the GTA V Enhanced
-next-gen edition). 19 modules, one shared design system, one database, no external framework
+next-gen edition). 21 modules, one shared design system, one database, no external framework
 dependency — it is not an ESX or QBCore add-on pack, it *is* the framework.
 
 Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -50,6 +50,8 @@ in-game** — never by editing Lua on a live server.
   **dealer / launderer** (dirty money). Store positions editable in-game.
 - **`v-target`** — universal interaction eye (hold Left-Alt): entity/zone options **filtered by permission & job**.
 - **`v-jobs`** — jobs, grades, on-duty salaries; the source of truth for every job gate.
+- **`v-vehicles` / `v-garages`** — owned-vehicle persistence (mods, fuel, damage), server-minted
+  plates, a key system, and 9 garages incl. an impound lot and job motor pools — all editable in-game.
 - **`v-cityhall`** — the city hall job desk: apply for any position an admin has left open, or resign.
   Whitelisted jobs (police, EMS, …) never show up here — they are handed out by their own chain of command.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** · **`v-notify`**
@@ -93,7 +95,7 @@ starts with Windows.
 - **`start-db.bat`** — starts MariaDB on `localhost:3306` (user `root`, password `root`, database `projet_r`).
 - **`stop-db.bat`** — stops it cleanly.
 
-Schema: `database/schema.sql` (14 tables). Data lives in `database/data/` (gitignored).
+Schema: `database/schema.sql` (17 tables). Data lives in `database/data/` (gitignored).
 
 ## Dependencies
 
@@ -111,7 +113,7 @@ Author: vyrriox
 # v-core — un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 19 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 21 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe — ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -161,6 +163,9 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
   **dealer / blanchisseur** illégal (argent sale). Positions modifiables en jeu.
 - **`v-target`** — œil d'interaction universel (maintiens Alt gauche) : options **filtrées par permission & métier**.
 - **`v-jobs`** — métiers, grades, salaires en service ; la référence pour tous les gates métier.
+- **`v-vehicles` / `v-garages`** — persistance des véhicules possédés (mods, carburant, dégâts),
+  plaques générées par le serveur, système de clés, et 9 garages dont une fourrière et les garages
+  de métier — le tout modifiable en jeu.
 - **`v-cityhall`** — le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
   ou démissionner. Les métiers sur whitelist (police, EMS, …) n'y apparaissent jamais.
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** · **`v-notify`**
@@ -204,7 +209,7 @@ et elle ne démarre jamais avec Windows.
 - **`start-db.bat`** — démarre MariaDB sur `localhost:3306` (user `root`, mot de passe `root`, base `projet_r`).
 - **`stop-db.bat`** — l'arrête proprement.
 
-Schéma : `database/schema.sql` (14 tables). Les données sont dans `database/data/` (gitignoré).
+Schéma : `database/schema.sql` (17 tables). Les données sont dans `database/data/` (gitignoré).
 
 ## Dépendances
 

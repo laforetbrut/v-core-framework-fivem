@@ -195,6 +195,9 @@ function edRowTitle(r) {
   }
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
   if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
+  if (edDomain === 'garages') {
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.type)} · ${Math.round(r.x)}, ${Math.round(r.y)}${r.job ? ' · 🔒 ' + esc(r.job) : ''}${r.fee ? ' · ' + fmt(r.fee) : ''}</i>`;
+  }
   if (edDomain === 'clothstores') {
     return `${esc(r.label)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)}${r.ped ? ' · ' + esc(r.ped) : ' · no ped'}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
   }
@@ -229,7 +232,7 @@ function renderEdList() {
     el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     el.querySelector('[data-act="del"]').onclick = async () => {
       const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
-        : (edDomain === 'clothcats') ? r.key : r.id;
+        : (edDomain === 'clothcats') ? r.key : r.id;   // garages key on `id` too
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
@@ -287,6 +290,23 @@ function openEdForm(row) {
       field(t('adm.ed_rarity'), 'ef-rarity', m.rarity ?? 'common') +
       field(t('adm.ed_desc'), 'ef-desc', m.desc ?? '') +
       check(t('adm.ed_stack'), 'ef-stack', row.stackable !== 0) + check(t('adm.ed_usable'), 'ef-usable', row.usable === 1);
+  } else if (edDomain === 'garages') {
+    const isNew = !row.id;
+    const types = (edData.types || ['public'])
+      .map(x => `<option value="${esc(x)}"${x === row.type ? ' selected' : ''}>${esc(x)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span><input id="ef-gid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_gartype'))}</span><select id="ef-type">${types}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
+      field(t('adm.ed_spawnx'), 'ef-sx', row.sx ?? '', 'number') + field(t('adm.ed_spawny'), 'ef-sy', row.sy ?? '', 'number') +
+      field(t('adm.ed_spawnz'), 'ef-sz', row.sz ?? '', 'number') + field(t('adm.ed_spawnh'), 'ef-sh', row.sh ?? 0, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      field(t('adm.ed_fee'), 'ef-fee', row.fee ?? 0, 'number') +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'clothstores') {
     html = field(t('adm.ed_label'), 'ef-label', row.label ?? '') +
       field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
@@ -330,7 +350,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -366,6 +386,11 @@ function openEdForm(row) {
     const cur = Object.entries(row.inputs || {});
     if (cur.length) cur.forEach(([n, q]) => addIng(n, q)); else addIng(undefined, 1);
     byId('ef-adding').onclick = () => addIng(undefined, 1);
+  }
+
+  if (edDomain === 'garages' && !row.id) {
+    const g = byId('ef-gid');
+    g.oninput = () => { g.value = g.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
   }
 
   if (edDomain === 'clothcats' && !row.key) {
@@ -407,6 +432,12 @@ function openEdForm(row) {
       payload = { name: v('ef-name'), isNew: !row.name, label: v('ef-label'), category: v('ef-cat'),
                   itype: v('ef-itype'), weight: parseInt(v('ef-weight'), 10) || 0, image: v('ef-image'),
                   rarity: v('ef-rarity'), desc: v('ef-desc'), stackable: ck('ef-stack'), usable: ck('ef-usable') };
+    } else if (edDomain === 'garages') {
+      payload = { gid: v('ef-gid'), isNew: !row.id, label: v('ef-label'), type: v('ef-type'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  sx: parseFloat(v('ef-sx')), sy: parseFloat(v('ef-sy')), sz: parseFloat(v('ef-sz')),
+                  sh: parseFloat(v('ef-sh')) || 0, job: v('ef-job'),
+                  fee: parseInt(v('ef-fee'), 10) || 0, blip: ck('ef-blip'), enabled: ck('ef-en') };
     } else if (edDomain === 'clothstores') {
       payload = { id: row.id, label: v('ef-label'), x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
                   z: parseFloat(v('ef-z')), h: parseFloat(v('ef-h')) || 0, ped: v('ef-ped'),

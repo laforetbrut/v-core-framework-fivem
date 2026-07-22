@@ -123,7 +123,8 @@ local function atStore(src)
         if #(c - vector3(l.x + 0.0, l.y + 0.0, l.z + 0.0)) <= (Config.Distance + 2.5) then
             if l.job and l.job ~= '' then
                 local p = Core.GetPlayer(src)
-                if not p or p.job ~= l.job then return false end
+                local job = p and p.job          -- { name, grade }
+                if not job or job.name ~= l.job then return false end
             end
             return true
         end
