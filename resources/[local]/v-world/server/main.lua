@@ -13,6 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
+local Gangs, Turfs = {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -239,6 +240,19 @@ local function ensureTables()
         if not has then MySQL.query.await('ALTER TABLE `vehicle_catalogue` ' .. col[2]) end
     end
 
+    -- Gang territory. A turf is a circle rather than a polygon on purpose: the capture
+    -- rule only ever asks "who is standing inside", and a radius answers that in one
+    -- distance check per player instead of a point-in-polygon test every tick.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_turfs` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `radius` FLOAT NOT NULL DEFAULT 90.0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -326,6 +340,24 @@ local function loadJobs()
         r.grades = g or {}
         r.whitelisted = bool(r.whitelisted)
         Jobs[#Jobs + 1] = r
+    end
+end
+
+local function loadGangs()
+    Gangs = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM gangs ORDER BY name') or {}) do
+        local g = r.grades
+        if type(g) == 'string' then g = json.decode(g) or {} end
+        r.grades = g or {}
+        Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadTurfs()
+    Turfs = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_turfs ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Turfs[#Turfs + 1] = r
     end
 end
 
@@ -436,6 +468,8 @@ local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
     if domain == 'jobs'    or not domain then loadJobs() end
+    if domain == 'gangs'   or not domain then loadGangs() end
+    if domain == 'turfs'   or not domain then loadTurfs() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -522,6 +556,8 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetGangs',   function() return Gangs end)
+exports('GetTurfs',   function() return Turfs end)
 exports('GetRentals', function() return Rentals end)
 exports('GetGarages', function() return Garages end)
 exports('GetStations', function() return Stations end)
@@ -719,6 +755,42 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-gangs: { [name] = { label, type, grades = { [n] = { name } } } }
+exports('SeedGangs', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('gangs', defaults)
+    if not need then return false end
+    for name, g in pairs(defaults) do
+        local arr = {}
+        for n, gr in pairs(g.grades or {}) do
+            arr[#arr + 1] = { grade = n, name = gr.name or ('Rank ' .. n), salary = gr.salary or 0 }
+        end
+        table.sort(arr, function(a, b) return a.grade < b.grade end)
+        MySQL.insert.await('INSERT IGNORE INTO gangs (name, label, type, grades) VALUES (?,?,?,?)',
+            { name, g.label or name, g.type or 'gang', json.encode(arr) })
+    end
+    seedDone('gangs', want)
+    loadGangs()
+    print(('[v-world] seeded %d gang(s) from config'):format(#Gangs))
+    return true
+end)
+
+-- v-gangs: list of { id, label, x, y, z, radius }
+exports('SeedTurfs', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('turfs', defaults)
+    if not need then return false end
+    for _, tf in ipairs(defaults) do
+        MySQL.insert.await(
+            'INSERT IGNORE INTO world_turfs (id, label, x, y, z, radius, blip, enabled) VALUES (?,?,?,?,?,?,1,1)',
+            { tf.id, tf.label or tf.id, tf.x, tf.y, tf.z, tf.radius or 90.0 })
+    end
+    seedDone('turfs', want)
+    loadTurfs()
+    print(('[v-world] seeded %d turf(s) from config'):format(#Turfs))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     local need, want = seedNeeded('jobs', defaults)
@@ -763,6 +835,19 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         end
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
+    elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'turfs' then
+        -- the owner and the influence live in v-gangs, not here: the turf row is only
+        -- the shape on the map
+        local st = V.Use('v-gangs').GetState() or {}
+        for _, tf in ipairs(Turfs) do
+            local o = st[tf.id]
+            tf.owner = o and o.owner or nil
+            tf.influence = o and o.influence or 0
+        end
+        local gangs = {}
+        for _, g in ipairs(Gangs) do gangs[#gangs + 1] = { name = g.name, label = g.label } end
+        resolve({ rows = Turfs, gangs = gangs })
     elseif domain == 'items' then resolve({ rows = Items, categories = Config.ItemCategories, types = Config.ItemTypes })
     elseif domain == 'recipes' then
         -- item names for the pickers (keep the payload light)
@@ -877,6 +962,47 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'gangs' then
+        local name = tostring(row.name or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
+        if name == '' then resolve({ error = 'name' }); return end
+        local grades = {}
+        for _, g in ipairs(row.grades or {}) do
+            grades[#grades + 1] = { grade = math.floor(num(g.grade)),
+                                    name = tostring(g.name or ''):sub(1, 40),
+                                    salary = math.floor(num(g.salary)) }
+        end
+        if #grades == 0 then grades = { { grade = 0, name = 'Member', salary = 0 } } end
+        table.sort(grades, function(a, b) return a.grade < b.grade end)
+        MySQL.query.await([[INSERT INTO gangs (name, label, type, grades) VALUES (?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), type=VALUES(type), grades=VALUES(grades)]],
+            { name, tostring(row.label or name):sub(1, 80),
+              tostring(row.type or 'gang'):sub(1, 20), json.encode(grades) })
+
+    elseif d == 'turfs' then
+        local tid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if tid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local radius = math.max(10.0, math.min(500.0, num(row.radius, 90.0)))
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_turfs WHERE id = ?', { tid })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await(
+                'INSERT INTO world_turfs (id, label, x, y, z, radius, blip, enabled) VALUES (?,?,?,?,?,?,?,?)',
+                { tid, label, num(row.x), num(row.y), num(row.z), radius,
+                  bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await(
+                'UPDATE world_turfs SET label=?, x=?, y=?, z=?, radius=?, blip=?, enabled=? WHERE id=?',
+                { label, num(row.x), num(row.y), num(row.z), radius,
+                  bool(row.blip), bool(row.enabled), tid })
+        end
+        -- An admin can also hand a turf over outright, which is the only way to set an
+        -- owner without a capture.
+        if row.owner ~= nil then
+            V.Use('v-gangs').SetOwner(tid, tostring(row.owner or ''), cid)
+        end
 
     elseif d == 'jobs' then
         local name = tostring(row.name or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
@@ -1205,6 +1331,17 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'gangs' then
+        local name = tostring(id or '')
+        if name == '' then resolve({ error = 'protected' }); return end
+        -- members would keep a gang name pointing at nothing
+        local used = MySQL.scalar.await('SELECT 1 FROM characters WHERE gang = ? LIMIT 1', { name })
+        if used then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM gangs WHERE name = ?', { name })
+    elseif d == 'turfs' then
+        local tid = tostring(id or '')
+        if tid == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_turfs WHERE id = ?', { tid })
     elseif d == 'jobs' then
         local name = tostring(id or '')
         if name == '' or name == 'unemployed' then resolve({ error = 'protected' }); return end

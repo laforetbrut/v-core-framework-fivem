@@ -829,6 +829,38 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-gangs` ✅ — territory, capture and influence
+
+Membership, ranks and the treasury are **not** here — they are `v-factions`'. This module
+adds only what the illegal side does not share with a legal faction: **territory**.
+
+**The `gangs` table shipped in the schema and nothing ever filled it**, so `v-factions` and
+the boss menu had no illegal organisation to work with. It is seeded now with the canonical
+Los Santos gangs (Ballas, Vagos, Families, Marabunta Grande, The Lost MC), each with four
+ranks, and `v-world` gained a full `gangs` domain mirroring `jobs` — **Editor → Gangs**.
+
+**A turf is a circle, not a polygon.** The capture rule only ever asks *who is standing
+inside*, and a radius answers that with one distance check per player instead of a
+point-in-polygon test every tick.
+
+**Influence belongs to whoever holds the turf; a rival wears it down rather than taking
+it.** The turf only changes hands once influence reaches the floor. That is what makes a
+contested turf a fight instead of a race to a number — and standing your ground as the
+owner slows the bleed rather than stopping it, so being outnumbered still costs you.
+Unattended influence decays, so a turf has to be *held*, not just taken once. A group
+multiplier is capped, because a mob should not capture instantly.
+
+Ten settings drive all of it, and the whole pass is admin-tunable at runtime: the interval
+is re-read every pass rather than cached, so a change takes effect without a restart.
+
+**Blips are per-gang coloured** — a radius blip for the territory and an icon on top
+carrying the name, the holder and the current influence.
+
+Exports the rest of the roadmap needs: `TurfAt(coords)`, `GetOwner(id)`, and `InOwnTurf(src)`
+— the one call a turf-gated drug sale or a gang stash will want. `SetOwner` hands a turf
+over without a capture, and is logged like any other ownership change; it is what
+**Editor → Territories** uses.
+
 ### `v-bossmenu` ✅ — the panel a faction leader actually needs
 
 Opens on **F6**, and only for somebody who is a boss of a job or a gang. Three panes over
@@ -1031,7 +1063,7 @@ spawn path** — nothing else in the framework is allowed to `CreateVehicle` an 
 |---|--------|-----------|----------------|
 | 5 | ✅ **`v-factions`** — the shared org layer (**shipped**) | `v-jobs`, `v-world` | One engine for **legal factions** (PD, EMS, mechanics, taxi, news) and **illegal ones** (gangs, mafias) — they differ by data, not by code. Owns membership, ranks (reusing `jobs.grades`), a **faction treasury** (a real account with its own transaction log, not a number in a config), owned garages/stashes/vehicles, and a territory concept for the illegal side. `gangs` already exists in the schema and is still empty. |
 | 6 | ✅ **`v-bossmenu`** — the boss/patron panel (**shipped**) | `v-factions`, `v-banking` | The management UI a faction leader actually needs, gated on **rank**, not on admin permission: **hire / fire / promote / demote** members, see who is on duty, **deposit & withdraw from the treasury** with a full audit trail, **pay salaries**, manage the faction's **garage and stash access per rank**, and set the recruitment state. Every action is server-verified against the caller's rank and logged — a boss menu that trusts the client is a money printer. |
-| 7 | **`v-gangs`** — the illegal org flavour | `v-factions` | What `v-factions` doesn't share: **territories** (capture, influence decay, contested state), turf-gated drug sales, gang stashes and gang wars. Reuses the faction engine for membership and the treasury. |
+| 7 | ✅ **`v-gangs`** — the illegal org flavour (**shipped**) | `v-factions` | What `v-factions` doesn't share: **territories** (capture, influence decay, contested state), turf-gated drug sales, gang stashes and gang wars. Reuses the faction engine for membership and the treasury. |
 | 8 | **`v-police`** | `v-factions`, `v-vehicles` | Cuffs, escort, search (reusing `v-inventory`'s `GetSearchable`, which already never exposes the hidden pocket), **evidence**, an MDT (records, warrants, BOLOs), fines, jail, and **impound** through `v-garages`. |
 
 ### 5.3 Papers — licences & permits

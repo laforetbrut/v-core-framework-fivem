@@ -23,6 +23,11 @@ shared_scripts {
     '@v-core/locale/shared.lua',
     'locales/en.lua',
     'locales/fr.lua',
+    -- The licence section of this panel speaks v-licenses' strings. Sharing the files is
+    -- the fix rather than copying the keys: a copy drifts, and a drifted key renders as
+    -- the raw key ("lic.buy") in front of a player.
+    '@v-licenses/locales/en.lua',
+    '@v-licenses/locales/fr.lua',
     'config.lua',
 }
 
