@@ -115,43 +115,54 @@ function renderHome() {
   const gridApps = apps.filter((a) => !dockApps.includes(a));
 
   const items = layoutItems();
-  // Four rows is what fits beneath the widgets; 24 per page is how the last row once
-  // ended up as a clipped sliver of yellow. But splitting 17 icons as 16 + 1 strands a
-  // single app on page two, which reads as "the rest did not load" rather than as a
-  // second page - so when there is an overflow the pages are BALANCED. Nine and eight
-  // both look like pages; sixteen and one does not.
-  const CAP = 16;
-  const pageCount = Math.max(1, Math.ceil(items.length / CAP));
-  const perPage = Math.ceil(items.length / pageCount);
-  const pages = [];
-  for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
-  if (!pages.length) pages.push([]);
-
-  let idx = -1;
-  byId('pages').innerHTML = pages.map((p) =>
-    '<div class="page">' + p.map((it, i) => {
-      idx += 1;
-      const html = it.t === 'folder' ? folderTile(it, idx)
-                                     : tileHTML(appById(it.id) || { id: it.id, icon: 'dot', label: it.id }, i);
-      // The index into the layout, so a drop knows what it moved.
-      return html.replace('<button class="tile"', '<button class="tile" data-idx="' + idx + '"');
-    }).join('') + '</div>').join('');
+  paintPages(items);
   byId('dock').innerHTML = dockApps.map((a, i) => tileHTML(a, i)).join('');
-  byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
-  byId('pages').style.transform = `translateX(${-page * 100}%)`;
   byId('pages').style.transition = 'transform .34s cubic-bezier(.32,.72,0,1)';
 
-  [...document.querySelectorAll('.tile')].forEach((t) => {
+  // Arrange mode survives a re-render: a drop stays in the jiggle until Done.
+  byId('home').classList.toggle('arrange', editing);
+  byId('pages').classList.toggle('jiggle', editing);
+
+  initArrange();
+  renderWidgets();
+}
+
+// Four rows is what fits beneath the widgets. Splitting 17 icons as 16 + 1 strands a
+// single app on page two, which reads as "the rest did not load"; so on overflow the
+// pages are BALANCED - nine and eight both look like pages, sixteen and one does not.
+let arrPerPage = 16;
+function paintPages(items) {
+  const CAP = 16;
+  const pageCount = Math.max(1, Math.ceil(items.length / CAP));
+  arrPerPage = Math.max(1, Math.ceil(items.length / pageCount));
+  const pages = [];
+  for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
+  if (!pages.length) pages.push([]);
+
+  byId('pages').innerHTML = pages.map((pg) =>
+    '<div class="page">' + pg.map((it, i) => {
+      if (it.t === 'gap') return '<div class="tile gap"></div>';
+      return it.t === 'folder' ? folderTile(it, i)
+                               : tileHTML(appById(it.id) || { id: it.id, icon: 'dot', label: it.id }, i);
+    }).join('') + '</div>').join('');
+  // data-idx is the position in `items`, counting only real tiles, so a drop can read it.
+  let k = -1;
+  [...byId('pages').querySelectorAll('.tile')].forEach((t) => {
+    if (t.classList.contains('gap')) return;
+    k += 1; t.dataset.idx = k;
+  });
+  byId('pages').style.transform = `translateX(${-page * 100}%)`;
+  byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
+
+  [...byId('pages').querySelectorAll('.tile:not(.gap)')].forEach((t) => {
     t.addEventListener('click', () => {
-      // A tap that ended an arrange drag must not also launch the app it landed on.
-      if (editing) return;
-      if (t.dataset.folder !== undefined) { openFolder(Number(t.dataset.folder)); return; }
+      if (editing) return;   // a tap in arrange mode never launches
+      const gi = Number(t.dataset.idx);
+      if (t.classList.contains('isfolder')) { openFolder(gi); return; }
       const a = (state.apps || []).find((x) => x.id === t.dataset.app);
       if (a) enterApp(a, t);
     });
   });
-  wireArrange();
-  renderWidgets();
 }
 
 // ══ Home layout ════════════════════════════════════════════════
@@ -197,7 +208,7 @@ function folderTile(it, i) {
     const a = appById(id);
     return '<span>' + (a ? UI.appIcon(a.icon) : '') + '</span>';
   }).join('');
-  return '<button class="tile" type="button" data-folder="' + i + '" style="--i:' + i + '">' +
+  return '<button class="tile isfolder" type="button" data-folder="1" style="--i:' + i + '">' +
     '<span class="wrap"><span class="folder glass">' + four + '</span></span>' +
     '<span class="nm">' + esc(it.name) + '</span></button>';
 }
@@ -225,64 +236,177 @@ byId('folderview').addEventListener('click', (e) => {
 });
 
 // ══ Arrange mode ═══════════════════════════════════════════════
-// Hold a tile to start, exactly as on the real thing. Dropping one tile onto another
-// makes a folder; dropping it on a gap moves it there.
-function wireArrange() {
-  const grid = byId('pages').querySelector('.page');
-  if (!grid) return;
-  let hold = null, from = null, moved = false;
+// A real drag: the tile lifts into a clone that follows the finger, the grid opens a gap
+// where it will land, and it stays in arrange mode until Done - a drop no longer kicks
+// you out. Hold a tile to enter; drag onto another app to make a folder.
+let arr = null;          // the live drag session, or null
+let arrWired = false;
 
-  grid.addEventListener('pointerdown', (e) => {
-    const tile = e.target.closest('.tile');
-    if (!tile) return;
-    moved = false;
-    from = tile;
-    hold = setTimeout(() => {
-      editing = true;
-      tile.classList.add('dragging');
-      byId('pages').classList.add('jiggle');
-      toast(L('ph.arrange_on'));
-    }, 420);
+function enterArrange() {
+  editing = true;
+  byId('home').classList.add('arrange');
+  byId('pages').classList.add('jiggle');
+}
+function exitArrange() {
+  editing = false;
+  endDrag(true);
+  byId('home').classList.remove('arrange');
+  byId('pages').classList.remove('jiggle');
+}
+
+function ptOf(e) {
+  const r = byId('screen').getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function moveGhost(e) {
+  const p = ptOf(e), g = byId('dragghost');
+  g.style.left = p.x + 'px'; g.style.top = p.y + 'px';
+}
+
+function beginDrag(tile, e) {
+  const items = layoutItems();
+  const idx = Number(tile.dataset.idx);
+  if (Number.isNaN(idx)) return;
+  const item = items[idx];
+  arr = { item, items: items.filter((_, i) => i !== idx), insert: idx,
+          hoverEl: null, since: 0, folderIdx: null, folderTimer: null, edgeTimer: null };
+
+  const g = byId('dragghost');
+  const ic = tile.querySelector('.ic, .folder');
+  const nm = tile.querySelector('.nm');
+  g.innerHTML = (ic ? ic.outerHTML : '') + (nm ? nm.outerHTML : '');
+  g.classList.add('on');
+  moveGhost(e);
+  paintArrange();
+}
+
+function paintArrange() {
+  const withGap = arr.items.slice();
+  withGap.splice(Math.max(0, Math.min(withGap.length, arr.insert)), 0, { t: 'gap' });
+  paintPages(withGap);
+  byId('pages').classList.add('jiggle');
+}
+
+function clearFolder() {
+  if (arr.folderTimer) { clearTimeout(arr.folderTimer); arr.folderTimer = null; }
+  arr.folderIdx = null;
+  [...byId('pages').querySelectorAll('.tile.folderready')].forEach((t) => t.classList.remove('folderready'));
+}
+
+function onDragMove(e) {
+  if (!arr) return;
+  moveGhost(e);
+
+  const pages = byId('pages').querySelectorAll('.page');
+  const cur = pages[page];
+  if (!cur) return;
+
+  // Edge of the screen, held: flip to the next page, so a drag can cross pages.
+  const p = ptOf(e), w = byId('screen').clientWidth;
+  const edge = (p.x < 24 && page > 0) ? -1 : (p.x > w - 24 && page < pages.length - 1) ? 1 : 0;
+  if (edge && !arr.edgeTimer) {
+    arr.edgeTimer = setTimeout(() => { arr.edgeTimer = null; flipPage(edge); }, 420);
+  } else if (!edge && arr.edgeTimer) { clearTimeout(arr.edgeTimer); arr.edgeTimer = null; }
+
+  const base = page * arrPerPage;
+
+  // Nearest real tile, worked out first: if the finger is deep inside one, that is a
+  // folder gesture and the grid must HOLD STILL - the reorder gap only opens in the seams
+  // between tiles. Chasing the finger into the centre of a tile is exactly what made the
+  // old version feel broken, because the target kept fleeing the drop.
+  let near = null, best = 1e9;
+  const tiles = [...cur.querySelectorAll('.tile:not(.gap)')];
+  tiles.forEach((t) => {
+    const r = t.getBoundingClientRect();
+    const d = Math.hypot(e.clientX - (r.left + r.width / 2), e.clientY - (r.top + r.height / 2));
+    if (d < best) { best = d; near = t; }
   });
+  const deep = near && best < near.getBoundingClientRect().width * 0.34;
 
-  grid.addEventListener('pointermove', (e) => {
-    if (!editing || !from) return;
-    moved = true;
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const over = el && el.closest ? el.closest('.tile') : null;
-    [...grid.querySelectorAll('.tile')].forEach((t) => t.classList.remove('dropinto'));
-    if (over && over !== from) over.classList.add('dropinto');
-  });
-
-  grid.addEventListener('pointerup', (e) => {
-    clearTimeout(hold);
-    if (!editing || !from) { from = null; return; }
-    const el = document.elementFromPoint(e.clientX, e.clientY);
-    const over = el && el.closest ? el.closest('.tile') : null;
-    [...grid.querySelectorAll('.tile')].forEach((t) => t.classList.remove('dropinto', 'dragging'));
-
-    if (over && over !== from && moved) {
-      const items = layoutItems();
-      const a = Number(from.dataset.idx), b = Number(over.dataset.idx);
-      if (!Number.isNaN(a) && !Number.isNaN(b)) {
-        const src = items[a], dst = items[b];
-        if (src.t === 'app' && dst.t === 'folder') {
-          dst.apps.push(src.id);
-          items.splice(a, 1);
-        } else if (src.t === 'app' && dst.t === 'app') {
-          // Two apps become a folder, which is the only way iOS makes one either.
-          items[b] = { t: 'folder', name: L('ph.folder'), apps: [dst.id, src.id] };
-          items.splice(a, 1);
-        } else {
-          items.splice(b, 0, items.splice(a, 1)[0]);
-        }
-        saveLayout(items).then(renderHome);
-      }
+  if (deep && arr.item.t === 'app') {
+    // Fold zone: leave the layout alone, arm the folder after a short dwell.
+    if (near !== arr.hoverEl) {
+      clearFolder();
+      arr.hoverEl = near;
+      const oi = Number(near.dataset.idx);
+      arr.folderTimer = setTimeout(() => { arr.folderIdx = oi; near.classList.add('folderready'); }, 300);
     }
-    editing = false;
-    from = null;
-    byId('pages').classList.remove('jiggle');
+    return;
+  }
+
+  // Seam: a plain reorder. Drop before the first tile the pointer is above-or-left of.
+  if (arr.hoverEl) { arr.hoverEl = null; clearFolder(); }
+  let ins = base + tiles.length;
+  for (let i = 0; i < tiles.length; i++) {
+    const r = tiles[i].getBoundingClientRect();
+    const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    if (e.clientY < cy - 6 || (Math.abs(e.clientY - cy) <= r.height / 2 && e.clientX < cx)) { ins = base + i; break; }
+  }
+  if (ins !== arr.insert) { arr.insert = ins; paintArrange(); }
+}
+
+function onDragEnd() {
+  if (!arr) return;
+  const a = arr;
+  if (a.edgeTimer) clearTimeout(a.edgeTimer);
+  if (a.folderTimer) clearTimeout(a.folderTimer);
+  byId('dragghost').classList.remove('on');
+
+  if (a.folderIdx != null && a.item.t === 'app') {
+    const tgt = a.items[a.folderIdx];
+    if (tgt && tgt.t === 'folder') tgt.apps.push(a.item.id);
+    else if (tgt && tgt.t === 'app') a.items[a.folderIdx] = { t: 'folder', name: L('ph.folder'), apps: [tgt.id, a.item.id] };
+    else a.items.splice(a.insert, 0, a.item);
+  } else {
+    a.items.splice(Math.max(0, Math.min(a.items.length, a.insert)), 0, a.item);
+  }
+  arr = null;
+  saveLayout(a.items).then(() => renderHome());
+}
+
+function endDrag(cancel) {
+  if (!arr) return;
+  if (arr.edgeTimer) clearTimeout(arr.edgeTimer);
+  if (arr.folderTimer) clearTimeout(arr.folderTimer);
+  byId('dragghost').classList.remove('on');
+  const items = cancel ? layoutItems() : arr.items;
+  arr = null;
+  paintPages(items);
+  byId('pages').classList.toggle('jiggle', editing);
+}
+
+// Attached once to the stable #pages container, so it survives every re-render.
+function initArrange() {
+  if (arrWired) return;
+  arrWired = true;
+  const pagesEl = byId('pages');
+  let hold = null, downTile = null, downXY = null;
+
+  pagesEl.addEventListener('pointerdown', (e) => {
+    const tile = e.target.closest ? e.target.closest('.tile:not(.gap)') : null;
+    downXY = { x: e.clientX, y: e.clientY };
+    if (editing) { downTile = tile; if (tile) beginDrag(tile, e); return; }
+    if (!tile) return;
+    downTile = tile;
+    hold = setTimeout(() => { hold = null; enterArrange(); beginDrag(tile, e); }, 380);
   });
+
+  window.addEventListener('pointermove', (e) => {
+    if (hold && downXY && Math.hypot(e.clientX - downXY.x, e.clientY - downXY.y) > 10) {
+      clearTimeout(hold); hold = null;   // a swipe, not a hold
+    }
+    if (arr) { e.preventDefault(); onDragMove(e); }
+  }, { passive: false });
+
+  window.addEventListener('pointerup', (e) => {
+    if (hold) { clearTimeout(hold); hold = null; }
+    if (arr) { onDragEnd(); downTile = null; return; }
+    // A tap on empty space in arrange mode leaves it, the way iOS does.
+    if (editing && !downTile) exitArrange();
+    downTile = null;
+  });
+
+  byId('arrangedone').addEventListener('click', exitArrange);
 }
 
 function flipPage(dir) {
@@ -1223,8 +1347,9 @@ byId('screen').addEventListener('pointerup', (e) => {
     return;
   }
 
-  // On the home screen, sideways moves between pages.
-  if (!byId('home').classList.contains('behind') && !byId('app').classList.contains('on')
+  // On the home screen, sideways moves between pages - but never while a tile is being
+  // carried, which owns the pointer.
+  if (!arr && !byId('home').classList.contains('behind') && !byId('app').classList.contains('on')
       && Math.abs(dx) > Math.abs(dy)) {
     flipPage(dx < 0 ? 1 : -1);
     return;
