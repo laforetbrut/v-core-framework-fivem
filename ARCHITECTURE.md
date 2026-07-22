@@ -829,6 +829,41 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-drugs` ✅ - plantations, street dealing, demand and heat
+
+The illegal loop already shipped as a **static** chain: fixed gather nodes, a craft bench
+and a buyer who always paid the same. This module adds the two parts that make it a game.
+
+**Plantations a player places and can lose.** Using a seed starts a placement prompt; the
+plant is a row, and its position is taken from the *player*, never from the payload - a
+client that picks its own coordinates can plant through a wall or across the map. Growth is
+derived from timestamps rather than ticked, so a restart mid-grow loses nothing and a crop
+keeps growing while nobody is online. Skipping the watering **wilts** rather than kills: a
+bad grower is punished, not wiped. Anyone can harvest anyone's plant for a configurable
+share, and **the owner is told** - anonymous theft would be free theft.
+
+The props are **local and non-networked**. A plant is server state; spawning it as a
+networked entity would let any client delete somebody else's crop.
+
+**Street dealing that pushes back.** Using a sellable drug offers it to whoever is standing
+next to you - no menu, because the point is standing somewhere you should not be. Price is
+`base × refinement × district demand × turf bonus`, and **demand decays per district as you
+sell into it**, recovering slowly. The same corner stops paying, so dealers have to move.
+That is the whole design.
+
+**Heat is the pressure side.** It rises with every sale, decays when you stop, makes peds
+refuse above a threshold, and drives a bust chance that scales from a floor to a ceiling.
+Getting caught is what a long session on one corner earns you, not bad luck on the first
+sale. A bust puts a temporary blip on **police** maps only, through `v-police:IsCop`.
+
+Sales pay **dirty money** by default, so the payout has to go through the launderer that
+already shipped in `v-shops` - which is what connects dealing to the banking side instead
+of paying into a clean balance.
+
+Substances are one `world_drugs` row each, carrying both the growing side and the street
+side, because an operator thinks in substances rather than subsystems. Edited in
+**Admin → Editor → Substances**; fifteen settings.
+
 ### `v-police` ✅ - cuffs, escort, search, charges, jail, MDT
 
 **Police is a job, not a permission.** Staff are not police, and an admin who wants to
@@ -1113,7 +1148,7 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | # | Module | Depends on | Responsibility |
 |---|--------|-----------|----------------|
-| 10 | **`v-drugs`** - the full chain | `v-gangs`, `v-police`, `v-licenses` | Turn the current recipes into a real system: **plantations** with growth stages, watering and theft by other players; **labs** with quality tiers, failure chance and a **fire/explosion risk** if you rush; **NPC dealing** priced by district, demand decay and heat; **player-to-player** dealing; **addiction & effects** on the buyer (tied to `v-status`); and **police pressure** - a bust chance that scales with heat, dirty money that must go through `v-banking`'s laundering, and evidence that lands in `v-police`. |
+| 10 | ✅ **`v-drugs`** - the full chain (**shipped**) | `v-gangs`, `v-police`, `v-licenses` | Turn the current recipes into a real system: **plantations** with growth stages, watering and theft by other players; **labs** with quality tiers, failure chance and a **fire/explosion risk** if you rush; **NPC dealing** priced by district, demand decay and heat; **player-to-player** dealing; **addiction & effects** on the buyer (tied to `v-status`); and **police pressure** - a bust chance that scales with heat, dirty money that must go through `v-banking`'s laundering, and evidence that lands in `v-police`. |
 | 11 | **Heists & robberies** | `v-police`, `v-inventory` | Stores, ATMs, jewellery, the Fleeca/Pacific jobs. Server-authoritative timers and loot tables, a **minimum police count** before a job can start, and dirty money as the payout so it feeds the laundering loop. |
 | 12 | **`v-anticheat`** | `v-core` | The counterweight to all of the above: server-side sanity checks on money deltas, health, explosions, spawned entities and impossible movement, every trip logged to the existing audit log. |
 

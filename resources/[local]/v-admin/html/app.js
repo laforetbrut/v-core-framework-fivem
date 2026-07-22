@@ -348,6 +348,11 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'drugs') {
+    const grow = r.seed_item ? `${r.grow_minutes}m · ${r.yield_min}-${r.yield_max}` : t('adm.ed_nogrow');
+    return `${esc(r.label)} <i class="dim">${esc(r.key)} · ${esc(r.product_item)} · ` +
+      `${esc(grow)} · ${fmt(r.street_price)} · heat ${Number(r.heat) || 0}</i>`;
+  }
   if (edDomain === 'charges') {
     return `${esc(r.code)} — ${esc(r.label)} <i class="dim">${esc(r.cat)} · ${fmt(r.fine)}` +
       ` · ${Number(r.jail) || 0}m${Number(r.points) ? ' · ' + r.points + 'p ' + esc(r.license || '') : ''}</i>`;
@@ -489,7 +494,8 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'charges') ? r.code
+      const id = (edDomain === 'drugs') ? r.key
+        : (edDomain === 'charges') ? r.code
         : (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
         : (edDomain === 'vehcat') ? r.model
@@ -670,6 +676,29 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'drugs') {
+    const isNew = !row.key;
+    const items = (edData.items || []);
+    const opts = (sel, blank) =>
+      (blank ? `<option value="">${esc(t('adm.ed_nogrow'))}</option>` : '') +
+      items.map(i => `<option value="${esc(i.name)}"${i.name === sel ? ' selected' : ''}>` +
+        `${esc(i.label || i.name)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_key'))}</span>` +
+        `<input id="ef-dkey" value="${esc(row.key ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      // a blank seed means the substance is made or bought, never grown
+      `<label class="edf"><span>${esc(t('adm.ed_seed'))}</span>` +
+        `<select id="ef-seed">${opts(row.seed_item, true)}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_product'))}</span>` +
+        `<select id="ef-prod">${opts(row.product_item, false)}</select></label>` +
+      field(t('adm.ed_grow'), 'ef-grow', row.grow_minutes ?? 60, 'number') +
+      field(t('adm.ed_waterh'), 'ef-waterh', row.water_hours ?? 2, 'number') +
+      field(t('adm.ed_ymin'), 'ef-ymin', row.yield_min ?? 2, 'number') +
+      field(t('adm.ed_ymax'), 'ef-ymax', row.yield_max ?? 5, 'number') +
+      field(t('adm.ed_street'), 'ef-street', row.street_price ?? 120, 'number') +
+      field(t('adm.ed_heat'), 'ef-heat', row.heat ?? 4, 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'charges') {
     const isNew = !row.code;
     const cats = (edData.cats || []).map(c =>
@@ -868,6 +897,11 @@ function openEdForm(row) {
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
+  if (edDomain === 'drugs' && !row.key) {
+    const e = byId('ef-dkey');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30); };
+  }
+
   if (edDomain === 'charges' && !row.code) {
     const e = byId('ef-code');
     e.oninput = () => { e.value = e.value.toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 20); };
@@ -959,6 +993,13 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'drugs') {
+      payload = { key: v('ef-dkey'), label: v('ef-label'), seed: v('ef-seed'),
+                  product: v('ef-prod'), grow: parseInt(v('ef-grow'), 10) || 60,
+                  water: parseInt(v('ef-waterh'), 10) || 0,
+                  min: parseInt(v('ef-ymin'), 10) || 0, max: parseInt(v('ef-ymax'), 10) || 0,
+                  price: parseInt(v('ef-street'), 10) || 0,
+                  heat: parseInt(v('ef-heat'), 10) || 0, enabled: ck('ef-en') };
     } else if (edDomain === 'charges') {
       payload = { code: v('ef-code'), label: v('ef-label'), cat: v('ef-cat'),
                   fine: parseInt(v('ef-fine'), 10) || 0, jail: parseInt(v('ef-jail'), 10) || 0,

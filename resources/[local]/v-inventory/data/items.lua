@@ -110,6 +110,8 @@ InventoryItems = {
   { name='meth_baggy', label='Meth Baggy', weight=5, stackable=1, usable=1, category='drugs', image='drugs/baggy_meth.png', itype='drug', rarity='rare', desc='Baggy of crystal meth.' },
   { name='ecstasy_baggy', label='Ecstasy Baggy', weight=5, stackable=1, usable=1, category='drugs', image='drugs/baggy_extasy.png', itype='drug', rarity='rare', desc='Baggy of ecstasy pills.' },
   { name='cocaine', label='Cocaine', weight=20, stackable=1, usable=1, category='drugs', image='drugs/cocaine.png', itype='drug', rarity='rare', desc='Loose cocaine powder.' },
+  { name='weed_seed', label='Cannabis Seeds', weight=10, stackable=1, usable=1, category='general', image='drugs/cannabis.png', itype='misc', rarity='uncommon', desc='Plant them somewhere nobody looks.' },
+  { name='coca_seed', label='Coca Seeds', weight=10, stackable=1, usable=1, category='general', image='drugs/cocaine.png', itype='misc', rarity='rare', desc='Needs warmth, patience and privacy.' },
   { name='cannabis', label='Cannabis Bud', weight=15, stackable=1, usable=1, category='drugs', image='drugs/cannabis.png', itype='drug', rarity='rare', desc='Dried cannabis bud.' },
   { name='joint', label='Joint', weight=5, stackable=1, usable=1, category='drugs', image='drugs/joint.png', itype='drug', rarity='rare', desc='Rolled cannabis joint.' },
   { name='blunt', label='Blunt', weight=6, stackable=1, usable=1, category='drugs', image='drugs/blunt.png', itype='drug', rarity='rare', desc='Rolled blunt.' },

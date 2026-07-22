@@ -13,7 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
-local Gangs, Turfs, Charges = {}, {}, {}
+local Gangs, Turfs, Charges, Drugs = {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -267,6 +267,23 @@ local function ensureTables()
         PRIMARY KEY (`code`), KEY `cat_idx` (`cat`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Substances. One row carries the growing side and the street side, because an
+    -- operator thinks in substances rather than in subsystems.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_drugs` (
+        `key` VARCHAR(30) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `seed_item` VARCHAR(50) DEFAULT NULL,        -- NULL = cannot be grown
+        `product_item` VARCHAR(50) NOT NULL,
+        `grow_minutes` INT NOT NULL DEFAULT 60,
+        `water_hours` INT NOT NULL DEFAULT 2,        -- unwatered for this long and it wilts
+        `yield_min` INT NOT NULL DEFAULT 2,
+        `yield_max` INT NOT NULL DEFAULT 5,
+        `street_price` INT NOT NULL DEFAULT 120,     -- per unit, before demand and turf
+        `heat` INT NOT NULL DEFAULT 4,               -- heat added per street sale
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -364,6 +381,14 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadDrugs()
+    Drugs = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_drugs ORDER BY label') or {}) do
+        r.enabled = bool(r.enabled)
+        Drugs[#Drugs + 1] = r
     end
 end
 
@@ -493,6 +518,7 @@ local function reload(domain)
     if domain == 'gangs'   or not domain then loadGangs() end
     if domain == 'turfs'   or not domain then loadTurfs() end
     if domain == 'charges' or not domain then loadCharges() end
+    if domain == 'drugs'   or not domain then loadDrugs() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -579,6 +605,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetDrugs',   function() return Drugs end)
 exports('GetCharges', function() return Charges end)
 exports('GetGangs',   function() return Gangs end)
 exports('GetTurfs',   function() return Turfs end)
@@ -779,6 +806,24 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-drugs: list of { key, label, seed, product, grow, water, min, max, price, heat }
+exports('SeedDrugs', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('drugs', defaults)
+    if not need then return false end
+    for _, d in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_drugs
+            (`key`, label, seed_item, product_item, grow_minutes, water_hours,
+             yield_min, yield_max, street_price, heat, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,1)]],
+            { d.key, d.label or d.key, d.seed, d.product, d.grow or 60, d.water or 2,
+              d.min or 2, d.max or 5, d.price or 120, d.heat or 4 })
+    end
+    seedDone('drugs', want)
+    loadDrugs()
+    print(('[v-world] seeded %d substance(s) from config'):format(#Drugs))
+    return true
+end)
+
 -- v-police: list of { code, label, cat, fine, jail, points, license }
 exports('SeedCharges', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
@@ -877,6 +922,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'drugs' then
+        local items = {}
+        for _, i in ipairs(Items) do items[#items + 1] = { name = i.name, label = i.label } end
+        resolve({ rows = Drugs, items = items })
     elseif domain == 'charges' then
         local lics = {}
         for _, l in ipairs(LicTypes) do lics[#lics + 1] = { key = l.key, label = l.label } end
@@ -1007,6 +1056,29 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'drugs' then
+        local key = tostring(row.key or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
+        if key == '' then resolve({ error = 'key' }); return end
+        local product = tostring(row.product or ''):sub(1, 50)
+        if product == '' then resolve({ error = 'product' }); return end
+        -- A blank seed means the substance cannot be grown, only made or bought. It must
+        -- not become an empty string, which would look like an item named "".
+        local seed = tostring(row.seed or ''):sub(1, 50); if seed == '' then seed = nil end
+        local mn = math.max(0, math.floor(num(row.min, 2)))
+        local mx = math.max(mn, math.floor(num(row.max, 5)))
+        MySQL.query.await([[INSERT INTO world_drugs
+            (`key`, label, seed_item, product_item, grow_minutes, water_hours,
+             yield_min, yield_max, street_price, heat, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), seed_item=VALUES(seed_item),
+                product_item=VALUES(product_item), grow_minutes=VALUES(grow_minutes),
+                water_hours=VALUES(water_hours), yield_min=VALUES(yield_min),
+                yield_max=VALUES(yield_max), street_price=VALUES(street_price),
+                heat=VALUES(heat), enabled=VALUES(enabled)]],
+            { key, tostring(row.label or key):sub(1, 80), seed, product,
+              math.max(1, math.floor(num(row.grow, 60))), math.max(0, math.floor(num(row.water, 2))),
+              mn, mx, math.max(0, math.floor(num(row.price, 120))),
+              math.max(0, math.floor(num(row.heat, 4))), bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'charges' then
         local code = tostring(row.code or ''):upper():gsub('[^%w%.%-]', ''):sub(1, 20)
@@ -1391,6 +1463,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'drugs' then
+        local key = tostring(id or '')
+        if key == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_drugs WHERE `key` = ?', { key })
     elseif d == 'charges' then
         local code = tostring(id or '')
         if code == '' then resolve({ error = 'protected' }); return end
