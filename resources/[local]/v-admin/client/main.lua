@@ -48,6 +48,19 @@ RegisterNUICallback('action', function(data, cb)
     Core.TriggerCallback('v-admin:action', function(ok) cb(ok and true or false) end, data)
 end)
 
+-- ── World editor relays (blips / shop locations / jobs) -> v-world ──
+RegisterNUICallback('worldList', function(data, cb)
+    Core.TriggerCallback('v-world:list', function(res) cb(res or false) end, data and data.domain)
+end)
+
+RegisterNUICallback('worldSave', function(data, cb)
+    Core.TriggerCallback('v-world:save', function(res) cb(res or false) end, data)
+end)
+
+RegisterNUICallback('worldDelete', function(data, cb)
+    Core.TriggerCallback('v-world:delete', function(res) cb(res or false) end, data)
+end)
+
 -- Open a target player's inventory (admin) — closes the panel, then opens the container.
 RegisterNUICallback('openinv', function(data, cb)
     local target = tonumber(data and data.target)

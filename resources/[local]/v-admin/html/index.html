@@ -17,8 +17,9 @@
         <button class="rtab" data-tab="players" style="--i:1" data-i18n="adm.tab_players">Players</button>
         <button class="rtab" data-tab="res" style="--i:2" data-i18n="adm.tab_res">Scripts</button>
         <button class="rtab" data-tab="tools" style="--i:3" data-i18n="adm.tab_tools">Tools</button>
-        <button class="rtab" data-tab="world" style="--i:4" data-i18n="adm.tab_world">World</button>
-        <button class="rtab" data-tab="logs" style="--i:5" data-i18n="adm.tab_logs">Logs</button>
+        <button class="rtab" data-tab="editor" style="--i:4" data-i18n="adm.tab_editor">Editor</button>
+        <button class="rtab" data-tab="world" style="--i:5" data-i18n="adm.tab_world">World</button>
+        <button class="rtab" data-tab="logs" style="--i:6" data-i18n="adm.tab_logs">Logs</button>
         <div class="railfoot">F10 · PROJET R</div>
       </div>
 
@@ -64,6 +65,19 @@
             <div class="crow"><span class="clbl">x, y, z</span><code class="cval" id="c-raw">—</code><button class="mini" data-copy="c-raw" data-i18n="adm.copy">Copy</button></div>
             <div class="cmeta" id="c-meta"></div>
           </div>
+        </section>
+
+        <!-- World editor: blips / shop locations / jobs -->
+        <section id="tab-editor" class="tab hidden">
+          <div class="subtabs">
+            <button class="sub on" data-dom="blips" data-i18n="adm.ed_blips">Blips</button>
+            <button class="sub" data-dom="shops" data-i18n="adm.ed_shops">Stores</button>
+            <button class="sub" data-dom="jobs"  data-i18n="adm.ed_jobs">Jobs</button>
+            <span class="spacer"></span>
+            <button class="mini accent" id="ed-new" data-i18n="adm.ed_new">+ New</button>
+          </div>
+          <div class="edform hidden" id="ed-form"></div>
+          <div class="list v-scroll" id="ed-list"></div>
         </section>
 
         <!-- Resources -->

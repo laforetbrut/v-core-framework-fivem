@@ -4,11 +4,55 @@ local Core = exports['v-core']:GetCore()
 
 local Duty = {}   -- [src] = bool (on/off duty; defaults on when holding a paid job)
 
-local function jobDef(name) return Config.Jobs[name] end
+-- Live job definitions. Sourced from the DB via v-world (admin-editable in-game);
+-- falls back to Config.Jobs when v-world is absent or the table is still empty, so
+-- the module behaves exactly as before on a fresh install.
+local JobDefs = Config.Jobs
+
+local function jobDef(name) return JobDefs[name] end
 local function gradeDef(name, grade)
-    local j = Config.Jobs[name]
+    local j = JobDefs[name]
     return j and j.grades and j.grades[grade or 0] or nil
 end
+
+-- Rebuild JobDefs from v-world rows ({name,label,type,grades=[{grade,name,salary}]})
+-- into the Config shape ({label, grades = {[n] = {name, salary}}}) the module uses.
+local function rebuildJobs()
+    if GetResourceState('v-world') ~= 'started' then JobDefs = Config.Jobs; return end
+    local ok, rows = pcall(function() return exports['v-world']:GetJobs() end)
+    if not ok or type(rows) ~= 'table' or #rows == 0 then JobDefs = Config.Jobs; return end
+    local out = {}
+    for _, r in ipairs(rows) do
+        local grades = {}
+        for _, g in ipairs(r.grades or {}) do
+            grades[math.floor(tonumber(g.grade) or 0)] = { name = g.name, salary = tonumber(g.salary) or 0 }
+        end
+        if next(grades) == nil then grades[0] = { name = 'Employee', salary = 0 } end
+        out[r.name] = { label = r.label or r.name, type = r.type, grades = grades }
+    end
+    JobDefs = out
+end
+
+-- Seed the DB from Config on first boot, then follow the DB from there on.
+CreateThread(function()
+    if GetResourceState('v-world') == 'missing' then return end
+    local t = 0
+    while GetResourceState('v-world') ~= 'started' and t < 100 do Wait(100); t = t + 1 end
+    if GetResourceState('v-world') ~= 'started' then return end
+    t = 0
+    while not (pcall(function() return exports['v-world']:IsReady() end) and exports['v-world']:IsReady()) and t < 100 do
+        Wait(100); t = t + 1
+    end
+    pcall(function() exports['v-world']:SeedJobs(Config.Jobs) end)
+    rebuildJobs()
+end)
+
+-- An admin edited jobs in the panel -> pick the change up immediately.
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'jobs' then rebuildJobs() end
+end)
+
+exports('GetJobDefs', function() return JobDefs end)
 
 -- Is `src` on duty? Unset defaults to true so a freshly-assigned job earns right away.
 local function isOnDuty(src)
