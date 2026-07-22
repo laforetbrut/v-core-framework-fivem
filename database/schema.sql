@@ -201,3 +201,33 @@ INSERT IGNORE INTO `shops` (`id`,`label`,`type`,`items`) VALUES
      JSON_OBJECT('item','water','price',5),
      JSON_OBJECT('item','bread','price',5),
      JSON_OBJECT('item','phone','price',250)));
+
+-- ─── Admin-editable world content (managed in-game via v-admin -> Editor) ───
+-- Seeded from each module's static config on first boot, so behaviour is
+-- identical until an admin edits something.
+
+CREATE TABLE IF NOT EXISTS `world_blips` (
+  `id`         INT NOT NULL AUTO_INCREMENT,
+  `label`      VARCHAR(80)  NOT NULL,
+  `sprite`     INT          NOT NULL DEFAULT 1,
+  `color`      INT          NOT NULL DEFAULT 0,
+  `scale`      FLOAT        NOT NULL DEFAULT 0.8,
+  `x`          FLOAT        NOT NULL,
+  `y`          FLOAT        NOT NULL,
+  `z`          FLOAT        NOT NULL,
+  `shortrange` TINYINT(1)   NOT NULL DEFAULT 1,
+  `enabled`    TINYINT(1)   NOT NULL DEFAULT 1,
+  `created_by` VARCHAR(24)  DEFAULT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS `world_shops` (
+  `id`      INT NOT NULL AUTO_INCREMENT,
+  `shop`    VARCHAR(50)  NOT NULL,                       -- -> shops.id
+  `x`       FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+  `ped`     VARCHAR(60)  DEFAULT NULL,                   -- clerk model; NULL = no ped
+  `blip`    TINYINT(1)   NOT NULL DEFAULT 1,
+  `enabled` TINYINT(1)   NOT NULL DEFAULT 1,
+  PRIMARY KEY (`id`),
+  KEY `shop_idx` (`shop`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

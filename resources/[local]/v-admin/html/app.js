@@ -37,6 +37,8 @@ async function loadTab() {
   } else if (curTab === 'tools') {
     renderTools();
     renderCoords();
+  } else if (curTab === 'editor') {
+    loadEditor();
   } else if (curTab === 'res') {
     const res = await post('resources');
     renderResources(Array.isArray(res) ? res : []);
@@ -159,6 +161,133 @@ async function renderCoords() {
   byId('c-meta').textContent = [d.street, d.model].filter(Boolean).join(' · ');
 }
 
+// ══ World editor: blips / shop locations / jobs ══
+let edDomain = 'blips', edData = { rows: [] };
+
+async function loadEditor() {
+  const res = await post('worldList', { domain: edDomain });
+  edData = (res && typeof res === 'object') ? res : { rows: [] };
+  byId('ed-form').classList.add('hidden');
+  renderEdList();
+}
+
+function edRowTitle(r) {
+  if (edDomain === 'blips') return `${esc(r.label)} <i class="dim">sprite ${r.sprite} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
+  return `${esc(r.label || r.name)} <i class="dim">${esc(r.name)} · ${(r.grades || []).length} ${t('adm.ed_grades')}</i>`;
+}
+
+function renderEdList() {
+  const wrap = byId('ed-list'); wrap.innerHTML = '';
+  const rows = edData.rows || [];
+  if (!rows.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.ed_empty'))}</div>`; return; }
+  rows.forEach((r, i) => {
+    const el = document.createElement('div'); el.className = 'edrow'; el.style.setProperty('--i', i);
+    const off = (r.enabled === 0 || r.enabled === false);
+    el.innerHTML = `<span class="edname${off ? ' off' : ''}">${edRowTitle(r)}</span>
+      <span class="edacts">
+        <button class="mini" data-act="edit">${esc(t('adm.ed_edit'))}</button>
+        <button class="mini danger" data-act="del">${esc(t('adm.ed_del'))}</button>
+      </span>`;
+    el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
+    el.querySelector('[data-act="del"]').onclick = async () => {
+      const id = (edDomain === 'jobs') ? r.name : r.id;
+      const ok = await post('worldDelete', { domain: edDomain, id });
+      if (ok && ok.ok) loadEditor();
+    };
+    wrap.appendChild(el);
+  });
+}
+
+const field = (label, id, val, type) =>
+  `<label class="edf"><span>${esc(label)}</span><input id="${id}" type="${type || 'text'}" value="${esc(val ?? '')}" /></label>`;
+const check = (label, id, on) =>
+  `<label class="edf chk"><input id="${id}" type="checkbox" ${on ? 'checked' : ''} /><span>${esc(label)}</span></label>`;
+
+function openEdForm(row) {
+  row = row || {};
+  const f = byId('ed-form'); f.classList.remove('hidden');
+  let html = '';
+  if (edDomain === 'blips') {
+    const presets = (edData.presets || []).map(p => `<option value="${p.sprite}"${p.sprite == row.sprite ? ' selected' : ''}>${esc(p.label)} (${p.sprite})</option>`).join('');
+    const colors = (edData.colors || []).map(c => `<option value="${c.color}"${c.color == row.color ? ' selected' : ''}>${esc(c.label)} (${c.color})</option>`).join('');
+    html = field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_sprite'))}</span><select id="ef-sprite">${presets}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_color'))}</span><select id="ef-color">${colors}</select></label>` +
+      field(t('adm.ed_scale'), 'ef-scale', row.scale ?? 0.8, 'number') +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
+      check(t('adm.ed_short'), 'ef-short', row.shortrange !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'shops') {
+    const shops = (edData.shops || []).map(s => `<option value="${esc(s.id)}"${s.id === row.shop ? ' selected' : ''}>${esc(s.label)} (${esc(s.id)})</option>`).join('');
+    html = `<label class="edf"><span>${esc(t('adm.ed_shop'))}</span><select id="ef-shop">${shops}</select></label>` +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      field(t('adm.ed_ped'), 'ef-ped', row.ped ?? '') +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else {
+    html = field(t('adm.ed_jobid'), 'ef-name', row.name) + field(t('adm.ed_label'), 'ef-label', row.label) +
+      field(t('adm.ed_type'), 'ef-type', row.type || 'civ') +
+      `<div class="grades" id="ef-grades"></div><button class="mini" id="ef-addgrade">+ ${esc(t('adm.ed_grade'))}</button>`;
+  }
+  f.innerHTML = `<div class="edfields">${html}</div>
+    <div class="edbtns">
+      ${edDomain !== 'jobs' ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      <span class="spacer"></span>
+      <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
+      <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
+    </div>`;
+
+  if (edDomain === 'jobs') {
+    const g = byId('ef-grades');
+    const addGrade = (gr) => {
+      const d = document.createElement('div'); d.className = 'grow';
+      d.innerHTML = `<input class="gin sm" placeholder="#" type="number" value="${esc(gr?.grade ?? 0)}" />
+        <input class="gin" placeholder="${esc(t('adm.ed_gradename'))}" value="${esc(gr?.name ?? '')}" />
+        <input class="gin sm" placeholder="$" type="number" value="${esc(gr?.salary ?? 0)}" />
+        <button class="mini danger grem">×</button>`;
+      d.querySelector('.grem').onclick = () => d.remove();
+      g.appendChild(d);
+    };
+    (row.grades && row.grades.length ? row.grades : [{ grade: 0, name: 'Employee', salary: 0 }]).forEach(addGrade);
+    byId('ef-addgrade').onclick = () => addGrade({ grade: g.children.length, name: '', salary: 0 });
+  }
+
+  const here = byId('ef-here');
+  if (here) here.onclick = async () => {
+    const c = await post('coords');
+    if (!c || !c.raw) return;
+    const p = c.raw.split(',').map(s => parseFloat(s.trim()));
+    if (byId('ef-x')) byId('ef-x').value = p[0];
+    if (byId('ef-y')) byId('ef-y').value = p[1];
+    if (byId('ef-z')) byId('ef-z').value = p[2];
+    if (byId('ef-h')) byId('ef-h').value = parseFloat(c.heading) || 0;
+  };
+  byId('ef-cancel').onclick = () => f.classList.add('hidden');
+  byId('ef-save').onclick = async () => {
+    const v = (id) => { const el = byId(id); return el ? el.value : undefined; };
+    const ck = (id) => { const el = byId(id); return el ? el.checked : false; };
+    let payload;
+    if (edDomain === 'blips') {
+      payload = { id: row.id, label: v('ef-label'), sprite: +v('ef-sprite'), color: +v('ef-color'),
+                  scale: parseFloat(v('ef-scale')) || 0.8, x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
+                  z: parseFloat(v('ef-z')), shortrange: ck('ef-short'), enabled: ck('ef-en') };
+    } else if (edDomain === 'shops') {
+      payload = { id: row.id, shop: v('ef-shop'), x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
+                  z: parseFloat(v('ef-z')), h: parseFloat(v('ef-h')) || 0, ped: v('ef-ped'),
+                  blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else {
+      const grades = [...byId('ef-grades').children].map(d => {
+        const i = d.querySelectorAll('.gin');
+        return { grade: +i[0].value || 0, name: i[1].value, salary: +i[2].value || 0 };
+      });
+      payload = { name: v('ef-name'), label: v('ef-label'), type: v('ef-type'), grades };
+    }
+    const res = await post('worldSave', { domain: edDomain, row: payload });
+    if (res && res.ok) { f.classList.add('hidden'); loadEditor(); }
+    else flash(byId('ef-save'), false);
+  };
+}
+
 // ── Resources ──
 function renderResources(list) {
   const wrap = byId('rlist'); wrap.innerHTML = '';
@@ -240,6 +369,12 @@ document.querySelectorAll('[data-copy]').forEach(b => b.onclick = () => {
   copyText(el.textContent.trim()); flash(b, true);
 });
 byId('c-refresh').onclick = () => renderCoords();
+document.querySelectorAll('.sub[data-dom]').forEach(b => b.onclick = () => {
+  edDomain = b.dataset.dom;
+  document.querySelectorAll('.sub[data-dom]').forEach(x => x.classList.toggle('on', x === b));
+  loadEditor();
+});
+byId('ed-new').onclick = () => openEdForm(null);
 document.querySelectorAll('.rtab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 byId('refresh').onclick = loadTab;
 byId('psearch').oninput = renderPlayers;

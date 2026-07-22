@@ -296,3 +296,44 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
   font-family:var(--v-font-num); font-size:12.5px; color:var(--v-accent-300);
   white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .cmeta { font-family:var(--v-font-body); font-size:11px; color:var(--v-text-faint); letter-spacing:.03em; min-height:14px; }
+
+/* ── World editor (blips / stores / jobs) ── */
+.subtabs { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+.subtabs .spacer { flex:1; }
+.sub { padding:7px 14px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
+  background:linear-gradient(180deg,var(--v-bg-500),var(--v-bg-700)); color:var(--v-text-dim);
+  font-family:var(--v-font-display); font-size:11px; font-weight:700; letter-spacing:.12em;
+  text-transform:uppercase; cursor:pointer;
+  transition:border-color var(--v-t-base) ease, color var(--v-t-base) ease, background-color var(--v-t-base) ease; }
+.sub:hover { border-color:var(--v-accent); color:var(--v-accent-300); }
+.sub.on { border-color:var(--v-accent); background:var(--v-accent-soft); color:var(--v-accent-300); }
+
+.edrow { display:flex; align-items:center; gap:10px; padding:10px 12px; margin-bottom:7px;
+  border-radius:var(--v-r-md); background-color:#12100D;
+  box-shadow:inset 0 2px 6px rgba(0,0,0,.6), inset 0 0 0 1px var(--v-line);
+  animation:v-seat .2s var(--v-ease) backwards; animation-delay:calc(var(--i,0) * 18ms); }
+.edrow .edname { flex:1; min-width:0; font-family:var(--v-font-display); font-size:12.5px;
+  letter-spacing:.05em; color:var(--v-text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.edrow .edname.off { opacity:.45; text-decoration:line-through; }
+.edrow .dim { font-style:normal; font-family:var(--v-font-num); font-size:11px; color:var(--v-text-faint); margin-left:8px; }
+.edrow .edacts { display:flex; gap:6px; flex:0 0 auto; }
+.empty-ed { padding:28px 12px; text-align:center; color:var(--v-text-faint);
+  font-family:var(--v-font-display); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
+
+.edform { margin-bottom:14px; padding:14px; border-radius:var(--v-r-md);
+  background:var(--v-bg-sunk); box-shadow:inset 0 0 0 1px var(--v-line); }
+.edfields { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; }
+.edf { display:flex; flex-direction:column; gap:4px; }
+.edf > span { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); }
+.edf input, .edf select { padding:7px 10px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
+  background:var(--v-bg-700); color:var(--v-text); font-family:var(--v-font-num); font-size:12.5px; }
+.edf input:focus, .edf select:focus { outline:none; border-color:var(--v-accent); }
+.edf.chk { flex-direction:row; align-items:center; gap:8px; align-self:end; padding-bottom:7px; }
+.edbtns { display:flex; align-items:center; gap:8px; margin-top:12px; }
+.edbtns .spacer { flex:1; }
+.grades { grid-column:1 / -1; display:flex; flex-direction:column; gap:6px; }
+.grow { display:flex; gap:6px; align-items:center; }
+.gin { flex:1; padding:6px 9px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
+  background:var(--v-bg-700); color:var(--v-text); font-family:var(--v-font-num); font-size:12px; }
+.gin.sm { flex:0 0 72px; }

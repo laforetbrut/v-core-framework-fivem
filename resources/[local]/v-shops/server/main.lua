@@ -4,6 +4,46 @@ local Core = exports['v-core']:GetCore()
 local Shops    = {}   -- id -> { id, label, type, job, items = [{item, price}] }
 local ItemDefs = {}   -- name -> row
 
+-- Live store locations. Sourced from the DB via v-world (admin-editable in-game);
+-- falls back to Config.Locations when v-world is absent, so a fresh install behaves
+-- exactly as before. Shape stays { shop, coords = vector4, ped, noPed, noBlip }.
+local Locations = Config.Locations
+
+local function rebuildLocations()
+    if GetResourceState('v-world') ~= 'started' then Locations = Config.Locations; return end
+    local ok, rows = pcall(function() return exports['v-world']:GetShopLocations() end)
+    if not ok or type(rows) ~= 'table' or #rows == 0 then Locations = Config.Locations; return end
+    local out = {}
+    for _, r in ipairs(rows) do
+        if r.enabled == 1 or r.enabled == true then
+            out[#out + 1] = {
+                shop   = r.shop,
+                coords = vector4(r.x + 0.0, r.y + 0.0, r.z + 0.0, (r.h or 0.0) + 0.0),
+                ped    = r.ped,
+                noPed  = (r.ped == nil or r.ped == ''),
+                noBlip = not (r.blip == 1 or r.blip == true),
+            }
+        end
+    end
+    Locations = out
+end
+
+-- Client-facing shape (vector4 doesn't survive the net boundary cleanly).
+local function locationPayload()
+    local out = {}
+    for _, l in ipairs(Locations) do
+        out[#out + 1] = { shop = l.shop, x = l.coords.x, y = l.coords.y, z = l.coords.z, w = l.coords.w,
+                          ped = l.ped, noPed = l.noPed == true, noBlip = l.noBlip == true }
+    end
+    return out
+end
+
+local function pushLocations(target)
+    TriggerClientEvent('v-shops:client:locations', target or -1, locationPayload())
+end
+
+exports('GetLocations', function() return Locations end)
+
 CreateThread(function()
     while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
     for _, r in ipairs(MySQL.query.await('SELECT * FROM items') or {}) do ItemDefs[r.name] = r end
@@ -18,7 +58,37 @@ CreateThread(function()
             items = (type(s.items) == 'table') and s.items or (json.decode(s.items or '[]') or {}),
         }
     end
+
+    -- Hand our static locations to v-world once (it only seeds when its table is
+    -- empty), then follow the DB from there so admins can move/add stores in-game.
+    if GetResourceState('v-world') ~= 'missing' then
+        local t = 0
+        while GetResourceState('v-world') ~= 'started' and t < 100 do Wait(100); t = t + 1 end
+        if GetResourceState('v-world') == 'started' then
+            t = 0
+            while not (pcall(function() return exports['v-world']:IsReady() end) and exports['v-world']:IsReady()) and t < 100 do
+                Wait(100); t = t + 1
+            end
+            local seed = {}
+            for _, l in ipairs(Config.Locations or {}) do
+                seed[#seed + 1] = { shop = l.shop, x = l.coords.x, y = l.coords.y, z = l.coords.z,
+                                    h = l.coords.w, ped = (not l.noPed) and (l.ped or 'mp_m_shopkeep_01') or nil,
+                                    blip = not l.noBlip }
+            end
+            pcall(function() exports['v-world']:SeedShopLocations(seed) end)
+            rebuildLocations()
+        end
+    end
+    pushLocations()
 end)
+
+-- An admin moved/added/removed a store in the panel -> apply live.
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'shops' then rebuildLocations(); pushLocations() end
+end)
+
+-- A client that just spawned asks for the current store list.
+RegisterNetEvent('v-shops:server:requestLocations', function() pushLocations(source) end)
 
 local function priceOf(shop, itemName)
     for _, e in ipairs(shop.items) do if e.item == itemName then return e.price end end
@@ -34,7 +104,7 @@ local function canUseShop(source, shop)
     if not ped or ped == 0 then return false, 'too_far' end
     local pos = GetEntityCoords(ped)
     local near = false
-    for _, loc in ipairs(Config.Locations or {}) do
+    for _, loc in ipairs(Locations or {}) do
         if loc.shop == shop.id and #(pos - vector3(loc.coords.x, loc.coords.y, loc.coords.z)) <= (Config.Distance + 3.0) then
             near = true; break
         end
