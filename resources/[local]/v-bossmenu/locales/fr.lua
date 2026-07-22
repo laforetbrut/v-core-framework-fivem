@@ -1,0 +1,40 @@
+-- v-bossmenu | Français
+-- Les apostrophes françaises passent par des guillemets doubles : l'échappement manuel
+-- est la source d'erreur la plus fréquente de ces fichiers.
+Locales.fr = Locales.fr or {}
+local T = {
+    ['boss.title']       = 'Menu patron',
+    ['boss.members']     = 'Membres',
+    ['boss.hire']        = 'Recruter',
+    ['boss.treasury']    = 'Trésorerie',
+    ['boss.balance']     = 'Solde',
+    ['boss.history']     = 'Mouvements récents',
+    ['boss.amount']      = 'Montant',
+    ['boss.deposit']     = 'Déposer',
+    ['boss.withdraw']    = 'Retirer',
+    ['boss.pay']         = 'Payer les salaires',
+    ['boss.fire']        = 'Renvoyer',
+    ['boss.nearby']      = 'À proximité',
+    ['boss.is_boss']     = 'patron',
+    ['boss.on_duty']     = 'en service',
+    ['boss.online']      = 'connecté',
+    ['boss.offline']     = 'hors ligne',
+    ['boss.no_members']  = "Personne ne travaille encore ici.",
+    ['boss.nobody_near'] = "Personne n'est assez proche pour être recruté.",
+    ['boss.no_history']  = 'Aucun mouvement pour le moment.',
+    ['boss.paid_n']      = 'Payé %d membre(s), %s au total.',
+    ['boss.got_paid']    = 'Salaire versé : %s $.',
+    ['boss.err_rank']    = "Vous ne dirigez aucune organisation.",
+    ['boss.err_off']     = 'Désactivé sur ce serveur.',
+    ['boss.err_far']     = "Cette personne n'est plus assez proche.",
+    ['boss.err_self']    = 'Vous ne pouvez pas vous renvoyer vous-même.',
+    ['boss.err_funds']   = 'La trésorerie est insuffisante.',
+    ['boss.err_limit']   = 'Cela dépasse la limite de retrait.',
+    ['boss.err_amount']  = 'Saisissez un montant.',
+    ['boss.err_grade']   = "Ce rang n'existe pas.",
+    ['boss.err_target']  = 'Membre introuvable.',
+    ['boss.err_faction'] = "Cette organisation n'existe pas.",
+    ['boss.err_disabled'] = 'Les trésoreries sont désactivées sur ce serveur.',
+    ['boss.err_x']       = 'Une erreur est survenue.',
+}
+for k, v in pairs(T) do Locales.fr[k] = v end

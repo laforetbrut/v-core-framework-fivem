@@ -1,0 +1,94 @@
+/* v-bossmenu — theme tokens only, so the panel follows the server palette and any
+   per-module override without a single literal colour here. */
+.boss-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, var(--v-backdrop-a));
+}
+.boss-overlay.hidden { display: none; }
+
+.panel { width: min(66vw, 900px); max-height: 80vh; display: flex; flex-direction: column; }
+
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--v-line);
+}
+.ttl { font-family: var(--v-font-display); font-size: 1.35rem; color: var(--v-text); }
+.sub { font-size: .82rem; color: var(--v-text-dim); margin-top: .15rem; }
+.head-right { display: flex; align-items: center; gap: .8rem; }
+.chip {
+  font-size: .86rem; padding: .35rem .8rem; border-radius: var(--v-r-sm);
+  border: 1px solid var(--v-accent-line); color: var(--v-accent);
+  background: var(--v-accent-soft); font-variant-numeric: tabular-nums;
+}
+.x {
+  background: none; border: 0; color: var(--v-text-dim); font-size: 1.6rem; line-height: 1;
+  cursor: pointer; transition: color var(--v-t-fast);
+}
+.x:hover { color: var(--v-text); }
+
+.tabs { display: flex; gap: .3rem; padding: .7rem 1.4rem 0; border-bottom: 1px solid var(--v-line); }
+.tab {
+  background: none; border: 0; cursor: pointer; padding: .5rem .9rem;
+  font-family: var(--v-font-display); font-size: .9rem; color: var(--v-text-dim);
+  border-bottom: 2px solid transparent; transition: color var(--v-t-fast), border-color var(--v-t-fast);
+}
+.tab:hover { color: var(--v-text); }
+.tab.on { color: var(--v-accent); border-bottom-color: var(--v-accent); }
+
+.panel__body { padding: 1.1rem 1.4rem; overflow-y: auto; }
+.pane.hidden { display: none; }
+
+.rowitem {
+  display: flex; align-items: center; gap: .8rem; padding: .6rem .8rem;
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  background: var(--v-panel-2); margin-bottom: .45rem;
+}
+.rowitem__main { flex: 1; min-width: 0; }
+.rowitem__name { color: var(--v-text); font-size: .95rem; }
+.rowitem__meta { color: var(--v-text-faint); font-size: .76rem; margin-top: .1rem; }
+.dot {
+  width: .5rem; height: .5rem; border-radius: 50%;
+  background: var(--v-text-faint); flex: 0 0 auto;
+}
+.dot.on { background: var(--v-success); }
+.dot.duty { background: var(--v-accent); }
+
+select, input[type="number"], input[type="text"] {
+  background: var(--v-bg-700); color: var(--v-text);
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  padding: .35rem .5rem; font-size: .85rem; font-family: inherit;
+}
+select:focus, input:focus { outline: none; border-color: var(--v-accent-line); }
+
+.btn {
+  padding: .4rem .8rem; border: 0; cursor: pointer; border-radius: var(--v-r-sm);
+  font-family: var(--v-font-display); font-size: .84rem;
+  color: var(--v-ink); background: var(--v-grad-accent); transition: filter var(--v-t-fast);
+}
+.btn:hover { filter: brightness(1.08); }
+.btn.ghost {
+  background: none; color: var(--v-text-dim); border: 1px solid var(--v-line);
+}
+.btn.ghost:hover { color: var(--v-text); border-color: var(--v-accent-line); }
+.btn.danger { background: none; color: var(--v-danger); border: 1px solid var(--v-danger); }
+.btn.danger:hover { background: var(--v-danger); color: var(--v-ink); filter: none; }
+
+.money-row { display: flex; gap: .5rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+.money-row input { width: 9rem; }
+
+.hist { margin-top: .4rem; }
+.hist__row {
+  display: flex; justify-content: space-between; gap: .8rem;
+  padding: .35rem .2rem; border-bottom: 1px solid var(--v-line);
+  font-size: .8rem; color: var(--v-text-dim);
+}
+.hist__row:last-child { border-bottom: 0; }
+.hist__amt { font-variant-numeric: tabular-nums; }
+.hist__amt.pos { color: var(--v-success); }
+.hist__amt.neg { color: var(--v-danger); }
+
+.section-ttl {
+  font-family: var(--v-font-display); font-size: .78rem; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--v-text-faint); margin: .2rem 0 .6rem;
+}
+.empty { text-align: center; color: var(--v-text-faint); padding: 2rem 0; font-size: .88rem; }
