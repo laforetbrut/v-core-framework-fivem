@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-world'
 author 'vyrriox'
 description 'v-world — admin-editable world content: blips, shop locations and jobs (DB-backed, live-synced)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-fuel'
 author 'vyrriox'
 description 'v-fuel — fuel types, consumption and gas / charging stations (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

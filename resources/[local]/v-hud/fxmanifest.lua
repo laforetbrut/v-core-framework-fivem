@@ -4,7 +4,7 @@ game 'gta5'
 name 'v-hud'
 author 'vyrriox'
 description 'v-hud — money HUD for Projet R (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

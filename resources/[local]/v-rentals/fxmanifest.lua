@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-rentals'
 author 'vyrriox'
 description 'v-rentals — short-term vehicle hire with a deposit and a timer (v-core module)'
-version '0.1.0'
+version '0.1.1'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
