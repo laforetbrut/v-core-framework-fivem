@@ -829,6 +829,38 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-3dsound` ✅ - the positional sound primitive
+
+A primitive, not a feature. `v-music`, `v-radio`, `v-housing`, `v-police` and `v-drugs` all
+want the same thing, and building it once is the whole point.
+
+**The wire carries a name, a position and a range - never audio.** The bank is on every
+client already, so the server broadcasts the *intent* and each client plays it locally,
+attenuated by its own distance.
+
+**Two banks.** Native GTA sounds cost nothing: no download, no streaming, already on every
+client, and the engine does the 3D mix itself. A custom file is a download every player
+pays for, so it goes through a small NUI page and only when nothing in the game sounds
+right. No custom files ship; the mechanism and the instructions do.
+
+**The rule the module exists to enforce:** anything a player can cause goes through
+`PlayFromPlayer`, which takes the position **from the ped**, not from a payload. A sound a
+client triggers and broadcasts itself is a griefing tool. Four entry points:
+`Play` (a world position), `PlayFromPlayer` (the one gameplay modules should use),
+`PlayOnEntity` (follows a moving car) and `PlayFor` (one person, not positional).
+
+**Only listeners in range get the message.** Sending to everyone and letting each client
+decide would put every sound on every wire, which is exactly what a proximity system exists
+to avoid. A per-source per-minute budget catches the realistic failure - a looping script,
+not a cheater.
+
+Custom-file falloff is **linear with a flat head**: full volume up close, silent at the
+edge. A squared curve sounds more natural but makes anything past half the range
+effectively inaudible, which is not what a caller asking for a 60 m alarm wants.
+
+Wired on arrival so it is not dead code: the cuff click in `v-police`, planting and
+harvesting in `v-drugs`, and a private confirmation in `v-banking`. Five settings.
+
 ### `v-anticheat` ✅ - sanity checks on what a client must not decide
 
 Six detectors, all server-side: **impossible movement** (metres per second between two
@@ -1226,7 +1258,6 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-3dsound` | high | A shared primitive, not a feature: play a sound at a position or on an entity, heard by everyone in range. Half the list below needs it. |
 | `v-phone` | high | iFruit phone NUI - a primary interaction surface. Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
 | `v-radio` | high | The handheld radio **device**: multi-channel listening, presets, per-channel volume. The transport is `v-voice`; this is the thing in your hand. |
@@ -1236,25 +1267,6 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 | `v-music` | medium | Boomboxes, jukeboxes and vehicle radio, positional through `v-3dsound`. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
-
-#### `v-3dsound` - the positional audio primitive
-
-Build this first of the five, because `v-music`, `v-radio`, `v-housing` (doors, alarms),
-`v-police` (sirens, cuffs) and `v-drugs` (a lab that goes wrong) all want the same thing
-and will otherwise each grow their own copy.
-
-**One export, honestly scoped:** play a named sound at a world position or attached to an
-entity, with a range and a volume, heard by every client in range. The server broadcasts
-the *intent*; each client plays it locally and attenuates by its own distance. Never send
-audio data - that is what the sound bank is for.
-
-Two banks: **native GTA sounds** (`PlaySoundFromCoord`, free, no streaming) and **custom
-files** shipped in the resource and played through a tiny NUI page. Prefer native; a custom
-sound is a download every player pays for.
-
-**The trap:** a sound triggered client-side and broadcast by that client is a griefing tool.
-Anything a player can cause goes through the server, which re-derives the position from the
-player rather than the payload - the same rule as every other module here.
 
 #### `v-radio` - the device, not the transport
 
@@ -1377,8 +1389,8 @@ the part that needs balancing once players are on the server.
    laundering path, and it is the module most likely to need balancing once players are on the server.
 5. ✅ **`v-anticheat` before the server opens**, not after - **done**. It is listed last because
    it guards everything above, not because it matters least.
-6. **`v-3dsound` before `v-music` and `v-radio`.** It is a primitive that five modules want;
-   building any of them first means building it five times.
+6. ✅ **`v-3dsound` before `v-music` and `v-radio`** - **done**. It is a primitive that five
+   modules want; building any of them first would have meant building it five times.
 7. **`v-motel` with `v-housing`, not after it.** It is a tenancy column, and discovering that
    after shipping housing means retrofitting rent into a model that assumed ownership.
 8. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
