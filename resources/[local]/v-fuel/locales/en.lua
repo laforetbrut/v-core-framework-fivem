@@ -33,5 +33,10 @@ local T = {
     ['fuel.err_funds']     = 'Not enough money.',
     ['fuel.err_space']     = 'Not enough inventory space.',
     ['fuel.err_x']         = 'Request refused.',
+    ['fuel.connector']   = 'Charger',
+    ['fuel.conn_ac']     = 'AC post',
+    ['fuel.conn_dc']     = 'DC fast',
+    ['fuel.conn_hpc']    = 'Ultra-fast',
+    ['fuel.health']      = 'Battery health',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

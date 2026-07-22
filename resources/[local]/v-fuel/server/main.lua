@@ -39,6 +39,39 @@ local function unitPrice(st, fuelType)
     return math.floor(t.price * (tonumber(st.mult) or 1.0) * 100 + 0.5) / 100
 end
 
+-- ── Electric ───────────────────────────────────────────────────
+--- Connectors a station offers. An admin-created charge point that isn't in the map
+--- still works: it falls back to the slow AC post rather than being unusable.
+local function connectorsAt(stationId)
+    local list = Config.StationConnectors[stationId] or { 'ac' }
+    local out = {}
+    for _, k in ipairs(list) do
+        local c = Config.EV.connectors[k]
+        if c then out[#out + 1] = { key = k, i18n = c.i18n, kw = c.kw, priceMult = c.price } end
+    end
+    return out
+end
+
+--- An aged traction battery holds less than its nameplate. v-mechanic owns that number,
+--- so an EV that has never been serviced genuinely has less range — which is the whole
+--- point of tracking battery health at all.
+local function batteryHealth(plate)
+    if not plate or plate == '' or GetResourceState('v-mechanic') ~= 'started' then return 100 end
+    local parts = exports['v-mechanic']:GetParts(plate)
+    if not parts then return 100 end
+    return tonumber(parts.battery_pack) or 100
+end
+
+--- Usable kWh of a pack, after health derating.
+local function usableCapacity(nominal, plate)
+    local h = batteryHealth(plate) / 100.0
+    -- a pack at 0 health still holds 55 % — a dead cell block, not a brick
+    return math.max(1.0, nominal * (0.55 + 0.45 * h))
+end
+
+exports('GetBatteryHealth', function(plate) return batteryHealth(plate) end)
+exports('GetUsableCapacity', function(nominal, plate) return usableCapacity(nominal, plate) end)
+
 -- ── Open a pump ────────────────────────────────────────────────
 Core.RegisterCallback('v-fuel:open', function(source, resolve, data)
     local st = stationById(type(data) == 'table' and tostring(data.station or '') or '')
@@ -60,8 +93,15 @@ Core.RegisterCallback('v-fuel:open', function(source, resolve, data)
                                   color = t.color, octane = t.octane }
         end
     end
+    local veh = type(data) == 'table' and data.vehicle or nil
+    local sellsElectric = stationSells(st, 'electric')
     resolve({
         station = { id = st.id, label = st.label },
+        ev = sellsElectric and {
+            connectors = connectorsAt(st.id),
+            taperFrom = Config.EV.taperFrom,
+            health = veh and veh.plate and batteryHealth(veh.plate) or 100,
+        } or nil,
         types = types, cash = p.money.cash, bank = p.money.bank,
         vehicle = type(data) == 'table' and data.vehicle or nil,   -- purely informational
         jerry = Config.JerryCan.item,
@@ -100,6 +140,11 @@ Core.RegisterCallback('v-fuel:refuel', function(source, resolve, data)
     if litres <= 0 then resolve({ error = 'nothing' }); return end
 
     local unit = unitPrice(st, fuelType)
+    -- A fast charger costs more per kWh than a slow post: same energy, better machine.
+    if fuelType == 'electric' then
+        local conn = Config.EV.connectors[tostring(data.connector or 'ac')] or Config.EV.connectors.ac
+        unit = math.floor(unit * conn.price * 100 + 0.5) / 100
+    end
     local total = math.ceil(litres * unit)
     local account = (data.account == 'bank') and 'bank' or 'cash'
     if (p.money[account] or 0) < total then
@@ -183,3 +228,6 @@ AddEventHandler('playerDropped', function() Sessions[source] = nil end)
 
 exports('GetStations', function() return Stations end)
 exports('GetTypes', function() return Config.Types end)
+-- v-mechanic mirrors this list to pick the electric part set for a vehicle row
+-- (server-side there is no entity to ask, only the stored model name).
+exports('GetElectricModels', function() return Config.ElectricModels end)

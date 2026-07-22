@@ -37,6 +37,15 @@ end
 
 exports('GetFuelType', function(veh) return fuelTypeOf(veh) end)
 exports('GetTankSize', function(veh) return tankOf(veh) end)
+exports('IsElectric', function(veh) return fuelTypeOf(veh) == 'electric' end)
+
+--- Charge speed at a given state of charge. Past the taper knee the cells deliberately
+--- slow down — that is real behaviour, and it is why "charge to 80 %" is a habit.
+local function chargeRate(kw, pct)
+    local rate = kw * Config.EV.kwhPerSecondPerKw
+    if pct >= Config.EV.taperFrom then rate = rate * Config.EV.taperMult end
+    return rate
+end
 
 -- ── Consumption ────────────────────────────────────────────────
 -- v-vehicles keeps the stored percentage; we decide how fast it falls. Load is derived
@@ -69,6 +78,32 @@ CreateThread(function()
                     Core.Notify(L('fuel.low'), 'warning')
                 end
             end
+        end
+    end
+end)
+
+-- ── Regenerative braking (electric only) ───────────────────────
+-- Slowing an EV puts a little charge back. Small on purpose: it should reward a smooth
+-- driver, not remove the need to charge.
+CreateThread(function()
+    if not Config.EV.regen.enabled then return end
+    local lastSpeed = 0.0
+    while true do
+        Wait(1000)
+        local ped = PlayerPedId()
+        local veh = GetVehiclePedIsIn(ped, false)
+        if veh ~= 0 and GetPedInVehicleSeat(veh, -1) == ped and fuelTypeOf(veh) == 'electric' then
+            local speed = GetEntitySpeed(veh)
+            local slowing = lastSpeed - speed
+            if slowing > 1.5 and speed > 1.0 then
+                local cur = exports['v-vehicles']:GetFuel(veh)
+                if cur < 100 then
+                    exports['v-vehicles']:SetFuel(veh, math.min(100, cur + Config.EV.regen.perBrakeSecond * slowing))
+                end
+            end
+            lastSpeed = speed
+        else
+            lastSpeed = 0.0
         end
     end
 end)
@@ -192,7 +227,9 @@ RegisterNUICallback('pump', function(data, cb)
 
     pumping = true
     close()
-    local flow = (ftype == 'electric') and Config.FlowRateEV or Config.FlowRate
+    local connKey = tostring((data and data.connector) or 'ac')
+    local conn = Config.EV.connectors[connKey] or Config.EV.connectors.ac
+    local flow = (ftype == 'electric') and (conn.kw * Config.EV.kwhPerSecondPerKw) or Config.FlowRate
     local tank = tankOf(curVeh)
     local drawn, veh = 0.0, curVeh
 
@@ -202,7 +239,13 @@ RegisterNUICallback('pump', function(data, cb)
         while drawn < want do
             if not DoesEntityExist(veh) then break end
             if #(GetEntityCoords(ped) - GetEntityCoords(veh)) > Config.NozzleRange + 2.0 then break end
-            drawn = math.min(want, drawn + flow * 0.25)
+            local step = flow
+            if ftype == 'electric' then
+                -- taper on the CURRENT state of charge, not the starting one
+                local soc = exports['v-vehicles']:GetFuel(veh) + (drawn / math.max(1, tank)) * 100
+                step = chargeRate(conn.kw, soc)
+            end
+            drawn = math.min(want, drawn + step * 0.25)
             SendNUIMessage({ action = 'pumping', litres = drawn, want = want })
             Wait(250)
         end
@@ -220,7 +263,7 @@ RegisterNUICallback('pump', function(data, cb)
                 exports['v-vehicles']:SetFuel(veh, pct)
             end
         end, { station = curStation or '', type = ftype, litres = drawn, tank = tank,
-               netid = VehToNet(veh), account = account, wrongFuel = wrong })
+               netid = VehToNet(veh), account = account, wrongFuel = wrong, connector = connKey })
     end)
     cb('ok')
 end)

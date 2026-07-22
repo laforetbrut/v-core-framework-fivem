@@ -18,12 +18,14 @@
 
       <div class="veh" id="veh"></div>
       <div class="types" id="types"></div>
+      <!-- EV only: which charger you plug into changes both speed and price -->
+      <div class="conns hidden" id="conns"></div>
 
       <div class="amount">
         <div class="arow">
           <span class="albl" data-i18n="fuel.litres">Litres</span>
           <input type="range" id="litres" min="1" max="60" value="20" />
-          <span class="aval"><b id="lval">20</b> L</span>
+          <span class="aval"><b id="lval">20</b> <span class="unit">L</span></span>
         </div>
         <div class="arow">
           <button class="mini" id="full" data-i18n="fuel.fulltank">Fill up</button>

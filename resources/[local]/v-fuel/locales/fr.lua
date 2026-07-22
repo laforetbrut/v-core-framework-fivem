@@ -33,5 +33,10 @@ local T = {
     ['fuel.err_funds']     = 'Pas assez d\'argent.',
     ['fuel.err_space']     = 'Pas assez de place dans l\'inventaire.',
     ['fuel.err_x']         = 'Demande refusée.',
+    ['fuel.connector']   = 'Borne',
+    ['fuel.conn_ac']     = 'Borne AC',
+    ['fuel.conn_dc']     = 'Charge rapide',
+    ['fuel.conn_hpc']    = 'Charge ultra-rapide',
+    ['fuel.health']      = 'Santé batterie',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

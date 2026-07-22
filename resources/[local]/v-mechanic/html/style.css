@@ -1,0 +1,106 @@
+/* v-mechanic — "EMBER" diagnostics panel.
+   Same rounded glass case as the other modules. The condition bars carry their own band
+   colour (good/fair/poor/crit) so a report reads as a diagnosis, not a wall of numbers.
+   Tokens + primitives come from v-ui/theme.css.
+   CEF-safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+.mech-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(55% 45% at 12% 0%,   rgba(255,122,26,.10), transparent 62%),
+    radial-gradient(48% 42% at 92% 100%, rgba(240,78,0,.08),  transparent 60%),
+    radial-gradient(135% 115% at 50% 8%, rgba(11,10,8,.42), rgba(11,10,8,.82) 72%, rgba(11,10,8,.94) 100%);
+  animation:v-fade var(--v-t-fast) var(--v-ease); }
+
+.mech { position:relative; z-index:var(--z-raised); width:640px; max-height:86vh;
+  display:flex; flex-direction:column; padding:26px 22px 22px; }
+
+.close { position:absolute; top:12px; right:12px; z-index:var(--z-raised);
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:99px;
+  color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease); }
+.close:hover { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.close svg { width:15px; height:15px; }
+
+.sub { font-family:var(--v-font-display); font-size:11px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); padding-bottom:13px; margin-bottom:12px;
+  border-bottom:1px solid var(--v-line); }
+
+/* ── Instrument cluster ── */
+.dash { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; margin-bottom:13px; }
+.dcell { display:flex; flex-direction:column; gap:3px; padding:10px 12px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px; }
+.dcell.warn { border-color:rgba(224,150,90,.55); background:rgba(224,150,90,.10); }
+.dk { font-family:var(--v-font-display); font-size:9px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); }
+.dv { font-size:14px; font-weight:700; color:var(--v-text); }
+.dcell.warn .dv { color:#e0a05a; }
+
+/* ── Filters ── */
+.filters { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.fbtn { padding:6px 13px; font-family:var(--v-font-display); font-size:10px; font-weight:600;
+  letter-spacing:.1em; text-transform:uppercase; color:var(--v-text-faint); cursor:pointer;
+  background:transparent; border:1px solid var(--v-line); border-radius:99px;
+  transition:color var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.fbtn:hover { color:var(--v-text-dim); border-color:var(--v-accent-line); }
+.fbtn.on { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.spacer { flex:1; }
+.chk { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--v-text-dim); cursor:pointer; }
+.chk input { accent-color:var(--v-accent); }
+
+/* ── Part rows ── */
+.list { display:flex; flex-direction:column; gap:7px; overflow-y:auto; padding-right:4px; }
+.empty { padding:26px 0; text-align:center; font-size:12px; color:var(--v-text-faint); }
+
+.prow { display:flex; align-items:center; gap:12px; padding:11px 13px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px;
+  animation:v-fade-up var(--v-t-base) var(--v-ease) backwards; animation-delay:calc(var(--i) * 18ms);
+  transition:transform var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.prow:hover { transform:translateY(-1px); border-color:var(--v-accent-line); background:var(--v-panel-3); }
+
+.pinfo { flex:1; display:flex; flex-direction:column; gap:5px; min-width:0; }
+.pname { font-size:13px; font-weight:600; color:var(--v-text); }
+.paff { font-style:normal; font-family:var(--v-font-display); font-size:9px; font-weight:600;
+  letter-spacing:.09em; text-transform:uppercase; color:var(--v-text-faint);
+  padding:2px 6px; margin-left:6px; border-radius:99px;
+  background:rgba(0,0,0,.28); border:1px solid var(--v-line); }
+.pbar { display:flex; align-items:center; gap:9px; }
+.pbar .v-progress { flex:1; }
+.pval { font-size:11px; font-weight:700; min-width:38px; text-align:right; }
+.pmeta { font-size:10px; color:var(--v-text-faint); }
+.pmeta b { color:var(--v-text-dim); }
+.pacts { display:flex; align-items:center; gap:6px; }
+
+/* Condition bands — the fill overrides the shared accent gradient on purpose. */
+.v-progress__fill.good { background:linear-gradient(90deg, #5aa06a, #7ac08a); box-shadow:0 0 10px rgba(90,160,106,.45); }
+.v-progress__fill.fair { background:linear-gradient(90deg, #c8a55a, #e0c07a); box-shadow:0 0 10px rgba(200,165,90,.45); }
+.v-progress__fill.poor { background:linear-gradient(90deg, #e0813a, #f0a05a); box-shadow:0 0 10px rgba(224,129,58,.50); }
+.v-progress__fill.crit { background:linear-gradient(90deg, #d04a4a, #e06a6a); box-shadow:0 0 12px rgba(208,74,74,.55); }
+.pval.good { color:#7ac08a; }
+.pval.fair { color:#e0c07a; }
+.pval.poor { color:#f0a05a; }
+.pval.crit { color:#e06a6a; }
+
+/* ── Buttons (shared .mini language) ── */
+.mini { padding:7px 14px; font-family:var(--v-font-display); font-size:11px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--v-text-dim); cursor:pointer;
+  background:var(--v-panel-3); border:1px solid var(--v-line); border-radius:99px;
+  white-space:nowrap;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease); }
+.mini:hover { color:var(--v-text); border-color:var(--v-accent-line); }
+.mini:disabled { opacity:.42; cursor:default; }
+.mini.accent { color:#1a1206; background:linear-gradient(135deg, var(--v-accent) 0%, var(--v-accent-600) 100%);
+  border-color:transparent; }
+.mini.accent:hover { filter:brightness(1.08); }
+.mini.accent:disabled { background:var(--v-panel-3); color:var(--v-text-dim); border-color:var(--v-line); }
+.mini.ko { color:#fff; background:rgba(224,90,90,.28); border-color:rgba(224,90,90,.5); }

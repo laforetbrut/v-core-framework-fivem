@@ -30,6 +30,7 @@ the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains a
 | **Clothing slots** | `clothing_categories` | `v-clothing` (`Categories`, item defs, use handlers) | ✅ |
 | **Garages** | `world_garages` | `v-garages` (blips, markers, store/retrieve) | ✅ |
 | **Fuel stations** | `world_stations` | `v-fuel` (blips, pumps, prices) | ✅ |
+| **Mechanic shops** | `world_mechshops` | `v-mechanic` (blips, diagnostics, repairs) | ✅ |
 
 Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
 + audit-logged), which reload the domain and fire the **server-to-server** event
@@ -204,7 +205,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (19 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (20 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -564,6 +565,41 @@ client-side `GetProps` / `ApplyProps` / `GetFuel` / `SetFuel` / `OpenPreview` / 
 stations, no vehicle-damage → repair economy, and a vehicle whose entity vanishes is moved to
 `impound` by the cleanup tick, which is a blunt rule that will want nuance once players test it.
 
+### `v-mechanic` ✅ — per-part wear, odometer, diagnostics, repairs
+**Done.** New module. Replaces "engine health" with a **20-part condition model** (12 for an EV):
+engine, transmission, clutch, turbo, injectors, plugs, filters, fuel pump, radiator, exhaust, brakes,
+suspension, steering, axle, tyres, battery, alternator, bodywork, glass — and for an electric car a
+**traction battery, motor, inverter, BMS, charge port and coolant** instead of the parts it doesn't have.
+
+**Wear has causes, not a timer.** Distance drives the baseline (per 100 km, scaled by each part's own
+rate); **abuse** multiplies it — sustained redline hits the drivetrain, hard braking hits the brakes,
+off-road hits the suspension; **collisions** damage the systems that took the hit, scaled by the body-health
+delta; and **neglect** past the service interval accelerates everything. A gentle driver genuinely gets
+more life out of a part, which is the only thing that makes parts interesting.
+
+**You feel it before you read it.** Condition is applied through `SetVehicleEnginePowerMultiplier`,
+`SetVehicleBrakeForceMultiplier` and `SetVehicleGripMultiplier`, ramping from `DegradeBelow` down to each
+system's floor. A dead radiator bleeds engine health; a dead alternator kills the lights and stalls you.
+
+**A real odometer** (`character_vehicles.mileage`, with `last_service`), incremented from actual distance
+travelled and immune to teleports — a garage spawn is not mileage.
+
+**Repair economy.** Every part is an **inventory item** (27 new ones, all craftable at the workbench or
+the electronics bench), so a mechanic can stock or craft their own. A **shop** replaces a part outright
+(part consumed + labour paid); a **repair kit** patches one back to 55 % in the field and refuses a part
+below 15 % — a way home, not a free garage. A **full service** resets the interval and the consumables.
+Shops are `world_mechshops` rows (position, blip, **job lock**, labour multiplier), editable in the admin
+panel; a shop staffed by its own job is cheaper than the same shop used self-service.
+
+Server-authoritative: the client observes the driving (it is the only side that can) but reports
+**deltas only**, capped at 25 points per message, and the server never adds condition from a client
+message. Every repair is priced, charged and consumed server-side.
+
+Exports: `GetParts(plate)` / `GetShops()`; client `GetLocalParts` / `GetMileage` / `ScanNearby`.
+
+**Remaining.** No tuning/cosmetic side (that is LSC's other half), no towing, no mechanic call-out job
+flow, and `v-hud` shows neither the odometer nor a warning light yet.
+
 ### `v-fuel` ✅ — fuel types, consumption, stations
 **Done.** New module. Owns everything fuel; `v-vehicles` keeps only the stored number.
 **Four fuel types** — regular (91), premium (98), diesel and electric — each with its own price per
@@ -586,6 +622,13 @@ litres are **clamped to what the tank could physically hold**, and both the play
 must be at the pump (the entity is re-read from its net id and measured). A patched client can ask for
 9999 L; it gets billed for a tankful. The jerry can is an inventory item, and a failed grant refunds
 the charge. fr+en.
+
+**Electric is modelled as charging, not filling.** Three things make it behave like an EV: a **charge
+curve** that tapers hard past 80 % (which is why "charge to 80" is a habit); **connector levels** — an
+11 kW AC post, a 50 kW DC charger and a 150 kW ultra-fast unit, each with its own speed *and* its own
+price per kWh, so the fast one is a real trade-off; and **battery health**, owned by `v-mechanic`'s
+`battery_pack`, which derates usable capacity — an aged EV genuinely has less range. **Regenerative
+braking** puts a little charge back when you slow down. The UI meters in kWh, not litres.
 
 **Remaining.** No fuel theft/siphoning, no station ownership or revenue for a player-run business, and
 `v-hud` does not show a fuel gauge yet.
