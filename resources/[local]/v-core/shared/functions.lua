@@ -1,6 +1,6 @@
 -- v-core | shared functions (loaded on both client and server)
 VCore = VCore or {}
-VCore.Version = '0.2.0'
+VCore.Version = '0.1.0'
 
 --- Debug logger, printed only when Config.Debug is enabled.
 function VCore.Debug(...)

@@ -5,7 +5,7 @@ capture good ideas as they surface so nothing is lost. Grouped by theme, roughly
 by value/effort. Tick items as they ship.
 
 > Constraints reminder: GTA V lore only (no invented brands), no player commands (everything
-> via phone/radial/pause + permissions), Field Case design system, version locked at 1.0.0.
+> via phone/radial/pause + permissions), Field Case design system, version locked at 0.1.0.
 
 ---
 

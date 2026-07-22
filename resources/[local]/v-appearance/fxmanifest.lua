@@ -4,7 +4,7 @@ lua54 'yes'
 
 name 'v-appearance'
 author 'vyrriox'
-version '0.2.0'
+version '0.1.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

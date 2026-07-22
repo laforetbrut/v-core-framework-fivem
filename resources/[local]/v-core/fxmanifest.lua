@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-core'
 author 'vyrriox'
 description 'v-core — custom roleplay framework core'
-version '0.2.0'
+version '0.1.0'
 
 -- v-core is the registry itself, but it lists too so an operator sees it running.
 v_module 'yes'
