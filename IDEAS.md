@@ -9,6 +9,12 @@ by value/effort. Tick items as they ship.
 
 ---
 
+> **The committed roadmap now lives in [ARCHITECTURE.md](ARCHITECTURE.md) §5** — vehicles
+> (persistence, keys, garages, dealerships, rentals), factions + boss menu, gangs, police,
+> licences & permits, and the full legal/illegal economy, with the build order and the reasons
+> behind it. This file stays what it always was: the loose idea bin for everything *not* yet
+> committed to.
+
 ## A. Inventory (`v-inventory`) — enhancements
 
 - [x] **Weapon jam at low condition** ✅ (shipped) — worn weapons jam on firing, forcing a reload.

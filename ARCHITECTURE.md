@@ -222,6 +222,11 @@ Schema lives in **`database/schema.sql`** (16 tables; `world_blips` gains `job`/
 | `gangs` | — | gangs & grades | ⬜ **empty — v-gangs not built** |
 | `server_config` | — | live server settings | ⬜ **empty — never read or written by anything** |
 
+**Planned by the roadmap (§5), not created yet:** `character_licenses` (licences & permits),
+`vehicle_catalogue` (dealership stock, a `v-world` domain), `world_garages` (garage points),
+`vehicle_rentals` (active hires), `faction_treasury` + `faction_transactions`, `gang_territories`,
+`drug_plants` / `drug_labs`. `character_vehicles` and `gangs` already exist and are still empty.
+
 ---
 
 ## 4. Per-module status
@@ -608,19 +613,79 @@ action behind one permission gate.
 
 ---
 
-## 5. Not built yet
+## 5. Not built yet — the roadmap
+
+Everything below follows the two rules the rest of the framework already follows: **server-authoritative**
+(never trust a client for money, ownership, position or permission) and **manageable in-game** (a
+`v-world` domain + a v-admin Editor subtab, never a `config.lua` an operator has to edit on a live
+server — `RULES.md` §3.6.2). Ordered by build order, not by wish.
+
+### 5.1 Vehicles — the next big block
+
+| # | Module | Depends on | Responsibility |
+|---|--------|-----------|----------------|
+| 1 | **`v-vehicles`** — persistence & keys | `v-core` | The foundation everything else in this block sits on. Owns `character_vehicles`: plate (unique), model, owner citizenid, **stored properties** (colours, mods, extras, livery, plate style), fuel, engine/body health, mileage, and a **state** (`garaged` / `out` / `impounded`). Persists a spawned vehicle's condition back to the row on despawn, on save-tick and on disconnect, so a car keeps its damage and mods. **Key system**: who may start/lock a given plate, giveable and revocable, checked server-side on engine start and lock toggle — a client-side lock check is not a lock. Plates are minted server-side and unique. |
+| 2 | **`v-garages`** — storage & retrieval | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB — the garage is the only legitimate way an owned car enters the world. |
+| 3 | **`v-vehicleshop`** — dealerships | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
+| 4 | **`v-rentals`** — short-term hire | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
+
+**Cross-cutting for the whole block:** fuel (a single consumption model both shops and garages read),
+a `v-vehicles` export surface (`GetOwned`, `HasKeys`, `GiveKeys`, `SpawnOwned`, `StoreOwned`) so
+`v-police` can impound and `v-jobs` can hand out job vehicles without touching the DB, and **one
+spawn path** — nothing else in the framework is allowed to `CreateVehicle` an owned car.
+
+### 5.2 Organisations — factions, gangs, and running them
+
+| # | Module | Depends on | Responsibility |
+|---|--------|-----------|----------------|
+| 5 | **`v-factions`** — the shared org layer | `v-jobs`, `v-world` | One engine for **legal factions** (PD, EMS, mechanics, taxi, news) and **illegal ones** (gangs, mafias) — they differ by data, not by code. Owns membership, ranks (reusing `jobs.grades`), a **faction treasury** (a real account with its own transaction log, not a number in a config), owned garages/stashes/vehicles, and a territory concept for the illegal side. `gangs` already exists in the schema and is still empty. |
+| 6 | **`v-bossmenu`** — the boss/patron panel | `v-factions`, `v-banking` | The management UI a faction leader actually needs, gated on **rank**, not on admin permission: **hire / fire / promote / demote** members, see who is on duty, **deposit & withdraw from the treasury** with a full audit trail, **pay salaries**, manage the faction's **garage and stash access per rank**, and set the recruitment state. Every action is server-verified against the caller's rank and logged — a boss menu that trusts the client is a money printer. |
+| 7 | **`v-gangs`** — the illegal org flavour | `v-factions` | What `v-factions` doesn't share: **territories** (capture, influence decay, contested state), turf-gated drug sales, gang stashes and gang wars. Reuses the faction engine for membership and the treasury. |
+| 8 | **`v-police`** | `v-factions`, `v-vehicles` | Cuffs, escort, search (reusing `v-inventory`'s `GetSearchable`, which already never exposes the hidden pocket), **evidence**, an MDT (records, warrants, BOLOs), fines, jail, and **impound** through `v-garages`. |
+
+### 5.3 Papers — licences & permits
+
+| # | Module | Depends on | Responsibility |
+|---|--------|-----------|----------------|
+| 9 | **`v-licenses`** | `v-core`, `v-factions` | The single source of truth for *"is this character allowed to do this"*. One table (`character_licenses`: citizenid, type, status, issued/expiry, issuer, points), one export (`Has(src, type)`), and a **licence type list editable from the admin panel** so a server can invent its own. Ships: **ID card**, **driving licence** (car / bike / truck / taxi), **boat**, **pilot**, **weapon permit**, **hunting**, **fishing**, and the job-side ones (medical, bar). Includes **suspension and revocation** (a licence taken by the PD, with points and expiry), and issuance flows: the **city hall** (`v-cityhall`, already built) for the paperwork, a **driving school** for the practical, the **PD** for weapon permits. Consumed everywhere: the dealership refuses a sale without the right licence, the weapon shop without a permit, and the PD can run a plate against the driver's status. |
+
+### 5.4 The illegal economy, finished
+
+The legal loop (gather → craft → sell) and a first illegal loop (grow → process → deal → launder) already
+ship. What's missing is the depth and the **risk** side that makes them a game rather than a spreadsheet.
+
+| # | Module | Depends on | Responsibility |
+|---|--------|-----------|----------------|
+| 10 | **`v-drugs`** — the full chain | `v-gangs`, `v-police`, `v-licenses` | Turn the current recipes into a real system: **plantations** with growth stages, watering and theft by other players; **labs** with quality tiers, failure chance and a **fire/explosion risk** if you rush; **NPC dealing** priced by district, demand decay and heat; **player-to-player** dealing; **addiction & effects** on the buyer (tied to `v-status`); and **police pressure** — a bust chance that scales with heat, dirty money that must go through `v-banking`'s laundering, and evidence that lands in `v-police`. |
+| 11 | **Heists & robberies** | `v-police`, `v-inventory` | Stores, ATMs, jewellery, the Fleeca/Pacific jobs. Server-authoritative timers and loot tables, a **minimum police count** before a job can start, and dirty money as the payout so it feeds the laundering loop. |
+| 12 | **`v-anticheat`** | `v-core` | The counterweight to all of the above: server-side sanity checks on money deltas, health, explosions, spawned entities and impossible movement, every trip logged to the existing audit log. |
+
+### 5.5 Interaction surfaces & the rest
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-vehicles` | 🔨 **next** | Garages, ownership (`character_vehicles` table already in the schema), keys, LSC |
-| `v-phone` | high | iFruit phone NUI — a primary interaction surface (the server has no chat) |
-| `v-radial` | high | Radial menu (context actions) — the other main interaction surface |
-| `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD) |
-| `v-anticheat` | medium | Server-side sanity checks; explosion / health / money guards, logged |
-| `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin) |
-| `v-gangs` | low | Gangs & mafias, territories (`gangs` table exists) |
-| `v-police` | low | Police + investigation (evidence, MDT, cuffs, jail) |
-| `v-drugs` | low | GTA-lore drug system (grow / process / deal) |
+| `v-phone` | high | iFruit phone NUI — a primary interaction surface (the server has no chat). Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
+| `v-radial` | high | Radial menu (context actions) — the other main interaction surface. |
+| `v-houses` | medium | Property ownership, interiors, house garages and stashes. |
+| `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
+| `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
+
+### 5.6 Build order and why
+
+1. **`v-vehicles` first.** Garages, dealerships, rentals, police impound and job vehicles all read the
+   same ownership + key layer. Building any of them before it means building it twice.
+2. **`v-licenses` early** — it is small, and the dealership, the weapon shop and the PD all need it.
+   Adding it after those exist means retrofitting gates into three modules.
+3. **`v-factions` before `v-gangs`, `v-police` and `v-bossmenu`.** They are the same engine with
+   different data; writing the police module standalone would fork the membership/treasury code.
+4. **`v-drugs` last of the economy work** — it depends on gangs (turf), police (pressure) and the
+   laundering path, and it is the module most likely to need balancing once players are on the server.
+5. **`v-anticheat` before the server opens**, not after. It is listed last because it guards
+   everything above, not because it matters least.
+
+**Every module in this roadmap ships with:** a `v-world` domain + a v-admin Editor subtab for its
+content, fr **and** en locales, server-side re-derivation of every gate, and an entry in this file,
+`CHANGELOG.md` and the module's own README (`RULES.md` §3.7).
 
 ---
 
