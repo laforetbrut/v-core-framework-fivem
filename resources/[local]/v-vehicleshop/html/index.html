@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="shop" class="shop-overlay hidden">
+    <!-- transparent drag surface: the showroom camera renders through it -->
+    <div class="stage" id="stage"></div>
+
+    <div class="shop v-chamfer v-panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" id="stitle">Dealership</span>
+      <button class="close" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+
+      <div class="tabs">
+        <button class="stab on" data-t="buy" data-i18n="shop.tab_buy">Showroom</button>
+        <button class="stab" data-t="sell" data-i18n="shop.tab_sell">Sell back</button>
+      </div>
+
+      <div class="cats" id="cats"></div>
+      <div class="list v-scroll" id="list"></div>
+
+      <div class="foot" id="foot">
+        <label class="chk"><input type="radio" name="sacct" id="sacct-cash" checked /><span data-i18n="shop.cash">Cash</span></label>
+        <label class="chk"><input type="radio" name="sacct" id="sacct-bank" /><span data-i18n="shop.bank">Card</span></label>
+        <span class="spacer"></span>
+        <button class="mini" id="test" data-i18n="shop.test" disabled>Test drive</button>
+        <button class="mini accent" id="buy" data-i18n="shop.buy" disabled>Buy</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- the test-drive countdown shows on its own, with no NUI focus -->
+  <div id="testbar" class="testbar hidden">
+    <span class="tlbl" data-i18n="shop.testing">Test drive</span>
+    <span class="tval" id="tleft">0s</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

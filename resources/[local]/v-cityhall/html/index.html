@@ -14,15 +14,20 @@
       <button class="close" id="close" aria-label="Close">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
       </button>
-      <div class="sub" data-i18n="cityhall.sub">Open positions · hired at entry grade</div>
+      <div class="tabs">
+        <button class="ctab on" data-t="jobs" data-i18n="cityhall.tab_jobs">Jobs</button>
+        <button class="ctab" data-t="lic" data-i18n="cityhall.tab_lic">Licences</button>
+      </div>
+      <div class="sub" id="csub" data-i18n="cityhall.sub">Open positions · hired at entry grade</div>
 
-      <div class="cur">
+      <div class="cur" id="cur">
         <span class="curlbl" data-i18n="cityhall.current">Current job</span>
         <span class="curval" id="cur-job">—</span>
         <button class="mini danger" id="resign" data-i18n="cityhall.resign">Resign</button>
       </div>
 
       <div class="list v-scroll" id="list"></div>
+      <div class="list v-scroll hidden" id="liclist"></div>
     </div>
   </div>
   <script src="app.js"></script>

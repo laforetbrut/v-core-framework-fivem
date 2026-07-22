@@ -31,6 +31,9 @@ the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains a
 | **Garages** | `world_garages` | `v-garages` (blips, markers, store/retrieve) | ✅ |
 | **Fuel stations** | `world_stations` | `v-fuel` (blips, pumps, prices) | ✅ |
 | **Mechanic shops** | `world_mechshops` | `v-mechanic` (blips, diagnostics, repairs) | ✅ |
+| **Dealerships** | `world_dealers` | `v-vehicleshop` (blips, which categories a dealer sells) | ✅ |
+| **Vehicle catalogue** | `vehicle_catalogue` | `v-vehicleshop` (model, price, stock, licence, job) | ✅ |
+| **Licences** | `license_types` | `v-licenses` (key, issuer, price, validity, test) | ✅ |
 
 Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
 + audit-logged), which reload the domain and fire the **server-to-server** event
@@ -205,7 +208,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (20 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (24 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -225,8 +228,7 @@ Schema lives in **`database/schema.sql`** (20 tables; `world_blips` gains `job`/
 | `gangs` | — | gangs & grades | ⬜ **empty — v-gangs not built** |
 | `server_config` | — | live server settings | ⬜ **empty — never read or written by anything** |
 
-**Planned by the roadmap (§5), not created yet:** `character_licenses` (licences & permits),
-`vehicle_catalogue` (dealership stock, a `v-world` domain),
+**Planned by the roadmap (§5), not created yet:**
 `vehicle_rentals` (active hires), `faction_treasury` + `faction_transactions`, `gang_territories`,
 `drug_plants` / `drug_labs`. `gangs` already exists and is still empty; **`character_vehicles` and `world_garages` are now live**.
 
@@ -565,6 +567,61 @@ client-side `GetProps` / `ApplyProps` / `GetFuel` / `SetFuel` / `OpenPreview` / 
 stations, no vehicle-damage → repair economy, and a vehicle whose entity vanishes is moved to
 `impound` by the cleanup tick, which is a blunt rule that will want nuance once players test it.
 
+### `v-licenses` ✅ — licences & permits
+**Done.** New module, roadmap §5.3. The single answer to *"is this character allowed to do this"*.
+The framework now has **three distinct permission concepts and they are not interchangeable**:
+`v-core` permission is **staff**, a `v-jobs` job is **employment**, and a licence is **the law**.
+Anything gating a real-world capability asks here.
+
+One table (`character_licenses`: citizenid, type, status, points, issued, expires, issuer) and one
+export — `Has(src, type)`. 12 types seeded (ID card, driving, motorcycle, HGV, taxi, boat, pilot,
+weapon, hunting, fishing, medical, liquor), all **editable from the admin panel** (`license_types`):
+key, issuer, price, validity in days, whether it needs a test.
+
+Four states — valid / suspended / revoked / expired — plus a **demerit-points** system that suspends
+automatically at the limit. Expiry is applied **lazily on read**, so a licence that lapsed while the
+player was offline never reads as valid again.
+
+**Who may issue** is the interesting rule: a *place* issuer (`cityhall`, `school`) serves anyone
+standing there, but anything else is a **job** — an on-duty member of that job is the authority. That
+is what makes a weapon permit a police decision rather than a shop transaction. Issuing to another
+player re-derives both peds' positions server-side. A licence requiring a **test** can be renewed at
+the city hall but never issued from nothing there; it is earned at the driving school.
+
+The wallet lives in the **city hall panel** (new Licences tab) — the paperwork counter belongs at the
+city hall, not in a module with its own UI.
+
+Exports: `Has` / `HasByCid` / `Get` / `GetTypes` / `Grant` / `Revoke` / `Suspend` / `Reinstate` /
+`AddPoints` / `LicenseForClass`.
+
+**Remaining.** No actual driving *test* flow (the school grants it; the practical is a roleplay
+gap), no physical ID-card item to show someone, and points are never added automatically because
+`v-police` doesn't exist yet to add them.
+
+### `v-vehicleshop` ✅ — dealerships
+**Done.** New module, roadmap §5.1 step 3. Six dealerships (Premium Deluxe, Luxury Autos, bike, boat,
+air, truck) each selling a **subset of categories**, and a **56-vehicle catalogue** with a deliberate
+price ladder from a $9.5k Panto to a $1.65M Buzzard — including the four GTA electrics, so `v-fuel`'s
+charging has customers.
+
+Both the dealerships and the catalogue are `v-world` domains: model, label, category, price, **stock**
+(-1 = unlimited), **required licence**, **job restriction** and enabled, all editable in the admin panel.
+
+**The purchase is the sensitive part** and is ordered accordingly: the vehicle row is minted *first*,
+then the charge; a failed charge deletes the row rather than gifting a car, and a failed mint has
+charged nobody. One purchase in flight per player, so a double click cannot mint two cars. The
+**licence gate is re-asked server-side**, never trusted from the browse payload.
+
+**Test drive** is a *local, non-networked* vehicle on a timer that returns you exactly where you
+started — it can never become an owned car. **Sell-back** pays a fraction of catalogue price scaled by
+the car's actual condition, and refuses a vehicle that is still out of the garage.
+
+The panel reuses `v-vehicles`' **showroom instance**: selecting a row stands the car up, drag to orbit.
+A car you *cannot* buy still shows, dimmed, with the reason — the missing licence is the information.
+
+**Remaining.** No financing/instalments, no dealer-owned stock economy (stock is a number, not a
+supply chain), and no player-run dealership.
+
 ### `v-mechanic` ✅ — per-part wear, odometer, diagnostics, repairs
 **Done.** New module. Replaces "engine health" with a **20-part condition model** (12 for an EV):
 engine, transmission, clutch, turbo, injectors, plugs, filters, fuel pump, radiator, exhaust, brakes,
@@ -745,8 +802,8 @@ server — `RULES.md` §3.6.2). Ordered by build order, not by wish.
 |---|--------|-----------|----------------|
 | 1 | ✅ **`v-vehicles`** — persistence & keys (**shipped**) | `v-core` | The foundation everything else in this block sits on. Owns `character_vehicles`: plate (unique), model, owner citizenid, **stored properties** (colours, mods, extras, livery, plate style), fuel, engine/body health, mileage, and a **state** (`garaged` / `out` / `impounded`). Persists a spawned vehicle's condition back to the row on despawn, on save-tick and on disconnect, so a car keeps its damage and mods. **Key system**: who may start/lock a given plate, giveable and revocable, checked server-side on engine start and lock toggle — a client-side lock check is not a lock. Plates are minted server-side and unique. |
 | 2 | ✅ **`v-garages`** — storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB — the garage is the only legitimate way an owned car enters the world. |
-| 3 | 🔨 **`v-vehicleshop`** — dealerships (**next**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
-| 4 | **`v-rentals`** — short-term hire | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
+| 3 | ✅ **`v-vehicleshop`** — dealerships (**shipped**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
+| 4 | 🔨 **`v-rentals`** — short-term hire (**next**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
 
 **Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` — one consumption model, four
 fuel types, admin-editable stations),
@@ -767,7 +824,7 @@ spawn path** — nothing else in the framework is allowed to `CreateVehicle` an 
 
 | # | Module | Depends on | Responsibility |
 |---|--------|-----------|----------------|
-| 9 | **`v-licenses`** | `v-core`, `v-factions` | The single source of truth for *"is this character allowed to do this"*. One table (`character_licenses`: citizenid, type, status, issued/expiry, issuer, points), one export (`Has(src, type)`), and a **licence type list editable from the admin panel** so a server can invent its own. Ships: **ID card**, **driving licence** (car / bike / truck / taxi), **boat**, **pilot**, **weapon permit**, **hunting**, **fishing**, and the job-side ones (medical, bar). Includes **suspension and revocation** (a licence taken by the PD, with points and expiry), and issuance flows: the **city hall** (`v-cityhall`, already built) for the paperwork, a **driving school** for the practical, the **PD** for weapon permits. Consumed everywhere: the dealership refuses a sale without the right licence, the weapon shop without a permit, and the PD can run a plate against the driver's status. |
+| 9 | ✅ **`v-licenses`** (**shipped**) | `v-core`, `v-factions` | The single source of truth for *"is this character allowed to do this"*. One table (`character_licenses`: citizenid, type, status, issued/expiry, issuer, points), one export (`Has(src, type)`), and a **licence type list editable from the admin panel** so a server can invent its own. Ships: **ID card**, **driving licence** (car / bike / truck / taxi), **boat**, **pilot**, **weapon permit**, **hunting**, **fishing**, and the job-side ones (medical, bar). Includes **suspension and revocation** (a licence taken by the PD, with points and expiry), and issuance flows: the **city hall** (`v-cityhall`, already built) for the paperwork, a **driving school** for the practical, the **PD** for weapon permits. Consumed everywhere: the dealership refuses a sale without the right licence, the weapon shop without a permit, and the PD can run a plate against the driver's status. |
 
 ### 5.4 The illegal economy, finished
 

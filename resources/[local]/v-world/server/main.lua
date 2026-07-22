@@ -15,6 +15,8 @@ local Core = exports['v-core']:GetCore()
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
+local LicTypes = {}
+local Dealers, VehCat = {}, {}
 local ready = false
 
 local function isAdmin(src)
@@ -149,6 +151,59 @@ local function ensureTables()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- The licence CATALOGUE (what kinds exist). Issued licences live on
+    -- `character_licenses`, owned by v-licenses.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `license_types` (
+        `key`    VARCHAR(40) NOT NULL,
+        `label`  VARCHAR(80) NOT NULL,
+        `issuer` VARCHAR(50) NOT NULL DEFAULT 'cityhall',
+        `price`  INT NOT NULL DEFAULT 0,
+        `days`   INT NOT NULL DEFAULT 0,               -- 0 = never expires
+        `test`   TINYINT(1) NOT NULL DEFAULT 0,
+        `sort`   INT NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `character_licenses` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `type`   VARCHAR(40) NOT NULL,
+        `status` VARCHAR(12) NOT NULL DEFAULT 'valid',
+        `points` INT NOT NULL DEFAULT 0,
+        `issued_at`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `expires_at` TIMESTAMP NULL DEFAULT NULL,
+        `issuer` VARCHAR(24) DEFAULT NULL,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `cid_type` (`citizenid`, `type`),
+        KEY `citizenid` (`citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_dealers` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `sx` FLOAT NOT NULL, `sy` FLOAT NOT NULL, `sz` FLOAT NOT NULL, `sh` FLOAT NOT NULL DEFAULT 0,
+        `cats` VARCHAR(200) NOT NULL DEFAULT '',        -- comma list; empty = sells everything
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `job` VARCHAR(50) DEFAULT NULL,                 -- job-only dealer (police motor pool, …)
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- The catalogue: what can be bought at all, and for how much.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vehicle_catalogue` (
+        `model` VARCHAR(50) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `cat`   VARCHAR(30) NOT NULL DEFAULT 'sedans',
+        `price` INT NOT NULL DEFAULT 0,
+        `stock` INT NOT NULL DEFAULT -1,                -- -1 = unlimited
+        `license` VARCHAR(40) DEFAULT NULL,             -- overrides the class default
+        `job`   VARCHAR(50) DEFAULT NULL,               -- job-restricted purchase
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`model`), KEY `cat_idx` (`cat`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
         `id` INT NOT NULL AUTO_INCREMENT,
         `station` VARCHAR(40) NOT NULL,
@@ -254,6 +309,30 @@ local function loadMechShops()
     end
 end
 
+local function loadLicTypes()
+    LicTypes = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM license_types ORDER BY sort, `key`') or {}) do
+        r.test, r.enabled = bool(r.test), bool(r.enabled)
+        LicTypes[#LicTypes + 1] = r
+    end
+end
+
+local function loadDealers()
+    Dealers = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_dealers ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Dealers[#Dealers + 1] = r
+    end
+end
+
+local function loadVehCat()
+    VehCat = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM vehicle_catalogue ORDER BY cat, price') or {}) do
+        r.enabled = bool(r.enabled)
+        VehCat[#VehCat + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
@@ -265,6 +344,9 @@ local function reload(domain)
     if domain == 'garages'     or not domain then loadGarages() end
     if domain == 'stations'    or not domain then loadStations() end
     if domain == 'mechshops'   or not domain then loadMechShops() end
+    if domain == 'licenses'    or not domain then loadLicTypes() end
+    if domain == 'dealers'     or not domain then loadDealers() end
+    if domain == 'vehcat'      or not domain then loadVehCat() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -335,6 +417,9 @@ exports('GetClothCategories', function() return ClothCats end)
 exports('GetGarages', function() return Garages end)
 exports('GetStations', function() return Stations end)
 exports('GetMechShops', function() return MechShops end)
+exports('GetLicenseTypes', function() return LicTypes end)
+exports('GetDealers', function() return Dealers end)
+exports('GetVehicleCatalogue', function() return VehCat end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -437,6 +522,50 @@ exports('SeedMechShops', function(defaults)
     return true
 end)
 
+-- v-licenses: list of { key, i18n, issuer, price, days, test, sort }
+exports('SeedLicenseTypes', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #LicTypes > 0 then return false end
+    for i, t in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO license_types (`key`, label, issuer, price, days, test, sort, enabled)
+            VALUES (?,?,?,?,?,?,?,1)]],
+            { t.key, t.label or t.key, t.issuer or 'cityhall', t.price or 0, t.days or 0,
+              t.test and 1 or 0, t.sort or i })
+    end
+    loadLicTypes()
+    print(('[v-world] seeded %d licence type(s) from config'):format(#LicTypes))
+    return true
+end)
+
+-- v-vehicleshop: list of { id, label, x, y, z, sx, sy, sz, sh, cats }
+exports('SeedDealers', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #Dealers > 0 then return false end
+    for _, d in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_dealers (id, label, x, y, z, sx, sy, sz, sh, cats, blip, job, enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,1,?,1)]],
+            { d.id, d.label or d.id, d.x, d.y, d.z, d.sx, d.sy, d.sz, d.sh or 0.0, d.cats or '', d.job })
+    end
+    loadDealers()
+    print(('[v-world] seeded %d dealership(s) from config'):format(#Dealers))
+    return true
+end)
+
+-- v-vehicleshop: list of { model, label, cat, price, license, job }
+exports('SeedVehicleCatalogue', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #VehCat > 0 then return false end
+    for _, v in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO vehicle_catalogue (model, label, cat, price, stock, license, job, enabled)
+            VALUES (?,?,?,?,?,?,?,1)]],
+            { tostring(v.model):lower(), v.label or v.model, v.cat or 'sedans',
+              v.price or 0, v.stock or -1, v.license, v.job })
+    end
+    loadVehCat()
+    print(('[v-world] seeded %d catalogue vehicle(s) from config'):format(#VehCat))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     if #Jobs > 0 then return false end
@@ -484,6 +613,19 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = Garages, jobs = jobs, types = Config.GarageTypes })
+    elseif domain == 'dealers' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = Dealers, jobs = jobs, cats = Config.VehicleCategories })
+    elseif domain == 'vehcat' then
+        local jobs, lics = {}, {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        for _, l in ipairs(LicTypes) do lics[#lics + 1] = { key = l.key, label = l.label } end
+        resolve({ rows = VehCat, jobs = jobs, licenses = lics, cats = Config.VehicleCategories })
+    elseif domain == 'licenses' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = LicTypes, jobs = jobs, places = Config.LicensePlaces })
     elseif domain == 'mechshops' then
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
@@ -624,6 +766,81 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   bool(row.blip), job, math.max(0, math.floor(num(row.fee))), bool(row.enabled), gid })
         end
 
+    elseif d == 'dealers' then
+        local did = tostring(row.did or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
+        if did == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        -- keep only real categories so a typo cannot hide the whole stock
+        local known, keep = {}, {}
+        for _, c in ipairs(Config.VehicleCategories or {}) do known[c] = true end
+        for c in tostring(row.cats or ''):gmatch('[^,%s]+') do
+            if known[c] then keep[#keep + 1] = c end
+        end
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_dealers WHERE id = ?', { did })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO world_dealers (id, label, x, y, z, sx, sy, sz, sh, cats, blip, job, enabled)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)]],
+                { did, label, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh), table.concat(keep, ','),
+                  bool(row.blip == nil or row.blip), job, bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE world_dealers SET label=?, x=?, y=?, z=?, sx=?, sy=?, sz=?, sh=?,
+                cats=?, blip=?, job=?, enabled=? WHERE id=?]],
+                { label, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh), table.concat(keep, ','),
+                  bool(row.blip), job, bool(row.enabled), did })
+        end
+
+    elseif d == 'vehcat' then
+        -- `model` is the spawn name: settable on CREATE, never after (owned cars store it).
+        local model = tostring(row.model or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
+        if model == '' then resolve({ error = 'model' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local lic = tostring(row.license or ''):sub(1, 40); if lic == '' then lic = nil end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        local stock = math.floor(num(row.stock, -1))
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM vehicle_catalogue WHERE model = ?', { model })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO vehicle_catalogue (model, label, cat, price, stock, license, job, enabled)
+                VALUES (?,?,?,?,?,?,?,?)]],
+                { model, label, tostring(row.cat or 'sedans'):sub(1, 30),
+                  math.max(0, math.floor(num(row.price))), stock, lic, job,
+                  bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE vehicle_catalogue SET label=?, cat=?, price=?, stock=?, license=?, job=?, enabled=?
+                WHERE model=?]],
+                { label, tostring(row.cat or 'sedans'):sub(1, 30),
+                  math.max(0, math.floor(num(row.price))), stock, lic, job, bool(row.enabled), model })
+        end
+
+    elseif d == 'licenses' then
+        -- `key` is stamped on every issued licence: settable on CREATE, never after.
+        local key = tostring(row.key or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
+        if key == '' then resolve({ error = 'key' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local issuer = tostring(row.issuer or 'cityhall'):sub(1, 50)
+        local price = math.max(0, math.floor(num(row.price)))
+        local days = math.max(0, math.floor(num(row.days)))
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM license_types WHERE `key` = ?', { key })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO license_types (`key`, label, issuer, price, days, test, sort, enabled)
+                VALUES (?,?,?,?,?,?,?,?)]],
+                { key, label, issuer, price, days, bool(row.test), math.floor(num(row.sort)),
+                  bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE license_types SET label=?, issuer=?, price=?, days=?, test=?, sort=?, enabled=?
+                WHERE `key`=?]],
+                { label, issuer, price, days, bool(row.test), math.floor(num(row.sort)),
+                  bool(row.enabled), key })
+        end
+
     elseif d == 'mechshops' then
         local mid = tostring(row.mid or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
         if mid == '' then resolve({ error = 'id' }); return end
@@ -756,6 +973,25 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local parked = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE garage = ? LIMIT 1', { gid })
         if parked then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_garages WHERE id = ?', { gid })
+    elseif d == 'dealers' then
+        local did = tostring(id or '')
+        if did == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_dealers WHERE id = ?', { did })
+    elseif d == 'vehcat' then
+        local model = tostring(id or '')
+        if model == '' then resolve({ error = 'protected' }); return end
+        -- a model somebody already owns stays in the catalogue: the row is what a garage,
+        -- a repair and a resale all read the label and price from
+        local owned = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE model = ? LIMIT 1', { model })
+        if owned then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM vehicle_catalogue WHERE model = ?', { model })
+    elseif d == 'licenses' then
+        local key = tostring(id or '')
+        if key == '' then resolve({ error = 'protected' }); return end
+        -- refuse while characters still hold it: deleting the type would strand them
+        local held = MySQL.scalar.await('SELECT 1 FROM character_licenses WHERE type = ? LIMIT 1', { key })
+        if held then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM license_types WHERE `key` = ?', { key })
     elseif d == 'mechshops' then
         local mid = tostring(id or '')
         if mid == '' then resolve({ error = 'protected' }); return end

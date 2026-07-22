@@ -2,17 +2,18 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'v-cityhall'
+name 'v-vehicleshop'
 author 'vyrriox'
-description 'v-cityhall — city hall: take an open job, resign, read your contract (v-core module)'
+description 'v-vehicleshop — dealerships: browse, test drive and buy a vehicle (v-core module)'
 version '0.1.0'
 
 dependencies {
     'v-core',
     'v-ui',
-    'v-jobs',
-    'v-licenses',   -- the licences counter lives in this panel
+    'v-vehicles',
+    'v-licenses',
     'v-world',
+    'oxmysql',
 }
 
 shared_scripts {

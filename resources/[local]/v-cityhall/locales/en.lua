@@ -23,5 +23,9 @@ local T = {
     ['cityhall.ls']        = 'Los Santos City Hall',
     ['cityhall.sandy']     = 'Sandy Shores Town Office',
     ['cityhall.paleto']    = 'Paleto Bay Town Office',
+    ['cityhall.tab_jobs']   = 'Jobs',
+    ['cityhall.tab_lic']    = 'Licences',
+    ['cityhall.lic_sub']    = 'Your papers · city hall issues these',
+    ['cityhall.lic_none']   = 'No licence type exists.',
 }
 for k, v in pairs(T) do Locales.en[k] = v end
