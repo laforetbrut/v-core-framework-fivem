@@ -70,7 +70,9 @@ Config.Apps = {
     -- Police only by default. The operator can open it up, or gate something else the
     -- same way, from Editor -> Phone apps.
     { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
-      job = 'police', category = 'work' },
+      -- Job apps get their own aisle: it is only in the store at all for the people
+      -- who hold the job, so it has no business sitting under Work next to Jobs.
+      job = 'police', category = 'duty' },
     { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12,
       category = 'utilities' },
     { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13,
@@ -94,8 +96,8 @@ Config.Apps = {
 }
 
 -- What the store groups by. The order here is the order of the sections.
-Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'entertainment',
-                      'health', 'essentials' }
+Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'duty',
+                      'entertainment', 'health', 'essentials' }
 
 -- ── Look ───────────────────────────────────────────────────────
 -- The chrome is the phone's; the accent, panel and radius come from v-ui, so a server that

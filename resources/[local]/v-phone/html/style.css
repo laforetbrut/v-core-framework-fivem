@@ -17,6 +17,11 @@
    ============================================================ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
+/* A phone has no text cursor. Dragging across the home screen used to select the app
+   labels and leave them highlighted, which no handset does. Fields opt back in below. */
+* { -webkit-user-select: none; user-select: none; -webkit-user-drag: none; }
+input, textarea, [contenteditable="true"], .selectable {
+  -webkit-user-select: text; user-select: text; }
 html, body { width: 100%; height: 100%; background: transparent; overflow: hidden;
   -webkit-font-smoothing: antialiased; }
 .hidden { display: none !important; }
@@ -591,6 +596,12 @@ input { font: inherit; }
 .seg button { flex: 1; padding: 7px 4px; border-radius: 8px; font-size: 13px;
   color: var(--app-label); transition: background .18s var(--snap); white-space: nowrap;
   overflow: hidden; text-overflow: ellipsis; }
+/* Nine categories will not share 320px. When there are more pills than fit, the strip
+   scrolls sideways instead of grinding every label down to one letter and an ellipsis. */
+.seg.scroll { overflow-x: auto; overflow-y: hidden; -ms-overflow-style: none;
+  scrollbar-width: none; }
+.seg.scroll::-webkit-scrollbar { display: none; }
+.seg.scroll button { flex: 0 0 auto; padding: 7px 12px; }
 .seg button.on { background: var(--app-card);
   box-shadow: 0 1px 3px rgba(0,0,0,.18); }
 

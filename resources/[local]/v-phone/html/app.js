@@ -1355,8 +1355,8 @@ function isInstalled(id) { return (state.apps || []).some((x) => x.id === id); }
 
 // Only the categories that actually have an app in them, in a fixed order so the store
 // does not reshuffle itself every time somebody installs something.
-const CAT_ORDER = ['social', 'finance', 'utilities', 'travel', 'work', 'entertainment',
-                   'health', 'essentials'];
+const CAT_ORDER = ['social', 'finance', 'utilities', 'travel', 'work', 'duty',
+                   'entertainment', 'health', 'essentials'];
 
 function storeCats(all) {
   const present = new Set(all.map((a) => a.category || 'utilities'));
@@ -1398,7 +1398,7 @@ RENDER.store = () => {
 
   body(
     searchHtml(L('ph.store_search')) +
-    '<div class="seg">' +
+    '<div class="seg scroll">' +
       '<button class="' + (storeCat === 'all' ? 'on' : '') + '" data-c="all">' + esc(L('ph.all')) + '</button>' +
       cats.map((c) => '<button class="' + (storeCat === c ? 'on' : '') + '" data-c="' + esc(c) + '">' +
         esc(L('ph.cat_' + c)) + '</button>').join('') +

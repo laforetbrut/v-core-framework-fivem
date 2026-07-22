@@ -319,6 +319,7 @@ local T = {
     ['ph.cat_utilities'] = 'Utilities',
     ['ph.cat_travel'] = 'Travel',
     ['ph.cat_work'] = 'Work',
+    ['ph.cat_duty'] = 'On duty',
     ['ph.cat_entertainment'] = 'Entertainment',
     ['ph.cat_health'] = 'Health',
     ['ph.cat_essentials'] = 'Essentials',

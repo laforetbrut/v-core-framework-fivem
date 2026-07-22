@@ -221,8 +221,14 @@ local function appsFor(src, p)
         if w and tonumber(w.enabled) == 0 then ok = false end
         -- An app that opens onto a stopped module is worse than an app that is not there.
         if ok and a.owner and a.owner ~= 'v-phone' and GetResourceState(a.owner) ~= 'started' then ok = false end
-        if ok and w and w.job and w.job ~= '' then
-            ok = (p.job and p.job.name == w.job) and (num(p.job.grade, 0) >= num(w.job_grade, 0))
+        -- The job gate can come from either place: the operator's row on v-world, or the
+        -- app's own `job` in config (a police MDT is police-only even before an operator
+        -- has ever touched it). The config value is the floor; the row can raise the grade.
+        local gjob   = (w and w.job and w.job ~= '' and w.job) or a.job
+        local ggrade = num(w and w.job_grade, 0)
+        if a.jobGrade and a.jobGrade > ggrade then ggrade = a.jobGrade end
+        if ok and gjob then
+            ok = (p.job and p.job.name == gjob) and (num(p.job.grade, 0) >= ggrade)
         end
         if ok and w and w.gang and w.gang ~= '' then
             ok = (p.gang and p.gang.name == w.gang)
