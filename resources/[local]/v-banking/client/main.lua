@@ -68,6 +68,15 @@ RegisterNUICallback('transfer', function(data, cb)
     Core.TriggerCallback('v-banking:transfer', function(res) cb(res or false) end, data)
 end)
 
+-- The card counter. Reading is free; ordering is charged and re-validated server-side.
+RegisterNUICallback('card', function(_, cb)
+    Core.TriggerCallback('v-banking:card', function(res) cb(res or { error = 'x' }) end)
+end)
+
+RegisterNUICallback('requestCard', function(_, cb)
+    Core.TriggerCallback('v-banking:requestCard', function(res) cb(res or { error = 'x' }) end)
+end)
+
 -- Never leave a player's cursor/controls stuck if the resource is restarted mid-use.
 AddEventHandler('onResourceStop', function(resName)
     if resName ~= GetCurrentResourceName() then return end

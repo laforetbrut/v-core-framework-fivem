@@ -57,6 +57,9 @@ Config.Apps = {
     { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
       job = 'police' },
     { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12 },
+    { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13 },
+    { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 14 },
+    { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15 },
     { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 13,
       required = true },
     { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20,
@@ -73,3 +76,23 @@ Config.DefaultWallpaper = 'ember'
 -- iOS 27's transparency slider, as a starting value: 0 is ultra clear glass, 100 is
 -- fully tinted. Players move it themselves in Settings; this is only where they begin.
 Config.DefaultGlass = 55
+
+-- ── Custom wallpapers ──────────────────────────────────────────
+-- A player may point the phone at an image on the web. That is a URL a client will fetch,
+-- so the hosts it may fetch from are an OPERATOR decision, exactly as they are for music.
+-- It ships narrow on purpose: an open list is a way to make somebody's client load
+-- anything at all.
+Config.WallpaperHosts = {
+    'i.imgur.com', 'imgur.com',
+    'cdn.discordapp.com', 'media.discordapp.net',
+    'i.ibb.co', 'raw.githubusercontent.com',
+}
+
+-- How a linked image is fitted. `cover` fills the screen and crops; `contain` shows all of
+-- it with bars. Both are offered because neither is right for every picture.
+Config.WallpaperFit = 'cover'
+
+-- The device itself. Players with small screens want it smaller, and left-handers want it
+-- on the other side; neither is worth making them live without.
+Config.DeviceSize = 1.0        -- 0.75 .. 1.15
+Config.DeviceSide = 'right'    -- right | left

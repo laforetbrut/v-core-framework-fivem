@@ -147,3 +147,24 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 
 /* ── One orchestrated open: panel seats, then blocks ripple in ── */
 .hero, .tabs, .form, .history { animation:v-fade-up .3s var(--v-ease) backwards; animation-delay:calc(130ms + var(--i,0) * 60ms); }
+
+/* ── Debit card ───────────────────────────────────────────────
+   Shown at the counter, because ordering one is a counter errand. The same
+   card face the phone's wallet draws, so the two never look like different
+   objects. */
+.cardpane { display: flex; flex-direction: column; gap: 12px; }
+.cardview { position: relative; border-radius: 16px; padding: 18px; aspect-ratio: 1.586;
+  display: flex; flex-direction: column; justify-content: space-between; overflow: hidden;
+  background: linear-gradient(145deg, #2b6cb0 0%, #1a365d 46%, #0f2233 100%);
+  box-shadow: 0 12px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.22),
+              inset 0 0 0 1px rgba(255,255,255,.12); color: #fff; }
+.cardview.none { background: rgba(255,255,255,.05); box-shadow: inset 0 0 0 1px var(--v-line);
+  align-items: center; justify-content: center; text-align: center; color: var(--v-text-dim);
+  font-size: 13px; padding: 26px; }
+.cardview .brand { display: flex; justify-content: space-between; align-items: center;
+  font-family: var(--v-font-display); font-weight: 700; letter-spacing: .1em; font-size: 13px; }
+.cardview .chip { width: 38px; height: 28px; border-radius: 6px;
+  background: linear-gradient(150deg, #f0d27a, #b58a2c); }
+.cardview .num { font-family: var(--v-font-num); font-size: 19px; letter-spacing: .08em; }
+.cardview .foot { display: flex; justify-content: space-between; align-items: flex-end;
+  font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }

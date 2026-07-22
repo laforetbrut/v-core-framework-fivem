@@ -40,9 +40,47 @@ function render(data) {
 
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = String(s); return d.innerHTML; }
 
-function setTab(tab) {
+let cardData = null;
+
+function renderCard() {
+  const v = byId('cardview');
+  if (cardData && cardData.card) {
+    v.className = 'cardview';
+    v.innerHTML =
+      '<div class="brand"><span>FLEECA</span><span class="chip"></span></div>' +
+      '<div class="num">' + escapeHtml(cardData.card) + '</div>' +
+      '<div class="foot"><span>' + escapeHtml(cardData.holder || '') + '</span>' +
+      '<span>' + fmt(cardData.bank) + '</span></div>';
+    byId('ordercard').classList.add('hidden');
+    byId('cardmsg').textContent = t('bank.card_have');
+  } else {
+    v.className = 'cardview none';
+    v.textContent = t('bank.card_none');
+    byId('ordercard').classList.remove('hidden');
+    byId('ordercard').textContent = t('bank.order_card') +
+      (cardData && cardData.fee ? '  ' + fmt(cardData.fee) : '');
+    byId('cardmsg').textContent = '';
+  }
+}
+
+byId('ordercard').onclick = async () => {
+  const res = await post('requestCard', {});
+  if (res && res.ok) {
+    cardData = Object.assign(cardData || {}, { card: res.card, bank: res.bank });
+    renderCard();
+    showMsg(t('bank.card_ordered'), 'ok');
+  } else {
+    showMsg(t('bank.err_' + ((res && res.error) || 'x')), 'err');
+  }
+};
+
+
   currentTab = tab;
   document.querySelectorAll('.tab').forEach(b => b.classList.toggle('on', b.getAttribute('data-tab') === tab));
+  const isCard = tab === 'card';
+  document.querySelector('.form').classList.toggle('hidden', isCard);
+  byId('cardpane').classList.toggle('hidden', !isCard);
+  if (isCard) post('card', {}).then((d) => { cardData = d; renderCard(); });
   byId('target-field').classList.toggle('hidden', tab !== 'transfer');
   showMsg('');
 }

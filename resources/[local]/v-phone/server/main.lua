@@ -63,6 +63,13 @@ V.Module({
         { key = 'anonymous', label = 'Allow withholding your number', type = 'bool', default = false,
           hint = 'On, a caller may hide their number. It is off by default because an anonymous call is a harassment tool before it is a roleplay tool.' },
 
+        { key = 'wallpaperHosts', label = 'Wallpaper image hosts', type = 'string',
+          default = table.concat(Config.WallpaperHosts, ', '),
+          hint = 'Comma separated. A wallpaper link is a URL a client will fetch, so this is an operator decision. An open list is a way to make somebody load anything at all.' },
+
+        { key = 'customWallpaper', label = 'Allow linked wallpapers', type = 'bool', default = true,
+          hint = 'Off leaves only the built-in gradients, which cost nothing to load.' },
+
         { key = 'camera', label = 'Camera app enabled', type = 'bool', default = false,
           hint = 'The camera writes to a gallery. Uploading anywhere is an operator decision, so it has no default destination and stays off until one is set.' },
 
@@ -222,6 +229,21 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Stored in the character's metadata rather than a table of their own: it is a handful of
 -- per-character values that are already persisted with everything else about them.
+--- A wallpaper link is a URL a client will fetch, so the host has to be one the operator
+--- allowed. Rejected rather than sanitised: quietly rewriting somebody's link into one
+--- that works is worse than telling them it is not permitted.
+local function wallpaperAllowed(url)
+    url = tostring(url or '')
+    if url == '' then return true end                      -- clearing it is always fine
+    local host = url:match('^https?://([^/]+)')
+    if not host then return false end
+    host = host:lower():gsub(':%d+$', '')
+    for _, allowed in ipairs(V.Setting('wallpaperHosts', Config.WallpaperHosts) or Config.WallpaperHosts) do
+        if host == allowed or host:sub(-(#allowed + 1)) == '.' .. allowed then return true end
+    end
+    return false
+end
+
 local function prefsOf(p)
     local m = p.GetMetadata('phone')
     if type(m) ~= 'table' then m = {} end
@@ -238,6 +260,13 @@ local function prefsOf(p)
         -- character having to go and find it in the store.
         removed   = (type(m.removed) == 'table') and m.removed or {},
         actionApp = m.actionApp and tostring(m.actionApp) or nil,
+        -- A linked wallpaper, its fit, and the shape of the device itself.
+        wallpaperUrl = m.wallpaperUrl and tostring(m.wallpaperUrl) or nil,
+        wallFit   = (m.wallFit == 'contain') and 'contain' or Config.WallpaperFit,
+        size      = math.max(0.75, math.min(1.15, tonumber(m.size) or Config.DeviceSize)),
+        side      = (m.side == 'left') and 'left' or 'right',
+        -- The home screen: the player's own order, and any folders they made.
+        layout    = (type(m.layout) == 'table') and m.layout or nil,
     }
 end
 
@@ -449,6 +478,13 @@ V.Callback('v-phone:open', function(src, resolve)
             { p.citizenid }) or {},
         conversations = conversations(p.citizenid),
         wallpapers = Config.Wallpapers,
+        photos     = (function()
+            local ph = p.GetMetadata('photos')
+            return (type(ph) == 'table') and ph or {}
+        end)(),
+        camera     = V.SettingBool('camera', false)
+                     and (tostring(V.Setting('cameraUpload', '')) ~= '') or false,
+        customWallpaper = V.SettingBool('customWallpaper', true),
     })
 end)
 
@@ -507,6 +543,17 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
+        if data.wallpaperUrl ~= nil then
+            local url = tostring(data.wallpaperUrl):sub(1, 400)
+            if url ~= '' and not wallpaperAllowed(url) then resolve({ error = 'badhost' }) return end
+            prefs.wallpaperUrl = (url ~= '') and url or nil
+        end
+        if data.wallFit ~= nil then prefs.wallFit = (data.wallFit == 'contain') and 'contain' or 'cover' end
+        if data.size ~= nil then prefs.size = math.max(0.75, math.min(1.15, num(data.size, 1.0))) end
+        if data.side ~= nil then prefs.side = (data.side == 'left') and 'left' or 'right' end
+        if data.layout ~= nil then
+            prefs.layout = (type(data.layout) == 'table') and data.layout or nil
+        end
         if data.actionApp ~= nil then
             prefs.actionApp = (data.actionApp ~= '') and tostring(data.actionApp) or nil
         end
@@ -594,6 +641,31 @@ local PLACE_SOURCES = {
 --- Install or remove an app for THIS character. It cannot make an app appear that the
 --- operator has not permitted, and it cannot remove one the phone needs to work: those
 --- are the operator's decision and the phone's, not the player's.
+--- The camera's gallery. Only ever URLs: the upload target the operator configured
+--- returns one, and a data URI would be megabytes of base64 in a metadata column.
+V.Callback('v-phone:photo', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    if not V.SettingBool('camera', false) then resolve({ error = 'off' }) return end
+
+    local shots = p.GetMetadata('photos')
+    if type(shots) ~= 'table' then shots = {} end
+
+    local op = tostring((data and data.op) or 'list')
+    if op == 'add' then
+        local url = tostring((data and data.url) or ''):sub(1, 400)
+        if url == '' then resolve({ error = 'x' }) return end
+        table.insert(shots, 1, url)
+        while #shots > 30 do table.remove(shots) end     -- a gallery, not an archive
+        p.SetMetadata('photos', shots)
+    elseif op == 'del' then
+        local i = math.floor(num(data and data.index, 0))
+        if shots[i] then table.remove(shots, i) end
+        p.SetMetadata('photos', shots)
+    end
+    resolve({ ok = true, photos = shots })
+end)
+
 V.Callback('v-phone:install', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end

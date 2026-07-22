@@ -21,3 +21,7 @@ Config.TransferFee  = 0.0    -- fraction, e.g. 0.02 = 2% charged ON TOP of the a
 Config.MinTransfer  = 1      -- blocks $1 spam transfers used to bypass logging
 Config.MaxTransfer  = 0      -- 0 = no ceiling
 Config.MaxWithdraw  = 0      -- 0 = no ceiling, per single ATM withdrawal
+
+-- What a debit card costs to order. It is not issued automatically: a card a character
+-- never asked for is one more thing on their account they did not choose.
+Config.CardFee = 250

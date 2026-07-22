@@ -26,5 +26,12 @@ local T = {
     ['tx.withdraw']      = 'Withdrawal',
     ['tx.transfer_in']   = 'Transfer received',
     ['tx.transfer_out']  = 'Transfer sent',
+    ['bank.card'] = 'Card',
+    ['bank.order_card'] = 'Order a card',
+    ['bank.card_none'] = 'You do not have a card yet. One can be ordered here.',
+    ['bank.card_have'] = 'Use this number to be paid without giving out your citizen id.',
+    ['bank.card_ordered'] = 'Card issued',
+    ['bank.err_hascard'] = 'You already have a card',
+    ['bank.err_x'] = 'Something went wrong',
 }
 for k, v in pairs(T) do Locales.en[k] = v end
