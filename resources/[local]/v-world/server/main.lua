@@ -1007,8 +1007,12 @@ exports('SeedApps', function(defaults)
     local need, want = seedNeeded('apps', defaults)
     if not need then return false end
     for _, a in ipairs(defaults) do
-        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
-            VALUES (?,?,?,1)]], { a.id, a.label or a.id, a.slot or 99 })
+        -- The gate ships as a DEFAULT, not a lock: an app that is police-only out of the
+        -- box is still something the operator can open up from the editor.
+        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, job, job_grade, gang, enabled)
+            VALUES (?,?,?,?,?,?,1)]],
+            { a.id, a.label or a.id, a.slot or 99,
+              a.job or '', a.jobGrade or 0, a.gang or '' })
     end
     seedDone('apps', want)
     loadApps()

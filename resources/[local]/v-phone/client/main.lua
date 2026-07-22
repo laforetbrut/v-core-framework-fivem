@@ -64,7 +64,9 @@ local APP_SOURCE = {
     bank   = { res = 'v-banking',  callback = 'v-banking:getData' },
     garage = { res = 'v-vehicles', callback = 'v-vehicles:myVehicles' },
     wallet = { res = 'v-licenses', callback = 'v-licenses:mine' },
-    jobs   = { res = 'v-cityhall', callback = 'v-phone:jobs' },
+    jobs     = { res = 'v-cityhall', callback = 'v-phone:jobs' },
+    music    = { res = 'v-music',    callback = 'v-music:list' },
+    property = { res = 'v-housing',  callback = 'v-housing:mine' },
 }
 
 RegisterNUICallback('app', function(data, cb)
@@ -101,6 +103,48 @@ RegisterNUICallback('refresh', function(_, cb)
         if res and res.ok then myNumber = res.number end
         cb(res or { error = 'x' })
     end)
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- The apps that do more than read
+-- ══════════════════════════════════════════════════════════════
+-- Each of these forwards to the module that owns the action, so the module's own
+-- validation, notifications and settings all still apply. None of them decide anything.
+
+RegisterNUICallback('places', relay('v-phone:places'))
+
+--- Setting a waypoint is the one thing a phone map is actually for. Purely local: it
+--- moves a marker on this player's own minimap and touches nothing else.
+RegisterNUICallback('waypoint', function(data, cb)
+    local x, y = tonumber(data and data.x), tonumber(data and data.y)
+    if not x or not y then cb({ error = 'x' }) return end
+    SetNewWaypoint(x + 0.0, y + 0.0)
+    cb({ ok = true })
+end)
+
+RegisterNUICallback('music', function(data, cb)
+    if GetResourceState('v-music') ~= 'started' then cb({ error = 'off' }) return end
+    V.Request('v-music:control', function(res) cb(res or { error = 'x' }) end, data)
+end)
+
+RegisterNUICallback('payRent', function(data, cb)
+    if GetResourceState('v-housing') ~= 'started' then cb({ error = 'off' }) return end
+    V.Request('v-housing:payRent', function(res) cb(res or { error = 'x' }) end, data)
+end)
+
+--- The MDT reads v-police directly. `isCop` is re-checked there on every call, so the
+--- app gate in the registry only decides whether the icon is drawn.
+RegisterNUICallback('mdt', function(data, cb)
+    if GetResourceState('v-police') ~= 'started' then cb({ error = 'off' }) return end
+    local op = tostring((data and data.op) or '')
+    if op == 'lookup' then
+        V.Request('v-police:lookup', function(res) cb(res or { error = 'x' }) end,
+            { query = data.query })
+    elseif op == 'warrants' then
+        V.Request('v-police:warrants', function(res) cb(res or { error = 'x' }) end)
+    else
+        cb({ error = 'x' })
+    end
 end)
 
 -- ══════════════════════════════════════════════════════════════

@@ -24,7 +24,8 @@ const post = (n, b) => fetch(`https://v-phone/${n}`, {
 
 // Icon tints, so the home grid is not eight identical squares.
 const TINT = { phone: 't-green', messages: 't-green', contacts: 't-grey', bank: 't-green',
-  garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey' };
+  garage: 't-blue', wallet: 't-dark', jobs: 't-blue', settings: 't-grey',
+  map: 't-blue', music: 't-green', house: 't-blue', shield: 't-dark', calc: 't-dark' };
 
 // ══ State ══════════════════════════════════════════════════════
 let S = {};             // strings
@@ -403,8 +404,32 @@ RENDER.settings = () => {
       data: { w },
     })), { header: L('ph.wallpaper') }) +
     UI.group([UI.row({ icon: 'moon', title: L('ph.dnd'), toggle: !!p.dnd, data: { t: 'dnd' } })],
-      { footer: L('ph.dnd_hint') })
+      { footer: L('ph.dnd_hint') }) +
+    // iOS 27's headline user-facing change. It is a stored preference every layer of
+    // the glass derives from, not a fade on one overlay.
+    '<div class="grouphead">' + esc(L('ph.transparency')) + '</div>' +
+    '<div class="sliderow">' +
+      '<div class="sl"><span>' + esc(L('ph.glass_clear')) + '</span>' +
+      '<span>' + esc(L('ph.glass_tinted')) + '</span></div>' +
+      '<input type="range" id="glass" min="0" max="100" step="1" value="' + (p.glass ?? 55) + '" />' +
+    '</div>' +
+    '<div class="groupfoot">' + esc(L('ph.glass_hint')) + '</div>'
   );
+  const gl = byId('glass');
+  if (gl) {
+    // Repaint live while dragging so the value is judged by looking at it, and only
+    // persist on release: one write per adjustment, not one per pixel.
+    gl.addEventListener('input', () => {
+      applyGlass(Number(gl.value));
+      gl.style.setProperty('--fill-pct', gl.value + '%');
+    });
+    gl.addEventListener('change', async () => {
+      const res = await post('prefs', { glass: Number(gl.value) });
+      if (res && res.ok) state.prefs = res.prefs;
+    });
+    gl.style.setProperty('--fill-pct', (p.glass ?? 55) + '%');
+  }
+
   rows('.row', (r) => r.addEventListener('click', async () => {
     if (r.dataset.w) {
       const res = await post('prefs', { wallpaper: r.dataset.w });
@@ -416,11 +441,199 @@ RENDER.settings = () => {
   }));
 };
 
+// 0 is ultra clear, 100 fully tinted. Every alpha in the material is a calc() off this.
+function applyGlass(v) {
+  const k = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
+  byId('screen').style.setProperty('--gk', String(k));
+}
+
 function applyWallpaper() {
   const w = byId('wallpaper');
   (state.wallpapers || []).forEach((x) => w.classList.remove('wall-' + x));
   w.classList.add('wall-' + ((state.prefs || {}).wallpaper || 'ember'));
 }
+
+// -- Maps -------------------------------------------------------
+// Everywhere the map already shows, turned into a waypoint. A phone map that could not
+// set a waypoint would be a list of place names.
+let placeFilter = 'all';
+
+RENDER.maps = async () => {
+  loading();
+  const d = await post('places');
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'map')); return; }
+  const all = d.places || [];
+  const kinds = [...new Set(all.map((p) => p.kind))];
+  const shown = placeFilter === 'all' ? all : all.filter((p) => p.kind === placeFilter);
+
+  body(
+    '<div class="seg">' +
+      '<button class="' + (placeFilter === 'all' ? 'on' : '') + '" data-k="all">' + esc(L('ph.all')) + '</button>' +
+      kinds.map((k) => '<button class="' + (placeFilter === k ? 'on' : '') + '" data-k="' + esc(k) + '">' + esc(L('ph.place_' + k)) + '</button>').join('') +
+    '</div>' +
+    (shown.length
+      ? UI.group(shown.map((pl, i) => UI.row({
+          icon: pl.icon, title: pl.label, subtitle: L('ph.place_' + pl.kind),
+          chevron: true, data: { i },
+        })), { footer: L('ph.maps_hint') })
+      : UI.empty(L('ph.no_places'), 'map'))
+  );
+  [...byId('appbody').querySelectorAll('.seg button')].forEach((b) =>
+    b.addEventListener('click', () => { placeFilter = b.dataset.k; RENDER.maps(); }));
+  rows('.row[data-i]', (r) => r.addEventListener('click', async () => {
+    const pl = shown[Number(r.dataset.i)];
+    if (!pl) return;
+    await post('waypoint', { x: pl.x, y: pl.y, label: pl.label });
+    toast(L('ph.waypoint_set'));
+  }));
+};
+
+// -- Music ------------------------------------------------------
+// v-music owns every source and decides who may touch which one; this lists what it
+// answered and sends the same actions its own UI does.
+RENDER.music = async () => {
+  loading();
+  const d = await post('app', { app: 'music' });
+  if (!d || d.error || d.enabled === false) { body(UI.empty(L('ph.err_off'), 'music')); return; }
+  const list = d.sources || [];
+  if (!list.length) { body(UI.empty(L('ph.no_music'), 'music')); return; }
+  body(UI.group(list.map((m, i) => UI.row({
+    icon: 'music', title: m.title || L('ph.untitled'),
+    subtitle: L('ph.music_' + (m.kind || 'boombox')),
+    value: m.paused ? L('ph.paused') : L('ph.playing'),
+    tone: m.paused ? '' : 'pos', chevron: true, data: { i },
+  })), { header: L('ph.music_sources') }));
+  rows('.row[data-i]', (r) => r.addEventListener('click', () => musicSheet(list[Number(r.dataset.i)])));
+};
+
+function musicSheet(m) {
+  const act = async (action) => {
+    const res = await post('music', { id: m.id, action });
+    closeSheet();
+    if (!res || res.error) toast(L('ph.err_' + ((res && res.error) || 'x')));
+    else RENDER.music();
+  };
+  sheet(m.title || L('ph.untitled'),
+    UI.button(L(m.paused ? 'ph.resume' : 'ph.pause'), 'mpause') +
+    UI.button(L('ph.stop'), 'mstop', 'destructive'),
+    () => {
+      byId('mpause').addEventListener('click', () => act(m.paused ? 'resume' : 'pause'));
+      byId('mstop').addEventListener('click', () => act('stop'));
+    });
+}
+
+// -- Property ---------------------------------------------------
+// A failed rent locks a door rather than deleting a property, so the one thing this app
+// has to be able to do is pay it off from anywhere.
+RENDER.property = async () => {
+  loading();
+  const d = await post('app', { app: 'property' });
+  if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'house')); return; }
+  const list = d.rows || [];
+  if (!list.length) { body(UI.empty(L('ph.no_property'), 'house')); return; }
+  body(UI.group(list.map((pr, i) => UI.row({
+    icon: 'house', title: pr.label,
+    subtitle: L('ph.tenancy_' + (pr.tenancy || 'own')) +
+      (Number(pr.arrears) > 0 ? '  ' + String(L('ph.arrears')).replace('%s', pr.arrears) : ''),
+    value: pr.locked ? L('ph.locked') : '',
+    tone: pr.locked ? 'neg' : '',
+    chevron: !!pr.locked, data: { i },
+  })), { footer: L('ph.property_hint') }));
+  rows('.row[data-i]', (r) => r.addEventListener('click', async () => {
+    const pr = list[Number(r.dataset.i)];
+    if (!pr || !pr.locked) return;
+    const res = await post('payRent', { id: pr.property });
+    if (res && res.ok) { toast(L('ph.rent_paid')); RENDER.property(); }
+    else toast(L('ph.err_' + ((res && res.error) || 'x')));
+  }));
+};
+
+// -- MDT --------------------------------------------------------
+// Police only by default, and the server re-checks that on every call: the app gate only
+// decides whether the icon is drawn.
+let mdtTab = 'warrants';
+
+RENDER.mdt = async () => {
+  const seg =
+    '<div class="seg">' +
+      '<button class="' + (mdtTab === 'warrants' ? 'on' : '') + '" data-t="warrants">' + esc(L('ph.warrants')) + '</button>' +
+      '<button class="' + (mdtTab === 'lookup' ? 'on' : '') + '" data-t="lookup">' + esc(L('ph.lookup')) + '</button>' +
+    '</div>';
+  const wire = () => [...byId('appbody').querySelectorAll('.seg button')].forEach((b) =>
+    b.addEventListener('click', () => { mdtTab = b.dataset.t; RENDER.mdt(); }));
+
+  if (mdtTab === 'lookup') {
+    body(seg + UI.field('mq', L('ph.lookup_ph')) + UI.button(L('ph.search'), 'mgo') + '<div id="mres"></div>');
+    wire();
+    byId('mgo').addEventListener('click', async () => {
+      const res = await post('mdt', { op: 'lookup', query: byId('mq').value.trim() });
+      if (!res || res.error) { byId('mres').innerHTML = UI.empty(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+      byId('mres').innerHTML =
+        UI.group([UI.row({ icon: 'id', title: res.name || '', subtitle: res.cid || '' })]) +
+        ((res.records || []).length
+          ? UI.group(res.records.map((r) => UI.row({
+              title: r.charges || '', subtitle: r.at || '',
+              value: r.paid ? L('ph.paid') : L('ph.unpaid'), tone: r.paid ? 'pos' : 'neg',
+            })), { header: L('ph.record') })
+          : UI.empty(L('ph.no_record')));
+    });
+    return;
+  }
+
+  loading();
+  const d = await post('mdt', { op: 'warrants' });
+  if (!d || d.error) { body(seg + UI.empty(L('ph.err_' + ((d && d.error) || 'x')), 'shield')); wire(); return; }
+  const list = d.rows || [];
+  body(seg + (list.length
+    ? UI.group(list.map((w) => UI.row({
+        icon: 'shield',
+        title: ((w.firstname || '') + ' ' + (w.lastname || '')).trim() || w.citizenid,
+        subtitle: w.reason || '', time: w.at || '',
+      })), { header: L('ph.warrants_active') })
+    : UI.empty(L('ph.no_warrants'), 'shield')));
+  wire();
+};
+
+// -- Calculator -------------------------------------------------
+// Owned by the phone, and the one app here that needs no module: splitting a payment
+// three ways is something players do constantly and currently do in their heads.
+let calcAcc = null, calcOp = null, calcVal = '0', calcFresh = true;
+
+function calcPress(k) {
+  const put = (v) => { calcVal = calcFresh ? v : (calcVal === '0' ? v : calcVal + v); calcFresh = false; };
+  if (k >= '0' && k <= '9') put(k);
+  else if (k === '.') { if (!calcVal.includes('.')) put(calcFresh ? '0.' : '.'); }
+  else if (k === 'c') { calcAcc = null; calcOp = null; calcVal = '0'; calcFresh = true; }
+  else if (k === 'neg') calcVal = String(-parseFloat(calcVal));
+  else if (k === 'pct') calcVal = String(parseFloat(calcVal) / 100);
+  else if (k === '=') {
+    if (calcOp !== null && calcAcc !== null) {
+      const b = parseFloat(calcVal);
+      const r = { '+': calcAcc + b, '-': calcAcc - b, '*': calcAcc * b, '/': b === 0 ? 0 : calcAcc / b }[calcOp];
+      calcVal = String(Math.round(r * 1e6) / 1e6);
+      calcAcc = null; calcOp = null; calcFresh = true;
+    }
+  } else {
+    if (calcOp !== null && !calcFresh) calcPress('=');
+    calcAcc = parseFloat(calcVal); calcOp = k; calcFresh = true;
+  }
+  const out = byId('calcout');
+  if (out) out.textContent = calcVal;
+}
+
+RENDER.calc = () => {
+  const K = [['c', 'fn', 'AC'], ['neg', 'fn', '+/-'], ['pct', 'fn', '%'], ['/', 'op', '÷'],
+             ['7', '', '7'], ['8', '', '8'], ['9', '', '9'], ['*', 'op', '×'],
+             ['4', '', '4'], ['5', '', '5'], ['6', '', '6'], ['-', 'op', '−'],
+             ['1', '', '1'], ['2', '', '2'], ['3', '', '3'], ['+', 'op', '+'],
+             ['0', 'wide', '0'], ['.', '', ','], ['=', 'op', '=']];
+  body('<div class="calcout" id="calcout">' + esc(calcVal) + '</div>' +
+    '<div class="calcgrid">' + K.map(function (e) {
+      return '<button class="ckey ' + e[1] + '" data-k="' + esc(e[0]) + '" type="button">' + e[2] + '</button>';
+    }).join('') + '</div>');
+  rows('.ckey', (b) => b.addEventListener('click', () => calcPress(b.dataset.k)));
+};
+
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 function sheet(title, html, after) {
@@ -661,6 +874,7 @@ window.addEventListener('message', (e) => {
     byId('device').classList.remove('hidden');
     byId('locknum').textContent = d.number || '';
     applyWallpaper();
+    applyGlass((d.prefs && d.prefs.glass) ?? 55);
     tick();
     paintNotifs();
     byId('lock').classList.remove('out');

@@ -145,6 +145,7 @@ local function registerApp(id, info, owner)
         -- Four apps sit in the dock rather than the paging grid: the ones a player
         -- reaches for without thinking should not move when the page does.
         dock  = info.dock == true,
+        job   = info.job, jobGrade = info.jobGrade, gang = info.gang,
     }
     return true
 end
@@ -156,8 +157,10 @@ exports('RegisterApp', function(id, info)
     -- ungovernable: to disable or gate it they would have to guess its id and create the
     -- row by hand. INSERT IGNORE, so an operator's existing edits are never overwritten.
     if ok and GetResourceState('v-world') == 'started' and exports['v-world']:IsReady() then
-        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
-            VALUES (?,?,?,1)]], { tostring(id), tostring(info.label or id), num(info.slot, 99) })
+        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, job, job_grade, gang, enabled)
+            VALUES (?,?,?,?,?,?,1)]],
+            { tostring(id), tostring(info.label or id), num(info.slot, 99),
+              info.job or '', num(info.jobGrade, 0), info.gang or '' })
         loadWorldApps()
     end
     return ok
@@ -219,10 +222,14 @@ end)
 local function prefsOf(p)
     local m = p.GetMetadata('phone')
     if type(m) ~= 'table' then m = {} end
+    -- `glass` is iOS 27's transparency slider: 0 is ultra clear, 100 is fully tinted.
+    -- It is a real stored preference driving a CSS variable, not a decorative control.
+    local glass = tonumber(m.glass)
     return {
         wallpaper = tostring(m.wallpaper or Config.DefaultWallpaper),
         dnd       = m.dnd == true,
         ringtone  = tostring(m.ringtone or 'default'),
+        glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
     }
 end
 
@@ -476,6 +483,9 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
+        if data.glass ~= nil then
+            prefs.glass = math.max(0, math.min(100, math.floor(num(data.glass, Config.DefaultGlass))))
+        end
     end
     p.SetMetadata('phone', prefs)
     resolve({ ok = true, prefs = prefs })
@@ -540,6 +550,42 @@ V.Callback('v-phone:storage', function(src, resolve, data)
     resolve({ ok = true, value = MySQL.scalar.await(
         'SELECT v FROM phone_app_data WHERE citizenid = ? AND app = ? AND k = ?',
         { p.citizenid, app, key }) })
+end)
+
+--- Everywhere the map already shows. v-world owns every one of these lists, and each is
+--- public information: these are places with blips on them, not secrets. The app turns a
+--- row into a waypoint, which is the one thing a phone map is actually for.
+local PLACE_SOURCES = {
+    { key = 'garage',   getter = 'GetGarages',       icon = 'garage' },
+    { key = 'shop',     getter = 'GetShopLocations', icon = 'cart' },
+    { key = 'station',  getter = 'GetStations',      icon = 'fuel' },
+    { key = 'mechanic', getter = 'GetMechShops',     icon = 'wrench' },
+    { key = 'cityhall', getter = 'GetCityHalls',     icon = 'jobs' },
+    { key = 'dealer',   getter = 'GetDealers',       icon = 'garage' },
+}
+
+V.Callback('v-phone:places', function(src, resolve)
+    if GetResourceState('v-world') ~= 'started' then resolve({ error = 'off' }) return end
+    local world = V.Use('v-world')
+    local out = {}
+    for _, src2 in ipairs(PLACE_SOURCES) do
+        for _, r in ipairs(world[src2.getter]() or {}) do
+            -- A disabled row is one the operator switched off; it should not be on a map
+            -- either, or the phone contradicts the world.
+            if r.enabled ~= 0 and r.enabled ~= false and r.x then
+                out[#out + 1] = {
+                    kind = src2.key, icon = src2.icon,
+                    label = r.label or r.id or src2.key,
+                    x = r.x, y = r.y, z = r.z or 0.0,
+                }
+            end
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.kind ~= b.kind then return a.kind < b.kind end
+        return tostring(a.label) < tostring(b.label)
+    end)
+    resolve({ ok = true, places = out })
 end)
 
 V.Callback('v-phone:call', function(src, resolve, data)
@@ -659,8 +705,9 @@ CreateThread(function()
     -- Any app that registered before v-world was ready still needs its editor row.
     for id, a in pairs(Apps) do
         if not WorldApps[id] then
-            MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
-                VALUES (?,?,?,1)]], { id, a.label or id, a.slot or 99 })
+            MySQL.insert.await([[INSERT IGNORE INTO world_apps
+                (id, label, slot, job, job_grade, gang, enabled) VALUES (?,?,?,?,?,?,1)]],
+                { id, a.label or id, a.slot or 99, a.job or '', a.jobGrade or 0, a.gang or '' })
         end
     end
     loadWorldApps()

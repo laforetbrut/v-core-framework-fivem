@@ -49,7 +49,15 @@ Config.Apps = {
     { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 5 },
     { id = 'wallet',   label = 'app.wallet',   icon = 'wallet',   owner = 'v-licenses', slot = 6 },
     { id = 'jobs',     label = 'app.jobs',     icon = 'jobs',     owner = 'v-cityhall', slot = 7 },
-    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 8 },
+    { id = 'maps',     label = 'app.maps',     icon = 'map',      owner = 'v-world',    slot = 8 },
+    { id = 'music',    label = 'app.music',    icon = 'music',    owner = 'v-music',    slot = 9 },
+    { id = 'property', label = 'app.property', icon = 'house',    owner = 'v-housing',  slot = 10 },
+    -- Police only by default. The operator can open it up, or gate something else the
+    -- same way, from Editor -> Phone apps.
+    { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
+      job = 'police' },
+    { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12 },
+    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20 },
 }
 
 -- ── Look ───────────────────────────────────────────────────────
@@ -58,3 +66,7 @@ Config.Apps = {
 -- purple world.
 Config.Wallpapers = { 'dune', 'grid', 'night', 'ember' }
 Config.DefaultWallpaper = 'ember'
+
+-- iOS 27's transparency slider, as a starting value: 0 is ultra clear glass, 100 is
+-- fully tinted. Players move it themselves in Settings; this is only where they begin.
+Config.DefaultGlass = 55
