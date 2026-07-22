@@ -320,14 +320,14 @@ local function conversations(cid)
     -- clever statement.
     local last = MySQL.query.await([[
         SELECT IF(from_cid = ?, to_cid, from_cid) AS other, MAX(id) AS last_id
-        FROM phone_messages WHERE from_cid = ? OR to_cid = ?
+        FROM phone_messages WHERE (from_cid = ? OR to_cid = ?) AND group_id IS NULL
         GROUP BY other
     ]], { cid, cid, cid }) or {}
     if #last == 0 then return {} end
 
     local unread = {}
     for _, r in ipairs(MySQL.query.await(
-        'SELECT from_cid AS other, COUNT(*) AS n FROM phone_messages WHERE to_cid = ? AND seen = 0 GROUP BY from_cid',
+        'SELECT from_cid AS other, COUNT(*) AS n FROM phone_messages WHERE to_cid = ? AND seen = 0 AND group_id IS NULL GROUP BY from_cid',
         { cid }) or {}) do
         unread[r.other] = num(r.n, 0)
     end
@@ -350,8 +350,9 @@ end
 
 local function conversation(cid, otherCid, limit)
     local rows = MySQL.query.await([[
-        SELECT id, from_cid, body, at, seen FROM phone_messages
-        WHERE (from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?)
+        SELECT id, from_cid, body, kind, attachment, at, seen FROM phone_messages
+        WHERE ((from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?))
+          AND group_id IS NULL
         ORDER BY at DESC, id DESC LIMIT ?
     ]], { cid, otherCid, otherCid, cid, limit }) or {}
 
@@ -360,14 +361,14 @@ local function conversation(cid, otherCid, limit)
     local out = {}
     for i = #rows, 1, -1 do
         local r = rows[i]
-        out[#out + 1] = { id = r.id, mine = (r.from_cid == cid), body = r.body, at = r.at }
+        out[#out + 1] = { id = r.id, mine = (r.from_cid == cid), body = r.body,
+            kind = r.kind, attachment = r.attachment, at = r.at }
     end
     MySQL.update('UPDATE phone_messages SET seen = 1 WHERE to_cid = ? AND from_cid = ? AND seen = 0',
         { cid, otherCid })
     return out
 end
 
---- The one write the phone owns. Returns ok plus the stored row, or an error key.
 --- Nothing leaves the phone without a signal. Checked here rather than in the client so
 --- that standing in a tunnel actually means something.
 local function hasBars(src)
@@ -375,17 +376,39 @@ local function hasBars(src)
     return (Signal[src] or 4) > 0
 end
 
-local function sendMessage(fromCid, toNumber, body)
+--- What a message may carry besides text. An image is a URL every reader's client will
+--- fetch, so it goes through the same host gate as wallpapers; a location is two numbers
+--- the sender chose to share. Returns body, attachment, errorKey.
+local function checkContent(body, kind, attachment)
     body = tostring(body or ''):sub(1, math.max(1, math.floor(num(S('maxLength', Config.Messages.maxLength), 250))))
-    if body:gsub('%s', '') == '' then return nil, 'empty' end
+    attachment = tostring(attachment or ''):sub(1, 300)
+
+    if kind == 'image' then
+        if attachment == '' then return nil, nil, 'noimage' end
+        if not wallpaperAllowed(attachment) then return nil, nil, 'badhost' end
+    elseif kind == 'location' then
+        if not attachment:match('^%-?%d+%.?%d*;%-?%d+%.?%d*$') then return nil, nil, 'x' end
+    else
+        if body:gsub('%s', '') == '' then return nil, nil, 'empty' end
+        attachment = ''
+    end
+    return body, attachment, nil
+end
+
+--- The one write the phone owns. Returns ok plus the stored row, or an error key.
+local function sendMessage(fromCid, toNumber, body, kind, attachment)
+    kind = (kind == 'image' or kind == 'location') and kind or 'text'
+    local err
+    body, attachment, err = checkContent(body, kind, attachment)
+    if err then return nil, err end
 
     local toCid = cidOfNumber(toNumber)
     if not toCid then return nil, 'nonumber' end
     if toCid == fromCid then return nil, 'self' end
 
     local id = MySQL.insert.await(
-        'INSERT INTO phone_messages (from_cid, to_cid, body) VALUES (?, ?, ?)',
-        { fromCid, toCid, body })
+        'INSERT INTO phone_messages (from_cid, to_cid, body, kind, attachment) VALUES (?,?,?,?,?)',
+        { fromCid, toCid, body, kind, attachment })
 
     -- Delivered live only if they are on: an offline character reads it next time they
     -- open the app, which is what the table is for.
@@ -393,9 +416,48 @@ local function sendMessage(fromCid, toNumber, body)
     if target then
         TriggerClientEvent('v-phone:client:message', target, {
             from = numberOfCid(fromCid), fromCid = fromCid, body = body, id = id,
+            kind = kind, attachment = attachment,
         })
     end
-    return { id = id, body = body }, nil
+    return { id = id, body = body, kind = kind, attachment = attachment }, nil
+end
+
+-- ── Groups ─────────────────────────────────────────────────────
+local function isMember(groupId, cid)
+    return MySQL.scalar.await(
+        'SELECT 1 FROM phone_group_members WHERE group_id = ? AND citizenid = ?',
+        { groupId, cid }) ~= nil
+end
+
+--- A group message is one row, delivered to every member who is on. The sender is the
+--- server's idea of who called, exactly as in a DM.
+local function sendGroup(p, groupId, body, kind, attachment)
+    kind = (kind == 'image' or kind == 'location') and kind or 'text'
+    local err
+    body, attachment, err = checkContent(body, kind, attachment)
+    if err then return nil, err end
+    if not isMember(groupId, p.citizenid) then return nil, 'x' end
+
+    local id = MySQL.insert.await(
+        'INSERT INTO phone_messages (from_cid, to_cid, group_id, body, kind, attachment) VALUES (?,"",?,?,?,?)',
+        { p.citizenid, groupId, body, kind, attachment })
+
+    local gname = MySQL.scalar.await('SELECT name FROM phone_groups WHERE id = ?', { groupId })
+    local fromNumber = numberOfCid(p.citizenid)
+    for _, m in ipairs(MySQL.query.await(
+        'SELECT citizenid FROM phone_group_members WHERE group_id = ?', { groupId }) or {}) do
+        if m.citizenid ~= p.citizenid then
+            local target = Online[numberOfCid(m.citizenid) or '']
+            if target then
+                TriggerClientEvent('v-phone:client:message', target, {
+                    from = fromNumber, fromCid = p.citizenid, body = body, id = id,
+                    kind = kind, attachment = attachment,
+                    group = groupId, groupName = gname,
+                })
+            end
+        end
+    end
+    return { id = id, body = body, kind = kind, attachment = attachment }, nil
 end
 
 exports('SendMessage', function(fromCid, toNumber, body)
@@ -628,6 +690,9 @@ V.Callback('v-phone:open', function(src, resolve)
             'SELECT id, name, number, favourite FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name',
             { p.citizenid }) or {},
         conversations = conversations(p.citizenid),
+        groups = MySQL.query.await([[SELECT g.id, g.name FROM phone_groups g
+            JOIN phone_group_members m ON m.group_id = g.id
+            WHERE m.citizenid = ? ORDER BY g.id DESC]], { p.citizenid }) or {},
         wallpapers = Config.Wallpapers,
         photos     = (function()
             local ph = p.GetMetadata('photos')
@@ -642,6 +707,28 @@ end)
 V.Callback('v-phone:conversation', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
+
+    local groupId = tonumber(data and data.group)
+    if groupId then
+        groupId = math.floor(groupId)
+        if not isMember(groupId, p.citizenid) then resolve({ error = 'x' }) return end
+        local rows = MySQL.query.await([[
+            SELECT id, from_cid, body, kind, attachment, at FROM phone_messages
+            WHERE group_id = ? ORDER BY at DESC, id DESC LIMIT ?
+        ]], { groupId, Config.Messages.pageSize }) or {}
+        local out = {}
+        for i = #rows, 1, -1 do
+            local r = rows[i]
+            out[#out + 1] = {
+                id = r.id, mine = (r.from_cid == p.citizenid), body = r.body,
+                kind = r.kind, attachment = r.attachment, at = r.at,
+                from = numberOfCid(r.from_cid),
+            }
+        end
+        resolve({ ok = true, messages = out })
+        return
+    end
+
     local other = cidOfNumber(tostring((data and data.number) or ''))
     if not other then resolve({ error = 'nonumber' }) return end
     resolve({ ok = true, messages = conversation(p.citizenid, other, Config.Messages.pageSize) })
@@ -651,9 +738,46 @@ V.Callback('v-phone:send', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     if not hasBars(src) then resolve({ error = 'nosignal' }) return end
-    local row, err = sendMessage(p.citizenid, tostring((data and data.number) or ''), data and data.body)
+    local row, err
+    local groupId = tonumber(data and data.group)
+    if groupId then
+        row, err = sendGroup(p, math.floor(groupId), data and data.body,
+            data and data.kind, data and data.attachment)
+    else
+        row, err = sendMessage(p.citizenid, tostring((data and data.number) or ''),
+            data and data.body, data and data.kind, data and data.attachment)
+    end
     if not row then resolve({ error = err }) return end
-    resolve({ ok = true, id = row.id, body = row.body })
+    resolve({ ok = true, id = row.id, body = row.body, kind = row.kind, attachment = row.attachment })
+end)
+
+--- Create a group from contact numbers. The creator is a member by construction; every
+--- number must resolve to a real character, because a group with ghosts in it is a bug
+--- report waiting to be typed.
+V.Callback('v-phone:groupCreate', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local name = tostring((data and data.name) or ''):sub(1, 40)
+    if name:gsub('%s', '') == '' then resolve({ error = 'fields' }) return end
+
+    local members, seen = { p.citizenid }, { [p.citizenid] = true }
+    for _, n in ipairs((data and data.numbers) or {}) do
+        local cid = cidOfNumber(tostring(n))
+        if cid and not seen[cid] then
+            seen[cid] = true
+            members[#members + 1] = cid
+        end
+        if #members >= 16 then break end
+    end
+    if #members < 2 then resolve({ error = 'fields' }) return end
+
+    local id = MySQL.insert.await(
+        'INSERT INTO phone_groups (name, owner_cid) VALUES (?,?)', { name, p.citizenid })
+    for _, cid in ipairs(members) do
+        MySQL.insert.await(
+            'INSERT IGNORE INTO phone_group_members (group_id, citizenid) VALUES (?,?)', { id, cid })
+    end
+    resolve({ ok = true, id = id, name = name })
 end)
 
 V.Callback('v-phone:contactSave', function(src, resolve, data)
@@ -988,6 +1112,32 @@ CreateThread(function()
         `v`         TEXT,
         PRIMARY KEY (`citizenid`, `app`, `k`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_groups` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `name`      VARCHAR(40) NOT NULL,
+        `owner_cid` VARCHAR(16) NOT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_group_members` (
+        `group_id`  INT UNSIGNED NOT NULL,
+        `citizenid` VARCHAR(16) NOT NULL,
+        PRIMARY KEY (`group_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Messages grew a kind, an attachment and a group. Idempotent, so an existing
+    -- database upgrades without a migration step nobody would run.
+    local hasKind = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'phone_messages'
+          AND COLUMN_NAME = 'kind' LIMIT 1]])
+    if not hasKind then
+        MySQL.query.await("ALTER TABLE `phone_messages` ADD COLUMN `kind` VARCHAR(10) NOT NULL DEFAULT 'text'")
+        MySQL.query.await("ALTER TABLE `phone_messages` ADD COLUMN `attachment` VARCHAR(300) NOT NULL DEFAULT ''")
+        MySQL.query.await("ALTER TABLE `phone_messages` ADD COLUMN `group_id` INT UNSIGNED NULL DEFAULT NULL")
+        MySQL.query.await("ALTER TABLE `phone_messages` ADD KEY `group_idx` (`group_id`, `id`)")
+        print('[v-phone] messages migrated: kind, attachment, groups')
+    end
 
     -- The number lives on the character, not in a table of its own: it identifies the
     -- character the same way their name does. Added idempotently so an existing database

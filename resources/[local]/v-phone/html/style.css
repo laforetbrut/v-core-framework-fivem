@@ -191,7 +191,7 @@ input { font: inherit; }
 .status .sright { display: flex; align-items: center; gap: 6px; }
 .status svg { width: 17px; height: 12px; }
 .battery { width: 25px; height: 12px; border-radius: 3.5px; position: relative;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.4); }
+  box-shadow: inset 0 0 0 1px var(--sb-dim, rgba(255,255,255,.4)); }
 /* The fill is the real charge, and the colour is the real state: white normally,
    amber under 20, red under 5, green while charging. A battery icon that always
    showed the same sliver would be decoration. */
@@ -200,7 +200,7 @@ input { font: inherit; }
   background: var(--batt-col, #fff);
   transition: width .4s var(--spring), background .3s ease; }
 .battery::after { content: ''; position: absolute; right: -3px; top: 4px; width: 2px; height: 4px;
-  border-radius: 0 1px 1px 0; background: rgba(255,255,255,.4); }
+  border-radius: 0 1px 1px 0; background: var(--sb-dim, rgba(255,255,255,.4)); }
 
 /* The island: a pill, and it EXPANDS for a live activity (a call). That expansion
    is the single most recognisable thing about a modern iPhone. */
@@ -909,3 +909,36 @@ input { font: inherit; }
 .hushbtn.no { color: var(--app-label2); }
 .hushbtn.yes { color: #FF2D55; }
 .hushbtn.yes svg { fill: #FF2D55; stroke: #FF2D55; }
+
+
+/* ══ Status ink follows the surface ═══════════════════════════
+   Over the wallpaper the bar is white. Over a light app it turns black, which is
+   what iOS does and what "23:11 disappeared" was about. Dark mode and the black
+   calculator keep white ink; the home indicator follows the same rule, because
+   an exit you cannot see is an exit that does not exist. */
+.status { color: var(--sb-ink, #fff); }
+.screen.app-open { --sb-ink: #000; --sb-dim: rgba(0, 0, 0, .35); }
+.screen.app-open .homebar { background: rgba(0, 0, 0, .55); }
+.screen.dark.app-open, .screen.appblack { --sb-ink: #fff; --sb-dim: rgba(255, 255, 255, .4); }
+.screen.dark.app-open .homebar, .screen.appblack .homebar { background: rgba(255, 255, 255, .55); }
+
+/* And nothing sits under the indicator: the compose bar clears it. */
+.compose { padding-bottom: 26px; }
+
+
+/* ══ Message media ════════════════════════════════════════════ */
+.bub .mimg { max-width: 100%; border-radius: 14px; display: block; }
+.bub.imgb { padding: 4px; background: none; }
+.bub .mcap { padding: 6px 8px 2px; font-size: 13px; }
+.gsender { font-size: 11px; color: var(--app-label2); margin: 2px 6px 1px; }
+.locbtn { display: flex; align-items: center; gap: 7px; font-size: 14px; font-weight: 600;
+  color: inherit; }
+.locbtn svg { width: 18px; height: 18px; }
+
+/* The attach button beside the compose field. */
+.compose .attach { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--app-fill); color: var(--app-label2); font-size: 22px; line-height: 1; }
+.gpick { display: flex; align-items: center; gap: 10px; padding: 9px 4px; font-size: 15px;
+  color: var(--app-label); }
+.gpick input { width: 20px; height: 20px; accent-color: var(--app-tint); }
