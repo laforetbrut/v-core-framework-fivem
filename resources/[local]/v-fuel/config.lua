@@ -97,3 +97,42 @@ Config.Marker = { type = 21, size = 0.22, r = 255, g = 122, b = 26, a = 110 }
 -- Litres per second while the nozzle is running (electric charges slower).
 Config.FlowRate   = 3.2
 Config.FlowRateEV = 1.1
+
+-- ── Electric vehicles ──────────────────────────────────────────
+-- A charge is not a fill. Three things make it behave like one:
+--   1. a CHARGE CURVE — fast to 80 %, then deliberately slow (that is how real cells
+--      protect themselves, and it is why "charge to 80" is a habit);
+--   2. a CONNECTOR level — a slow AC post and a DC fast charger are different machines;
+--   3. BATTERY HEALTH — an aged pack holds less than its nameplate capacity, so an old
+--      EV genuinely has less range. v-mechanic owns that number (`battery_pack`).
+Config.EV = {
+    -- Charge speed multiplier past the knee, and where the knee sits (% of capacity).
+    taperFrom  = 80,
+    taperMult  = 0.35,
+
+    -- Connector levels. `kw` drives the flow rate; `price` multiplies the per-kWh price
+    -- because a fast charger costs more to use.
+    connectors = {
+        ac  = { i18n = 'fuel.conn_ac',   kw = 11,  price = 1.00 },
+        dc  = { i18n = 'fuel.conn_dc',   kw = 50,  price = 1.25 },
+        hpc = { i18n = 'fuel.conn_hpc',  kw = 150, price = 1.60 },
+    },
+    connectorOrder = { 'ac', 'dc', 'hpc' },
+    -- kWh delivered per second, per kW of connector. Tuned so a 50 kW DC charge of a
+    -- 60 kWh pack from 20 % to 80 % takes a bit over a minute of real time.
+    kwhPerSecondPerKw = 0.0125,
+
+    -- Regenerative braking recovers a little charge when slowing down.
+    regen = { enabled = true, perBrakeSecond = 0.06 },
+
+    -- An EV left with a flat pack loses a little health each time (deep discharge).
+    deepDischargeWear = 1.5,
+}
+
+-- Which connectors a station offers. Anything not listed falls back to `ac` only, so a
+-- station an admin creates without thinking about it is still usable.
+Config.StationConnectors = {
+    ev_downtown = { 'ac', 'dc', 'hpc' },
+    ev_rockford = { 'ac', 'dc' },
+    ev_paleto   = { 'ac' },
+}

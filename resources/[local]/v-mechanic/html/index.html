@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="mech" class="mech-overlay hidden">
+    <div class="mech v-chamfer v-panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" id="mtitle">Diagnostics</span>
+      <button class="close" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="sub" id="msub">Vehicle report</div>
+
+      <div class="dash" id="dash"></div>
+
+      <div class="filters">
+        <button class="fbtn on" data-f="all" data-i18n="mech.f_all">All</button>
+        <button class="fbtn" data-f="worn" data-i18n="mech.f_worn">Needs work</button>
+        <span class="spacer"></span>
+        <label class="chk"><input type="radio" name="macct" id="macct-cash" checked /><span data-i18n="mech.cash">Cash</span></label>
+        <label class="chk"><input type="radio" name="macct" id="macct-bank" /><span data-i18n="mech.bank">Card</span></label>
+        <button class="mini accent" id="service" data-i18n="mech.service">Full service</button>
+      </div>
+
+      <div class="list v-scroll" id="plist"></div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

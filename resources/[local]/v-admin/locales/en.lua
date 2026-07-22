@@ -149,6 +149,10 @@ local T = {
     ['adm.ed_statid']       = 'Station id (immutable)',
     ['adm.ed_fueltypes']    = 'Fuels sold',
     ['adm.ed_pricemult']    = 'Price multiplier',
+    ['adm.ed_mechshops']    = 'Mechanic shops',
+    ['adm.ed_mechid']       = 'Shop id (immutable)',
+    ['adm.ed_labourmult']   = 'Labour multiplier',
+    ['adm.ed_selfserv']     = 'Self-service (no job)',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }

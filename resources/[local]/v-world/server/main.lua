@@ -14,7 +14,7 @@ local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
-local Garages, Stations = {}, {}
+local Garages, Stations, MechShops = {}, {}, {}
 local ready = false
 
 local function isAdmin(src)
@@ -45,6 +45,20 @@ local function ensureTables()
         'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
         { 'jobs', 'whitelisted' }) then
         MySQL.query.await('ALTER TABLE `jobs` ADD COLUMN `whitelisted` TINYINT(1) NOT NULL DEFAULT 0')
+    end
+
+    -- v-mechanic stores per-part condition, the odometer and the last service on the
+    -- vehicle row itself: it is the same object, and a separate table would let the two
+    -- drift apart on delete.
+    for _, col in ipairs({
+        { 'parts',        "ADD COLUMN `parts` JSON DEFAULT NULL" },
+        { 'mileage',      "ADD COLUMN `mileage` DOUBLE NOT NULL DEFAULT 0" },
+        { 'last_service', "ADD COLUMN `last_service` DOUBLE NOT NULL DEFAULT 0" },
+    }) do
+        local has = MySQL.scalar.await(
+            'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            { 'character_vehicles', col[1] })
+        if not has then MySQL.query.await('ALTER TABLE `character_vehicles` ' .. col[2]) end
     end
 
     -- Upgrade path for a world_blips created before visibility gating existed.
@@ -120,6 +134,17 @@ local function ensureTables()
         `types` VARCHAR(120) NOT NULL DEFAULT 'regular',
         `mult` FLOAT NOT NULL DEFAULT 1.0,
         `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_mechshops` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `job` VARCHAR(50) DEFAULT NULL,                   -- staffed shop (NULL = self-service)
+        `mult` FLOAT NOT NULL DEFAULT 1.0,                -- labour price multiplier
         `enabled` TINYINT(1) NOT NULL DEFAULT 1,
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
@@ -221,6 +246,14 @@ local function loadStations()
     end
 end
 
+local function loadMechShops()
+    MechShops = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_mechshops ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        MechShops[#MechShops + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
@@ -231,6 +264,7 @@ local function reload(domain)
     if domain == 'clothcats'   or not domain then loadClothCats() end
     if domain == 'garages'     or not domain then loadGarages() end
     if domain == 'stations'    or not domain then loadStations() end
+    if domain == 'mechshops'   or not domain then loadMechShops() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -300,6 +334,7 @@ exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
 exports('GetGarages', function() return Garages end)
 exports('GetStations', function() return Stations end)
+exports('GetMechShops', function() return MechShops end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -388,6 +423,20 @@ exports('SeedStations', function(defaults)
     return true
 end)
 
+-- v-mechanic: list of { id, label, x, y, z, job }
+exports('SeedMechShops', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #MechShops > 0 then return false end
+    for _, sh in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_mechshops (id, label, x, y, z, blip, job, mult, enabled)
+            VALUES (?,?,?,?,?,1,?,?,1)]],
+            { sh.id, sh.label or sh.id, sh.x, sh.y, sh.z, sh.job, sh.mult or 1.0 })
+    end
+    loadMechShops()
+    print(('[v-world] seeded %d mechanic shop(s) from config'):format(#MechShops))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     if #Jobs > 0 then return false end
@@ -435,6 +484,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = Garages, jobs = jobs, types = Config.GarageTypes })
+    elseif domain == 'mechshops' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = MechShops, jobs = jobs })
     elseif domain == 'stations' then
         resolve({ rows = Stations, types = Config.FuelTypes })
     elseif domain == 'clothcats' then
@@ -571,6 +624,26 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   bool(row.blip), job, math.max(0, math.floor(num(row.fee))), bool(row.enabled), gid })
         end
 
+    elseif d == 'mechshops' then
+        local mid = tostring(row.mid or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
+        if mid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        local mult = math.max(0.1, math.min(5.0, tonumber(row.mult) or 1.0))
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_mechshops WHERE id = ?', { mid })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO world_mechshops (id, label, x, y, z, blip, job, mult, enabled)
+                VALUES (?,?,?,?,?,?,?,?,?)]],
+                { mid, label, num(row.x), num(row.y), num(row.z),
+                  bool(row.blip == nil or row.blip), job, mult, bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE world_mechshops SET label=?, x=?, y=?, z=?, blip=?, job=?, mult=?, enabled=?
+                WHERE id=?]],
+                { label, num(row.x), num(row.y), num(row.z), bool(row.blip), job, mult, bool(row.enabled), mid })
+        end
+
     elseif d == 'stations' then
         local sid = tostring(row.sid or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
         if sid == '' then resolve({ error = 'id' }); return end
@@ -683,6 +756,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local parked = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE garage = ? LIMIT 1', { gid })
         if parked then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_garages WHERE id = ?', { gid })
+    elseif d == 'mechshops' then
+        local mid = tostring(id or '')
+        if mid == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_mechshops WHERE id = ?', { mid })
     elseif d == 'stations' then
         local sid = tostring(id or '')
         if sid == '' then resolve({ error = 'protected' }); return end

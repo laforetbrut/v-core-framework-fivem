@@ -149,6 +149,10 @@ local T = {
     ['adm.ed_statid']       = 'Id de la station (non modifiable)',
     ['adm.ed_fueltypes']    = 'Carburants vendus',
     ['adm.ed_pricemult']    = 'Multiplicateur de prix',
+    ['adm.ed_mechshops']    = 'Ateliers mécanique',
+    ['adm.ed_mechid']       = 'Id de l\'atelier (non modifiable)',
+    ['adm.ed_labourmult']   = 'Multiplicateur main-d\'oeuvre',
+    ['adm.ed_selfserv']     = 'Libre-service (sans métier)',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

@@ -6,12 +6,16 @@ const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 // unit prices are per litre and have cents: flooring them would show $1 for $1.65
 const fmt2 = (n) => '$' + (Number(n) || 0).toFixed(2);
 
-let strings = {}, state = {}, chosen = null;
+let strings = {}, state = {}, chosen = null, conn = 'ac';
 const t = (k) => strings[k] || k;
 
 function applyStrings() {
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 }
+
+// Electricity is metered in kWh, not litres. One helper so the slider, the vehicle
+// line and the price tag can never disagree about which unit they are showing.
+const unitFor = (key) => (key === 'electric' ? 'kWh' : 'L');
 
 // How many litres the tank can still take. Without a vehicle we fall back to the
 // station's own maximum so the slider is never a single unusable step.
@@ -29,7 +33,13 @@ function priceOf(key) {
 function updateTotal() {
   const l = Number(byId('litres').value) || 0;
   byId('lval').textContent = l;
-  byId('total').textContent = fmt(Math.ceil(l * priceOf(chosen)));
+  document.querySelectorAll('.unit').forEach(el => { el.textContent = unitFor(chosen); });
+  let unit = priceOf(chosen);
+  if (chosen === 'electric' && state.ev) {
+    const c = (state.ev.connectors || []).find(x => x.key === conn);
+    if (c) unit *= c.priceMult;
+  }
+  byId('total').textContent = fmt(Math.ceil(l * unit));
 }
 
 function renderVehicle() {
@@ -41,7 +51,7 @@ function renderVehicle() {
     <span class="vplate">${esc(v.plate)}</span>
     <span class="vgauge">
       <span class="v-progress"><i class="v-progress__fill" style="width:${Math.round(v.fuel || 0)}%"></i></span>
-      <span class="vpct">${Math.round(v.fuel || 0)}% · ${v.tank} L</span>
+      <span class="vpct">${Math.round(v.fuel || 0)}% &middot; ${v.tank} ${esc(unitFor(v.accepts))}</span>
     </span>
     <span class="vaccepts">${esc(t('fuel.accepts'))} <b>${esc(accepts ? t(accepts.i18n) : v.accepts)}</b></span>`;
 }
@@ -59,10 +69,32 @@ function renderTypes() {
     b.innerHTML = `<span class="fdot"></span>
       <span class="fname">${esc(t(ty.i18n))}</span>
       ${ty.octane ? `<span class="foct">${ty.octane}</span>` : ''}
-      <span class="fprice">${fmt2(ty.price)}<i>/L</i></span>
+      <span class="fprice">${fmt2(ty.price)}<i>/${esc(unitFor(ty.key))}</i></span>
       ${fits ? '' : `<span class="fwarn">${esc(t('fuel.mismatch'))}</span>`}`;
-    b.onclick = () => { chosen = ty.key; renderTypes(); updateTotal(); };
+    b.onclick = () => { chosen = ty.key; renderTypes(); renderConns(); updateTotal(); };
     wrap.appendChild(b);
+  });
+}
+
+// EV connectors. A slow AC post and a 150 kW charger are different machines: the fast
+// one fills quicker AND costs more per kWh, so the choice is a real trade-off.
+function renderConns() {
+  const box = byId('conns');
+  const ev = state.ev;
+  const isEV = chosen === 'electric' && ev && (ev.connectors || []).length;
+  box.classList.toggle('hidden', !isEV);
+  if (!isEV) return;
+  if (!ev.connectors.some(c => c.key === conn)) conn = ev.connectors[0].key;
+  box.innerHTML =
+    `<span class="clbl">${esc(t('fuel.connector'))}</span>` +
+    ev.connectors.map(c =>
+      `<button class="conn${c.key === conn ? ' on' : ''}" data-c="${esc(c.key)}">
+         <b>${esc(t(c.i18n))}</b><i>${c.kw} kW</i>
+         <u>${fmt2(priceOf('electric') * c.priceMult)}/kWh</u>
+       </button>`).join('') +
+    `<span class="health">${esc(t('fuel.health'))} <b>${Math.round(ev.health ?? 100)}%</b></span>`;
+  box.querySelectorAll('.conn').forEach(b => {
+    b.onclick = () => { conn = b.dataset.c; renderConns(); updateTotal(); };
   });
 }
 
@@ -76,7 +108,7 @@ function render() {
   const max = missing();
   const sl = byId('litres');
   sl.max = max; sl.value = Math.min(Number(sl.value) || max, max);
-  renderVehicle(); renderTypes(); updateTotal();
+  renderVehicle(); renderTypes(); renderConns(); updateTotal();
   byId('can').classList.toggle('hidden', !state.jerry);
 }
 
@@ -87,7 +119,8 @@ byId('go').onclick = async () => {
   const l = Number(byId('litres').value) || 0;
   if (!chosen || l <= 0) return;
   byId('go').disabled = true;
-  await post('pump', { type: chosen, litres: l, account: byId('acct-bank').checked ? 'bank' : 'cash' });
+  await post('pump', { type: chosen, litres: l, connector: conn,
+                       account: byId('acct-bank').checked ? 'bank' : 'cash' });
 };
 
 byId('can').onclick = async (e) => {
@@ -106,7 +139,7 @@ document.addEventListener('keyup', (e) => {
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
-    strings = d.strings || {}; state = d.data || {}; chosen = null;
+    strings = d.strings || {}; state = d.data || {}; chosen = null; conn = 'ac';
     byId('go').disabled = false;
     byId('pumpbar').classList.add('hidden');
     applyStrings(); render();

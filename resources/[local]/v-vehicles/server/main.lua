@@ -152,6 +152,8 @@ local function spawnOwned(src, plate, coords, heading)
     TriggerClientEvent('v-vehicles:client:applyState', src, netid, {
         props = row.props, fuel = row.fuel, engine = row.engine, body = row.body, plate = plate,
     })
+    -- let the modules that own their own slice of a vehicle (wear, fuel, …) hydrate it
+    TriggerEvent('v-vehicles:server:spawned', src, plate, netid, row)
     return netid, nil
 end
 
