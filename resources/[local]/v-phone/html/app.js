@@ -99,7 +99,9 @@ function renderHome() {
   const gridApps = apps.filter((a) => !dockApps.includes(a));
 
   const items = layoutItems();
-  const perPage = 24;
+  // With the widgets above, four rows is what actually fits; the rest paginate.
+  // 24 per page is how the last row ended up as a clipped sliver of yellow.
+  const perPage = 16;
   const pages = [];
   for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
   if (!pages.length) pages.push([]);
@@ -334,11 +336,11 @@ function closeApp(instant) {
   const app = byId('app');
   if (!app.classList.contains('on')) return;
   byId('screen').classList.remove('app-open');
-  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; socialMe = null; return; }
+  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null; return; }
   app.classList.remove('on');
   app.classList.add('closing');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
-  openApp = null; thread = null; storeView = null; socialMe = null;
+  openApp = null; thread = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null;
 }
 
 function setNav(title, backLabel, action) {
@@ -1439,13 +1441,15 @@ function tabbar(tabs, current, onPick) {
 // ══ Social ═════════════════════════════════════════════════════
 // Three views over v-social. The account gate is shared: none of them work without a
 // handle, and the handle is the identity every post travels under.
-let socialMe = null;
+// One account PER APP, because that is how the real ones work: your Bleeter handle is
+// not your Snapmatic handle unless you choose it twice.
+const socialAcc = {};
 
-async function needAccount(then) {
-  if (socialMe) { then(); return; }
-  const r = await post('social', { op: 'me' });
+async function needAccount(app, then) {
+  if (socialAcc[app]) { then(); return; }
+  const r = await post('social', { op: 'me', app });
   if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'off')), 'bleet')); return; }
-  if (r.account) { socialMe = r.account; then(); return; }
+  if (r.account) { socialAcc[app] = r.account; then(); return; }
 
   // First run: pick a handle. This IS the account the network knows you by, which is
   // why it is the one thing you cannot skip.
@@ -1458,9 +1462,9 @@ async function needAccount(then) {
     '<div class="groupfoot">' + esc(L('ph.soc_hint')) + '</div>'
   );
   byId('smake').addEventListener('click', async () => {
-    const r2 = await post('social', { op: 'setup', handle: byId('shandle').value.trim(),
+    const r2 = await post('social', { op: 'setup', app, handle: byId('shandle').value.trim(),
       avatar: byId('savatar').value.trim(), bio: byId('sbio').value.trim() });
-    if (r2 && r2.ok) { socialMe = r2.account; toast(L('ph.soc_made')); then(); }
+    if (r2 && r2.ok) { socialAcc[app] = r2.account; toast(L('ph.soc_made')); then(); }
     else toast(L('ph.err_' + ((r2 && r2.error) || 'x')));
   });
 }
@@ -1500,7 +1504,7 @@ async function socialFeed(kind, emptyKey) {
 }
 
 // -- Bleeter ----------------------------------------------------
-RENDER.bleeter = () => needAccount(async () => {
+RENDER.bleeter = () => needAccount('bleeter', async () => {
   setNav(L('app.bleeter'), null, { icon: 'add', onClick: () => {
     sheet(L('ph.bleet_new'),
       UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') + UI.button(L('ph.bleet_send'), 'bgo'),
@@ -1516,7 +1520,7 @@ RENDER.bleeter = () => needAccount(async () => {
 // -- Snapmatic --------------------------------------------------
 // Posting starts from the gallery, because that is where photos already are: the camera
 // shoots, Snapmatic shows.
-RENDER.snap = () => needAccount(async () => {
+RENDER.snap = () => needAccount('snap', async () => {
   setNav(L('app.snap'), null, { icon: 'add', onClick: () => {
     const shots = state.photos || [];
     if (!shots.length) { toast(L('ph.snap_noshots')); return; }
@@ -1536,7 +1540,7 @@ RENDER.snap = () => needAccount(async () => {
 });
 
 // -- Hush -------------------------------------------------------
-RENDER.hush = () => needAccount(async () => {
+RENDER.hush = async () => {
   setNav(L('app.hush'), null);
   loading();
   const me = await post('social', { op: 'hushMe' });
@@ -1547,7 +1551,7 @@ RENDER.hush = () => needAccount(async () => {
     // whole network. The photo defaults to the account avatar.
     body(
       UI.field('hbio', L('ph.hush_bio'), '', 'maxlength="160"') +
-      UI.field('hphoto', L('ph.hush_photo'), (socialMe && socialMe.avatar) || '', 'maxlength="300"') +
+      UI.field('hphoto', L('ph.hush_photo'), '', 'maxlength="300"') +
       UI.button(L('ph.hush_join'), 'hgo') +
       '<div class="groupfoot">' + esc(L('ph.hush_hint')) + '</div>'
     );
@@ -1586,7 +1590,7 @@ RENDER.hush = () => needAccount(async () => {
   };
   byId('hno').addEventListener('click', () => choose(false));
   byId('hyes').addEventListener('click', () => choose(true));
-});
+};
 
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════

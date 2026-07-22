@@ -164,3 +164,10 @@
 **Root cause:** Two compounding mistakes. The file contains an emoji outside the BMP, and reading it without `errors='surrogatepass'` produced lone surrogates that the encoder then refused on the way out. Worse, `open(path, 'w')` truncates the target *before* the encoder ever runs, so the failure destroyed the file it was supposed to edit.
 **Fix:** `git checkout --` restored it, then the patch was rewritten to read and write with `errors='surrogatepass'` and to write to `path + '.tmp'` followed by `os.replace`.
 **Prevention:** Never write a patched file in place. Write to a temp path and `os.replace` only after the write returns. Any in-place `open(p, 'w')` on a file that already exists is a destructive operation waiting for its first exception.
+
+## [2026-07-22 23:20] — "Already applied" marked without verifying, shipping grey social icons
+**Context:** Re-running a multi-section patch script after its first section failed on a wrong anchor.
+**Error:** The first failure aborted the whole script before the sdk.js section ran. When re-running, that section was replaced with `print('sdk: already applied')` from memory of the run order — but it had never executed. The Bleeter/Snapmatic/Hush tiles were missing and every one rendered as a grey dot, straight into the delivered preview.
+**Root cause:** Assuming a section had applied because a LATER check (`node parse`) passed. Parsing proves syntax, not presence.
+**Fix:** Re-ran the section with its own guard (`assert 'bleet:' not in s`), verified with grep before rebuilding the preview.
+**Prevention:** A skipped section must be justified by a grep for its own marker in the target file, never by recalling the run order. Every section of a multi-part patch carries its own idempotence guard so re-running the whole script is always safe.
