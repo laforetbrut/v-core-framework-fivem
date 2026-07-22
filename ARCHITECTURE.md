@@ -162,6 +162,28 @@ worse than no setting: it lies to the operator.
 
 ---
 
+## 0c. Seeding — how a default reaches the database
+
+Every module ships defaults in `config.lua` and pushes them into its `v-world` table once.
+The first real boot showed the original rule — *"seed only if the table is empty"* — was
+wrong in a way that is invisible until it bites: this database already held 3 jobs from an
+older schema, so `mechanic` and `taxi` were **never inserted**, the mechanic shops gated on
+`job = 'mechanic'` could match nobody, and the city hall could not offer either job.
+
+There are two kinds of table and they need different rules:
+
+| Table shape | Rule | Why |
+|---|---|---|
+| **Natural key** (`jobs.name`, `license_types.key`, `vehicle_catalogue.model`, garages/stations/mechshops/dealers `id`, `clothing_categories.key`) | Re-seed when the **config's entry count changes** (`world_seeded.count`); every insert is `INSERT IGNORE` | Existing rows are untouched, genuinely new defaults get added, and a default an admin deleted stays deleted until the config itself changes |
+| **AUTO_INCREMENT id** (`world_shops`, `world_clothing`, `craft_recipes`) | Seed **only when the table is empty** | There is no key to dedupe on, so a re-run would duplicate every row — which is exactly what happened on the boot that proved this |
+
+**Column migrations backfill.** An `ALTER TABLE ... ADD COLUMN` leaves existing rows at the
+column default, which is not always the right answer. `jobs.whitelisted` defaulted to `0`,
+so police and EMS — rows that pre-dated the column — would have been handed out at the city
+hall to anyone. The migration now backfills non-civilian jobs in the same step.
+
+---
+
 ## 1. Layers
 
 ```

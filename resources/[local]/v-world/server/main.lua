@@ -47,6 +47,13 @@ local function ensureTables()
         'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
         { 'jobs', 'whitelisted' }) then
         MySQL.query.await('ALTER TABLE `jobs` ADD COLUMN `whitelisted` TINYINT(1) NOT NULL DEFAULT 0')
+        -- Backfill, in the same migration: rows that pre-date the column all default to 0,
+        -- which would leave police and EMS handed out at the city hall to anyone. Any job
+        -- that is not a plain civilian one starts whitelisted, matching the seed rule.
+        local n = MySQL.update.await("UPDATE `jobs` SET `whitelisted` = 1 WHERE `type` IS NOT NULL AND `type` <> 'civ'")
+        if n and n > 0 then
+            print(('[v-world] backfilled whitelisted=1 on %d pre-existing non-civ job(s)'):format(n))
+        end
     end
 
     -- v-mechanic stores per-part condition, the odometer and the last service on the
@@ -204,6 +211,14 @@ local function ensureTables()
         PRIMARY KEY (`model`), KEY `cat_idx` (`cat`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- How many defaults each domain was last seeded with. See `seedNeeded` below.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
+        `domain` VARCHAR(40) NOT NULL,
+        `count`  INT NOT NULL DEFAULT 0,
+        `at`     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (`domain`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
         `id` INT NOT NULL AUTO_INCREMENT,
         `station` VARCHAR(40) NOT NULL,
@@ -218,6 +233,31 @@ end
 
 -- ── Load caches ────────────────────────────────────────────────
 local function bool(v) return (v == true or v == 1) and 1 or 0 end
+
+-- ── Seeding ────────────────────────────────────────────────────
+-- The old guard was "is the table empty", which meant a table populated by an earlier
+-- version never gained anything the config added later. Instead, remember how many
+-- defaults a domain was last seeded with and re-run when that number changes. Every seed
+-- insert is INSERT IGNORE, so re-running never touches an existing row — it only fills in
+-- what is genuinely new. A default an admin deleted stays deleted until the config itself
+-- changes, which is the behaviour the original guard was protecting.
+local function countOf(defaults)
+    local n = 0
+    for _ in pairs(defaults or {}) do n = n + 1 end
+    return n
+end
+
+local function seedNeeded(domain, defaults)
+    local want = countOf(defaults)
+    local have = MySQL.scalar.await('SELECT `count` FROM world_seeded WHERE domain = ?', { domain })
+    if have and tonumber(have) == want then return false end
+    return true, want
+end
+
+local function seedDone(domain, want)
+    MySQL.query.await([[INSERT INTO world_seeded (domain, `count`) VALUES (?,?)
+        ON DUPLICATE KEY UPDATE `count` = VALUES(`count`)]], { domain, want })
+end
 
 local function loadBlips()
     Blips = {}
@@ -431,12 +471,16 @@ exports('GetVehicleCatalogue', function() return VehCat end)
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
+    -- This table keys on an AUTO_INCREMENT id, so INSERT IGNORE cannot dedupe and a
+    -- re-run would duplicate every row. It seeds once, when genuinely empty.
     if #Recipes > 0 then return false end
+    local want = countOf(defaults)
     for _, r in ipairs(defaults) do
         MySQL.insert.await(
             'INSERT INTO craft_recipes (station, output, count, time, inputs, enabled) VALUES (?,?,?,?,?,1)',
             { r.station, r.output, r.count or 1, r.time or 3000, json.encode(r.inputs or {}) })
     end
+    seedDone('recipes', want)
     loadRecipes()
     print(('[v-world] seeded %d craft recipe(s) from config'):format(#Recipes))
     return true
@@ -446,12 +490,16 @@ end)
 -- v-shops: list of { shop, x, y, z, h, ped, blip }
 exports('SeedShopLocations', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #ShopLocs > 0 then return false end                       -- already managed in DB
+    -- This table keys on an AUTO_INCREMENT id, so INSERT IGNORE cannot dedupe and a
+    -- re-run would duplicate every row. It seeds once, when genuinely empty.
+    if #ShopLocs > 0 then return false end
+    local want = countOf(defaults)                       -- already managed in DB
     for _, l in ipairs(defaults) do
         MySQL.insert.await(
             'INSERT INTO world_shops (shop, x, y, z, h, ped, blip, enabled) VALUES (?,?,?,?,?,?,?,1)',
             { l.shop, l.x, l.y, l.z, l.h or 0.0, l.ped, bool(l.blip == nil or l.blip) })
     end
+    seedDone('shops', want)
     loadShops()
     print(('[v-world] seeded %d shop location(s) from config'):format(#ShopLocs))
     return true
@@ -461,11 +509,15 @@ end)
 -- v-clothing: list of { x, y, z, h, label?, ped? }
 exports('SeedClothStores', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
+    -- This table keys on an AUTO_INCREMENT id, so INSERT IGNORE cannot dedupe and a
+    -- re-run would duplicate every row. It seeds once, when genuinely empty.
     if #ClothStores > 0 then return false end
+    local want = countOf(defaults)
     for _, l in ipairs(defaults) do
         MySQL.insert.await('INSERT INTO world_clothing (label, x, y, z, h, ped, blip, enabled) VALUES (?,?,?,?,?,?,1,1)',
             { l.label or 'Clothing Store', l.x, l.y, l.z, l.h or 0.0, l.ped })
     end
+    seedDone('clothstores', want)
     loadClothStores()
     print(('[v-world] seeded %d clothing store(s) from config'):format(#ClothStores))
     return true
@@ -474,13 +526,15 @@ end)
 -- v-clothing: list of { key, label, kind, slot, item, price, framing, sort }
 exports('SeedClothCategories', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #ClothCats > 0 then return false end
+    local need, want = seedNeeded('clothcats', defaults)
+    if not need then return false end
     for i, c in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO clothing_categories
             (`key`, label, kind, slot, item, price, framing, sort, enabled) VALUES (?,?,?,?,?,?,?,?,1)]],
             { c.key, c.label or c.key, c.kind or 'comp', c.slot or c.id or 0, c.item or c.key,
               c.price or 0, c.framing or 'body', c.sort or i })
     end
+    seedDone('clothcats', want)
     loadClothCats()
     print(('[v-world] seeded %d clothing category(ies) from config'):format(#ClothCats))
     return true
@@ -489,13 +543,15 @@ end)
 -- v-garages: list of { id, label, type, x, y, z, sx, sy, sz, sh, job, fee }
 exports('SeedGarages', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #Garages > 0 then return false end
+    local need, want = seedNeeded('garages', defaults)
+    if not need then return false end
     for _, g in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO world_garages
             (id, label, type, x, y, z, sx, sy, sz, sh, blip, job, fee, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,1)]],
             { g.id, g.label or g.id, g.type or 'public', g.x, g.y, g.z,
               g.sx, g.sy, g.sz, g.sh or 0.0, g.job, g.fee or 0 })
     end
+    seedDone('garages', want)
     loadGarages()
     print(('[v-world] seeded %d garage(s) from config'):format(#Garages))
     return true
@@ -504,12 +560,14 @@ end)
 -- v-fuel: list of { id, label, x, y, z, types, mult }
 exports('SeedStations', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #Stations > 0 then return false end
+    local need, want = seedNeeded('stations', defaults)
+    if not need then return false end
     for _, st in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO world_stations (id, label, x, y, z, types, mult, blip, enabled)
             VALUES (?,?,?,?,?,?,?,1,1)]],
             { st.id, st.label or st.id, st.x, st.y, st.z, st.types or 'regular', st.mult or 1.0 })
     end
+    seedDone('stations', want)
     loadStations()
     print(('[v-world] seeded %d fuel station(s) from config'):format(#Stations))
     return true
@@ -518,12 +576,14 @@ end)
 -- v-mechanic: list of { id, label, x, y, z, job }
 exports('SeedMechShops', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #MechShops > 0 then return false end
+    local need, want = seedNeeded('mechshops', defaults)
+    if not need then return false end
     for _, sh in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO world_mechshops (id, label, x, y, z, blip, job, mult, enabled)
             VALUES (?,?,?,?,?,1,?,?,1)]],
             { sh.id, sh.label or sh.id, sh.x, sh.y, sh.z, sh.job, sh.mult or 1.0 })
     end
+    seedDone('mechshops', want)
     loadMechShops()
     print(('[v-world] seeded %d mechanic shop(s) from config'):format(#MechShops))
     return true
@@ -532,13 +592,15 @@ end)
 -- v-licenses: list of { key, i18n, issuer, price, days, test, sort }
 exports('SeedLicenseTypes', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #LicTypes > 0 then return false end
+    local need, want = seedNeeded('licenses', defaults)
+    if not need then return false end
     for i, t in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO license_types (`key`, label, issuer, price, days, test, sort, enabled)
             VALUES (?,?,?,?,?,?,?,1)]],
             { t.key, t.label or t.key, t.issuer or 'cityhall', t.price or 0, t.days or 0,
               t.test and 1 or 0, t.sort or i })
     end
+    seedDone('licenses', want)
     loadLicTypes()
     print(('[v-world] seeded %d licence type(s) from config'):format(#LicTypes))
     return true
@@ -547,12 +609,14 @@ end)
 -- v-vehicleshop: list of { id, label, x, y, z, sx, sy, sz, sh, cats }
 exports('SeedDealers', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #Dealers > 0 then return false end
+    local need, want = seedNeeded('dealers', defaults)
+    if not need then return false end
     for _, d in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO world_dealers (id, label, x, y, z, sx, sy, sz, sh, cats, blip, job, enabled)
             VALUES (?,?,?,?,?,?,?,?,?,?,1,?,1)]],
             { d.id, d.label or d.id, d.x, d.y, d.z, d.sx, d.sy, d.sz, d.sh or 0.0, d.cats or '', d.job })
     end
+    seedDone('dealers', want)
     loadDealers()
     print(('[v-world] seeded %d dealership(s) from config'):format(#Dealers))
     return true
@@ -561,13 +625,15 @@ end)
 -- v-vehicleshop: list of { model, label, cat, price, license, job }
 exports('SeedVehicleCatalogue', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #VehCat > 0 then return false end
+    local need, want = seedNeeded('vehcat', defaults)
+    if not need then return false end
     for _, v in ipairs(defaults) do
         MySQL.insert.await([[INSERT IGNORE INTO vehicle_catalogue (model, label, cat, price, stock, license, job, enabled)
             VALUES (?,?,?,?,?,?,?,1)]],
             { tostring(v.model):lower(), v.label or v.model, v.cat or 'sedans',
               v.price or 0, v.stock or -1, v.license, v.job })
     end
+    seedDone('vehcat', want)
     loadVehCat()
     print(('[v-world] seeded %d catalogue vehicle(s) from config'):format(#VehCat))
     return true
@@ -575,7 +641,8 @@ end)
 
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
-    if #Jobs > 0 then return false end
+    local need, want = seedNeeded('jobs', defaults)
+    if not need then return false end
     for name, j in pairs(defaults) do
         local arr = {}
         for n, g in pairs(j.grades or {}) do
@@ -588,6 +655,7 @@ exports('SeedJobs', function(defaults)
         MySQL.insert.await('INSERT IGNORE INTO jobs (name, label, type, grades, whitelisted) VALUES (?,?,?,?,?)',
             { name, j.label or name, j.type or 'civ', json.encode(arr), wl })
     end
+    seedDone('jobs', want)
     loadJobs()
     print(('[v-world] seeded %d job(s) from config'):format(#Jobs))
     return true

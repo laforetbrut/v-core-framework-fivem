@@ -34,6 +34,13 @@ local declared = {}     -- name -> true (found via fxmanifest, may not have regi
 
 local TYPES = { number = true, bool = true, string = true, select = true, color = true }
 
+--- Is a manifest flag set? FiveM normalises `v_module 'yes'` to `1`, not the string it was
+--- written as, so an equality test against 'yes' silently matched nothing. Accept anything
+--- an author would reasonably write.
+local function flagSet(v)
+    return v == 1 or v == '1' or v == true or v == 'yes' or v == 'true' or v == 'on'
+end
+
 -- ── Storage ────────────────────────────────────────────────────
 local function ensureTable()
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `module_settings` (
@@ -192,8 +199,7 @@ local function detect()
     for i = 0, GetNumResources() - 1 do
         local res = GetResourceByFindIndex(i)
         if res and GetResourceState(res) == 'started' then
-            local flag = GetResourceMetadata(res, 'v_module', 0)
-            if flag == 'yes' or flag == 'true' then
+            if flagSet(GetResourceMetadata(res, 'v_module', 0)) then
                 declared[res] = true
                 found = found + 1
                 if not Modules[res] then
@@ -215,8 +221,7 @@ VCore.DetectModules = detect
 -- A resource that starts later must still be picked up.
 AddEventHandler('onResourceStart', function(res)
     if res == GetCurrentResourceName() then return end
-    local flag = GetResourceMetadata(res, 'v_module', 0)
-    if flag == 'yes' or flag == 'true' then
+    if flagSet(GetResourceMetadata(res, 'v_module', 0)) then
         declared[res] = true
         if not Modules[res] then
             Modules[res] = {
