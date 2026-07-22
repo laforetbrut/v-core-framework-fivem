@@ -4,7 +4,7 @@ game 'gta5'
 name 'v-loadscreen'
 author 'vyrriox'
 description 'v-loadscreen — Projet R custom loading screen'
-version '0.1.1'
+version '0.2.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

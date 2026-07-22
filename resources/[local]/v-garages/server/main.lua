@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('garages')
 -- v-garages | server
 -- The only legitimate way an owned vehicle enters or leaves the world.
 --

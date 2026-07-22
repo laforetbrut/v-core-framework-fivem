@@ -137,6 +137,104 @@ registering a callback on the wrong side is a hang with no error message.
 
 ---
 
+## Working with other scripts
+
+A framework is only as good as what somebody else can build on it. Five tools cover the
+whole of it.
+
+### Services: ask for a capability, not a resource
+
+```lua
+V.Provide('banking')                 -- in the module that implements it
+local bank = V.Service('banking')    -- in anything that needs it
+bank.GetBalance(src)
+```
+
+`V.Service` returns the same forgiving proxy as `V.Use`, so a missing provider is a `nil`
+return rather than a crash. **The point is indirection**: a server that replaces
+`v-banking` with its own implementation keeps every consumer working, because no consumer
+ever named the resource. Twenty-three services ship: `banking`, `inventory`, `vehicles`,
+`garages`, `jobs`, `factions`, `licenses`, `police`, `voice`, `sound`, `notify`, `target`,
+`status`, `shops`, `crafting`, `mechanic`, `fuel`, `clothing`, `appearance`, `drugs`,
+`gangs`, `music`, `anticheat`.
+
+`V.HasService('banking')` if you just want the boolean.
+
+### Hooks: intercept, rewrite or veto
+
+```lua
+V.Hook('core:beforeAddMoney', function(p)
+    if p.reason == 'salary' and p.amount > 50000 then return false end   -- veto
+    p.amount = math.floor(p.amount * 1.1)                                 -- or rewrite
+    return p
+end, 50)                                                                  -- lower runs first
+```
+
+This is the one thing FiveM events **cannot** do. Event arguments are serialised across
+resources, so a handler that mutates a table changes nothing on the other side. Hooks go
+through exports, which do return values.
+
+Returning `false` vetoes; returning a table replaces the payload; returning nothing leaves
+it alone. A handler that errors is skipped rather than allowed to abort the chain - one
+broken third-party script must not be able to stop money from moving.
+
+Hooks that ship: `core:beforeAddMoney`, `core:beforeRemoveMoney`, `core:beforeSetJob`.
+Run your own with `V.RunHook(name, payload)`; it returns the payload, or `nil` when a
+handler vetoed, so **check for nil, not for true**.
+
+### Events, with discovery
+
+```lua
+V.On('v-core:server:onPlayerLoaded', function(src) end)
+V.Emit('my-script:somethingHappened', data)
+V.EmitClient('my-script:show', src, data)   -- server -> one client, or nil for everyone
+V.EmitServer('my-script:ask', data)         -- client -> server
+```
+
+Thin wrappers over FiveM's own events, plus the thing FiveM does not give you: a registry.
+Anything routed through `V.On` / `V.Emit` shows up in the registry below, so the next
+developer can find out what exists instead of grepping.
+
+### Turning modules on and off
+
+```lua
+V.Enabled('v-drugs')            -- is it running
+V.SetEnabled('v-drugs', false)  -- stop it
+```
+
+A real resource stop, not a flag every module has to remember to honour. The admin panel's
+**Resources** tab does the same thing.
+
+### Refusing to run against the wrong version
+
+```lua
+if not V.Require('v-banking', '0.2.0') then return end
+```
+
+Prints one clear line and stops, instead of failing somewhere unrelated an hour later.
+`V.Version('v-banking')` reads it without judging.
+
+### Discovery
+
+```lua
+local r = V.Registry()   -- { modules, services, hooks, events, commands }
+```
+
+Or type `vdev` in the server console. It answers "what already exists here" in one call,
+which is the question every integrator starts with.
+
+### The rest
+
+| | |
+|---|---|
+| `V.Command(name, { perm = 'admin', help = '...' }, fn)` | permission-gated and registered in one call |
+| `V.Interval(ms, fn)` | returns a function that stops it |
+| `V.Timeout(ms, fn)` | |
+| `V.State(key, value)` / `V.PlayerState(src, key, value)` | statebags, readable from both sides |
+| `V.Log(...)` | prefixed with your resource name |
+
+---
+
 ## Conventions
 
 **Exports are `PascalCase`.** `exports('GetFuel', …)`, not `getFuel`. The framework has

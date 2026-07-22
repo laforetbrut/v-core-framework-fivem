@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('target')
 -- v-target | server/settings.lua
 -- This module is client-side, but settings must be REGISTERED server-side (v-core owns the
 -- store and the admin panel talks to the server). The values are mirrored to clients

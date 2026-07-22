@@ -37,6 +37,11 @@ V.Module({
     },
 })
 
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('police')
+
+
 -- ── Who is police? ────────────────────────────────────────────
 local function isCop(src)
     local p = Core.GetPlayer(src)

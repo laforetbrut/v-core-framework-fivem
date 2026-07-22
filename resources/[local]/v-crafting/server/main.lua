@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('crafting')
 -- v-crafting | server
 -- Authority: validates the player is really at the requested bench, owns the
 -- inputs, and has space for the output before consuming anything.

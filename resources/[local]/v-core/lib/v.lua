@@ -166,3 +166,230 @@ end
 function V.Log(...)
     print(('[%s]'):format(V.name), ...)
 end
+
+-- ═══════════════════════════════════════════════════════════════════════════════
+--  Integration toolkit
+--  Everything below exists so a script somebody else wrote can plug into this
+--  framework without reading its source.
+-- ═══════════════════════════════════════════════════════════════════════════════
+
+-- ── Events, with discovery ────────────────────────────────────────────────────
+-- Thin wrappers over FiveM's own events, plus one thing FiveM does not give you: a
+-- registry, so `GetRegistry()` can answer "what events exist and who listens".
+
+function V.On(event, fn)
+    AddEventHandler(event, fn)
+    if isServer then
+        pcall(function() exports['v-core']:NoteEvent(event, 'handle') end)
+    end
+    return true
+end
+
+--- A net event this resource is willing to receive from the other side.
+function V.OnNet(event, fn)
+    RegisterNetEvent(event, fn)
+    if isServer then
+        pcall(function() exports['v-core']:NoteEvent(event, 'handle') end)
+    end
+    return true
+end
+
+function V.Emit(event, ...)
+    TriggerEvent(event, ...)
+    if isServer then
+        pcall(function() exports['v-core']:NoteEvent(event, 'emit') end)
+    end
+end
+
+if isServer then
+    --- To one player, or to everyone when `target` is nil.
+    function V.EmitClient(event, target, ...)
+        TriggerClientEvent(event, target or -1, ...)
+        pcall(function() exports['v-core']:NoteEvent(event, 'emit') end)
+    end
+else
+    function V.EmitServer(event, ...)
+        TriggerServerEvent(event, ...)
+    end
+end
+
+-- ── Services ──────────────────────────────────────────────────────────────────
+-- Ask for a capability, not a resource. A server that swaps `v-banking` for its own
+-- banking keeps every consumer working, because consumers never named the resource.
+--
+--     V.Provide('banking')                    -- in v-banking
+--     local bank = V.Service('banking')        -- in anything else
+--     bank.GetBalance(src)
+--
+-- `V.Service` returns the same forgiving proxy as `V.Use`, so a missing provider is a nil
+-- return rather than a crash.
+
+function V.Provide(service)
+    if not isServer then return false end
+    local ok = false
+    V.Ready(function()
+        ok = select(1, pcall(function()
+            return exports['v-core']:ProvideService(service)
+        end))
+    end)
+    return ok
+end
+
+function V.Service(service)
+    local c = V.Core()
+    if not c then return V.Use('__missing__') end
+    local ok, resource = pcall(function() return exports['v-core']:GetService(service) end)
+    if not ok or not resource then return V.Use('__missing__') end
+    return V.Use(resource)
+end
+
+function V.HasService(service)
+    local ok, resource = pcall(function() return exports['v-core']:GetService(service) end)
+    return ok and resource ~= nil
+end
+
+-- ── Hooks ─────────────────────────────────────────────────────────────────────
+-- A synchronous interception point another resource can veto or rewrite. This is the one
+-- thing FiveM events cannot do: event arguments are serialised across resources, so a
+-- handler that mutates a table changes nothing on the other side. Hooks go through
+-- exports, which do return values.
+--
+--     V.Hook('banking:beforeTransfer', function(p)
+--         if p.amount > 100000 then return false end   -- veto
+--         p.fee = p.fee + 50                            -- or rewrite
+--         return p
+--     end)
+--
+-- Lower priority runs first, so a validator can reject before a mutator bothers.
+
+local hookSeq = 0
+
+function V.Hook(hook, fn, priority)
+    if not isServer or type(fn) ~= 'function' then return false end
+    hookSeq = hookSeq + 1
+    local name = ('__vhook_%d'):format(hookSeq)
+    -- The handler is exposed as an export so v-core can call it and read what it returns.
+    exports(name, fn)
+    V.Ready(function()
+        pcall(function() exports['v-core']:RegisterHook(hook, name, priority) end)
+    end)
+    return true
+end
+
+--- Run a hook from the module that owns the decision. Returns the payload (possibly
+--- rewritten) or nil when a handler vetoed - so the caller checks for nil, not for true.
+function V.RunHook(hook, payload)
+    if not isServer then return payload end
+    local ok, res, by = pcall(function()
+        return exports['v-core']:RunHook(hook, payload)
+    end)
+    if not ok then return payload end
+    return res, by
+end
+
+-- ── Modules: state and control ────────────────────────────────────────────────
+function V.Enabled(module)
+    return GetResourceState(tostring(module or '')) == 'started'
+end
+
+--- Start or stop another module at runtime. A real resource stop, not a flag every module
+--- has to remember to honour.
+function V.SetEnabled(module, on)
+    if not isServer then return false end
+    local ok = pcall(function() return exports['v-core']:SetModuleEnabled(module, on) end)
+    return ok
+end
+
+--- Refuse to run against a version you were not written for, loudly and once, rather than
+--- failing in some unrelated place an hour later.
+function V.Require(resource, minVersion)
+    if GetResourceState(resource) ~= 'started' then
+        print(('[v] %s requires %s, which is not started.'):format(V.name, resource))
+        return false
+    end
+    if not minVersion then return true end
+    local have = GetResourceMetadata(resource, 'version', 0) or '0.0.0'
+    local function parts(v)
+        local a, b, c = tostring(v):match('(%d+)%.(%d+)%.(%d+)')
+        return tonumber(a) or 0, tonumber(b) or 0, tonumber(c) or 0
+    end
+    local h1, h2, h3 = parts(have)
+    local w1, w2, w3 = parts(minVersion)
+    local okv = h1 > w1 or (h1 == w1 and (h2 > w2 or (h2 == w2 and h3 >= w3)))
+    if not okv then
+        print(('[v] %s requires %s >= %s, found %s.'):format(V.name, resource, minVersion, have))
+    end
+    return okv
+end
+
+function V.Version(resource)
+    return GetResourceMetadata(resource or V.name, 'version', 0) or '0.0.0'
+end
+
+-- ── Commands, gated and discoverable ──────────────────────────────────────────
+-- Admin commands are fine; player commands are not (see DEVELOPERS.md). This registers
+-- the permission check and the help text in one call, and puts the command in the registry
+-- so `vdev` can list it.
+
+function V.Command(name, opts, fn)
+    if not isServer then return false end
+    opts = opts or {}
+    local perm = opts.perm or 'admin'
+    RegisterCommand(name, function(source, args, raw)
+        if source ~= 0 then
+            local c = V.Core()
+            if not c or not c.HasPermission(source, perm) then return end
+        end
+        fn(source, args, raw)
+    end, false)
+    V.Ready(function()
+        pcall(function() exports['v-core']:NoteCommand(name, perm, opts.help) end)
+    end)
+    return true
+end
+
+-- ── Small things every script rewrites ────────────────────────────────────────
+function V.Interval(ms, fn)
+    local stop = false
+    CreateThread(function()
+        while not stop do
+            Wait(ms)
+            local ok, err = pcall(fn)
+            if not ok then print(('[v] %s: interval failed: %s'):format(V.name, err)) end
+        end
+    end)
+    return function() stop = true end
+end
+
+function V.Timeout(ms, fn)
+    CreateThread(function() Wait(ms); pcall(fn) end)
+end
+
+--- A statebag on the player, readable by every resource on both sides. The shortest safe
+--- way to share a fact without inventing an event for it.
+function V.State(key, value, replicated)
+    if isServer then
+        return nil
+    end
+    local st = LocalPlayer.state
+    if value == nil then return st[key] end
+    st:set(key, value, replicated ~= false)
+    return value
+end
+
+if isServer then
+    function V.PlayerState(src, key, value, replicated)
+        local st = Player(src).state
+        if value == nil then return st[key] end
+        st:set(key, value, replicated ~= false)
+        return value
+    end
+end
+
+--- The whole registry: modules, services, hooks, events and commands. What a developer
+--- reads instead of twenty files.
+function V.Registry()
+    if not isServer then return nil end
+    local ok, r = pcall(function() return exports['v-core']:GetRegistry() end)
+    return ok and r or nil
+end

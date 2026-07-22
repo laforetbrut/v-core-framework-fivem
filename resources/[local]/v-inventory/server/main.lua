@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('inventory')
 -- v-inventory | server
 -- Items live as an array: { name, amount, slot, metadata }.
 -- 'player' container = the v-core player inventory (synced back for saving).

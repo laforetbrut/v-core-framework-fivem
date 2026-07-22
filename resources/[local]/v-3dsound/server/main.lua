@@ -23,6 +23,11 @@ V.Module({
     },
 })
 
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('sound')
+
+
 local function def(name) return Config.Bank[tostring(name or '')] end
 
 --- A budget per calling source. A looping script is the realistic way this floods, not a

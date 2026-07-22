@@ -266,6 +266,29 @@ exports['v-core']:GetWorldPolicy()             -- { applied = {...}, overrides =
 -- keys: npcPolice, maxWanted, npcEmergency, randomCops, randomEvents,
 --       randomTrains, randomBoats, garbageTrucks
 
+-- Events with no internal handler, on purpose: they exist for YOU to listen to.
+-- The registry lists them, and nothing in the framework consumes them.
+--   v-core:server:modulesReady          -- every module has declared itself
+--   v-core:server:serviceRegistered     -- (service, resource)
+--   v-core:client:onJobChange           -- (job table)
+--   v-core:client:onGangChange          -- (gang table)
+--   v-factions:server:membershipChanged -- (faction, kind, cid, action, grade)
+--   v-factions:server:treasuryChanged   -- (faction, kind, balance, delta)
+--   v-status:client:onUpdate            -- (full status table)
+
+-- v-core integration layer (server) - the toolkit third-party scripts plug into.
+-- Prefer the V helper in DEVELOPERS.md; these are what it calls.
+exports['v-core']:ProvideService(service, providerExport)
+exports['v-core']:GetService(service)          -- resource name, or nil when it is down
+exports['v-core']:ListServices()
+exports['v-core']:RegisterHook(hook, fnExport, priority)
+exports['v-core']:RunHook(hook, payload)       -- payload, or nil when vetoed
+exports['v-core']:ListHooks()
+exports['v-core']:SetModuleEnabled(name, bool) -- a real resource start/stop
+exports['v-core']:GetRegistry()                -- modules, services, hooks, events, commands
+exports['v-core']:NoteEvent(event, 'emit'|'handle')
+exports['v-core']:NoteCommand(name, perm, help)
+
 -- v-music (server)
 exports['v-music']:GetSources()          -- every live source
 exports['v-music']:StopSource(id)

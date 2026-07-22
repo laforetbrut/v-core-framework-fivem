@@ -1,3 +1,4 @@
+
 -- v-vehicles | server
 -- Owns `character_vehicles`. Everything about an owned car that must be true — who owns
 -- it, what its plate is, what condition it is in — is decided here and nowhere else.
@@ -6,6 +7,10 @@
 -- client cannot conjure an owned vehicle by asking nicely. The client's only job is to
 -- read/write the visual mod state of an entity it is already near.
 local Core = exports['v-core']:GetCore()
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('vehicles')
 
 local Live = {}      -- plate -> { netid, owner, model, since }
 local Keys = {}      -- plate -> { [citizenid] = true }  (session-scoped, see Config.Keys.persist)

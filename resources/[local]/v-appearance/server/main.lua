@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('appearance')
 -- v-appearance | server
 -- Thin server surface over v-core's appearance persistence, plus push-to-client
 -- re-apply helpers. All ped natives are client-side, so the server never renders;

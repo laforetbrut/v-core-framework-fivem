@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('licenses')
 -- v-licenses | server
 -- The single source of truth for what a CHARACTER is legally allowed to do.
 --

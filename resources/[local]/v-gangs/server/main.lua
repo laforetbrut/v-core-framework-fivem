@@ -29,6 +29,11 @@ V.Module({
     },
 })
 
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('gangs')
+
+
 -- ── State ─────────────────────────────────────────────────────
 local function pushState(src)
     local payload = { turfs = Turfs, state = State,
