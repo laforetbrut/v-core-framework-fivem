@@ -2,11 +2,44 @@
 
 How the framework is wired, what each module actually does today, and what is left to build.
 
-Last surveyed: **2026-07-10** (every module read end-to-end; see `## Per-module status`).
+Last surveyed: **2026-07-22** (every module read end-to-end; see `## Per-module status`).
+
+Platform: **FiveM Enhanced** — the server runs on `artifacts/cfx-server.exe` (the Enhanced binary;
+`FXServer.exe` is the Legacy branch and rejects Enhanced clients with `bad_request`). `info.json`
+must report `gamename: gta5enhanced`. **Never set `sv_enforceGameBuild`** — those are Legacy build
+numbers and enforcing one locks Enhanced clients out. CEF is Chromium 140, so `nui://` is no longer a
+secure context: always reference NUI assets as `https://cfx-nui-<resource>/…`.
 
 ---
 
-## 0. Build progress — inventory & appearance
+## 0. Build progress — in-game content editor, inventory & appearance
+
+### In-game content editor — `v-world` + the v-admin **Editor** tab
+
+`RULES.md` §3.6.2 requires every content system to be create/modify/delete-able in-game. `v-world` is
+the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains are live:
+
+| Domain | Table | Consumed by | State |
+|--------|-------|-------------|-------|
+| **Blips** | `world_blips` | `v-world/client` renders them directly | ✅ |
+| **Stores** | `world_shops` | `v-shops` (peds, blips, v-target zones, `canUseShop`) | ✅ |
+| **Jobs** | `jobs` | `v-jobs` (`JobDefs`, grades, pay) | ✅ |
+| **Items** | `items` | `v-inventory` (`ItemDefs` + type-driven use handlers) | ✅ |
+| **Craft** | `craft_recipes` | `v-crafting` (`Recipes`) | ✅ |
+
+Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
++ audit-logged), which reload the domain and fire the **server-to-server** event
+`v-world:server:changed(domain)`. Each consuming module listens for it and rebuilds its runtime tables
+live — **no `restart` needed**. Config tables are now *seed data only*: they are pushed to the DB with
+`INSERT IGNORE` on first boot, so the DB is the single source of truth and admin edits are never
+overwritten on restart.
+
+Guard rails: item internal `name` is immutable after creation (renaming would orphan every stack);
+deleting an item is refused if a recipe references it, and `money` can never be deleted.
+
+**Remaining for the editor:** vehicles, gangs, gathering nodes, crafting *stations* (only recipes are
+editable, the benches are still `config.lua`), shop price lists / sell lists, and a live map-picker
+instead of "use my position".
 
 Quick tracker for the two big in-flight workstreams. `✅ done · 🔨 in progress · ⬜ not started`.
 
@@ -153,19 +186,23 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (10 tables). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (14 tables). MariaDB, accessed through `oxmysql`.
+`craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
 |-------|-------|---------|-------|
 | `users` | v-core | account per license: name, language, permission, last_seen | ✅ used |
 | `characters` | v-core | identity, cash/bank, job, gang, position, metadata, inventory, appearance | ✅ used (`slot` column unused — multi-character not implemented) |
-| `items` | v-core (schema) | item definitions (name, label, weight, stackable, usable, category, metadata) | ✅ used, but seeded by **v-inventory** and **v-clothing** directly |
+| `items` | v-core (schema) | item definitions (name, label, weight, stackable, usable, category, metadata) | ✅ **source of truth** — seeded `INSERT IGNORE` by v-inventory/v-clothing, edited live from v-admin → v-world |
 | `logs` | v-core | structured audit log | ✅ used (read directly by v-admin) |
 | `bank_transactions` | v-banking | deposit / withdraw / transfer_in / transfer_out audit | ✅ used (direct SQL) |
 | `stashes` | v-inventory | persistent containers (stashes, gang boxes, ground drops) | ✅ used (created + queried directly) |
-| `shops` | v-shops | shop catalogue + prices | ⚠️ read at boot only; `coords` column **dead** (locations hardcoded) |
+| `shops` | v-shops | shop catalogue + prices | ⚠️ read at boot only; store **positions** now live in `world_shops` |
+| `world_blips` | v-world | admin-created map blips | ✅ used (Editor → Blips) |
+| `world_shops` | v-world | store positions: coords, heading, ped model, blip | ✅ used (Editor → Stores, consumed by v-shops) |
+| `craft_recipes` | v-world | recipes: station, output, count, time, ingredients JSON | ✅ used (Editor → Craft, consumed by v-crafting) |
 | `character_vehicles` | — | vehicle ownership | ⬜ **empty — v-vehicles not built** |
-| `jobs` | — | jobs & grades | ⬜ **empty — v-jobs not built** |
+| `jobs` | v-world | jobs & grades | ✅ used (Editor → Jobs, consumed by v-jobs) |
 | `gangs` | — | gangs & grades | ⬜ **empty — v-gangs not built** |
 | `server_config` | — | live server settings | ⬜ **empty — never read or written by anything** |
 
@@ -329,8 +366,12 @@ in-memory / offline credited by SQL). Every mutation server-authoritative; both 
 - History is capped at 20 rows, no pagination, and re-queried on every mutation.
 
 ### `v-inventory` ✅ — grid inventory
-**Done.** 40 slots / 30 kg, 5-slot hotbar (keys 1-5), **TAB** to open. 170-item catalogue with local
-images, seeded on boot with `ON DUPLICATE KEY UPDATE`. Drag & drop (move / swap / merge / shift-split),
+**Done.** 40 slots / 30 kg, 5-slot hotbar (keys 1-5), **TAB** to open. **300-item catalogue**
+(`data/items.lua`; the first 170 ship local PNGs, the rest use `image=nil` and fall back to the NUI
+glyph), seeded on boot with **`INSERT IGNORE`** — the `items` table is the source of truth and is
+edited live from v-admin → v-world, so re-applying the Lua values every boot would wipe admin edits.
+`loadItemDefs()` re-reads the definitions and re-binds the type-driven use handlers whenever
+`v-world:server:changed('items')` fires. Drag & drop (move / swap / merge / shift-split),
 right-click actions (use / give / split / rename / drop), search, tooltip with rarity / serial / ammo /
 durability. **Cash as an item** — a virtual wallet tile mirroring the account, which stays the single
 source of truth (no dupe path). Vehicle trunk + glovebox, persistent stashes, ground drops.
@@ -376,10 +417,15 @@ count + Sell button). `v-shops:sell` runs the same `canUseShop` gate, reads the 
 verifies the owned amount, `RemoveItem`s then `AddMoney`. A sell-only **Scrap Dealer** shop is auto-seeded at
 boot (`Config.SeedShops`) so no manual SQL is needed. Closes the gather→craft→**sell** loop.
 
+**In-game editable.** Store **positions** (coords, heading, clerk ped, blip, shop id, enabled) now live in
+`world_shops` and are managed from v-admin → Editor → Stores. `config.lua` locations are seed data only
+(pushed once with `INSERT IGNORE`). The server rebuilds `Locations` and **pushes them to every client**
+on `v-world:server:changed('shops')`; the client tears down and rebuilds blips, peds and v-target zones
+with no `restart`.
+
 **Remaining.**
-- Locations hardcoded in `config.lua`; the `shops.coords` column built to hold them is **dead**.
 - Sell prices are static in `Config.SellLists` (no dynamic/market pricing, no in-game editor yet).
-- Data is loaded **once at boot** — any DB price edit needs a full `restart v-shops`.
+- Item **prices** are still loaded once at boot — a DB price edit needs a `restart v-shops`.
 - Direct SQL against `items` and `shops`.
 - No in-game management UI (`config.lua` literally says *"editable in-game later"*).
 - The NUI silently ignores `{error='funds'|'space'}`.
@@ -396,8 +442,14 @@ in-flight lock guard against spam/double-submit. EMBER NUI: recipe rows show eac
 the panel refreshes owned counts live after each craft. fr+en. Reuses `v-inventory`
 `GetItemCount`/`RemoveItem`/`AddItem` exports — no new DB tables.
 
+**In-game editable.** Recipes now live in `craft_recipes` and are managed from v-admin → Editor → Craft
+(station, output item, produced count, duration, enabled, and a dynamic list of ingredient/qty rows).
+`Config.Recipes` is seed data only; `rebuildRecipes()` re-derives the runtime list on
+`v-world:server:changed('recipes')`, and `loadItemDefs()` refreshes labels on `…('items')`.
+
 **Remaining.**
-- Recipes are boot-static in `config.lua` — no in-game recipe editor yet.
+- The **stations** (bench coords, blips, markers) are still boot-static in `config.lua` — only the
+  recipes are editable in-game.
 - The craft progress time is client-side (feel only); the server enforces order + cooldown but not the
   full duration, so a crafted item can arrive up to `time` early if the client is patched. Low impact
   (inputs are still consumed atomically); move the timer server-side if it ever matters.
@@ -444,6 +496,34 @@ Exports: `Unequip(src, catKey)` / `GetWorn(src)`.
 - Thumbnails are 1848 loose base64 `.txt` files + an `index.json` under the resource.
 - `screenshot-basic` and `oxmysql` are not declared in `dependencies{}`.
 
+### `v-world` ✅ — admin-editable world content
+
+**Done.** The data layer behind the v-admin **Editor** tab. Owns five domains — `blips`, `shops`,
+`jobs`, `items`, `recipes` — and is the only writer for `world_blips`, `world_shops`, `craft_recipes`,
+`jobs` and `items`. `ensureTables()` creates its own tables at boot, then each domain is loaded into
+memory. Three permission-gated + audit-logged callbacks:
+
+```lua
+Core.TriggerCallback('v-world:list',   cb, domain)          -- rows for the editor
+Core.TriggerCallback('v-world:save',   cb, domain, row)     -- insert or update, validated
+Core.TriggerCallback('v-world:delete', cb, domain, id)      -- protected deletes
+```
+
+After a write it reloads the domain, pushes blips to clients, and fires the server-to-server event
+**`v-world:server:changed(domain)`** that `v-shops`, `v-jobs`, `v-inventory` and `v-crafting` listen to
+so they rebuild live. Consumers seed their `config.lua` defaults through
+`SeedShopLocations` / `SeedJobs` / `SeedRecipes` (all `INSERT IGNORE`) on first boot, then read the DB.
+
+Exports: `IsReady` / `GetBlips` / `GetShopLocations` / `GetJobs` / `GetItems` / `GetRecipes` /
+`SeedShopLocations` / `SeedJobs` / `SeedRecipes`.
+Client: renders `world_blips` and re-renders on `v-world:client:blips`.
+Validation lives server-side: names are slugged (`[^%w_]` stripped, 50 chars), labels capped, numbers
+clamped, item `name` immutable after create, an item referenced by a recipe cannot be deleted, and
+`money` is undeletable.
+
+**Remaining.** Vehicles / gangs / gathering nodes / craft stations / price lists domains; a map-picker
+UI instead of "use my position"; per-domain import & export.
+
 ### `v-admin` ✅ — management panel (F10)
 **Done.** Permission-gated NUI. **Dashboard** (uptime, players, resources, characters). **Players**
 (searchable roster; goto / bring / heal / freeze / kick with reason / give money / give item /
@@ -452,13 +532,21 @@ protected resources shielded). **World** (weather + time synced via `GlobalState
 joiners, vehicle spawner, server announcements). **Logs** (last 60 rows, category filter,
 parameterized query). Every action validated server-side and audit-logged.
 
+**Editor tab ✅** — the content-management surface `RULES.md` §3.6.2 requires. A rail tab with five
+subtabs (**Blips / Stores / Jobs / Items / Craft**), a live search box, a list of existing rows and a
+per-domain form: create, edit, delete, plus **"use my position"** for anything with coords. It is a thin
+client over `v-world:list` / `v-world:save` / `v-world:delete` — the admin panel holds no content logic
+of its own. Item forms lock the internal `name` when editing; recipe forms build ingredient rows
+dynamically. Every write is permission-gated and audit-logged server-side.
+
+**Tools tab ✅** — noclip (F6), god mode, invisible, player blips (ESP), spectate, self heal / revive /
+armor, copy coordinates, and open any player's inventory. Admin tools are revoked automatically when a
+player is demoted.
+
 **Remaining.**
-- **It does not yet manage content.** `RULES.md` §3.6.2 says every content system must be
-  create/modify/delete-able in-game from here. There is **no UI for jobs, grades, prices, shops,
-  items, vehicles, or any module's config**. This is the single biggest gap between the stated
-  architecture and the code.
-- Missing admin staples: **ban, warn, mute, spectate, noclip, revive-other, teleport-to-waypoint,
-  vehicle repair/delete, inventory viewing**.
+- Editor coverage is not complete: **vehicles, gangs, gathering nodes, craft stations, shop price /
+  sell lists** are still `config.lua`-only.
+- Missing admin staples: **ban, warn, mute, teleport-to-waypoint, vehicle repair/delete**.
 - `Actions.money` is **uncapped and unrated** — a compromised admin account can inflate the economy.
 - The dashboard's `SELECT COUNT(*) FROM characters` has no `pcall`; a DB error leaves the NUI fetch
   hanging forever.
@@ -506,10 +594,12 @@ Ordered by how much damage it can do.
    (`bank_transactions`, `characters`), `v-shops` (`shops`, `items`), `v-clothing` (`items`),
    `v-admin` (`characters`, `logs`). `v-core` should grow `GetShops` / `GetStash` / `SaveStash` /
    `InsertTransaction` / `GetLogs` / `CountCharacters` and the modules should stop pulling in `oxmysql`.
-5. **Nothing is manageable in-game.** Every module's tunables (shop prices and locations, clothing
-   prices, status drain rates, HUD thresholds, notification behaviour, the protected-resource list)
-   live in `config.lua` with no permission-gated UI, which is exactly what `RULES.md` §3.6.2 forbids.
-   `v-admin` is the intended home for all of it.
+5. **Content management — mostly closed.** ✅ Blips, store positions, jobs & grades, **items** and
+   **craft recipes** are now created / renamed / deleted in-game from v-admin → Editor, backed by
+   `v-world`, with live reload. Still `config.lua`-only and therefore still in breach of
+   `RULES.md` §3.6.2: vehicles, gangs, gathering nodes, craft **stations**, shop price & sell lists,
+   clothing prices, status drain rates, HUD thresholds, notification behaviour, the protected-resource
+   list.
 6. **`server_config` table is dead** — built for live settings, never read or written.
 7. **i18n leaks.** Hardcoded French in `v-banking`'s transfer notification and the whole
    `v-loadscreen` status line; hardcoded English `aria-label`s in `v-hud`; DB-sourced content strings
@@ -535,6 +625,11 @@ Ordered by how much damage it can do.
    (`RULES.md` §3.5). **The resource that owns the page calls `SetNuiFocus` itself.**
 5. Every player-facing string goes through `L('key')` with fr **and** en entries.
 6. Ship a permission-gated management UI in `v-admin` for anything an operator will want to tune.
+   The cheap way: add a **domain to `v-world`** (table + loader + `list`/`save`/`delete` branch +
+   `SeedX` export), a subtab + form to the v-admin Editor, and an
+   `AddEventHandler('v-world:server:changed', …)` in your module that rebuilds its runtime tables.
+   Seed your `config.lua` defaults with `INSERT IGNORE` — **never** `ON DUPLICATE KEY UPDATE`, which
+   silently wipes every admin edit on restart.
 7. `ensure v-<name>` in `server.cfg` after `v-core`.
 8. Update this file, `CHANGELOG.md` and the roadmap in the same commit (`RULES.md` §3.7).
 
@@ -561,6 +656,16 @@ exports['v-inventory']:GetSearchable(src)            -- what a police frisk/stea
 exports['v-inventory']:GetLimits()                   -- { maxSlots, maxWeight, hotbar }
 -- open a container client-side:
 TriggerServerEvent('v-inventory:server:openStash', id, label, kind)
+
+-- v-world (server) — admin-editable content, DB is the source of truth
+exports['v-world']:IsReady()                         -- tables created + loaded
+exports['v-world']:GetShopLocations()                -- rows of world_shops
+exports['v-world']:GetJobs() / GetItems() / GetRecipes() / GetBlips()
+exports['v-world']:SeedShopLocations(Config.Locations)  -- INSERT IGNORE, first boot only
+exports['v-world']:SeedJobs(Config.Jobs)
+exports['v-world']:SeedRecipes(Config.Recipes)
+-- rebuild your runtime tables when an admin edits something:
+AddEventHandler('v-world:server:changed', function(domain) --[[ 'blips'|'shops'|'jobs'|'items'|'recipes' ]] end)
 
 -- v-clothing (server)
 exports['v-clothing']:GetWorn(src)            -- cat -> { item, drawable, texture }

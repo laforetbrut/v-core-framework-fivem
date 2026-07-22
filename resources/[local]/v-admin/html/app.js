@@ -174,14 +174,25 @@ async function loadEditor() {
 function edRowTitle(r) {
   if (edDomain === 'blips') return `${esc(r.label)} <i class="dim">sprite ${r.sprite} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
+  if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
+  if (edDomain === 'recipes') {
+    const ing = Object.entries(r.inputs || {}).map(([k, v]) => `${v}× ${k}`).join(', ');
+    return `${esc(r.output)} ×${r.count} <i class="dim">${esc(r.station)} · ${esc(ing)}</i>`;
+  }
   return `${esc(r.label || r.name)} <i class="dim">${esc(r.name)} · ${(r.grades || []).length} ${t('adm.ed_grades')}</i>`;
+}
+
+function edFilter(rows) {
+  const q = (byId('ed-search').value || '').trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter(r => JSON.stringify(r).toLowerCase().includes(q));
 }
 
 function renderEdList() {
   const wrap = byId('ed-list'); wrap.innerHTML = '';
-  const rows = edData.rows || [];
+  const rows = edFilter(edData.rows || []);
   if (!rows.length) { wrap.innerHTML = `<div class="empty-ed">${esc(t('adm.ed_empty'))}</div>`; return; }
-  rows.forEach((r, i) => {
+  rows.slice(0, 300).forEach((r, i) => {
     const el = document.createElement('div'); el.className = 'edrow'; el.style.setProperty('--i', i);
     const off = (r.enabled === 0 || r.enabled === false);
     el.innerHTML = `<span class="edname${off ? ' off' : ''}">${edRowTitle(r)}</span>
@@ -191,7 +202,7 @@ function renderEdList() {
       </span>`;
     el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     el.querySelector('[data-act="del"]').onclick = async () => {
-      const id = (edDomain === 'jobs') ? r.name : r.id;
+      const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name : r.id;
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
@@ -224,6 +235,30 @@ function openEdForm(row) {
       field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
       field(t('adm.ed_ped'), 'ef-ped', row.ped ?? '') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'items') {
+    const isNew = !row.name;
+    const cats = (edData.categories || []).map(c => `<option value="${esc(c)}"${c === row.category ? ' selected' : ''}>${esc(c)}</option>`).join('');
+    const m = row.metadata || {};
+    const types = (edData.types || []).map(x => `<option value="${esc(x)}"${x === m.type ? ' selected' : ''}>${esc(x)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_itemname'))}</span><input id="ef-name" value="${esc(row.name ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_cat'))}</span><select id="ef-cat">${cats}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_itype'))}</span><select id="ef-itype">${types}</select></label>` +
+      field(t('adm.ed_weight'), 'ef-weight', row.weight ?? 100, 'number') +
+      field(t('adm.ed_image'), 'ef-image', row.image ?? '') +
+      field(t('adm.ed_rarity'), 'ef-rarity', m.rarity ?? 'common') +
+      field(t('adm.ed_desc'), 'ef-desc', m.desc ?? '') +
+      check(t('adm.ed_stack'), 'ef-stack', row.stackable !== 0) + check(t('adm.ed_usable'), 'ef-usable', row.usable === 1);
+  } else if (edDomain === 'recipes') {
+    const stations = (edData.stations || []).map(s => `<option value="${esc(s)}"${s === row.station ? ' selected' : ''}>${esc(s)}</option>`).join('');
+    const opts = (edData.items || []).map(i => `<option value="${esc(i.name)}"${i.name === row.output ? ' selected' : ''}>${esc(i.label)} (${esc(i.name)})</option>`).join('');
+    html = `<label class="edf"><span>${esc(t('adm.ed_station'))}</span><select id="ef-station">${stations}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_output'))}</span><select id="ef-output">${opts}</select></label>` +
+      field(t('adm.ed_count'), 'ef-count', row.count ?? 1, 'number') +
+      field(t('adm.ed_time'), 'ef-time', row.time ?? 3000, 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0) +
+      `<div class="grades" id="ef-ing"></div><button class="mini" id="ef-adding">+ ${esc(t('adm.ed_ingredient'))}</button>`;
   } else {
     html = field(t('adm.ed_jobid'), 'ef-name', row.name) + field(t('adm.ed_label'), 'ef-label', row.label) +
       field(t('adm.ed_type'), 'ef-type', row.type || 'civ') +
@@ -231,7 +266,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${edDomain !== 'jobs' ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -250,6 +285,29 @@ function openEdForm(row) {
     };
     (row.grades && row.grades.length ? row.grades : [{ grade: 0, name: 'Employee', salary: 0 }]).forEach(addGrade);
     byId('ef-addgrade').onclick = () => addGrade({ grade: g.children.length, name: '', salary: 0 });
+  }
+
+  if (edDomain === 'recipes') {
+    const box = byId('ef-ing');
+    const itemOpts = (sel) => (edData.items || [])
+      .map(i => `<option value="${esc(i.name)}"${i.name === sel ? ' selected' : ''}>${esc(i.label)} (${esc(i.name)})</option>`).join('');
+    const addIng = (name, qty) => {
+      const d = document.createElement('div'); d.className = 'grow';
+      d.innerHTML = `<select class="gin ing-name">${itemOpts(name)}</select>
+        <input class="gin sm ing-qty" type="number" min="1" value="${esc(qty ?? 1)}" />
+        <button class="mini danger grem">×</button>`;
+      d.querySelector('.grem').onclick = () => d.remove();
+      box.appendChild(d);
+    };
+    const cur = Object.entries(row.inputs || {});
+    if (cur.length) cur.forEach(([n, q]) => addIng(n, q)); else addIng(undefined, 1);
+    byId('ef-adding').onclick = () => addIng(undefined, 1);
+  }
+
+  if (edDomain === 'items' && !row.name) {
+    // Mirror the server-side slug so the admin sees the real internal name before saving.
+    const n = byId('ef-name');
+    n.oninput = () => { n.value = n.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 50); };
   }
 
   const here = byId('ef-here');
@@ -275,6 +333,17 @@ function openEdForm(row) {
       payload = { id: row.id, shop: v('ef-shop'), x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
                   z: parseFloat(v('ef-z')), h: parseFloat(v('ef-h')) || 0, ped: v('ef-ped'),
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'items') {
+      payload = { name: v('ef-name'), isNew: !row.name, label: v('ef-label'), category: v('ef-cat'),
+                  itype: v('ef-itype'), weight: parseInt(v('ef-weight'), 10) || 0, image: v('ef-image'),
+                  rarity: v('ef-rarity'), desc: v('ef-desc'), stackable: ck('ef-stack'), usable: ck('ef-usable') };
+    } else if (edDomain === 'recipes') {
+      const inputs = [...byId('ef-ing').children].map(d => ({
+        item: d.querySelector('.ing-name').value, qty: +d.querySelector('.ing-qty').value || 1,
+      }));
+      payload = { id: row.id, station: v('ef-station'), output: v('ef-output'),
+                  count: parseInt(v('ef-count'), 10) || 1, time: parseInt(v('ef-time'), 10) || 3000,
+                  inputs, enabled: ck('ef-en') };
     } else {
       const grades = [...byId('ef-grades').children].map(d => {
         const i = d.querySelectorAll('.gin');
@@ -375,6 +444,7 @@ document.querySelectorAll('.sub[data-dom]').forEach(b => b.onclick = () => {
   loadEditor();
 });
 byId('ed-new').onclick = () => openEdForm(null);
+byId('ed-search').oninput = () => renderEdList();
 document.querySelectorAll('.rtab').forEach(b => b.onclick = () => setTab(b.dataset.tab));
 byId('refresh').onclick = loadTab;
 byId('psearch').oninput = renderPlayers;

@@ -7,11 +7,55 @@ local ItemDefs = {}   -- name -> row (label / image / weight / category / rarity
 local Busy     = {}   -- src -> true while a craft is resolving (anti double-submit)
 local LastAt   = {}   -- src -> os.time() of last craft (cooldown)
 
-CreateThread(function()
-    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
+-- Live recipe list. Sourced from the DB via v-world (admin-editable in-game); falls
+-- back to Config.Recipes when v-world is absent, so a fresh install is unchanged.
+local Recipes = Config.Recipes
+
+local function loadItemDefs()
+    ItemDefs = {}
     for _, r in ipairs(MySQL.query.await('SELECT name, label, image, weight, category, metadata FROM items') or {}) do
         ItemDefs[r.name] = r
     end
+end
+
+local function rebuildRecipes()
+    if GetResourceState('v-world') ~= 'started' then Recipes = Config.Recipes; return end
+    local ok, rows = pcall(function() return exports['v-world']:GetRecipes() end)
+    if not ok or type(rows) ~= 'table' or #rows == 0 then Recipes = Config.Recipes; return end
+    local out = {}
+    for _, r in ipairs(rows) do
+        if r.enabled == 1 or r.enabled == true then
+            out[#out + 1] = { station = r.station, output = r.output, count = r.count or 1,
+                              time = r.time or 3000, inputs = r.inputs or {} }
+        end
+    end
+    Recipes = out
+end
+
+CreateThread(function()
+    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
+    loadItemDefs()
+
+    -- Hand our static recipes to v-world once (it seeds only when empty), then follow
+    -- the DB so admins can create/edit recipes from the panel.
+    if GetResourceState('v-world') ~= 'missing' then
+        local t = 0
+        while GetResourceState('v-world') ~= 'started' and t < 100 do Wait(100); t = t + 1 end
+        if GetResourceState('v-world') == 'started' then
+            t = 0
+            while not (pcall(function() return exports['v-world']:IsReady() end) and exports['v-world']:IsReady()) and t < 100 do
+                Wait(100); t = t + 1
+            end
+            pcall(function() exports['v-world']:SeedRecipes(Config.Recipes) end)
+            rebuildRecipes()
+        end
+    end
+end)
+
+-- Admin edited items or recipes in the panel -> apply immediately.
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'items' then loadItemDefs() end
+    if domain == nil or domain == 'recipes' then rebuildRecipes() end
 end)
 
 local function defOf(name)
@@ -37,7 +81,7 @@ end
 local function recipesFor(source, stationId)
     local counts = countsOf(source)
     local out = {}
-    for i, r in ipairs(Config.Recipes) do
+    for i, r in ipairs(Recipes) do
         if r.station == stationId then
             local inputs = {}
             for item, qty in pairs(r.inputs) do
@@ -88,7 +132,7 @@ end)
 Core.RegisterCallback('v-crafting:craft', function(source, resolve, data)
     data = data or {}
     local stationId = data.station
-    local recipe = Config.Recipes[tonumber(data.idx) or -1]
+    local recipe = Recipes[tonumber(data.idx) or -1]
     local amount = math.max(1, math.min(10, math.floor(tonumber(data.amount) or 1)))
 
     if Busy[source] then resolve({ error = 'busy' }); return end

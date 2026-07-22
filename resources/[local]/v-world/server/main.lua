@@ -10,7 +10,7 @@
 -- (`v-world:server:changed`) and pushes a live sync to clients — no restart.
 local Core = exports['v-core']:GetCore()
 
-local Blips, ShopLocs, Jobs = {}, {}, {}
+local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local ready = false
 
 local function isAdmin(src)
@@ -41,6 +41,17 @@ local function ensureTables()
         `blip` TINYINT(1) NOT NULL DEFAULT 1,
         `enabled` TINYINT(1) NOT NULL DEFAULT 1,
         PRIMARY KEY (`id`), KEY `shop_idx` (`shop`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `station` VARCHAR(40) NOT NULL,
+        `output`  VARCHAR(60) NOT NULL,
+        `count`   INT NOT NULL DEFAULT 1,
+        `time`    INT NOT NULL DEFAULT 3000,
+        `inputs`  JSON NOT NULL,                          -- { itemName: qty, ... }
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`), KEY `station_idx` (`station`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 end
 
@@ -73,10 +84,35 @@ local function loadJobs()
     end
 end
 
+local function loadItems()
+    Items = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM items ORDER BY category, name') or {}) do
+        local m = r.metadata
+        if type(m) == 'string' then m = json.decode(m) or {} end
+        r.metadata = m or {}
+        r.stackable = bool(r.stackable)
+        r.usable    = bool(r.usable)
+        Items[#Items + 1] = r
+    end
+end
+
+local function loadRecipes()
+    Recipes = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM craft_recipes ORDER BY station, id') or {}) do
+        local i = r.inputs
+        if type(i) == 'string' then i = json.decode(i) or {} end
+        r.inputs  = i or {}
+        r.enabled = bool(r.enabled)
+        Recipes[#Recipes + 1] = r
+    end
+end
+
 local function reload(domain)
-    if domain == 'blips' or not domain then loadBlips() end
-    if domain == 'shops' or not domain then loadShops() end
-    if domain == 'jobs'  or not domain then loadJobs() end
+    if domain == 'blips'   or not domain then loadBlips() end
+    if domain == 'shops'   or not domain then loadShops() end
+    if domain == 'jobs'    or not domain then loadJobs() end
+    if domain == 'items'   or not domain then loadItems() end
+    if domain == 'recipes' or not domain then loadRecipes() end
 end
 
 -- Push blips to clients and tell the owning modules to re-read their data.
@@ -101,6 +137,22 @@ exports('IsReady', function() return ready end)
 exports('GetBlips', function() return Blips end)
 exports('GetShopLocations', function() return ShopLocs end)
 exports('GetJobs', function() return Jobs end)
+exports('GetItems', function() return Items end)
+exports('GetRecipes', function() return Recipes end)
+
+-- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
+exports('SeedRecipes', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #Recipes > 0 then return false end
+    for _, r in ipairs(defaults) do
+        MySQL.insert.await(
+            'INSERT INTO craft_recipes (station, output, count, time, inputs, enabled) VALUES (?,?,?,?,?,1)',
+            { r.station, r.output, r.count or 1, r.time or 3000, json.encode(r.inputs or {}) })
+    end
+    loadRecipes()
+    print(('[v-world] seeded %d craft recipe(s) from config'):format(#Recipes))
+    return true
+end)
 
 -- ── Seeding (called ONCE by the owning module at boot, only if empty) ──
 -- v-shops: list of { shop, x, y, z, h, ped, blip }
@@ -143,6 +195,12 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local shops = MySQL.query.await('SELECT id, label FROM shops ORDER BY id') or {}
         resolve({ rows = ShopLocs, shops = shops })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
+    elseif domain == 'items' then resolve({ rows = Items, categories = Config.ItemCategories, types = Config.ItemTypes })
+    elseif domain == 'recipes' then
+        -- item names for the pickers (keep the payload light)
+        local names = {}
+        for _, it in ipairs(Items) do names[#names + 1] = { name = it.name, label = it.label } end
+        resolve({ rows = Recipes, items = names, stations = Config.CraftStations })
     else resolve(false) end
 end)
 
@@ -196,6 +254,55 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         MySQL.query.await([[INSERT INTO jobs (name, label, type, grades) VALUES (?,?,?,?)
             ON DUPLICATE KEY UPDATE label=VALUES(label), type=VALUES(type), grades=VALUES(grades)]],
             { name, tostring(row.label or name):sub(1, 80), tostring(row.type or 'civ'):sub(1, 20), json.encode(grades) })
+    elseif d == 'items' then
+        -- `name` is the primary key referenced by inventories/recipes: it can be set on
+        -- CREATE but never changed afterwards (that would orphan every stack). The
+        -- display label is freely renameable.
+        local name = tostring(row.name or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
+        if name == '' then resolve({ error = 'name' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local meta = json.encode({
+            desc   = tostring(row.desc or ''):sub(1, 200),
+            type   = tostring(row.itype or 'misc'):sub(1, 24),
+            rarity = tostring(row.rarity or 'common'):sub(1, 16),
+        })
+        local img = row.image
+        if img == '' then img = nil end
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM items WHERE name = ?', { name })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO items (name, label, weight, stackable, usable, category, image, metadata)
+                VALUES (?,?,?,?,?,?,?,?)]],
+                { name, label, math.floor(num(row.weight, 100)), bool(row.stackable), bool(row.usable),
+                  tostring(row.category or 'misc'):sub(1, 30), img, meta })
+        else
+            MySQL.update.await([[UPDATE items SET label=?, weight=?, stackable=?, usable=?, category=?, image=?, metadata=?
+                WHERE name=?]],
+                { label, math.floor(num(row.weight, 100)), bool(row.stackable), bool(row.usable),
+                  tostring(row.category or 'misc'):sub(1, 30), img, meta, name })
+        end
+
+    elseif d == 'recipes' then
+        local station = tostring(row.station or ''):sub(1, 40)
+        local output  = tostring(row.output or ''):sub(1, 60)
+        if station == '' or output == '' then resolve({ error = 'field' }); return end
+        local inputs = {}
+        for _, ing in ipairs(row.inputs or {}) do
+            local n = tostring(ing.item or '')
+            local q = math.floor(num(ing.qty, 1))
+            if n ~= '' and q > 0 then inputs[n] = q end
+        end
+        if next(inputs) == nil then resolve({ error = 'inputs' }); return end
+        if row.id then
+            MySQL.update.await('UPDATE craft_recipes SET station=?, output=?, count=?, time=?, inputs=?, enabled=? WHERE id=?',
+                { station, output, math.max(1, math.floor(num(row.count, 1))), math.max(500, math.floor(num(row.time, 3000))),
+                  json.encode(inputs), bool(row.enabled), num(row.id) })
+        else
+            MySQL.insert.await('INSERT INTO craft_recipes (station, output, count, time, inputs, enabled) VALUES (?,?,?,?,?,?)',
+                { station, output, math.max(1, math.floor(num(row.count, 1))), math.max(500, math.floor(num(row.time, 3000))),
+                  json.encode(inputs), bool(row.enabled == nil or row.enabled) })
+        end
     else
         resolve(false); return
     end
@@ -214,6 +321,17 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local name = tostring(id or '')
         if name == '' or name == 'unemployed' then resolve({ error = 'protected' }); return end
         MySQL.query.await('DELETE FROM jobs WHERE name = ?', { name })
+    elseif d == 'items' then
+        local name = tostring(id or '')
+        if name == '' or name == 'money' then resolve({ error = 'protected' }); return end
+        -- refuse while the item is still referenced by a recipe (input or output)
+        local used = MySQL.scalar.await(
+            "SELECT 1 FROM craft_recipes WHERE output = ? OR JSON_CONTAINS_PATH(inputs, 'one', CONCAT('$.\"', ?, '\"')) LIMIT 1",
+            { name, name })
+        if used then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM items WHERE name = ?', { name })
+    elseif d == 'recipes' then
+        MySQL.query.await('DELETE FROM craft_recipes WHERE id = ?', { num(id) })
     else resolve(false); return end
 
     reload(d); broadcast(d)
