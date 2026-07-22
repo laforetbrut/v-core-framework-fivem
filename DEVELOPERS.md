@@ -253,6 +253,7 @@ V.Ready(function()
         icon  = 'note',       -- any key from PhoneUI.icons
         slot  = 20,           -- home-screen position; the operator can change it
         dock  = false,        -- true puts it in the dock instead of the grid
+        desc  = 'One line for its FruitStore page',
         page  = 'https://cfx-nui-v-phone-notes/html/index.html',
     })
 end)

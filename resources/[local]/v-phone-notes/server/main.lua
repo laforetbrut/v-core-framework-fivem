@@ -13,6 +13,7 @@ V.Ready(function()
         label = 'Notes',        -- a literal, or a locale key your resource ships
         icon  = 'note',         -- any key from PhoneUI.icons
         slot  = 20,
+        desc  = 'Notes kept on your character through Phone.storage - the worked example for anyone writing an app.',
         page  = 'https://cfx-nui-v-phone-notes/html/index.html',
     })
 end)

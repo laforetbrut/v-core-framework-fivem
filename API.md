@@ -299,7 +299,7 @@ exports['v-phone']:GetNumber(cid) / FindByNumber(number) / IsOnline(number)
 exports['v-phone']:NumberOf(src) / IsOnCall(src)
 exports['v-phone']:SendMessage(fromCid, toNumber, body)    -- returns ok, errorKey
 exports['v-phone']:Notify(src, app, title, body)           -- a banner on their phone
-exports['v-phone']:RegisterApp(id, { label, icon, page, slot, dock })
+exports['v-phone']:RegisterApp(id, { label, icon, page, slot, dock, desc })
 -- the page then uses https://cfx-nui-v-phone/sdk.js: PhoneUI (the kit) + Phone (the bridge)
 -- Phone.request/emit/storage/notify/badge/toast/title/close/contacts/message/call
 -- see DEVELOPERS.md "Shipping a phone app" and resources/[local]/v-phone-notes
