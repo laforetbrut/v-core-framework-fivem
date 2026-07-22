@@ -99,9 +99,14 @@ function renderHome() {
   const gridApps = apps.filter((a) => !dockApps.includes(a));
 
   const items = layoutItems();
-  // With the widgets above, four rows is what actually fits; the rest paginate.
-  // 24 per page is how the last row ended up as a clipped sliver of yellow.
-  const perPage = 16;
+  // Four rows is what fits beneath the widgets; 24 per page is how the last row once
+  // ended up as a clipped sliver of yellow. But splitting 17 icons as 16 + 1 strands a
+  // single app on page two, which reads as "the rest did not load" rather than as a
+  // second page - so when there is an overflow the pages are BALANCED. Nine and eight
+  // both look like pages; sixteen and one does not.
+  const CAP = 16;
+  const pageCount = Math.max(1, Math.ceil(items.length / CAP));
+  const perPage = Math.ceil(items.length / pageCount);
   const pages = [];
   for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
   if (!pages.length) pages.push([]);
@@ -265,6 +270,8 @@ function wireArrange() {
 }
 
 function flipPage(dir) {
+  // Clamped to the pages that exist, so flipping past the end cannot slide the grid off
+  // the screen and leave nothing showing.
   const n = byId('pages').children.length;
   page = Math.max(0, Math.min(n - 1, page + dir));
   byId('pages').style.transform = `translateX(${-page * 100}%)`;
