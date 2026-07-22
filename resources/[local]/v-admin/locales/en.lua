@@ -196,6 +196,12 @@ local T = {
     ['adm.ed_fontscale']    = 'Font scale',
     ['adm.ed_inherit']      = 'inherit',
     ['adm.ed_inherits']     = 'inherits everything',
+    ['adm.ed_rentals']      = 'Rental points',
+    ['adm.ed_rentcats']     = 'Categories (comma list)',
+    ['adm.ed_anycat']       = 'any category',
+    ['adm.ed_rentdep']      = 'Rent deposit',
+    ['adm.ed_rentfee']      = 'Rent fee',
+    ['adm.ed_norent']       = 'not rentable',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }

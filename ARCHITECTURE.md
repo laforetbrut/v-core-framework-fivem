@@ -829,6 +829,33 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-rentals` ✅ — short-term vehicle hire
+
+Rental counters at four real GTA V locations (LSIA, Vespucci, Sandy Shores airfield, Paleto
+Bay), each a `world_rentals` row: position, spawn point + heading, a **category list**, an
+optional job lock, blip and enabled flag. Editable from **Admin → Editor → Rental points**.
+
+**Rentability rides on the vehicle catalogue, not a second list.** `vehicle_catalogue` gained
+two nullable columns — `rent_deposit` and `rent_fee`. NULL means *not for hire*; a value makes
+the model rentable wherever a point's category list allows it. An operator edits one vehicle
+list, in **Editor → Vehicles**, and blank never collapses to 0 (a free hire with no deposit is
+a very different thing from no hire).
+
+**What stops it being a free car:** a rental never creates a `character_vehicles` row. It gets
+a temporary `RENT###` plate — deliberately recognisable, so police can tell a hire car from an
+owned one — keys through `v-vehicles` (whose key system is not ownership-gated), and a row in
+`vehicle_rentals` with an `expires_at`. The deposit comes back only by returning the car to a
+rental point in time.
+
+**Expiry runs on its own clock, not a per-rental timer**: a timer dies with a restart, a row
+does not. On boot, any hire still marked `active` is closed as forfeited — otherwise a
+restart mid-hire would leave a row that blocks that player from ever renting again.
+
+Server re-derives everything: proximity (of the *vehicle*, not just the player, on return),
+the price from the catalogue, the driving-licence gate, and the one-hire-at-a-time rule.
+Eight settings: range, hire length, warning threshold, refund-on-time, licence requirement,
+deposit and fee multipliers, blips.
+
 ### `v-world` ✅ — admin-editable world content
 
 **Done.** The data layer behind the v-admin **Editor** tab. Owns five domains — `blips`, `shops`,
@@ -933,7 +960,7 @@ server — `RULES.md` §3.6.2). Ordered by build order, not by wish.
 | 1 | ✅ **`v-vehicles`** — persistence & keys (**shipped**) | `v-core` | The foundation everything else in this block sits on. Owns `character_vehicles`: plate (unique), model, owner citizenid, **stored properties** (colours, mods, extras, livery, plate style), fuel, engine/body health, mileage, and a **state** (`garaged` / `out` / `impounded`). Persists a spawned vehicle's condition back to the row on despawn, on save-tick and on disconnect, so a car keeps its damage and mods. **Key system**: who may start/lock a given plate, giveable and revocable, checked server-side on engine start and lock toggle — a client-side lock check is not a lock. Plates are minted server-side and unique. |
 | 2 | ✅ **`v-garages`** — storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB — the garage is the only legitimate way an owned car enters the world. |
 | 3 | ✅ **`v-vehicleshop`** — dealerships (**shipped**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
-| 4 | 🔨 **`v-rentals`** — short-term hire (**next**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
+| 4 | ✅ **`v-rentals`** — short-term hire (**shipped**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
 
 **Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` — one consumption model, four
 fuel types, admin-editable stations),

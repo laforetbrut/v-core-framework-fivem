@@ -331,6 +331,12 @@ function edRowTitle(r) {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)} · ${esc(r.cats || t('adm.ed_allcats'))}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
   }
   if (edDomain === 'vehcat') {
+    if (r.rent_deposit !== null && r.rent_deposit !== undefined) {
+      return `${esc(r.label)} <i class="dim">${esc(r.model)} · ${esc(r.cat)} · ${fmt(r.price)}` +
+        ` · 🔑 ${fmt(r.rent_deposit)}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+    }
+  }
+  if (edDomain === 'vehcat') {
     return `${esc(r.label)} <i class="dim">${esc(r.model)} · ${esc(r.cat)} · ${fmt(r.price)}${r.stock >= 0 ? ' · ' + r.stock + ' stock' : ''}${r.license ? ' · 🪪 ' + esc(r.license) : ''}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
   }
   if (edDomain === 'licenses') {
@@ -341,6 +347,11 @@ function edRowTitle(r) {
   }
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
+  }
+  if (edDomain === 'rentals') {
+    return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${Math.round(r.x)}, ${Math.round(r.y)}` +
+      `${r.cats ? ' · ' + esc(r.cats) : ' · ' + esc(t('adm.ed_anycat'))}` +
+      `${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
   }
   if (edDomain === 'garages') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.type)} · ${Math.round(r.x)}, ${Math.round(r.y)}${r.job ? ' · 🔒 ' + esc(r.job) : ''}${r.fee ? ' · ' + fmt(r.fee) : ''}</i>`;
@@ -591,6 +602,11 @@ function openEdForm(row) {
       `<label class="edf"><span>${esc(t('adm.ed_cat'))}</span><select id="ef-cat">${cats}</select></label>` +
       field(t('adm.ed_price'), 'ef-price', row.price ?? 0, 'number') +
       field(t('adm.ed_stock'), 'ef-stock', row.stock ?? -1, 'number') +
+      // blank = not rentable. NOT 0, which would be a free hire with no deposit.
+      `<label class="edf"><span>${esc(t('adm.ed_rentdep'))}</span><input id="ef-rdep" type="number" ` +
+        `value="${row.rent_deposit ?? ''}" placeholder="${esc(t('adm.ed_norent'))}" /></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_rentfee'))}</span><input id="ef-rfee" type="number" ` +
+        `value="${row.rent_fee ?? ''}" placeholder="${esc(t('adm.ed_norent'))}" /></label>` +
       `<label class="edf"><span>${esc(t('adm.ed_reqlic'))}</span><select id="ef-lic">` +
         `<option value="">${esc(t('adm.ed_byclass'))}</option>${lics}</select></label>` +
       `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
@@ -634,6 +650,23 @@ function openEdForm(row) {
       field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'rentals') {
+    const isNew = !row.id;
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_garid'))}</span><input id="ef-rid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') + field('Z', 'ef-z', row.z ?? '', 'number') +
+      field(t('adm.ed_spawnx'), 'ef-sx', row.sx ?? '', 'number') + field(t('adm.ed_spawny'), 'ef-sy', row.sy ?? '', 'number') +
+      field(t('adm.ed_spawnz'), 'ef-sz', row.sz ?? '', 'number') + field(t('adm.ed_spawnh'), 'ef-sh', row.sh ?? 0, 'number') +
+      // a comma list rather than a multi-select: the categories come from config and an
+      // operator adding one should not have to wait for a UI change
+      `<label class="edf"><span>${esc(t('adm.ed_rentcats'))}</span>` +
+        `<input id="ef-cats" value="${esc(row.cats ?? '')}" placeholder="${esc((edData.cats || []).join(', '))}" /></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'garages') {
     const isNew = !row.id;
@@ -695,7 +728,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores' || edDomain === 'garages' || edDomain === 'rentals' || edDomain === 'stations' || edDomain === 'mechshops' || edDomain === 'dealers') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -754,6 +787,11 @@ function openEdForm(row) {
   if (edDomain === 'stations' && !row.id) {
     const st = byId('ef-sid');
     st.oninput = () => { st.value = st.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
+  }
+
+  if (edDomain === 'rentals' && !row.id) {
+    const r = byId('ef-rid');
+    r.oninput = () => { r.value = r.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
   if (edDomain === 'garages' && !row.id) {
@@ -815,7 +853,8 @@ function openEdForm(row) {
       payload = { model: v('ef-model'), isNew: !row.model, label: v('ef-label'), cat: v('ef-cat'),
                   price: parseInt(v('ef-price'), 10) || 0,
                   stock: parseInt(v('ef-stock'), 10),
-                  license: v('ef-lic'), job: v('ef-job'), enabled: ck('ef-en') };
+                  license: v('ef-lic'), job: v('ef-job'), enabled: ck('ef-en'),
+                  rentDeposit: v('ef-rdep'), rentFee: v('ef-rfee') };
     } else if (edDomain === 'licenses') {
       payload = { key: v('ef-lkey'), isNew: !row.key, label: v('ef-label'), issuer: v('ef-issuer'),
                   price: parseInt(v('ef-price'), 10) || 0, days: parseInt(v('ef-days'), 10) || 0,
@@ -830,6 +869,12 @@ function openEdForm(row) {
       payload = { sid: v('ef-sid'), isNew: !row.id, label: v('ef-label'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
+                  blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'rentals') {
+      payload = { id: v('ef-rid'), isNew: !row.id, label: v('ef-label'),
+                  x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
+                  sx: parseFloat(v('ef-sx')), sy: parseFloat(v('ef-sy')), sz: parseFloat(v('ef-sz')),
+                  sh: parseFloat(v('ef-sh')) || 0, cats: v('ef-cats'), job: v('ef-job'),
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
     } else if (edDomain === 'garages') {
       payload = { gid: v('ef-gid'), isNew: !row.id, label: v('ef-label'), type: v('ef-type'),

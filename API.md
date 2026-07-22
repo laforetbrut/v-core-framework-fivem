@@ -185,6 +185,10 @@ exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage)
 exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
 exports['v-vehicles']:GetFuel(veh) / SetFuel(veh, pct)
 exports['v-vehicles']:IsBuckled()     -- client: seatbelt state, for HUDs and EMS scripts
+
+-- v-rentals (server)
+exports['v-rentals']:GetActive(cid)   -- the caller's live hire row, or nil
+exports['v-rentals']:IsRental(plate)  -- true if this plate is a live hire, not an owned car
 exports['v-vehicles']:OpenPreview(model, props)   -- showroom instance (local entity)
 exports['v-vehicles']:RotatePreview(dx) / ZoomPreview(dz) / ClosePreview() / IsPreviewOpen()
 ```

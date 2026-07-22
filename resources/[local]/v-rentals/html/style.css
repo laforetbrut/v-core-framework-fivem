@@ -1,0 +1,66 @@
+/* v-rentals — hire counter. Theme tokens only: no literal colours, so the page follows
+   the server palette and any per-module override. */
+.rent-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, var(--v-backdrop-a));
+}
+.rent-overlay.hidden { display: none; }
+
+.panel { width: min(72vw, 980px); max-height: 78vh; display: flex; flex-direction: column; }
+
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--v-line);
+}
+.ttl { font-family: var(--v-font-display); font-size: 1.35rem; color: var(--v-text); letter-spacing: .01em; }
+.sub { font-size: .82rem; color: var(--v-text-dim); margin-top: .15rem; }
+.head-right { display: flex; align-items: center; gap: .8rem; }
+.chip {
+  font-size: .78rem; padding: .3rem .7rem; border-radius: var(--v-r-sm);
+  border: 1px solid var(--v-accent-line); color: var(--v-accent); background: var(--v-accent-soft);
+}
+.x {
+  background: none; border: 0; color: var(--v-text-dim); font-size: 1.6rem; line-height: 1;
+  cursor: pointer; transition: color var(--v-t-fast);
+}
+.x:hover { color: var(--v-text); }
+
+.banner {
+  margin: 1rem 1.4rem 0; padding: .7rem 1rem;
+  border: 1px solid var(--v-warning); border-radius: var(--v-r-sm);
+  color: var(--v-warning); font-size: .85rem; background: var(--v-panel-2);
+}
+.banner.hidden { display: none; }
+
+.panel__body { padding: 1.2rem 1.4rem; overflow-y: auto; }
+
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: .9rem; }
+
+.card {
+  border: 1px solid var(--v-line); border-radius: var(--v-r-md);
+  background: var(--v-panel-2); padding: .9rem 1rem;
+  display: flex; flex-direction: column; gap: .55rem;
+  transition: border-color var(--v-t-fast), transform var(--v-t-fast);
+}
+.card:hover { border-color: var(--v-accent-line); transform: translateY(-2px); }
+.card__name { font-family: var(--v-font-display); font-size: 1rem; color: var(--v-text); }
+.card__cat { font-size: .72rem; text-transform: uppercase; letter-spacing: .12em; color: var(--v-text-faint); }
+.card__rows { display: flex; flex-direction: column; gap: .2rem; margin-top: .2rem; }
+.row { display: flex; justify-content: space-between; font-size: .82rem; color: var(--v-text-dim); }
+.row.total {
+  color: var(--v-text); font-weight: 600;
+  border-top: 1px solid var(--v-line); padding-top: .3rem; margin-top: .2rem;
+}
+.row b { font-variant-numeric: tabular-nums; }
+
+.btn {
+  margin-top: .3rem; padding: .5rem .9rem; border: 0; cursor: pointer;
+  border-radius: var(--v-r-sm); font-family: var(--v-font-display); font-size: .88rem;
+  color: var(--v-ink); background: var(--v-grad-accent);
+  transition: filter var(--v-t-fast);
+}
+.btn:hover { filter: brightness(1.08); }
+.btn:disabled { background: var(--v-panel-3); color: var(--v-text-faint); cursor: not-allowed; filter: none; }
+
+.empty { text-align: center; color: var(--v-text-faint); padding: 2.5rem 0; font-size: .9rem; }
+.empty.hidden { display: none; }
