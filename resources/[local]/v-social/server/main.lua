@@ -78,9 +78,16 @@ end
 -- ══════════════════════════════════════════════════════════════
 -- Accounts
 -- ══════════════════════════════════════════════════════════════
-local function accountOf(cid)
+-- 'bleeter' posts text, 'snap' posts photos. The app an account belongs to is part of
+-- its key: your Bleeter handle is not your Snapmatic handle unless you choose it twice.
+local APPS = { bleeter = true, snap = true }
+
+local function appOfKind(kind) return kind == 'photo' and 'snap' or 'bleeter' end
+
+local function accountOf(cid, app)
     return MySQL.single.await(
-        'SELECT citizenid, handle, avatar, bio FROM social_accounts WHERE citizenid = ?', { cid })
+        'SELECT citizenid, handle, avatar, bio FROM social_accounts WHERE citizenid = ? AND app = ?',
+        { cid, app })
 end
 
 local function publicAccount(a)
@@ -88,17 +95,21 @@ local function publicAccount(a)
     return a and { handle = a.handle, avatar = a.avatar, bio = a.bio } or nil
 end
 
-V.Callback('v-social:me', function(src, resolve)
+V.Callback('v-social:me', function(src, resolve, data)
     if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    resolve({ ok = true, account = publicAccount(accountOf(p.citizenid)) })
+    local app = tostring((data and data.app) or 'bleeter')
+    if not APPS[app] then resolve(false) return end
+    resolve({ ok = true, account = publicAccount(accountOf(p.citizenid, app)) })
 end)
 
 V.Callback('v-social:setup', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
 
+    local app = tostring((data and data.app) or 'bleeter')
+    if not APPS[app] then resolve(false) return end
     local handle = tostring((data and data.handle) or ''):gsub('[^%w_]', ''):sub(1, Config.HandleMax)
     if #handle < Config.HandleMin then resolve({ error = 'handle' }) return end
     local avatar = tostring((data and data.avatar) or ''):sub(1, 300)
@@ -108,14 +119,14 @@ V.Callback('v-social:setup', function(src, resolve, data)
     -- One handle per server, checked against everyone else but not against yourself, so
     -- editing your own bio does not collide with your own name.
     local taken = MySQL.scalar.await(
-        'SELECT 1 FROM social_accounts WHERE handle = ? AND citizenid <> ? LIMIT 1',
-        { handle, p.citizenid })
+        'SELECT 1 FROM social_accounts WHERE app = ? AND handle = ? AND citizenid <> ? LIMIT 1',
+        { app, handle, p.citizenid })
     if taken then resolve({ error = 'taken' }) return end
 
-    MySQL.query.await([[INSERT INTO social_accounts (citizenid, handle, avatar, bio)
-        VALUES (?,?,?,?)
+    MySQL.query.await([[INSERT INTO social_accounts (citizenid, app, handle, avatar, bio)
+        VALUES (?,?,?,?,?)
         ON DUPLICATE KEY UPDATE handle=VALUES(handle), avatar=VALUES(avatar), bio=VALUES(bio)]],
-        { p.citizenid, handle, avatar, bio })
+        { p.citizenid, app, handle, avatar, bio })
     resolve({ ok = true, account = { handle = handle, avatar = avatar, bio = bio } })
 end)
 
@@ -137,10 +148,10 @@ V.Callback('v-social:feed', function(src, resolve, data)
                EXISTS(SELECT 1 FROM social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
                (s.citizenid = ?) AS mine
         FROM social_posts s
-        JOIN social_accounts a ON a.citizenid = s.citizenid
+        JOIN social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
         WHERE s.kind = ?
         ORDER BY s.id DESC LIMIT ?
-    ]], { p.citizenid, p.citizenid, kind, Config.Posts.feedSize }) or {}
+    ]], { p.citizenid, p.citizenid, appOfKind(kind), kind, Config.Posts.feedSize }) or {}
 
     for _, r in ipairs(rows) do
         r.likes = num(r.likes, 0)
@@ -153,9 +164,8 @@ end)
 V.Callback('v-social:post', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    if not accountOf(p.citizenid) then resolve({ error = 'noaccount' }) return end
-
     local kind = (data and data.kind == 'photo') and 'photo' or 'text'
+    if not accountOf(p.citizenid, appOfKind(kind)) then resolve({ error = 'noaccount' }) return end
     local body = tostring((data and data.body) or '')
         :sub(1, math.floor(num(S('maxLength', Config.Posts.maxLength), 280)))
     local image = tostring((data and data.image) or ''):sub(1, 300)
@@ -306,8 +316,8 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Exports for other modules
 -- ══════════════════════════════════════════════════════════════
-exports('GetHandle', function(cid)
-    local a = accountOf(tostring(cid or ''))
+exports('GetHandle', function(cid, app)
+    local a = accountOf(tostring(cid or ''), APPS[tostring(app or '')] and app or 'bleeter')
     return a and a.handle or nil
 end)
 
@@ -315,7 +325,7 @@ end)
 --- news module, a race result). `handle` must be an account that exists.
 exports('PostAs', function(cid, kind, body, image)
     cid = tostring(cid or '')
-    if not accountOf(cid) then return false end
+    if not accountOf(cid, appOfKind(kind == 'photo' and 'photo' or 'text')) then return false end
     return MySQL.insert.await(
         'INSERT INTO social_posts (citizenid, kind, body, image) VALUES (?,?,?,?)',
         { cid, kind == 'photo' and 'photo' or 'text', tostring(body or ''):sub(1, 280),
@@ -331,12 +341,26 @@ CreateThread(function()
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_accounts` (
         `citizenid` VARCHAR(16) NOT NULL,
+        `app`       VARCHAR(12) NOT NULL DEFAULT 'bleeter',
         `handle`    VARCHAR(20) NOT NULL,
         `avatar`    VARCHAR(300) NOT NULL DEFAULT '',
         `bio`       VARCHAR(160) NOT NULL DEFAULT '',
-        PRIMARY KEY (`citizenid`),
-        UNIQUE KEY `handle` (`handle`)
+        PRIMARY KEY (`citizenid`, `app`),
+        UNIQUE KEY `handle` (`app`, `handle`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- A database created before accounts were per-app is migrated in place: existing
+    -- rows become Bleeter accounts, which is what they were in spirit.
+    local hasApp = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'social_accounts'
+          AND COLUMN_NAME = 'app' LIMIT 1]])
+    if not hasApp then
+        MySQL.query.await("ALTER TABLE `social_accounts` ADD COLUMN `app` VARCHAR(12) NOT NULL DEFAULT 'bleeter'")
+        MySQL.query.await("ALTER TABLE `social_accounts` DROP PRIMARY KEY, ADD PRIMARY KEY (`citizenid`, `app`)")
+        MySQL.query.await("ALTER TABLE `social_accounts` DROP INDEX `handle`")
+        MySQL.query.await("ALTER TABLE `social_accounts` ADD UNIQUE KEY `handle` (`app`, `handle`)")
+        print('[v-social] accounts migrated to one per app')
+    end
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_posts` (
         `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
