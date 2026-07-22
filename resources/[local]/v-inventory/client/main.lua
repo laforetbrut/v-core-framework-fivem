@@ -239,3 +239,34 @@ end
 
 AddEventHandler('v-ui:client:themeChanged', function() pushTheme() end)
 CreateThread(function() Wait(4000); pushTheme() end)
+
+-- ── Carried-item cache (read-only) ─────────────────────────────
+-- The server publishes a { name = count } map on this player's statebag whenever the
+-- inventory changes. Reading it here is O(1) and synchronous, which is what lets a menu
+-- decide whether to draw an option in the same frame it draws the rest of the list.
+-- It is the player's OWN inventory only, and it is a display hint: every action that
+-- consumes an item must still re-check it server-side.
+local function counts() return LocalPlayer.state and LocalPlayer.state.items or nil end
+
+exports('Count', function(name)
+    local c = counts()
+    return (c and c[name]) or 0
+end)
+
+exports('HasItem', function(name, amount)
+    local c = counts()
+    if not c then return false end
+    return (c[name] or 0) >= (tonumber(amount) or 1)
+end)
+
+--- Any one of a list of item names. Used by options that accept alternatives
+--- (a lockpick OR a screwdriver, a phone OR a radio).
+exports('HasAny', function(names)
+    local c = counts()
+    if not c then return false end
+    if type(names) ~= 'table' then names = { names } end
+    for _, n in ipairs(names) do if (c[n] or 0) > 0 then return true end end
+    return false
+end)
+
+exports('GetCarried', function() return counts() or {} end)

@@ -1,8 +1,11 @@
 /* ============================================================
    v-target — interaction eye · EMBER theme
-   Free cursor (glowing orange reticle) + a cursor-anchored rounded
-   glass option list with an orange hover highlight. CEF safe:
-   no color-mix(), no :has(), no nesting, no @import.
+
+   The reticle sits at the screen CENTRE, because that is where the world ray is
+   cast from. The panel is anchored to it rather than to the mouse: a list that
+   followed the cursor moved out from under the row you were reaching for.
+
+   CEF safe: no color-mix(), no :has(), no nesting, no @import, no backdrop-filter.
    ============================================================ */
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -11,90 +14,153 @@ html, body { width: 100%; height: 100%; background: transparent; overflow: hidde
 .hidden { display: none !important; }
 
 .eye { position: fixed; inset: 0; pointer-events: none; z-index: var(--z-overlay); }
-.eye.hidden { display: none; }
-/* Hide the OS cursor while the eye is open (we draw our own reticle). CEF has
-   no :has(), so the class is toggled on <html> from JS instead. */
-html.eyeopen, html.eyeopen body, .eyeopen .opt { cursor: none; }
+/* We draw our own pointer, so the OS one is hidden. CEF has no :has(), so the class
+   is toggled on <html> from JS. */
+html.eyeopen, html.eyeopen body, .eyeopen .row, .eyeopen .back { cursor: none; }
 
-/* ── Reticle cursor — sleek ring + ticks, orange with a soft glow ──
-   JS owns .cursor's transform (cursor tracking), so all dressing lives
-   on children and pseudo-elements. */
-.cursor { position: fixed; left: 0; top: 0; width: 30px; height: 30px; margin: -15px 0 0 -15px; pointer-events: none; }
+/* ══ Reticle ══════════════════════════════════════════════════
+   Three states, and they are the whole feedback loop:
+     idle        nothing under the ray      small, dim
+     .live       something with options     orange, open, glowing
+     .self       the self menu              orange, closed ring   */
+.reticle { position: fixed; left: 50%; top: 50%; width: 34px; height: 34px;
+  margin: -17px 0 0 -17px; pointer-events: none;
+  transition: transform var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease);
+  opacity: .55; }
+.reticle.live { opacity: 1; }
+.reticle.self { opacity: .85; }
 
-/* Hairline ring with a warm halo. */
-.cursor::before { content: ''; position: absolute; inset: 9px; border-radius: 50%;
-  border: 1px solid var(--v-accent-line); box-shadow: var(--v-accent-glow); }
-/* Slow sonar ping breathing out of the ring. */
-.cursor::after { content: ''; position: absolute; inset: 9px; border-radius: 50%;
-  border: 1px solid var(--v-accent-line); animation: vt-ping 2.4s var(--v-ease) infinite; }
+.reticle .ring { position: absolute; inset: 10px; border-radius: 50%;
+  border: 1px solid var(--v-text-faint);
+  transition: inset var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+              box-shadow var(--v-t-base) var(--v-ease); }
+.reticle.live .ring { inset: 6px; border-color: var(--v-accent-line); box-shadow: var(--v-accent-glow); }
+.reticle.self .ring { border-color: var(--v-accent-line); box-shadow: var(--v-accent-glow); }
 
-/* Center dot — solid brand orange, glowing. */
-.cursor .cdot { position: absolute; left: 50%; top: 50%; width: 4px; height: 4px; margin: -2px 0 0 -2px;
-  border-radius: 50%; background: var(--v-accent); box-shadow: var(--v-accent-glow); }
+.reticle .dot { position: absolute; left: 50%; top: 50%; width: 3px; height: 3px;
+  margin: -1.5px 0 0 -1.5px; border-radius: 50%; background: var(--v-text-dim);
+  transition: background var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
+.reticle.live .dot, .reticle.self .dot { background: var(--v-accent); box-shadow: var(--v-accent-glow); }
 
-/* Outer ticks — rounded gradient-orange dashes. */
-.cursor .ch { position: absolute; border-radius: 99px; background: var(--v-grad-accent);
-  box-shadow: 0 0 6px var(--v-accent-line); }
-.cursor .ch-t, .cursor .ch-b { left: 50%; width: 2px; height: 6px; margin-left: -1px; }
-.cursor .ch-l, .cursor .ch-r { top: 50%; height: 2px; width: 6px; margin-top: -1px; }
-.cursor .ch-t { top: 0; } .cursor .ch-b { bottom: 0; }
-.cursor .ch-l { left: 0; } .cursor .ch-r { right: 0; }
+/* Ticks only appear on a live target — they are the "you can act on this" signal. */
+.reticle .tick { position: absolute; border-radius: 99px; background: var(--v-grad-accent);
+  opacity: 0; transition: opacity var(--v-t-base) var(--v-ease), transform var(--v-t-base) var(--v-ease); }
+.reticle.live .tick { opacity: 1; }
+.reticle .tick.t, .reticle .tick.b { left: 50%; width: 2px; height: 5px; margin-left: -1px; }
+.reticle .tick.l, .reticle .tick.r { top: 50%; height: 2px; width: 5px; margin-top: -1px; }
+.reticle .tick.t { top: 0; } .reticle .tick.b { bottom: 0; }
+.reticle .tick.l { left: 0; } .reticle .tick.r { right: 0; }
 
-@keyframes vt-ping {
-  0%        { transform: scale(.55); opacity: .9; }
-  70%, 100% { transform: scale(1.45); opacity: 0; }
-}
-
-/* ── Options list — rounded glass panel anchored near the cursor by JS ── */
-.opts { position: fixed; left: 0; top: 0; display: flex; flex-direction: column; gap: 2px;
-  min-width: 200px; max-width: 300px; padding: 6px; pointer-events: none;
-  border: 1px solid var(--v-line); border-radius: var(--v-r-lg);
+/* ══ Panel ════════════════════════════════════════════════════
+   Fixed to the right of the reticle and vertically centred on it. It never moves
+   while it is open, which is what makes clicking a row reliable. */
+.panel { position: fixed; left: 50%; top: 50%; transform: translate(38px, -50%);
+  /* 336, not 296: French labels are the long ones and "Ouvrir / fermer cette portière"
+     was being clipped mid-word. Sizing to the longest real label beats abbreviating it. */
+  display: flex; flex-direction: column; width: 336px;
+  border: 1px solid var(--v-line); border-radius: var(--v-r-lg); overflow: hidden;
+  pointer-events: none;
   background:
-    linear-gradient(165deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, rgba(14, 12, 10, .92));
-  box-shadow: var(--v-shadow-box), inset 0 1px 0 rgba(255, 255, 255, .05);
-  animation: v-pop .22s var(--v-ease) backwards; }
-/* Orange light-streak bleeding across the panel's top edge. */
-.opts::before { content: ''; position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 150, 60, .55), transparent); pointer-events: none; }
-.opts.empty, .opts:empty { display: none; }
+    linear-gradient(165deg, rgba(255,255,255,.045), rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, rgba(14,12,10,.94));
+  box-shadow: var(--v-shadow-box), inset 0 1px 0 rgba(255,255,255,.05);
+  animation: v-pop .18s var(--v-ease) backwards; }
+.panel::before { content: ''; position: absolute; top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,150,60,.6), transparent); }
 
-/* ── Option row — orange glow highlight on hover ── */
-.opt { position: relative; display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px 9px 13px; border-radius: var(--v-r-md);
+/* ── Header: what you are pointing at, or where you are in the submenu ── */
+.head { display: flex; align-items: center; gap: 8px; padding: 9px 12px 8px;
+  border-bottom: 1px solid var(--v-line-2); }
+.head .ttl { flex: 1; min-width: 0; font-family: var(--v-font-display); font-weight: 700;
+  font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--v-accent-300);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head .back { flex: 0 0 auto; width: 20px; height: 20px; display: flex; align-items: center;
+  justify-content: center; border: 1px solid var(--v-line); border-radius: 6px;
+  background: rgba(255,255,255,.05); color: var(--v-text-dim); pointer-events: auto;
+  transition: color var(--v-t-fast) var(--v-ease), border-color var(--v-t-fast) var(--v-ease); }
+.head .back:hover { color: var(--v-accent-300); border-color: var(--v-accent-line); }
+.head .back svg { width: 13px; height: 13px; }
+
+/* ── Rows ── */
+.rows { display: flex; flex-direction: column; gap: 2px; padding: 6px;
+  max-height: 60vh; overflow-y: auto; overflow-x: hidden; }
+.rows::-webkit-scrollbar { width: 4px; }
+.rows::-webkit-scrollbar-thumb { background: var(--v-accent-line); border-radius: 99px; }
+
+/* A row cut in half by the bottom edge reads as broken, not as "there is more below".
+   This fade sits on the scrollport and only exists when the list actually overflows —
+   JS sets .scrolls, because CSS cannot ask whether a box is scrollable. */
+.rows::after { content: ''; display: none; position: sticky; bottom: -6px; z-index: 1;
+  flex: 0 0 auto; height: 22px; margin-top: -22px; pointer-events: none;
+  background: linear-gradient(180deg, rgba(14, 12, 10, 0), rgba(14, 12, 10, .96)); }
+.panel.scrolls .rows::after { display: block; }
+
+.row { position: relative; display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px 8px 13px; border-radius: var(--v-r-md);
   pointer-events: auto; cursor: pointer;
   transition: background-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease),
               transform var(--v-t-fast) var(--v-ease);
-  animation: v-fade-up .24s var(--v-ease) backwards; animation-delay: calc(var(--i, 0) * 30ms); }
-/* Accent bar on the row's left edge, springs in on hover. */
-.opt::before { content: ''; position: absolute; left: 4px; top: 8px; bottom: 8px; width: 3px;
+  animation: v-fade-up .2s var(--v-ease) backwards; animation-delay: calc(var(--i,0) * 22ms); }
+.row::before { content: ''; position: absolute; left: 4px; top: 7px; bottom: 7px; width: 3px;
   border-radius: 99px; background: var(--v-grad-accent); box-shadow: 0 0 8px var(--v-accent-line);
   opacity: 0; transform: scaleY(.4);
   transition: opacity var(--v-t-base) var(--v-ease), transform var(--v-t-base) var(--v-ease); }
-.opt:hover { background-color: var(--v-accent-soft); box-shadow: inset 0 0 0 1px var(--v-accent-line);
-  transform: translateX(2px); }
-.opt:hover::before { opacity: 1; transform: scaleY(1); }
 
-/* Icon chip — soft orange tile, fills with the brand gradient on hover. */
-.opt .ico { flex: 0 0 auto; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center;
-  border-radius: 8px; color: var(--v-accent-300); background: var(--v-accent-soft);
+/* Keyboard selection and mouse hover are ONE state: a menu where the arrow keys and
+   the mouse each highlight a different row is a menu you cannot trust. */
+.row.sel { background-color: var(--v-accent-soft); box-shadow: inset 0 0 0 1px var(--v-accent-line);
+  transform: translateX(2px); }
+.row.sel::before { opacity: 1; transform: scaleY(1); }
+
+.row .num { flex: 0 0 auto; width: 17px; height: 17px; display: flex; align-items: center;
+  justify-content: center; border-radius: 5px; background: rgba(255,255,255,.06);
+  border: 1px solid var(--v-line); font-family: var(--v-font-num); font-weight: 700;
+  font-size: 9.5px; color: var(--v-text-dim); }
+.row.sel .num { color: var(--v-accent-300); border-color: var(--v-accent-line); }
+
+.row .ico { flex: 0 0 auto; width: 25px; height: 25px; display: flex; align-items: center;
+  justify-content: center; border-radius: 8px; color: var(--v-accent-300);
+  background: var(--v-accent-soft);
   transition: background var(--v-t-base) var(--v-ease), color var(--v-t-base) var(--v-ease),
               box-shadow var(--v-t-base) var(--v-ease); }
-.opt .ico svg { width: 19px; height: 19px; }
-.opt:hover .ico { background: var(--v-grad-accent); color: var(--v-ink); box-shadow: var(--v-shadow-glow); }
+.row .ico svg { width: 18px; height: 18px; }
+.row.sel .ico { background: var(--v-grad-accent); color: var(--v-ink); box-shadow: var(--v-shadow-glow); }
 
-/* Option index chip — press the number to trigger it. */
-.opt .num { flex: 0 0 auto; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center;
-  border-radius: 6px; background: rgba(255, 255, 255, .06); border: 1px solid var(--v-line);
-  font-family: var(--v-font-num); font-weight: 700; font-size: 10px; color: var(--v-text-dim); }
-.opt:hover .num { color: var(--v-accent-300); border-color: var(--v-accent-line); }
-
-.opt .lbl { flex: 1; min-width: 0; font-family: var(--v-font-display); font-weight: 600; font-size: 12.5px;
+.row .txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.row .lbl { font-family: var(--v-font-display); font-weight: 600; font-size: 12px;
   letter-spacing: .06em; text-transform: uppercase; color: var(--v-text);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .sub { font-size: 10px; color: var(--v-text-faint); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; }
+
+/* Chevron marks a row that opens another list rather than doing something. */
+.row .chev { flex: 0 0 auto; width: 12px; height: 12px; color: var(--v-text-faint); }
+.row.sel .chev { color: var(--v-accent-300); }
+
+/* ── Blocked row ──
+   Drawn, but visibly inert, with the reason underneath. Hiding it would leave the
+   player guessing why the action they expected is not there. */
+.row.blocked { cursor: default; opacity: .45; }
+.row.blocked .ico { background: rgba(255,255,255,.05); color: var(--v-text-faint); box-shadow: none; }
+.row.blocked.sel { background-color: rgba(255,255,255,.04); box-shadow: inset 0 0 0 1px var(--v-line);
+  transform: none; }
+.row.blocked.sel::before { opacity: 0; }
+.row.blocked .sub { color: var(--v-danger-300); }
+
+/* ── Footer key hints ── */
+.foot { display: flex; align-items: center; gap: 10px; padding: 6px 12px 7px;
+  border-top: 1px solid var(--v-line-2); font-size: 9.5px; letter-spacing: .07em;
+  text-transform: uppercase; color: var(--v-text-faint); }
+.foot b { font-family: var(--v-font-num); font-weight: 700; color: var(--v-text-dim); }
+
+/* ══ Pointer ══════════════════════════════════════════════════
+   Deliberately small and quiet: the reticle is the aim point, this is only how you
+   reach the list. */
+.cursor { position: fixed; left: 0; top: 0; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%; border: 1px solid var(--v-accent-line);
+  background: rgba(255,150,60,.22); box-shadow: var(--v-accent-glow); pointer-events: none; }
 
 @media (prefers-reduced-motion: reduce) {
-  .cursor::after { animation: none; }
-  .opts, .opt { animation: none; }
-  .opt:hover { transform: none; }
+  .panel, .row { animation: none; }
+  .row.sel { transform: none; }
 }
