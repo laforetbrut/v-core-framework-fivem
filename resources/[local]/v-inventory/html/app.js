@@ -1,4 +1,4 @@
-// v-inventory — quasar/ox-style grid. Server-authoritative: every action posts to
+// v-inventory — icon grid. Server-authoritative: every action posts to
 // Lua and re-renders from the returned state. Native HTML5 drag & drop, delegated
 // listeners, single tooltip/context/amount singletons. CEF-103 safe.
 const byId = (id) => document.getElementById(id);

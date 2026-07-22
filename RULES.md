@@ -37,8 +37,8 @@
 Reuse its tokens and primitives. Only override a token locally when the value genuinely differs
 for that module. **Never fork the palette.**
 
-**Concept:** a modern dark-glass HUD in the spirit of Quasar-style FiveM interfaces — deep
-warm-graphite panels, generously rounded cards, soft layered shadows, and one **dominant**
+**Concept:** a modern dark-glass HUD — deep warm-graphite panels,
+generously rounded cards, soft layered shadows, and one **dominant**
 brand orange that glows: gradient fills, a light-streak on every panel's top edge, hover and
 selection auras. Reference implementation: `resources/[local]/v-inventory/html/`.
 
@@ -161,7 +161,7 @@ fivem/
 │   └── [local]/               # ← our custom development scripts live here
 │       └── v-core/            # our roleplay framework core (exports GetCore)
 ├── server.cfg                 # server configuration (license key here)
-├── start.bat / start.ps1      # launchers
+├── start.ps1                  # server launcher
 ├── README.md · CHANGELOG.md · RULES.md · ERROR_LOG.md
 └── .gitignore
 ```
@@ -187,7 +187,7 @@ fivem/
 
 1. **Artifacts** (if missing): download `server.zip` from the cfx.re artifacts and extract into `artifacts/`.
 2. **License key:** set a valid `sv_licenseKey` in `server.cfg` (free at https://keymaster.fivem.net/).
-3. **Run:** double-click `start.bat` (or `./start.ps1`).
+3. **Run:** `./start.ps1`.
 4. **Connect:** in the FiveM client, `F8` → `connect localhost:30120`.
 
 ## 8. AI Assistant Instructions

@@ -113,7 +113,7 @@ in-game** — never by editing Lua on a live server.
    `FXServer.exe` is the **Legacy** branch and will reject Enhanced clients with `bad_request`.
 2. **License key** — get a free key at [keymaster.fivem.net](https://keymaster.fivem.net/) and set
    `sv_licenseKey` in `server.cfg`.
-3. **Database** — run `start-db.bat`, then import `database/schema.sql`.
+3. **Database** — point `mysql_connection_string` in `server.cfg` at your MySQL/MariaDB, then import `database/schema.sql`.
 4. **Run** — `./start.ps1`.
 5. **Connect** — in FiveM press `F8` and type `connect localhost:30120`.
 
@@ -136,13 +136,16 @@ To add a feature resource:
 
 ## Database (on-demand)
 
-A local MariaDB instance is available but **does not run 24/7** — it is not a Windows service and never
-starts with Windows.
+Any MySQL or MariaDB instance works — the framework only talks to it through `oxmysql`, so how you run
+it is your call (a service, Docker, or an on-demand local install).
 
-- **`start-db.bat`** — starts MariaDB on `localhost:3306` (user `root`, password `root`, database `projet_r`).
-- **`stop-db.bat`** — stops it cleanly.
+Set the connection in `server.cfg`:
 
-Schema: `database/schema.sql` (24 tables). Data lives in `database/data/` (gitignored).
+```cfg
+set mysql_connection_string "mysql://user:password@localhost:3306/your_database?charset=utf8mb4"
+```
+
+Then import **`database/schema.sql`** (24 tables). Migrations run automatically at boot.
 
 ## Dependencies
 
@@ -254,7 +257,7 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
    `FXServer.exe` est la branche **Legacy** et refusera les clients Enhanced avec `bad_request`.
 2. **Clé de licence** — récupère une clé gratuite sur [keymaster.fivem.net](https://keymaster.fivem.net/)
    et renseigne `sv_licenseKey` dans `server.cfg`.
-3. **Base de données** — lance `start-db.bat`, puis importe `database/schema.sql`.
+3. **Base de données** — fais pointer `mysql_connection_string` dans `server.cfg` vers ton MySQL/MariaDB, puis importe `database/schema.sql`.
 4. **Lancement** — `./start.ps1`.
 5. **Connexion** — dans FiveM, appuie sur `F8` et tape `connect localhost:30120`.
 
@@ -277,13 +280,16 @@ Pour ajouter une ressource :
 
 ## Base de données (à la demande)
 
-Une instance MariaDB locale est disponible mais **ne tourne pas 24/7** — ce n'est pas un service Windows
-et elle ne démarre jamais avec Windows.
+N'importe quelle instance MySQL ou MariaDB convient — le framework ne lui parle qu'à travers `oxmysql`,
+donc la façon de la lancer t'appartient (service, Docker, ou installation locale à la demande).
 
-- **`start-db.bat`** — démarre MariaDB sur `localhost:3306` (user `root`, mot de passe `root`, base `projet_r`).
-- **`stop-db.bat`** — l'arrête proprement.
+Configure la connexion dans `server.cfg` :
 
-Schéma : `database/schema.sql` (24 tables). Les données sont dans `database/data/` (gitignoré).
+```cfg
+set mysql_connection_string "mysql://user:password@localhost:3306/ta_base?charset=utf8mb4"
+```
+
+Puis importe **`database/schema.sql`** (24 tables). Les migrations s'appliquent automatiquement au démarrage.
 
 ## Dépendances
 
