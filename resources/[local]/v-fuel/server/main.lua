@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('fuel')
 -- v-fuel | server
 -- Prices, charges and the authoritative fuel write. The client runs the pump animation
 -- and reports how much it drew; the server re-derives the price from ITS OWN station and

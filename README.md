@@ -62,6 +62,11 @@ in-game** - never by editing Lua on a live server.
   the vehicle catalogue, licence types, **gang territories**, **the penal code**, **substances**,
   **radio channels**, **faction treasuries** and **per-module themes**. All backed by `v-world`,
   all applied **live**.
+- **Built to be extended** - a script somebody else writes plugs in with one manifest line.
+  **Services** (`V.Service('banking')`) so it asks for a capability rather than a resource name;
+  **hooks** it can veto or rewrite, which plain events cannot do; and a **registry** listing every
+  module, service, hook, event and command, because that is the question an integrator starts with.
+  See **[DEVELOPERS.md](DEVELOPERS.md)**.
 - **Module registry & settings** - every module declares its tunables to `v-core`; the admin panel's
   **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
   adds `v_module 'yes'` to its manifest and appears there too - see [DEVELOPERS.md](DEVELOPERS.md).
@@ -241,6 +246,11 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
   catalogue véhicules, types de licence, **territoires de gang**, **code pénal**, **substances**,
   **canaux radio**, **trésoreries de faction** et **thèmes par module**. Adossé à `v-world`,
   appliqué à chaud.
+- **Conçu pour être étendu** - un script écrit par quelqu'un d'autre se branche avec une ligne de
+  manifest. **Services** (`V.Service('banking')`) pour demander une capacité plutôt qu'un nom de
+  ressource ; **hooks** qu'il peut refuser ou réécrire, ce que de simples events ne permettent pas ;
+  et un **registre** listant chaque module, service, hook, event et commande. Voir
+  **[DEVELOPERS.md](DEVELOPERS.md)**.
 - **Registre de modules & réglages** - chaque module déclare ses réglages à `v-core` ; l'onglet
   **Réglages** du menu admin affiche ce qu'on lui donne, il n'a donc jamais à changer. Un script tiers
   ajoute `v_module 'yes'` à son manifest et y apparaît aussi - voir [DEVELOPERS.md](DEVELOPERS.md).

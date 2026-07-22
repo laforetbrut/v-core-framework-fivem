@@ -916,6 +916,35 @@ included** - which means it was not a cooldown. It is a server callback now that
 the dealer's proximity, checks the model is actually in the catalogue, enforces the wait,
 and tells the anticheat to expect the two teleports and the local vehicle that follow.
 
+### `v-core` - the integration layer
+
+Three things turn a large framework into an extensible one, and none of them are exports.
+
+**Services** answer "who provides banking?" rather than "what is the banking resource
+called". Twenty-three ship. A server that replaces a module keeps every consumer working,
+because no consumer ever named the resource. Two providers for one service is a
+configuration mistake the core says out loud rather than resolving silently - picking one
+would mean half the server talking to a module the operator thinks is off.
+
+**Hooks** are a synchronous interception point another resource can veto or rewrite, and
+they are the one thing FiveM events cannot do: event arguments are serialised across
+resources, so a handler that mutates a table changes nothing. Hooks go through **exports**,
+which do return values. `false` vetoes, a table replaces the payload, and a handler that
+errors is **skipped rather than allowed to abort the chain** - one broken third-party
+script must not be able to stop money from moving. Lower priority runs first, so a
+validator rejects before a mutator bothers. Three ship on the money and job paths; the
+value is in what a server adds.
+
+**Discovery** is the registry: every module, service, hook, event and command in one call,
+or `vdev` in the console. The question every integrator starts with is "what already exists
+here", and the honest answer to that is not a documentation file that drifts.
+
+Around them: `V.Enabled` / `V.SetEnabled` (a real resource stop, not a flag every module
+has to remember to honour), `V.Require(resource, version)` which refuses **loudly and once**
+rather than failing somewhere unrelated an hour later, `V.Command` which gates and registers
+in one call, and the small things every script otherwise rewrites - intervals, timeouts and
+statebag helpers.
+
 ### `v-music` ✅ - boomboxes, jukeboxes and the car stereo
 
 Same rule as `v-3dsound`: the server sends a URL, a start timestamp and a position, and

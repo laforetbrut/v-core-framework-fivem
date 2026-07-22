@@ -39,6 +39,11 @@ V.Module({
     },
 })
 
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('factions')
+
+
 -- ── Definitions ───────────────────────────────────────────────
 -- Read straight from the same rows the admin panel already edits, so there is no second
 -- copy of an organisation to drift out of sync.

@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('status')
 -- v-status | server
 -- Owns hunger / thirst / stress / bleeding / illness. Health & armor stay
 -- native and are read client-side by the HUD.

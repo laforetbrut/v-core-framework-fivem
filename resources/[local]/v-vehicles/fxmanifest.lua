@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-vehicles'
 author 'vyrriox'
 description 'v-vehicles — owned-vehicle persistence, server-minted plates and the key system (v-core module)'
-version '0.1.1'
+version '0.2.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
@@ -15,6 +15,8 @@ dependencies {
     'v-core',
     'oxmysql',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

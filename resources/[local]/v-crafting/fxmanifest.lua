@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-crafting'
 author 'vyrriox'
 description 'v-crafting — workbench crafting: recipes consume inventory items to produce new ones (v-core module)'
-version '0.1.1'
+version '0.2.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

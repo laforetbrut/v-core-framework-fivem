@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-core'
 author 'vyrriox'
 description 'v-core — custom roleplay framework core'
-version '0.1.1'
+version '0.2.0'
 
 -- v-core is the registry itself, but it lists too so an operator sees it running.
 v_module 'yes'
@@ -37,6 +37,7 @@ server_scripts {
     'server/callbacks.lua',
     'server/permissions.lua',
     'server/logs.lua',
+    'server/integration.lua',   -- services, hooks, discovery registry
     'server/modules.lua',   -- module registry + live settings (self-describing to v-admin)
     'server/player.lua',
     'server/main.lua',

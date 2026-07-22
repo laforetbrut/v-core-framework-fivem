@@ -38,6 +38,11 @@ V.Module({
     },
 })
 
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('music')
+
+
 -- ── URL policy ────────────────────────────────────────────────
 local function hostOf(url)
     return tostring(url or ''):match('^%a+://([^/:]+)') or ''

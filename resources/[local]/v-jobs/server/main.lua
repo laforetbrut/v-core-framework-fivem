@@ -1,3 +1,7 @@
+
+-- Consumers ask for the capability, not the resource: a server that replaces this
+-- module keeps every consumer working.
+V.Provide('jobs')
 -- v-jobs | server
 -- Owns jobs/grades/duty/salaries and the exports other modules use to gate access.
 local Core = exports['v-core']:GetCore()

@@ -6,7 +6,7 @@
 |-------|-------|
 | Project name | v-core - a roleplay framework for FiveM Enhanced |
 | Repository | `laforetbrut/v-core-framework-fivem` (public) |
-| Version | 0.1.1 - every module reads the same number |
+| Version | 0.2.0 - every module reads the same number |
 | Type | FiveM **Enhanced** (GTA V Enhanced) roleplay framework |
 | Framework | v-core (custom, in-house - `resources/[local]/v-core`), 34 modules |
 | Server runtime | **`cfx-server.exe`** - the Enhanced binary. `FXServer.exe` is Legacy and rejects Enhanced clients |

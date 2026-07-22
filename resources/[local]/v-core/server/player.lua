@@ -39,6 +39,15 @@ function VCore.NewPlayer(source, row)
     function self.AddMoney(account, amount, reason)
         amount = math.floor(tonumber(amount) or 0)
         if not self.money[account] or amount <= 0 then return false end
+        -- Interception point: a third-party script can veto this or change the amount.
+        -- Nothing in the framework registers a handler; it exists for what comes later.
+        local hooked = VCore.RunHook('core:beforeAddMoney', {
+            source = self.source, citizenid = self.citizenid,
+            account = account, amount = amount, reason = reason,
+        })
+        if not hooked then return false end
+        amount = math.floor(tonumber(hooked.amount) or amount)
+        if amount <= 0 then return false end
         self.money[account] = self.money[account] + amount
         self.SyncMoney(account, reason)
         return true
@@ -47,6 +56,13 @@ function VCore.NewPlayer(source, row)
     function self.RemoveMoney(account, amount, reason)
         amount = math.floor(tonumber(amount) or 0)
         if not self.money[account] or amount <= 0 then return false end
+        local hooked = VCore.RunHook('core:beforeRemoveMoney', {
+            source = self.source, citizenid = self.citizenid,
+            account = account, amount = amount, reason = reason,
+        })
+        if not hooked then return false end
+        amount = math.floor(tonumber(hooked.amount) or amount)
+        if amount <= 0 then return false end
         if self.money[account] < amount then return false end
         self.money[account] = self.money[account] - amount
         self.SyncMoney(account, reason)
@@ -55,6 +71,12 @@ function VCore.NewPlayer(source, row)
 
     -- ── Job / gang ─────────────────────────────────────────
     function self.SetJob(name, grade)
+        local hooked = VCore.RunHook('core:beforeSetJob', {
+            source = self.source, citizenid = self.citizenid,
+            job = name, grade = grade or 0, previous = self.job,
+        })
+        if not hooked then return end
+        name, grade = hooked.job or name, hooked.grade or grade
         self.job = { name = name, grade = grade or 0 }
         TriggerClientEvent('v-core:client:job', self.source, self.job)
         TriggerEvent('v-core:server:onJobChange', self.source, self.job)
