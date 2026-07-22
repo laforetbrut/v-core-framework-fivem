@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-shops — store peds + buy UI, items & prices from the shops table (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Shops'
 v_module_category 'economy'
@@ -16,6 +16,8 @@ dependencies {
     'v-ui',
     'v-inventory',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

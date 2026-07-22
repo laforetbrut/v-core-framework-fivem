@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-banking — Fleeca banking: ATM + account UI (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Banking'
 v_module_category 'economy'
@@ -15,6 +15,8 @@ dependencies {
     'v-core',
     'v-ui',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

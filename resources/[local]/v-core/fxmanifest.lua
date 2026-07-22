@@ -11,6 +11,9 @@ version '0.2.0'
 v_module 'yes'
 v_module_label 'Core'
 v_module_category 'other'
+-- The shared helper other resources load with `shared_script '@v-core/lib/v.lua'`.
+files { 'lib/v.lua' }
+
 shared_scripts {
     'config/config.lua',
     'locale/shared.lua',

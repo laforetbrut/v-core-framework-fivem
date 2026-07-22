@@ -7,10 +7,12 @@ author 'vyrriox'
 description 'v-ui — EMBER design system: the single source of truth for every NUI in the framework'
 version '0.2.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Interface'
 v_module_category 'other'
+
+shared_script '@v-core/lib/v.lua'
 
 shared_script 'config.lua'
 

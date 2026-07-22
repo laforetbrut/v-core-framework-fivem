@@ -6,7 +6,7 @@ author 'vyrriox'
 description 'v-loadscreen — Projet R custom loading screen'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Loadscreen'
 v_module_category 'other'

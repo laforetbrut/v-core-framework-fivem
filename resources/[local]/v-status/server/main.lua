@@ -153,7 +153,7 @@ end, false)
 -- ══════════════════════════════════════════════════════════════════
 -- Declared to v-core, which stores the values and serves them to the admin panel.
 -- Applied back onto Config so the existing code paths see an operator's change without
--- a restart. See INTEGRATION.md.
+-- a restart. See DEVELOPERS.md.
 local function declareSettings()
     Core.RegisterModule('v-status', {
         label = 'Survival needs', category = 'gameplay',
@@ -194,8 +194,7 @@ AddEventHandler('v-core:server:settingChanged', function(mod)
     if mod == 'v-status' then applySettings() end
 end)
 
-CreateThread(function()
-    Wait(2600)          -- let v-core's registry come up first
+V.Ready(function()
     declareSettings()
     applySettings()
 end)
