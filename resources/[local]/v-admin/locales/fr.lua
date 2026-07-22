@@ -242,6 +242,12 @@ local T = {
     ['adm.ed_cityhall']     = 'Mairie',
     ['adm.ed_appspots']     = 'Stations d apparence',
     ['adm.ed_sub']          = 'Sous-titre',
+    ['adm.ed_props']        = 'Proprietes',
+    ['adm.ed_shell']        = 'Interieur',
+    ['adm.ed_tenancy']      = 'Bail',
+    ['adm.ed_rent']         = 'Loyer par jour ($)',
+    ['adm.ed_slots']        = 'emplacements',
+    ['adm.ed_hasgarage']    = 'Possede un garage',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

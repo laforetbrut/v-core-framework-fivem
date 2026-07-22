@@ -15,6 +15,7 @@ local Core = exports['v-core']:GetCore()
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local Gangs, Turfs, Charges, Drugs, Radio, Jukebox = {}, {}, {}, {}, {}, {}
 local Nodes, Benches, Spawns, Halls, AppSpots = {}, {}, {}, {}, {}
+local Props = {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -359,6 +360,25 @@ local function ensureTables()
         PRIMARY KEY (`id`), KEY `kind_idx` (`kind`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Property: a door on the map plus a shell to teleport into. `tenancy` is what makes
+    -- a motel a motel rather than a second housing system - the same row, rented instead
+    -- of owned, with a smaller stash and no garage.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_properties` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `kind` VARCHAR(16) NOT NULL DEFAULT 'house',      -- house | apartment | motel
+        `shell` VARCHAR(30) NOT NULL DEFAULT 'apartment',
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `price` INT NOT NULL DEFAULT 0,
+        `rent` INT NOT NULL DEFAULT 0,                    -- per day; 0 = owned outright
+        `tenancy` VARCHAR(8) NOT NULL DEFAULT 'own',      -- own | rent
+        `slots` INT NOT NULL DEFAULT 40,                  -- stash size
+        `garage` TINYINT(1) NOT NULL DEFAULT 0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -456,6 +476,14 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadProps()
+    Props = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_properties ORDER BY label') or {}) do
+        r.garage, r.blip, r.enabled = bool(r.garage), bool(r.blip), bool(r.enabled)
+        Props[#Props + 1] = r
     end
 end
 
@@ -648,6 +676,7 @@ local function reload(domain)
     if domain == 'radio'   or not domain then loadRadio() end
     if domain == 'jukebox' or not domain then loadJukebox() end
     if domain == 'nodes'    or not domain then loadNodes() end
+    if domain == 'properties' or not domain then loadProps() end
     if domain == 'benches'  or not domain then loadBenches() end
     if domain == 'spawns'   or not domain then loadSpawns() end
     if domain == 'cityhall' or not domain then loadHalls() end
@@ -738,6 +767,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetProperties', function() return Props end)
 exports('GetNodes',     function() return Nodes end)
 exports('GetBenches',   function() return Benches end)
 exports('GetSpawns',    function() return Spawns end)
@@ -943,6 +973,25 @@ exports('SeedVehicleCatalogue', function(defaults)
     seedDone('vehcat', want)
     loadVehCat()
     print(('[v-world] seeded %d catalogue vehicle(s) from config'):format(#VehCat))
+    return true
+end)
+
+-- v-housing: list of { id, label, kind, shell, x, y, z, h, price, rent, tenancy, slots, garage }
+exports('SeedProperties', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('properties', defaults)
+    if not need then return false end
+    for _, p in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_properties
+            (id, label, kind, shell, x, y, z, h, price, rent, tenancy, slots, garage, blip, enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)]],
+            { p.id, p.label or p.id, p.kind or 'house', p.shell or 'apartment',
+              p.x, p.y, p.z, p.h or 0.0, p.price or 0, p.rent or 0,
+              p.tenancy or 'own', p.slots or 40, p.garage and 1 or 0, p.blip == false and 0 or 1 })
+    end
+    seedDone('properties', want)
+    loadProps()
+    print(('[v-world] seeded %d propert(y/ies) from config'):format(#Props))
     return true
 end)
 
@@ -1169,6 +1218,9 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'properties' then
+        resolve({ rows = Props, kinds = Config.PropertyKinds, shells = Config.PropertyShells,
+                  tenancies = { 'own', 'rent' } })
     elseif domain == 'nodes' then
         resolve({ rows = Nodes, kinds = Config.NodeKinds })
     elseif domain == 'benches' then
@@ -1324,6 +1376,28 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'properties' then
+        local pid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if pid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        -- A rented property with no rent is a free flat nobody ever loses; a bought one
+        -- with no price is the same. Neither is an error worth blocking on, but both are
+        -- worth not inventing a value for.
+        MySQL.query.await([[INSERT INTO world_properties
+            (id, label, kind, shell, x, y, z, h, price, rent, tenancy, slots, garage, blip, enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), kind=VALUES(kind), shell=VALUES(shell),
+                x=VALUES(x), y=VALUES(y), z=VALUES(z), h=VALUES(h), price=VALUES(price),
+                rent=VALUES(rent), tenancy=VALUES(tenancy), slots=VALUES(slots),
+                garage=VALUES(garage), blip=VALUES(blip), enabled=VALUES(enabled)]],
+            { pid, label, tostring(row.kind or 'house'):sub(1,16), tostring(row.shell or 'apartment'):sub(1,30),
+              num(row.x), num(row.y), num(row.z), num(row.h),
+              math.max(0, math.floor(num(row.price))), math.max(0, math.floor(num(row.rent))),
+              (tostring(row.tenancy or 'own') == 'rent') and 'rent' or 'own',
+              math.max(1, math.floor(num(row.slots, 40))), bool(row.garage),
+              bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'nodes' then
         local kind = tostring(row.kind or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
@@ -1820,6 +1894,13 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'properties' then
+        local pid = tostring(id or '')
+        if pid == '' then resolve({ error = 'protected' }); return end
+        -- Somebody lives there: deleting the row would strand their stash.
+        local owned = MySQL.scalar.await('SELECT 1 FROM property_owners WHERE property = ? LIMIT 1', { pid })
+        if owned then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM world_properties WHERE id = ?', { pid })
     elseif d == 'nodes' then
         MySQL.query.await('DELETE FROM world_nodes WHERE id = ?', { math.floor(num(id)) })
     elseif d == 'benches' then

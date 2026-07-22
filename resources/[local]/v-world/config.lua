@@ -64,6 +64,10 @@ Config.GarageTypes = { 'public', 'job', 'gang', 'impound' }
 
 -- Picker lists for the world-content editor. Kept here rather than read from each
 -- module, so the editor never has to be up at the same time as what it edits.
+Config.PropertyKinds = { 'house', 'apartment', 'motel' }
+-- Shells are base-game interiors every client already has; a custom MLO is added here.
+Config.PropertyShells = { 'apartment', 'motel', 'lowend', 'modern' }
+
 Config.NodeKinds = { 'mining', 'salvage', 'textile', 'weed' }
 Config.AppStationKinds = { 'barber', 'tattoo', 'surgery' }
 

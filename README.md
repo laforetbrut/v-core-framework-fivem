@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
-[![Modules](https://img.shields.io/badge/modules-36-e8a33d.svg)](ARCHITECTURE.md)
+[![Modules](https://img.shields.io/badge/modules-37-e8a33d.svg)](ARCHITECTURE.md)
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 36 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 37 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -56,7 +56,7 @@ in-game** - never by editing Lua on a live server.
 - **Configurable loading screen** - `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
   split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
   toggleable, and all copy + tips in one place.
-- **In-game content editor** - **27 domains** the admin panel creates, edits and deletes without a
+- **In-game content editor** - **28 domains** the admin panel creates, edits and deletes without a
   restart: map blips, store locations, shops, jobs & grades, gangs & ranks, items, craft recipes,
   clothing stores & wearable slots, garages, rental points, fuel stations, mechanic shops, dealerships,
   the vehicle catalogue, licence types, **gang territories**, **the penal code**, **substances**,
@@ -203,7 +203,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 36 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 37 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -240,7 +240,7 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **Écran de chargement configurable** - `v-loadscreen/html/config.js` : **7 dispositions** (centre,
   gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
   effet activable, et tous les textes + astuces au même endroit.
-- **Éditeur de contenu en jeu** - **27 domaines** que le menu admin crée, modifie et supprime sans
+- **Éditeur de contenu en jeu** - **28 domaines** que le menu admin crée, modifie et supprime sans
   redémarrage : blips, boutiques, métiers & grades, gangs & rangs, items, recettes de craft, boutiques de
   vêtements & emplacements, garages, points de location, stations-service, ateliers, concessions,
   catalogue véhicules, types de licence, **territoires de gang**, **code pénal**, **substances**,

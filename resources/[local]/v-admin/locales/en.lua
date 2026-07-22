@@ -242,6 +242,12 @@ local T = {
     ['adm.ed_cityhall']     = 'City hall',
     ['adm.ed_appspots']     = 'Appearance stations',
     ['adm.ed_sub']          = 'Subtitle',
+    ['adm.ed_props']        = 'Properties',
+    ['adm.ed_shell']        = 'Interior shell',
+    ['adm.ed_tenancy']      = 'Tenancy',
+    ['adm.ed_rent']         = 'Rent per day ($)',
+    ['adm.ed_slots']        = 'slots',
+    ['adm.ed_hasgarage']    = 'Has a garage',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }
