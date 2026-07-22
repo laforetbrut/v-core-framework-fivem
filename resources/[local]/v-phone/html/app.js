@@ -38,6 +38,7 @@ let recents = [];       // app ids, most recently opened first
 let available = [];     // what the operator permits; the store lists these
 let editing = false;    // home screen in arrange mode
 let folderOpen = null;
+let storeView = null;   // app id while a store page is open
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -333,11 +334,11 @@ function closeApp(instant) {
   const app = byId('app');
   if (!app.classList.contains('on')) return;
   byId('screen').classList.remove('app-open');
-  if (instant) { app.classList.remove('on'); openApp = null; thread = null; return; }
+  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; return; }
   app.classList.remove('on');
   app.classList.add('closing');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
-  openApp = null; thread = null;
+  openApp = null; thread = null; storeView = null;
 }
 
 function setNav(title, backLabel, action) {
@@ -1166,7 +1167,57 @@ function wireSideButtons() {
 // Two decisions, kept apart: the OPERATOR decides what is available (Editor -> Phone
 // apps), the PLAYER decides what to keep. The store can never conjure an app the operator
 // has not permitted, and it refuses to remove the ones the phone needs to work.
+// One page per app, like a store has. The description comes from the locale when the
+// framework ships one, from RegisterApp's `desc` when a third party wrote one, and from
+// an honest fallback when nobody did.
+function descOf(a) {
+  const k = 'ph.desc_' + a.id;
+  const v = L(k);
+  if (v !== k) return v;
+  if (a.desc) return a.desc;
+  return L('ph.desc_generic');
+}
+
+function storeDetail(a) {
+  storeView = a.id;
+  const installed = (state.apps || []).some((x) => x.id === a.id);
+  setNav(L('app.store'), null);
+  body(
+    '<div class="storehero">' + UI.appIcon(a.icon) +
+      '<div><div class="shname">' + esc(L(a.label)) + '</div>' +
+      '<div class="shsub">' + esc(a.required ? L('ph.store_required') : (a.owner || 'iFruit')) + '</div></div>' +
+    '</div>' +
+    (installed
+      ? UI.button(L('ph.store_open'), 'sopen') +
+        (a.required ? '' : UI.button(L('ph.store_delete'), 'sdel', 'destructive'))
+      : UI.button(L('ph.store_install'), 'sget')) +
+    '<div class="grouphead">' + esc(L('ph.about')) + '</div>' +
+    '<div class="storedesc">' + esc(descOf(a)) + '</div>'
+  );
+  pushAnim();
+
+  const so = byId('sopen');
+  if (so) so.addEventListener('click', () => {
+    const app = (state.apps || []).find((x) => x.id === a.id);
+    if (app) { storeView = null; enterApp(app, null); }
+  });
+  const act = async (install) => {
+    const r = await post('install', { app: a.id, install });
+    if (!r || r.error) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
+    await refresh();
+    available = state.available || available;
+    renderHome();
+    storeDetail(a);
+    toast(L(install ? 'ph.store_added' : 'ph.store_removed'));
+  };
+  const sg = byId('sget');
+  if (sg) sg.addEventListener('click', () => act(true));
+  const sd = byId('sdel');
+  if (sd) sd.addEventListener('click', () => act(false));
+}
+
 RENDER.store = () => {
+  storeView = null;
   const installed = new Set((state.apps || []).map((a) => a.id));
   const list = (available || []).slice().sort((a, b) => a.slot - b.slot);
   if (!list.length) { body(UI.empty(L('ph.store_empty'), 'store')); return; }
@@ -1183,6 +1234,10 @@ RENDER.store = () => {
       '</div>';
   }), { header: L('ph.store_all'), footer: L('ph.store_hint') }));
 
+  rows('.row[data-app]', (r) => r.addEventListener('click', () => {
+    const a = (available || []).find((x) => x.id === r.dataset.app);
+    if (a) storeDetail(a);
+  }));
   rows('.storebtn', (b) => b.addEventListener('click', async (e) => {
     e.stopPropagation();
     const id = b.closest('.row').dataset.app;
@@ -1599,6 +1654,11 @@ byId('status').addEventListener('click', () => {
 });
 
 byId('navback').addEventListener('click', () => {
+  if (openApp && openApp.id === 'store' && storeView) {
+    storeView = null;
+    RENDER.store();
+    return;
+  }
   if (openApp && openApp.id === 'messages' && thread) {
     thread = null; foot('');
     RENDER.messages();

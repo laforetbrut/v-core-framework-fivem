@@ -173,6 +173,9 @@ local function registerApp(id, info, owner)
         job   = info.job, jobGrade = info.jobGrade, gang = info.gang,
         -- A phone with no Phone app is a brick, so a few apps refuse to be removed.
         required = info.required == true,
+        -- One sentence for the store page. Optional, because forcing an empty string on
+        -- every app would just fill the store with empty strings.
+        desc  = info.desc and tostring(info.desc):sub(1, 300) or nil,
     }
     return true
 end
@@ -227,6 +230,7 @@ local function appsFor(src, p)
                 id = id, label = a.label, icon = a.icon, page = a.page, dock = a.dock or nil,
                 slot = (w and num(w.slot, a.slot)) or a.slot,
                 required = a.required or nil,
+                desc = a.desc, owner = a.owner,
             }
         end
     end

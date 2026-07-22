@@ -813,3 +813,38 @@ input { font: inherit; }
    with no motion reads as a refresh rather than a step. */
 @keyframes ph-push { from { transform: translateX(52px); opacity: 0; } }
 .appbody.pushin > * { animation: ph-push .3s var(--spring); }
+
+
+/* ══ Pull-down surfaces ═══════════════════════════════════════
+   The shade, control centre and switcher were a 40% tint over the home grid,
+   which left the grid fighting the content for attention. They are their own
+   LAYER now: near-opaque, with the modules given real fills, because a control
+   you have to squint at is a control that does not exist. */
+.cc, .shade { background: rgba(13, 13, 17, .94); }
+.switcher { background: rgba(13, 13, 17, .9); }
+.cc .cctile { background: rgba(72, 72, 80, .66);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .16); }
+.cc .cch { color: rgba(255, 255, 255, .78); }
+.cc .ccv { color: #fff; }
+.cc .ccpill { background: rgba(255, 255, 255, .22); }
+.shade::before { content: ''; display: block; width: 36px; height: 5px;
+  margin: 0 auto 14px; border-radius: 99px; background: rgba(255, 255, 255, .32); }
+
+/* ══ Sheets scroll ════════════════════════════════════════════
+   A sheet taller than the screen was simply cut off, and the app search fills
+   one immediately with eighteen rows. The sheet caps its height and the result
+   list inside it is the part that scrolls. */
+.sheet { max-height: 78%; }
+.sheet.on { display: flex; flex-direction: column; }
+.sheet #appres { flex: 1; min-height: 0; overflow-y: auto; }
+.sheet #appres::-webkit-scrollbar { width: 0; }
+
+/* ══ FruitStore app pages ═════════════════════════════════════ */
+.storehero { display: flex; align-items: center; gap: 14px; padding: 6px 2px 16px; }
+.storehero .ic { width: 72px; height: 72px; border-radius: 16px; flex: 0 0 auto;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .28); }
+.storehero .shname { font-size: 22px; font-weight: 700; letter-spacing: -.02em;
+  color: var(--app-label); }
+.storehero .shsub { font-size: 13px; color: var(--app-label2); margin-top: 2px; }
+.storedesc { font-size: 15px; line-height: 1.45; color: var(--app-label);
+  padding: 4px 2px 18px; }
