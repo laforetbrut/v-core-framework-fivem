@@ -14,6 +14,7 @@ local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
+local Garages = {}
 local ready = false
 
 local function isAdmin(src)
@@ -93,6 +94,21 @@ local function ensureTables()
         `sort`  INT NOT NULL DEFAULT 0,
         `enabled` TINYINT(1) NOT NULL DEFAULT 1,
         PRIMARY KEY (`key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Garage points. `spawn*` is where a retrieved car appears (kept separate from the
+    -- interaction point so a garage can sit indoors and spawn on the street outside).
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_garages` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `type` VARCHAR(12) NOT NULL DEFAULT 'public',     -- public | job | gang | impound
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `sx` FLOAT NOT NULL, `sy` FLOAT NOT NULL, `sz` FLOAT NOT NULL, `sh` FLOAT NOT NULL DEFAULT 0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `job` VARCHAR(50) DEFAULT NULL,                   -- job/gang lock (NULL = open to all)
+        `fee` INT NOT NULL DEFAULT 0,                     -- release fee (impound)
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
@@ -176,6 +192,14 @@ local function loadClothCats()
     end
 end
 
+local function loadGarages()
+    Garages = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_garages ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Garages[#Garages + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
@@ -184,6 +208,7 @@ local function reload(domain)
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
     if domain == 'clothcats'   or not domain then loadClothCats() end
+    if domain == 'garages'     or not domain then loadGarages() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -194,8 +219,10 @@ local function canSeeBlip(src, r)
     if r.perm and r.perm ~= '' and not Core.HasPermission(src, r.perm) then return false end
     if r.job and r.job ~= '' then
         local p = Core.GetPlayer(src)
-        if not p or p.job ~= r.job then return false end
-        if (tonumber(p.grade) or 0) < (tonumber(r.grade) or 0) then return false end
+        -- player.job is a table { name, grade }, not a string
+        local job = p and p.job
+        if not job or job.name ~= r.job then return false end
+        if (tonumber(job.grade) or 0) < (tonumber(r.grade) or 0) then return false end
     end
     return true
 end
@@ -249,6 +276,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetGarages', function() return Garages end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -308,6 +336,21 @@ exports('SeedClothCategories', function(defaults)
     return true
 end)
 
+-- v-garages: list of { id, label, type, x, y, z, sx, sy, sz, sh, job, fee }
+exports('SeedGarages', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #Garages > 0 then return false end
+    for _, g in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_garages
+            (id, label, type, x, y, z, sx, sy, sz, sh, blip, job, fee, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,1,?,?,1)]],
+            { g.id, g.label or g.id, g.type or 'public', g.x, g.y, g.z,
+              g.sx, g.sy, g.sz, g.sh or 0.0, g.job, g.fee or 0 })
+    end
+    loadGarages()
+    print(('[v-world] seeded %d garage(s) from config'):format(#Garages))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     if #Jobs > 0 then return false end
@@ -351,6 +394,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = ClothStores, jobs = jobs })
+    elseif domain == 'garages' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = Garages, jobs = jobs, types = Config.GarageTypes })
     elseif domain == 'clothcats' then
         resolve({ rows = ClothCats, kinds = { 'comp', 'prop' }, framings = Config.ClothFramings })
     else resolve(false) end
@@ -459,6 +506,32 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   bool(row.blip == nil or row.blip), job, bool(row.enabled == nil or row.enabled) })
         end
 
+    elseif d == 'garages' then
+        -- `id` is stored on every vehicle row (character_vehicles.garage): settable on
+        -- CREATE, never changed afterwards or the cars parked there become unreachable.
+        local gid = tostring(row.gid or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
+        if gid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        local gtype = tostring(row.type or 'public'):sub(1, 12)
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_garages WHERE id = ?', { gid })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO world_garages
+                (id, label, type, x, y, z, sx, sy, sz, sh, blip, job, fee, enabled) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)]],
+                { gid, label, gtype, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh),
+                  bool(row.blip == nil or row.blip), job, math.max(0, math.floor(num(row.fee))),
+                  bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE world_garages SET label=?, type=?, x=?, y=?, z=?, sx=?, sy=?, sz=?, sh=?,
+                blip=?, job=?, fee=?, enabled=? WHERE id=?]],
+                { label, gtype, num(row.x), num(row.y), num(row.z),
+                  num(row.sx), num(row.sy), num(row.sz), num(row.sh),
+                  bool(row.blip), job, math.max(0, math.floor(num(row.fee))), bool(row.enabled), gid })
+        end
+
     elseif d == 'clothcats' then
         -- `key` is referenced by every worn-clothing metadata blob: settable on CREATE,
         -- never changed afterwards (that would orphan every garment already owned).
@@ -537,6 +610,13 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         MySQL.query.await('DELETE FROM items WHERE name = ?', { name })
     elseif d == 'clothstores' then
         MySQL.query.await('DELETE FROM world_clothing WHERE id = ?', { num(id) })
+    elseif d == 'garages' then
+        local gid = tostring(id or '')
+        if gid == '' then resolve({ error = 'protected' }); return end
+        -- refuse while cars are still parked there: they would become unreachable
+        local parked = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE garage = ? LIMIT 1', { gid })
+        if parked then resolve({ error = 'inuse' }); return end
+        MySQL.query.await('DELETE FROM world_garages WHERE id = ?', { gid })
     elseif d == 'clothcats' then
         local key = tostring(id or '')
         if key == '' then resolve({ error = 'protected' }); return end

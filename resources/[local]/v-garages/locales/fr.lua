@@ -1,0 +1,29 @@
+-- v-garages | Français
+Locales.fr = Locales.fr or {}
+local T = {
+    ['gar.blip']        = 'Garage',
+    ['gar.help_open']   = 'Ouvrir le garage',
+    ['gar.help_store']  = 'Ranger ce véhicule',
+    ['gar.title']       = 'Garage',
+    ['gar.sub']         = 'Tes véhicules garés ici',
+    ['gar.take']        = 'Sortir',
+    ['gar.empty']       = 'Rien de garé ici.',
+    ['gar.fuel']        = 'Carburant',
+    ['gar.engine']      = 'Moteur',
+    ['gar.body']        = 'Carrosserie',
+    ['gar.fee']         = 'Frais de sortie',
+    ['gar.stored']      = 'Véhicule rangé.',
+    ['gar.nojob']       = 'Ce garage n\'est pas pour toi.',
+    ['gar.err_far']     = 'Tu es trop loin du garage.',
+    ['gar.err_nojob']   = 'Ce garage n\'est pas pour toi.',
+    ['gar.err_notyours']= 'Ce véhicule ne t\'appartient pas.',
+    ['gar.err_notparked']= 'Ce véhicule n\'est pas garé ici.',
+    ['gar.err_notout']  = 'Ce véhicule n\'est pas sorti.',
+    ['gar.err_already'] = 'Ce véhicule est déjà sorti.',
+    ['gar.err_novehicle']= 'Aucun véhicule à ranger.',
+    ['gar.err_funds']   = 'Tu ne peux pas payer les frais de sortie.',
+    ['gar.err_noimpound']= 'Impossible de se garer à la fourrière.',
+    ['gar.err_spawn']   = 'Le véhicule n\'a pas pu être sorti.',
+    ['gar.err_x']       = 'Demande refusée.',
+}
+for k, v in pairs(T) do Locales.fr[k] = v end

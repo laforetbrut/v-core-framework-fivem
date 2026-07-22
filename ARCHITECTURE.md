@@ -28,6 +28,7 @@ the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains a
 | **Craft** | `craft_recipes` | `v-crafting` (`Recipes`) | ✅ |
 | **Clothing stores** | `world_clothing` | `v-clothing` (blips, clerk peds, `atStore`) | ✅ |
 | **Clothing slots** | `clothing_categories` | `v-clothing` (`Categories`, item defs, use handlers) | ✅ |
+| **Garages** | `world_garages` | `v-garages` (blips, markers, store/retrieve) | ✅ |
 
 Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
 + audit-logged), which reload the domain and fire the **server-to-server** event
@@ -202,7 +203,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (16 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (17 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -223,9 +224,9 @@ Schema lives in **`database/schema.sql`** (16 tables; `world_blips` gains `job`/
 | `server_config` | — | live server settings | ⬜ **empty — never read or written by anything** |
 
 **Planned by the roadmap (§5), not created yet:** `character_licenses` (licences & permits),
-`vehicle_catalogue` (dealership stock, a `v-world` domain), `world_garages` (garage points),
+`vehicle_catalogue` (dealership stock, a `v-world` domain),
 `vehicle_rentals` (active hires), `faction_treasury` + `faction_transactions`, `gang_territories`,
-`drug_plants` / `drug_labs`. `character_vehicles` and `gangs` already exist and are still empty.
+`drug_plants` / `drug_labs`. `gangs` already exists and is still empty; **`character_vehicles` and `world_garages` are now live**.
 
 ---
 
@@ -532,6 +533,45 @@ Exports: `Unequip(src, catKey)` / `GetWorn(src)` / `GetCategories()`.
 - Thumbnails are 1848 loose base64 `.txt` files + an `index.json` under the resource.
 - `screenshot-basic` and `oxmysql` are not declared in `dependencies{}`.
 
+### `v-vehicles` ✅ — owned-vehicle persistence & keys
+**Done.** New module, roadmap §5.1 step 1. Owns `character_vehicles` and is the **only** legitimate
+path an owned vehicle takes into the world. Plates are **minted server-side** (`VR` + 5 digits, retried
+against the unique index, fails loudly rather than handing out a duplicate). Condition — mod slots,
+colours, neon, extras, livery, plate style, fuel, engine and body health — is captured from the client
+that can actually see the entity and written back on store, on despawn, on disconnect and on a
+`Config.SaveInterval` safety tick; every field is **coerced and clamped** server-side, so a patched
+client can lie about its own fuel but cannot corrupt the row or reach another plate. `SpawnOwned()`
+creates the entity **server-side** (OneSync) after checking ownership or keys, so a client cannot
+conjure an owned car by asking. **Keys** are session-scoped (`Config.Keys.persist = false`) — a
+courtesy, not an ownership record, which stays `character_vehicles.citizenid`; sharing them re-derives
+both players' positions from the server-owned peds. The client-side engine cut is deliberately a
+**soft** gate: the authoritative answer already came from `v-vehicles:hasKeys`.
+
+Exports: `GetOwned` / `GetOwnedByCid` / `GetVehicle` / `IsOwner` / `HasKeys` / `GiveKeys` /
+`RemoveKeys` / `SpawnOwned` / `DespawnOwned` / `CreateOwned` / `IsLive` / `SetState` / `SetGarage`;
+client-side `GetProps` / `ApplyProps` / `GetFuel`.
+
+**Remaining.** No lockpick/hotwire path yet (the config reserves `hotwireTime` for it), no fuel
+stations, no vehicle-damage → repair economy, and a vehicle whose entity vanishes is moved to
+`impound` by the cleanup tick, which is a blunt rule that will want nuance once players test it.
+
+### `v-garages` ✅ — store, retrieve, impound
+**Done.** New module, roadmap §5.1 step 2. Garage points live in `world_garages` (editable from the
+admin panel): id, label, **type** (`public` / `job` / `gang` / `impound`), the interaction point, a
+**separate spawn point + heading** so a garage can sit indoors and deliver on the street, blip, a
+**job/gang lock** reusing the clothing-store gate, a release fee and enabled. 9 real GTA V parking
+structures ship as seed data, including the impound lot and the LSPD/EMS motor pools.
+
+Server-authoritative throughout: `canUse()` re-derives the player's distance and job, `take` re-reads
+the row's real `state`/`garage` instead of trusting the list the NUI was shown, and `store` re-reads
+**the vehicle entity itself** from its net id, checks the plate on it and measures *its* distance —
+parking a car you are not near is not possible. The impound fee is refunded if the spawn then fails.
+Deleting a garage that still has cars parked in it is refused. EMBER NUI with per-vehicle
+fuel/engine/body bars. fr+en.
+
+**Remaining.** No per-garage capacity, no shared/gang garage listing (it lists *your* cars only), and
+no vehicle preview in the panel.
+
 ### `v-world` ✅ — admin-editable world content
 
 **Done.** The data layer behind the v-admin **Editor** tab. Owns five domains — `blips`, `shops`,
@@ -624,9 +664,9 @@ server — `RULES.md` §3.6.2). Ordered by build order, not by wish.
 
 | # | Module | Depends on | Responsibility |
 |---|--------|-----------|----------------|
-| 1 | **`v-vehicles`** — persistence & keys | `v-core` | The foundation everything else in this block sits on. Owns `character_vehicles`: plate (unique), model, owner citizenid, **stored properties** (colours, mods, extras, livery, plate style), fuel, engine/body health, mileage, and a **state** (`garaged` / `out` / `impounded`). Persists a spawned vehicle's condition back to the row on despawn, on save-tick and on disconnect, so a car keeps its damage and mods. **Key system**: who may start/lock a given plate, giveable and revocable, checked server-side on engine start and lock toggle — a client-side lock check is not a lock. Plates are minted server-side and unique. |
-| 2 | **`v-garages`** — storage & retrieval | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB — the garage is the only legitimate way an owned car enters the world. |
-| 3 | **`v-vehicleshop`** — dealerships | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
+| 1 | ✅ **`v-vehicles`** — persistence & keys (**shipped**) | `v-core` | The foundation everything else in this block sits on. Owns `character_vehicles`: plate (unique), model, owner citizenid, **stored properties** (colours, mods, extras, livery, plate style), fuel, engine/body health, mileage, and a **state** (`garaged` / `out` / `impounded`). Persists a spawned vehicle's condition back to the row on despawn, on save-tick and on disconnect, so a car keeps its damage and mods. **Key system**: who may start/lock a given plate, giveable and revocable, checked server-side on engine start and lock toggle — a client-side lock check is not a lock. Plates are minted server-side and unique. |
+| 2 | ✅ **`v-garages`** — storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB — the garage is the only legitimate way an owned car enters the world. |
+| 3 | 🔨 **`v-vehicleshop`** — dealerships (**next**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
 | 4 | **`v-rentals`** — short-term hire | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
 
 **Cross-cutting for the whole block:** fuel (a single consumption model both shops and garages read),
