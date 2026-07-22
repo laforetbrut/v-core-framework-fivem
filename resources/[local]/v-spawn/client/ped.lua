@@ -17,17 +17,28 @@ function DefaultAppearance(sex)
             lipstick = { style = 0, opacity = 0.0, color = 0 },
         },
         eyeColor   = 0,
+        -- Every clothing slot the engine knows about is listed explicitly, including the
+        -- ones the store now sells (bag / neck / armor / decal). SetPedDefaultComponentVariation
+        -- hands out a RANDOM outfit, so a slot left unset here would leak a random bag,
+        -- chain or badge onto a brand-new character.
         components = {
             ['1']  = { drawable = 0, texture = 0 },                        -- mask (0 = none)
-            ['11'] = { drawable = 15, texture = 0 },                       -- top / jacket
-            ['8']  = { drawable = 15, texture = 0 },                       -- undershirt
-            ['3']  = { drawable = 15, texture = 0 },                       -- arms
+            ['3']  = { drawable = 15, texture = 0 },                       -- arms / gloves
             ['4']  = { drawable = (sex == 0 and 21 or 15), texture = 0 },  -- pants
+            ['5']  = { drawable = 0, texture = 0 },                        -- bag / parachute (none)
             ['6']  = { drawable = (sex == 0 and 34 or 35), texture = 0 },  -- shoes
+            ['7']  = { drawable = 0, texture = 0 },                        -- neck / chain (none)
+            ['8']  = { drawable = 15, texture = 0 },                       -- undershirt
+            ['9']  = { drawable = 0, texture = 0 },                        -- body armor (none)
+            ['10'] = { drawable = 0, texture = 0 },                        -- decals / badges (none)
+            ['11'] = { drawable = 15, texture = 0 },                       -- top / jacket
         },
         props = {
             ['0'] = { drawable = -1, texture = 0 },   -- hat (-1 = none)
             ['1'] = { drawable = -1, texture = 0 },   -- glasses
+            ['2'] = { drawable = -1, texture = 0 },   -- earrings
+            ['6'] = { drawable = -1, texture = 0 },   -- watch
+            ['7'] = { drawable = -1, texture = 0 },   -- bracelet
         },
     }
 end

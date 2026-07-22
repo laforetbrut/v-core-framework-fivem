@@ -53,7 +53,7 @@ in-game** — never by editing Lua on a live server.
 - **`v-cityhall`** — the city hall job desk: apply for any position an admin has left open, or resign.
   Whitelisted jobs (police, EMS, …) never show up here — they are handed out by their own chain of command.
 - **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** · **`v-notify`**
-  · **`v-clothing`** · **`v-loadscreen`**.
+  · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
 - **Economy loops** — legal: gather → craft → sell. Illegal: grow → process → deal → launder.
 
 ## Installation
@@ -136,7 +136,7 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
 - **Design system `v-ui` « EMBER »** — un `theme.css` canonique (verre sombre, orange dominant) partagé
   par les 13 pages NUI, pour que rien n'ait l'air rapporté.
 - **Éditeur de contenu en jeu** — le menu admin crée, modifie et supprime **blips, positions de boutique,
-  métiers & grades, items et recettes de craft**, adossé à `v-world`. Application **à chaud**, sans restart.
+  métiers & grades, items, recettes de craft, boutiques de vêtements et emplacements portables**, adossé à `v-world`. Application **à chaud**, sans restart.
 - **Aucune commande chat joueur** — la surface d'interaction, c'est l'œil de ciblage, les touches et la NUI.
 - **Bilingue nativement** — chaque texte joueur existe en anglais et en français ; le joueur choisit sa
   langue à la première connexion.
@@ -164,7 +164,7 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
 - **`v-cityhall`** — le guichet emploi de la mairie : postuler à un poste laissé ouvert par un admin,
   ou démissionner. Les métiers sur whitelist (police, EMS, …) n'y apparaissent jamais.
 - **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** · **`v-notify`**
-  · **`v-clothing`** · **`v-loadscreen`**.
+  · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
 - **Boucles économiques** — légale : récolter → fabriquer → vendre. Illégale : cultiver → traiter → dealer → blanchir.
 
 ## Installation

@@ -1,22 +1,135 @@
 -- v-clothing | server
 local Core = exports['v-core']:GetCore()
 
-local Cats = {}   -- item name -> category def
-for _, c in ipairs(Config.Categories) do Cats[c.item] = c end
+-- The wearable categories live in `clothing_categories` (owned by v-world) and are
+-- editable from the admin panel. Config.Categories is first-boot seed data only.
+local Categories = Config.Categories       -- runtime list
+local Cats = {}                            -- item name -> category def
+local registered = {}                      -- item -> usable handler already bound
+local equip                                -- forward declaration (defined below, used by rebuild)
 
 local function catByKey(key)
-    for _, c in ipairs(Config.Categories) do if c.key == key then return c end end
+    for _, c in ipairs(Categories) do if c.key == key then return c end end
+end
+local function catByItem(item) return Cats[item] end
+
+-- Categories that share this one's ped slot. GTA renders a single drawable per
+-- component/prop id, so equipping gloves must evict bare arms and vice-versa.
+local function sameSlot(cat)
+    local out = {}
+    for _, c in ipairs(Categories) do
+        if c.key ~= cat.key and c.kind == cat.kind and c.id == cat.id then out[#out + 1] = c.key end
+    end
+    return out
 end
 
--- Ensure the clothing item definitions exist (managed like any other item).
-CreateThread(function()
-    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
-    for _, c in ipairs(Config.Categories) do
+local function rebuildCategories()
+    local rows = (GetResourceState('v-world') == 'started' and exports['v-world']:IsReady())
+        and exports['v-world']:GetClothCategories() or nil
+    local list = {}
+    if rows and #rows > 0 then
+        for _, r in ipairs(rows) do
+            if r.enabled == 1 then
+                list[#list + 1] = {
+                    key = r.key, i18n = 'cl.' .. r.key, label = r.label,
+                    kind = (r.kind == 'prop') and 'prop' or 'comp',
+                    id = math.floor(tonumber(r.slot) or 0),
+                    price = math.floor(tonumber(r.price) or 0),
+                    item = r.item, framing = r.framing or Config.DefaultFraming,
+                }
+            end
+        end
+    end
+    if #list == 0 then list = Config.Categories end   -- never leave the store empty
+    Categories = list
+
+    Cats = {}
+    for _, c in ipairs(Categories) do Cats[c.item] = c end
+
+    for _, c in ipairs(Categories) do
+        -- every category mints an inventory item; make sure the definition exists
         MySQL.insert.await(
             'INSERT IGNORE INTO items (name, label, weight, stackable, usable, category) VALUES (?, ?, ?, 0, 1, ?)',
-            { c.item, c.item:sub(1, 1):upper() .. c.item:sub(2), 200, 'clothing' })
+            { c.item, c.label or (c.item:sub(1, 1):upper() .. c.item:sub(2)), 200, 'clothing' })
+        if not registered[c.item] then
+            registered[c.item] = true
+            exports['v-inventory']:RegisterUsableItem(c.item, function(src, item) equip(src, item) end)
+        end
     end
+    TriggerClientEvent('v-clothing:client:categories', -1, Categories)
+end
+
+exports('GetCategories', function() return Categories end)
+
+CreateThread(function()
+    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
+    -- wait for v-world, then seed this module's defaults into it once
+    local tries = 0
+    while GetResourceState('v-world') == 'started' and not exports['v-world']:IsReady() and tries < 100 do
+        Wait(100); tries = tries + 1
+    end
+    if GetResourceState('v-world') == 'started' and exports['v-world']:IsReady() then
+        exports['v-world']:SeedClothCategories(Config.Categories)
+        local locs = {}
+        for _, l in ipairs(Config.Locations) do
+            locs[#locs + 1] = { label = l.label, x = l.coords.x, y = l.coords.y, z = l.coords.z,
+                                h = l.coords.w, ped = Config.PedModel }
+        end
+        exports['v-world']:SeedClothStores(locs)
+    end
+    rebuildCategories()
 end)
+
+-- ── Store locations (DB-backed, pushed live) ───────────────────
+local function storePayload()
+    local rows = (GetResourceState('v-world') == 'started' and exports['v-world']:IsReady())
+        and exports['v-world']:GetClothStores() or nil
+    local out = {}
+    for _, r in ipairs(rows or {}) do
+        if r.enabled == 1 then
+            out[#out + 1] = { id = r.id, label = r.label, x = r.x, y = r.y, z = r.z, h = r.h,
+                              ped = r.ped, blip = r.blip, job = r.job }
+        end
+    end
+    if #out == 0 then
+        for i, l in ipairs(Config.Locations) do
+            out[#out + 1] = { id = -i, label = l.label, x = l.coords.x, y = l.coords.y,
+                              z = l.coords.z, h = l.coords.w, ped = Config.PedModel, blip = 1 }
+        end
+    end
+    return out
+end
+
+local function pushStores(target)
+    TriggerClientEvent('v-clothing:client:stores', target or -1, storePayload())
+end
+
+RegisterNetEvent('v-clothing:server:request', function()
+    TriggerClientEvent('v-clothing:client:categories', source, Categories)
+    pushStores(source)
+end)
+
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'clothcats' then rebuildCategories() end
+    if domain == nil or domain == 'clothstores' then pushStores() end
+end)
+
+-- Is `src` physically at a clothing store they are allowed to use?
+local function atStore(src)
+    local ped = GetPlayerPed(src)
+    if not ped or ped == 0 then return false end
+    local c = GetEntityCoords(ped)
+    for _, l in ipairs(storePayload()) do
+        if #(c - vector3(l.x + 0.0, l.y + 0.0, l.z + 0.0)) <= (Config.Distance + 2.5) then
+            if l.job and l.job ~= '' then
+                local p = Core.GetPlayer(src)
+                if not p or p.job ~= l.job then return false end
+            end
+            return true
+        end
+    end
+    return false
+end
 
 local function worn(player)
     local w = player.GetMetadata('worn')
@@ -28,6 +141,9 @@ Core.RegisterCallback('v-clothing:buy', function(source, resolve, data)
     local player = Core.GetPlayer(source)
     local cat = catByKey(data.category)
     if not player or not cat then resolve(false); return end
+    if not atStore(source) then
+        Core.Notify(source, LP(source, 'cl.toofar'), 'error'); resolve({ error = 'far' }); return
+    end
     if (player.money.cash or 0) < cat.price then
         Core.Notify(source, LP(source, 'cl.nofunds'), 'error'); resolve({ error = 'funds' }); return
     end
@@ -47,12 +163,25 @@ Core.RegisterCallback('v-clothing:buy', function(source, resolve, data)
 end)
 
 -- ── Equip (clothing item "used" via the inventory) ─────────────
-local function equip(source, item)
+function equip(source, item)
     local player = Core.GetPlayer(source)
     if not player or not item or not item.metadata then return end
     local m = item.metadata
     local cat = m.cat
+    local def = catByKey(cat) or catByItem(item.name)
     local w = worn(player)
+    -- A ped renders one drawable per slot: return any garment sharing this slot first,
+    -- otherwise it would stay "worn" in the data while being invisible on the ped.
+    if def then
+        for _, other in ipairs(sameSlot(def)) do
+            if w[other] then
+                if not exports['v-inventory']:AddItem(source, w[other].item, 1, w[other].meta) then
+                    Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return
+                end
+                w[other] = nil
+            end
+        end
+    end
     -- return the currently worn piece of this category to the inventory first — abort
     -- the swap if it can't fit, so the worn piece isn't destroyed by a full inventory
     if w[cat] then
@@ -64,10 +193,6 @@ local function equip(source, item)
     player.SetMetadata('worn', w)
     TriggerClientEvent('v-clothing:client:apply', source, m)   -- apply on the ped + persist appearance
     Core.Notify(source, LP(source, 'cl.equipped', LP(source, 'item.' .. item.name)), 'success')
-end
-
-for _, c in ipairs(Config.Categories) do
-    exports['v-inventory']:RegisterUsableItem(c.item, function(src, item) equip(src, item) end)
 end
 
 -- ── Wardrobe: list worn + unequip ──────────────────────────────

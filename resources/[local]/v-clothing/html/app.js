@@ -7,6 +7,8 @@ let strings = {}, cats = [], catMap = {}, worn = [];
 let curCat = null, curDraw = 0, curTex = 0, texCount = 0, filter = '';
 let thumbSet = new Set(), thumbObserver = null;
 const t = (k) => strings[k] || k;
+// An admin-created category has no translation: the server sends a literal label instead.
+const cl = (c) => c.label || t(c.i18n);
 const applyStrings = () => document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
 
 function setTab(tab) {
@@ -21,7 +23,7 @@ function renderCats() {
   cats.forEach(c => {
     const b = document.createElement('button');
     b.className = 'chip' + (c.key === curCat ? ' on' : '');
-    b.textContent = t(c.i18n);
+    b.textContent = cl(c);
     b.onclick = () => selectCategory(c.key);
     wrap.appendChild(b);
   });
@@ -136,7 +138,7 @@ function renderTex() {
 
 function updateBar() {
   const c = catMap[curCat];
-  byId('bsel').innerHTML = `<b>${t(c.i18n)}</b> · <span class="bnum">#<b>${curDraw}</b></span>`;
+  byId('bsel').innerHTML = `<b>${cl(c)}</b> · <span class="bnum">#<b>${curDraw}</b></span>`;
   byId('buy').innerHTML = c.price > 0
     ? `${t('cl.buy')} · <b>${fmt(c.price)}</b>`
     : `${t('cl.buy')} · <em class="freetag">${t('cl.free')}</em>`;
