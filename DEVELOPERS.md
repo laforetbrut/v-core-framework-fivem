@@ -187,7 +187,7 @@ These are not hypothetical - each one shipped, broke something, and was fixed.
   at the end of a file cannot be called by a thread above it. Five modules failed to boot
   this way.
 - **FiveM normalises manifest flags.** `v_module 'yes'` reads back as `1`, not `'yes'`.
-  Comparing to `'yes'` matched nothing and the registry found 0 of 25 modules.
+  Comparing to `'yes'` matched nothing, and the registry found none of them.
 - **`cond and nil or x` always yields `x` in Lua.** `nil` is falsy, so the `and` branch is
   discarded. Assign after building the table instead.
 - **`INSERT IGNORE` only dedupes on a natural key.** On an `AUTO_INCREMENT` table it
@@ -197,6 +197,14 @@ These are not hypothetical - each one shipped, broke something, and was fixed.
   resource-scoped.
 - **Enhanced rejects Legacy stream assets.** One `.ytd` in RSC7 format stops the whole
   resource with "Asset version mismatch".
+- **Starting a resource before `v-core` makes FiveM hoist the core as a silent
+  dependency**, and `v-core` then disappears from the boot log entirely - which reads as
+  "the core did not start". It did; the log just stops mentioning it. Put your `ensure`
+  after `v-core` and let `V.Ready` handle the timing.
+- **A two-name capture drops extra return values.** Several exports here answer with
+  `(value, reason)`, and `local ok, res = pcall(...)` keeps only the first - leaving the
+  caller able to report nothing but "unknown error". Use `table.pack` / `table.unpack`
+  when you wrap a call whose reason you need.
 
 ---
 

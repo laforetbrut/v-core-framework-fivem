@@ -98,9 +98,10 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 
 ## v-world - admin-editable content
 
-The single owner of every content table. 14 domains: `blips`, `shops`, `jobs`, `items`,
-`recipes`, `clothstores`, `clothcats`, `garages`, `stations`, `mechshops`, `dealers`,
-`vehcat`, `licenses`, `uitheme`.
+The single owner of every content table. **21 domains**: `blips`, `shops`, `jobs`,
+`gangs`, `items`, `recipes`, `clothstores`, `clothcats`, `garages`, `rentals`, `stations`,
+`mechshops`, `dealers`, `vehcat`, `licenses`, `turfs`, `charges`, `drugs`, `radio`,
+`factions` (treasuries) and `uitheme` (per-module themes).
 
 ```lua
 exports['v-world']:IsReady()

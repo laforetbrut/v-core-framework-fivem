@@ -149,8 +149,8 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab - §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-**21 of 25 modules declare their settings** - every one that has a meaningful tunable.
-The four that do not (`v-ui`, `v-loadscreen`, `v-world`, `v-admin`) are infrastructure with
+**31 of 34 modules declare their settings** - every one that has a meaningful tunable.
+The three that do not (`v-loadscreen`, `v-world`, `v-admin`) are infrastructure with
 nothing an operator would sensibly change at runtime; `v-core` itself is listed so an
 operator sees it running.
 

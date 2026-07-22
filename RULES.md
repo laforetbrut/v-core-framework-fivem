@@ -8,7 +8,7 @@
 | Repository | `laforetbrut/v-core-framework-fivem` (public) |
 | Version | 0.1.1 - every module reads the same number |
 | Type | FiveM **Enhanced** (GTA V Enhanced) roleplay framework |
-| Framework | v-core (custom, in-house - `resources/[local]/v-core`), 30 modules |
+| Framework | v-core (custom, in-house - `resources/[local]/v-core`), 34 modules |
 | Server runtime | **`cfx-server.exe`** - the Enhanced binary. `FXServer.exe` is Legacy and rejects Enhanced clients |
 | Game build | **Never set `sv_enforceGameBuild`** - those are Legacy build numbers and lock Enhanced clients out |
 | Base resources | Official cfx-server-data defaults |
@@ -166,10 +166,10 @@ fivem/
 ├── resources/
 │   ├── [cfx-default]/         # official cfx default resources - do not edit
 │   ├── [standalone]/          # oxmysql, screenshot-basic
-│   └── [local]/               # our 30 modules
+│   └── [local]/               # our 34 modules
 │       ├── v-core/            # the framework core, and lib/v.lua (the shared helper)
 │       ├── v-ui/              # the design system: theme.css + generated theme-vars.css
-│       ├── v-world/           # admin-editable world content, 19 domains
+│       ├── v-world/           # admin-editable world content, 21 domains
 │       ├── v-admin/           # the in-game panel (F10)
 │       └── …                  # one folder per module, see ARCHITECTURE.md
 ├── server.cfg                 # server config; sv_licenseKey lives in license.cfg (gitignored)
