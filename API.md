@@ -256,6 +256,13 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
 exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
+-- v-core world policy (client) - what the GAME is allowed to do on its own
+exports['v-core']:SetWorldPolicy(key, value)   -- override a setting for a scripted scene
+exports['v-core']:ClearWorldPolicy(key)        -- nil clears every override
+exports['v-core']:GetWorldPolicy()             -- { applied = {...}, overrides = {...} }
+-- keys: npcPolice, maxWanted, npcEmergency, randomCops, randomEvents,
+--       randomTrains, randomBoats, garbageTrucks
+
 -- v-3dsound (server) - the wire carries a name and a place, never audio
 exports['v-3dsound']:Play(name, coords, opts)        -- a world position
 exports['v-3dsound']:PlayFromPlayer(src, name, opts) -- position taken from the ped, not a payload

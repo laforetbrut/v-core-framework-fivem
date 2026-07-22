@@ -315,6 +315,25 @@ CreateThread(function()
     for name in pairs(Modules) do
         if not Values[name] then loadValues(name) end
     end
+    -- v-core declares its own world policy. Registering here rather than in a separate
+    -- file keeps it in the one place that already knows the registry is up.
+    VCore.RegisterModule('v-core', {
+        label = 'Core', category = 'other',
+        settings = {
+            { key = 'npcPolice',   label = 'NPC police respond to crime', type = 'bool', default = false,
+              hint = 'Off for immersive roleplay: no NPC cruisers, no dispatch, no wanted stars.' },
+            { key = 'maxWanted',   label = 'Maximum wanted level', type = 'number', default = 0, min = 0, max = 5, step = 1,
+              hint = 'Ignored while NPC police are off.' },
+            { key = 'npcEmergency', label = 'NPC ambulances and fire trucks', type = 'bool', default = false },
+            { key = 'randomCops',  label = 'Ambient police vehicles and peds', type = 'bool', default = false },
+            { key = 'randomEvents', label = 'GTA ambient random events', type = 'bool', default = false,
+              hint = 'Muggings, drug deals and the other scripted street scenes.' },
+            { key = 'randomTrains', label = 'Trains run', type = 'bool', default = true },
+            { key = 'randomBoats',  label = 'Ambient boats', type = 'bool', default = true },
+            { key = 'garbageTrucks', label = 'Garbage trucks', type = 'bool', default = false },
+        },
+    })
+
     TriggerEvent('v-core:server:modulesReady')
 end)
 

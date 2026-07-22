@@ -26,6 +26,7 @@ client_scripts {
     'client/callbacks.lua',
     'client/functions.lua',
     'client/focus.lua',
+    'client/world.lua',   -- world policy: NPC police, dispatch, ambient events
     'client/main.lua',
 }
 
