@@ -253,6 +253,9 @@ local function prefsOf(p)
     return {
         wallpaper = tostring(m.wallpaper or Config.DefaultWallpaper),
         dnd       = m.dnd == true,
+        -- Apps are light by default, as they are on iOS. This flips the six
+        -- surface values and nothing else.
+        dark      = m.dark == true,
         ringtone  = tostring(m.ringtone or 'default'),
         glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
         -- What the player REMOVED, not what they installed. Storing the removals
@@ -543,6 +546,7 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
+        if data.dark ~= nil then prefs.dark = data.dark == true end
         if data.wallpaperUrl ~= nil then
             local url = tostring(data.wallpaperUrl):sub(1, 400)
             if url ~= '' and not wallpaperAllowed(url) then resolve({ error = 'badhost' }) return end

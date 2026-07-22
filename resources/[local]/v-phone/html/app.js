@@ -130,6 +130,7 @@ function renderHome() {
     });
   });
   wireArrange();
+  renderWidgets();
 }
 
 // ══ Home layout ════════════════════════════════════════════════
@@ -268,6 +269,34 @@ function flipPage(dir) {
   byId('dots').innerHTML = [...Array(n)].map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
 }
 
+// ══ Widgets ════════════════════════════════════════════════════
+// Both show something true: the weather the server is running, and the in-game date.
+// A widget showing the player's real-world clock would be showing the wrong clock.
+const WEATHER_ICON = {
+  EXTRASUNNY: 'sun', CLEAR: 'sun', CLOUDS: 'cloud', OVERCAST: 'cloud', SMOG: 'cloud',
+  FOGGY: 'cloud', RAIN: 'rain', THUNDER: 'rain', CLEARING: 'cloud', NEUTRAL: 'sun',
+  SNOW: 'snow', BLIZZARD: 'snow', SNOWLIGHT: 'snow', XMAS: 'snow', HALLOWEEN: 'cloud',
+};
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+async function renderWidgets() {
+  const host = byId('widgets');
+  if (!host) return;
+  const d = await post('ambient');
+  if (!d || !d.ok) { host.innerHTML = ''; return; }
+  const w = String(d.weather || 'CLEAR').toUpperCase();
+  const icon = WEATHER_ICON[w] || 'sun';
+  const hh = String(d.hours).padStart(2, '0') + ':' + String(d.minutes).padStart(2, '0');
+  host.innerHTML =
+    '<div class="widget glass"><div class="wtop"><span>' + esc(L('ph.los_santos')) + '</span>' +
+      '<span class="wicon">' + svg(icon) + '</span></div>' +
+      '<div><div class="wbig">' + esc(hh) + '</div>' +
+      '<div class="wsub">' + esc(L('ph.weather_' + icon)) + '</div></div></div>' +
+    '<div class="widget cal glass"><div class="wday">' + esc(L('ph.month_' + MONTHS[(d.month || 1) - 1])) + '</div>' +
+      '<div class="wnum">' + esc(d.day || 1) + '</div>' +
+      '<div class="wsub">' + esc(L('ph.in_game_date')) + '</div></div>';
+}
+
 // ══ App shell ══════════════════════════════════════════════════
 // The zoom origin is taken from the icon that launched it. That one detail is most of
 // what makes opening an app feel like iOS rather than a page swap.
@@ -295,6 +324,7 @@ function enterApp(a, tile) {
     return;
   }
   byId('appbody').style.padding = '';
+  byId('app').classList.remove('black');
   byId('navbar').classList.remove('hidden');
   const fn = RENDER[a.id];
   if (fn) fn(); else body(UI.empty(L('ph.no_app')));
@@ -345,7 +375,27 @@ const RENDER = {};
 const KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'],
   ['7', 'PQRS'], ['8', 'TUV'], ['9', 'WXYZ'], ['*', ''], ['0', '+'], ['#', '']];
 
+let phoneTab = 'keypad';
+
 RENDER.phone = () => {
+  tabbar([
+    { id: 'favourites', icon: 'star', label: 'ph.favourites' },
+    { id: 'contacts', icon: 'contacts', label: 'app.contacts' },
+    { id: 'keypad', icon: 'keypad', label: 'ph.keypad_tab' },
+  ], phoneTab, (t) => { phoneTab = t; RENDER.phone(); });
+
+  if (phoneTab !== 'keypad') {
+    // Favourites is the contacts the player marked, not a second address book.
+    const list = (state.contacts || []).filter((c) => phoneTab === 'contacts' || Number(c.favourite) === 1);
+    body(list.length
+      ? UI.group(list.map((c) => UI.row({
+          avatar: c.name, title: c.name, subtitle: c.number, chevron: true, data: { n: c.number },
+        })))
+      : UI.empty(L(phoneTab === 'contacts' ? 'ph.no_contacts' : 'ph.no_favourites'), 'contacts'));
+    rows('.row[data-n]', (r) => r.addEventListener('click', () => post('call', { number: r.dataset.n })));
+    return;
+  }
+
   const known = (state.contacts || []).find((c) => c.number === dialed);
   body(
     `<div class="dialed" id="dialed">${esc(dialed)}</div>` +
@@ -441,16 +491,24 @@ function newMessageSheet() {
 // ── Contacts ───────────────────────────────────────────────────
 RENDER.contacts = () => {
   setNav(L('app.contacts'), null, { icon: 'add', onClick: () => contactSheet({}) });
-  const list = state.contacts || [];
-  if (!list.length) { body(UI.empty(L('ph.no_contacts'), 'contacts')); return; }
-  body(UI.group(list.map((c) => UI.row({
-    avatar: c.name, title: c.name, subtitle: c.number, chevron: true,
-    data: { id: c.id, n: c.number },
-  }))));
-  rows('.row', (r) => r.addEventListener('click', () => {
+  const all = state.contacts || [];
+  const draw = (q) => {
+    const list = q ? all.filter((c) => (c.name + ' ' + c.number).toLowerCase().includes(q)) : all;
+    byId('clist').innerHTML = list.length
+      ? UI.group(list.map((c) => UI.row({
+          avatar: c.name, title: c.name, subtitle: c.number, chevron: true,
+          data: { id: c.id, n: c.number },
+        })))
+      : UI.empty(L('ph.no_contacts'), 'contacts');
+    wire();
+  };
+  const wire = () => rows('.row', (r) => r.addEventListener('click', () => {
     const c = (state.contacts || []).find((x) => String(x.id) === r.dataset.id);
     if (c) contactSheet(c);
   }));
+  body(searchHtml(L('ph.search_contacts')) + '<div id="clist"></div>');
+  draw('');
+  onSearch(draw);
 };
 
 function contactSheet(c) {
@@ -528,11 +586,19 @@ RENDER.wallet = async () => {
       '<span class="bal">' + esc(money(card.bank)) + '</span></div></div>'
     : (card && card.ok ? UI.group([UI.row({ icon: 'bank', title: L('ph.no_card'), subtitle: L('ph.no_card_hint') })]) : '');
   if (!list.length) { body(cardHtml + UI.empty(L('ph.no_licenses'), 'wallet')); return; }
+  const wireCard = () => {
+    const el = document.querySelector('.bankcard');
+    if (el && card && card.card) {
+      el.style.cursor = 'pointer';
+      el.addEventListener('click', () => copyText(card.card, L('ph.card_copied')));
+    }
+  };
   body(cardHtml + UI.group(list.map((l) => UI.row({
     icon: 'wallet', title: (L(l.i18n) !== l.i18n ? L(l.i18n) : (l.label || l.key)),
     subtitle: l.issuer || '', value: l.held ? L('ph.lic_held') : L('ph.lic_none'),
     tone: l.held ? 'pos' : '',
   }))));
+  wireCard();
 };
 
 // ── Jobs ───────────────────────────────────────────────────────
@@ -557,7 +623,11 @@ RENDER.jobs = async () => {
 RENDER.settings = () => {
   const p = state.prefs || {};
   body(
-    UI.group([UI.row({ icon: 'phone', title: L('ph.my_number'), value: state.number || '' })]) +
+    UI.group([
+      UI.row({ icon: 'phone', title: L('ph.my_number'), value: state.number || '',
+               data: { copy: state.number || '' } }),
+      UI.row({ icon: 'moon', title: L('ph.dark_mode'), toggle: !!p.dark, data: { t: 'dark' } }),
+    ]) +
     (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
     (state.customWallpaper === false ? '' :
       UI.field('wurl', L('ph.wall_url'), p.wallpaperUrl || '') +
@@ -653,6 +723,11 @@ RENDER.settings = () => {
     if (r.dataset.w) {
       const res = await post('prefs', { wallpaper: r.dataset.w });
       if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
+    } else if (r.dataset.copy) {
+      copyText(r.dataset.copy);
+    } else if (r.dataset.t === 'dark') {
+      const res = await post('prefs', { dark: !(state.prefs || {}).dark });
+      if (res && res.ok) { state.prefs = res.prefs; applyTheme(); RENDER.settings(); }
     } else if (r.dataset.act) {
       // Tapping the app already chosen clears it, so there is a way back to "nothing".
       const next = (state.prefs || {}).actionApp === r.dataset.act ? '' : r.dataset.act;
@@ -693,6 +768,12 @@ function applyWallpaper() {
 
 // The device's own shape. Both are per character, because a small screen and a
 // left-handed player are not the same person's problem.
+// An app is light by default, as it is on iOS. The chrome around it stays dark glass
+// over the wallpaper, which is also how iOS behaves: the two are different surfaces.
+function applyTheme() {
+  byId('screen').classList.toggle('dark', (state.prefs || {}).dark === true);
+}
+
 function applyDevice() {
   const p = state.prefs || {};
   const d = byId('device');
@@ -871,6 +952,7 @@ function calcPress(k) {
 }
 
 RENDER.calc = () => {
+  byId('app').classList.add('black');
   const K = [['c', 'fn', 'AC'], ['neg', 'fn', '+/-'], ['pct', 'fn', '%'], ['/', 'op', '÷'],
              ['7', '', '7'], ['8', '', '8'], ['9', '', '9'], ['*', 'op', '×'],
              ['4', '', '4'], ['5', '', '5'], ['6', '', '6'], ['-', 'op', '−'],
@@ -1213,6 +1295,60 @@ RENDER.camera = async () => {
 };
 
 
+// ══ Clipboard ══════════════════════════════════════════════════
+// navigator.clipboard needs a secure context, and cfx-nui:// is not one, so this is the
+// textarea trick. It is the only thing that works in CEF, and a number you cannot copy
+// is a number you have to read out loud.
+function copyText(text, said) {
+  // The page is served from https://cfx-nui-<resource>/, which CEF treats as a secure
+  // context, so the real clipboard API is available. The textarea trick stays as the
+  // fallback: it is the only thing that works when it is not.
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text)
+      .then(() => toast(said || L('ph.copied')))
+      .catch(() => legacyCopy(text, said));
+    return true;
+  }
+  return legacyCopy(text, said);
+}
+
+function legacyCopy(text, said) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.setAttribute('readonly', '');
+  ta.style.cssText = 'position:absolute;left:-9999px;opacity:0';
+  document.body.appendChild(ta);
+  ta.select();
+  ta.setSelectionRange(0, ta.value.length);
+  let ok = false;
+  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  document.body.removeChild(ta);
+  toast(ok ? (said || L('ph.copied')) : L('ph.copy_failed'));
+  return ok;
+}
+
+// ══ Search field ═══════════════════════════════════════════════
+function searchHtml(placeholder) {
+  return '<div class="search">' + svg('search') +
+    '<input id="q" placeholder="' + esc(placeholder) + '" autocomplete="off" /></div>';
+}
+
+function onSearch(fn) {
+  const q = byId('q');
+  if (!q) return;
+  q.addEventListener('input', () => fn(q.value.trim().toLowerCase()));
+}
+
+// ══ Tab bar ════════════════════════════════════════════════════
+function tabbar(tabs, current, onPick) {
+  foot('<div class="tabbar">' + tabs.map((t) =>
+    '<button class="' + (t.id === current ? 'on' : '') + '" data-t="' + esc(t.id) + '" type="button">' +
+    svg(t.icon) + '<span>' + esc(L(t.label)) + '</span></button>').join('') + '</div>');
+  [...byId('appfoot').querySelectorAll('button')].forEach((b) =>
+    b.addEventListener('click', () => onPick(b.dataset.t)));
+}
+
+
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 function sheet(title, html, after) {
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
@@ -1454,6 +1590,7 @@ window.addEventListener('message', (e) => {
     byId('locknum').textContent = d.number || '';
     applyWallpaper();
     applyDevice();
+    applyTheme();
     applyGlass((d.prefs && d.prefs.glass) ?? 55);
     tick();
     paintNotifs();

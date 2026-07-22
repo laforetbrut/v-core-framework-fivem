@@ -175,6 +175,18 @@ end)
 
 RegisterNUICallback('photos', relay('v-phone:photo'))
 
+--- What the widgets show. Both are the GAME's: the weather the server is actually
+--- running (v-admin replicates it on GlobalState) and the in-game clock. A widget
+--- showing the player's real-world time would be showing the wrong clock.
+RegisterNUICallback('ambient', function(_, cb)
+    cb({
+        ok = true,
+        weather = tostring(GlobalState.vweather or GetPrevWeatherTypeHashName() or 'CLEAR'),
+        hours = GetClockHours(), minutes = GetClockMinutes(),
+        day = GetClockDayOfMonth(), month = GetClockMonth() + 1,
+    })
+end)
+
 --- Take a picture.
 ---
 --- screenshot-basic uploads it and hands back a URL; the phone stores the URL. There is
