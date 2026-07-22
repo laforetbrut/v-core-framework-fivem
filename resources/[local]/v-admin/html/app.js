@@ -348,6 +348,10 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'charges') {
+    return `${esc(r.code)} — ${esc(r.label)} <i class="dim">${esc(r.cat)} · ${fmt(r.fine)}` +
+      ` · ${Number(r.jail) || 0}m${Number(r.points) ? ' · ' + r.points + 'p ' + esc(r.license || '') : ''}</i>`;
+  }
   if (edDomain === 'gangs') {
     const n = (r.grades || []).length;
     return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.type)} · ${n} ${esc(t('adm.ed_ranks'))}</i>`;
@@ -485,7 +489,8 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
+      const id = (edDomain === 'charges') ? r.code
+        : (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
         : (edDomain === 'vehcat') ? r.model
         : (edDomain === 'uitheme') ? r.module : r.id;   // garages/dealers key on `id`
@@ -665,6 +670,24 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'charges') {
+    const isNew = !row.code;
+    const cats = (edData.cats || []).map(c =>
+      `<option value="${esc(c)}"${c === row.cat ? ' selected' : ''}>${esc(c)}</option>`).join('');
+    const lics = (edData.licenses || []).map(l =>
+      `<option value="${esc(l.key)}"${l.key === row.license ? ' selected' : ''}>${esc(l.label || l.key)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_code'))}</span>` +
+        `<input id="ef-code" value="${esc(row.code ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_cat'))}</span><select id="ef-cat">${cats}</select></label>` +
+      field(t('adm.ed_fine'), 'ef-fine', row.fine ?? 0, 'number') +
+      field(t('adm.ed_jail'), 'ef-jail', row.jail ?? 0, 'number') +
+      field(t('adm.ed_points'), 'ef-points', row.points ?? 0, 'number') +
+      // points without a licence go nowhere, so the picker sits next to them
+      `<label class="edf"><span>${esc(t('adm.ed_pointlic'))}</span><select id="ef-lic">` +
+        `<option value="">${esc(t('adm.ed_nolic'))}</option>${lics}</select></label>` +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'gangs') {
     const isNew = !row.name;
     html =
@@ -845,6 +868,11 @@ function openEdForm(row) {
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
   }
 
+  if (edDomain === 'charges' && !row.code) {
+    const e = byId('ef-code');
+    e.oninput = () => { e.value = e.value.toUpperCase().replace(/[^A-Z0-9.\-]/g, '').slice(0, 20); };
+  }
+
   if (edDomain === 'gangs' && !row.name) {
     const e = byId('ef-gname');
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 50); };
@@ -931,6 +959,11 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'charges') {
+      payload = { code: v('ef-code'), label: v('ef-label'), cat: v('ef-cat'),
+                  fine: parseInt(v('ef-fine'), 10) || 0, jail: parseInt(v('ef-jail'), 10) || 0,
+                  points: parseInt(v('ef-points'), 10) || 0, license: v('ef-lic'),
+                  enabled: ck('ef-en') };
     } else if (edDomain === 'gangs') {
       let grades = [];
       try { grades = JSON.parse(v('ef-grades')) || []; } catch (e) { grades = []; }

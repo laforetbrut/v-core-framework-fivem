@@ -202,6 +202,16 @@ exports['v-factions']:GetTransactions(name, kind, limit)
 exports['v-factions']:TrySalary(name, kind, amount, cid)  -- nil = not on treasury pay, true/false = paid or not
 exports['v-factions']:ListFactions(kind)
 
+-- v-police (server)
+exports['v-police']:IsCop(src)          -- job + duty, not a permission tier
+exports['v-police']:IsCuffed(src)
+exports['v-police']:JailLeft(cid)       -- minutes remaining, 0 if free
+exports['v-police']:HasWarrant(cid)
+exports['v-police']:GetCharges()        -- the live penal code
+
+-- v-licenses (server) — added for the MDT: every licence of an OFFLINE citizen
+exports['v-licenses']:GetAllByCid(cid)
+
 -- v-gangs (server) — territory only; membership and treasury are v-factions
 exports['v-gangs']:TurfAt(coords)      -- turfId, owner (or nil)
 exports['v-gangs']:GetOwner(turfId)

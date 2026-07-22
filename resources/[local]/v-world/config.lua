@@ -62,6 +62,11 @@ Config.ClothFramings = { 'head', 'upper', 'lower', 'body' }
 -- Garage kinds (must match v-garages' handling).
 Config.GarageTypes = { 'public', 'job', 'gang', 'impound' }
 
+-- Penal code categories (v-police). Charges themselves live in `world_charges`.
+Config.ChargeCategories = {
+    'traffic', 'misdemeanour', 'felony', 'drugs', 'weapons', 'misc',
+}
+
 -- Fuel type keys a station may sell (must match v-fuel's Config.Types).
 Config.FuelTypes = { 'regular', 'premium', 'diesel', 'electric' }
 

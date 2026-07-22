@@ -213,6 +213,13 @@ local T = {
     ['adm.ed_balance']      = 'Balance',
     ['adm.ed_adjust']       = 'Adjustment (+ / -)',
     ['adm.ed_reason']       = 'Reason',
+    ['adm.ed_charges']      = 'Penal code',
+    ['adm.ed_code']         = 'Code',
+    ['adm.ed_fine']         = 'Fine ($)',
+    ['adm.ed_jail']         = 'Jail (minutes)',
+    ['adm.ed_points']       = 'Licence points',
+    ['adm.ed_pointlic']     = 'Points apply to',
+    ['adm.ed_nolic']        = 'no licence',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }
