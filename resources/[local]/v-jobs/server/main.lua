@@ -100,8 +100,18 @@ CreateThread(function()
                 local g = gradeDef(p.job.name, p.job.grade)
                 local pay = math.floor((g and g.salary or 0) * (Config.SalaryMult or 1.0))
                 if pay > 0 then
-                    p.AddMoney(account, pay, 'salary')
-                    Core.Notify(src, LP(src, 'jobs.paid', pay), 'success')
+                    -- v-factions can pay this out of the faction treasury instead of
+                    -- minting it. Three distinct answers matter here: nil = this server
+                    -- does not use treasury pay, true = the treasury covered it, false =
+                    -- it could not. Only the last one must withhold the wage, otherwise
+                    -- turning the feature on would silently double every salary.
+                    local paid = V.Use('v-factions').TrySalary(p.job.name, 'job', pay, p.citizenid)
+                    if paid == false then
+                        Core.Notify(src, LP(src, 'jobs.nopay'), 'error')
+                    else
+                        p.AddMoney(account, pay, 'salary')
+                        Core.Notify(src, LP(src, 'jobs.paid', pay), 'success')
+                    end
                 end
             end
         end

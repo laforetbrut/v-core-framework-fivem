@@ -186,6 +186,22 @@ exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
 exports['v-vehicles']:GetFuel(veh) / SetFuel(veh, pct)
 exports['v-vehicles']:IsBuckled()     -- client: seatbelt state, for HUDs and EMS scripts
 
+-- v-factions (server) — a faction is (name, kind) with kind = 'job' | 'gang'
+exports['v-factions']:Get(name, kind)              -- definition, or nil
+exports['v-factions']:GetGrades(name, kind)        -- [{ grade, name, salary, isboss }]
+exports['v-factions']:GetMembers(name, kind)       -- [{ citizenid, names, grade, gradeLabel, online }]
+exports['v-factions']:IsBoss(src, name, kind)
+exports['v-factions']:GetGrade(src, name, kind)    -- the caller rank, or nil
+exports['v-factions']:Hire(bySrc, cid, name, kind, grade)     -- bySrc = nil means the server itself
+exports['v-factions']:Fire(bySrc, cid, name, kind)
+exports['v-factions']:SetGrade(bySrc, cid, name, kind, grade)
+exports['v-factions']:GetBalance(name, kind)
+exports['v-factions']:Deposit(name, kind, amount, reason, byCid)   -- new balance, or nil + reason
+exports['v-factions']:Withdraw(name, kind, amount, reason, byCid)
+exports['v-factions']:GetTransactions(name, kind, limit)
+exports['v-factions']:TrySalary(name, kind, amount, cid)  -- nil = not on treasury pay, true/false = paid or not
+exports['v-factions']:ListFactions(kind)
+
 -- v-rentals (server)
 exports['v-rentals']:GetActive(cid)   -- the caller's live hire row, or nil
 exports['v-rentals']:IsRental(plate)  -- true if this plate is a live hire, not an owned car
