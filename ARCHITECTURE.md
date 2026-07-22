@@ -916,6 +916,39 @@ included** - which means it was not a cooldown. It is a server callback now that
 the dealer's proximity, checks the model is actually in the catalogue, enforces the wait,
 and tells the anticheat to expect the two teleports and the local vehicle that follow.
 
+### `v-radio` ✅ - the handheld, and `v-voice` goes multi-channel
+
+`v-voice` owns the channels: who may join, who may transmit, and the Mumble plumbing.
+`v-radio` is deliberately the other half - **the object in your hand** - and it never
+decides a permission. It asks `v-voice`, which asks `v-factions` and `v-police`. A device
+that decides its own channel list is a device that can be edited.
+
+**The multi-channel change landed where it belonged, inside `v-voice`.** One joined channel
+became a **set of listens plus a single transmit target**, which is how a real handheld
+works and what an officer monitoring dispatch and a tac channel needs.
+`MumbleAddVoiceChannelListen` already accepts several; the authority check simply runs per
+channel. Two details make it behave:
+
+- **The first channel joined becomes the transmit target**, so a player who only ever uses
+  one never has to learn that the distinction exists.
+- **The server sends the whole set on every change and the client reconciles**, adding what
+  is new and dropping what is gone. Sending deltas would let the two disagree about what is
+  being monitored, and only one of them would be right.
+
+**A ceiling on how many channels one radio monitors** (a setting, four by default). Without
+it, "listen to everything" is strictly better than choosing, and the device stops being a
+decision.
+
+**The device:** the channel list filtered to what you may actually use, a keypad of presets
+saved in KVP (a preset is a personal convenience, not world state, and should not cost a
+round trip), and a transmit selector that only offers channels you already monitor - which
+is exactly what the server enforces. Leaving a job leaves its channels, and an admin
+re-gating a channel takes the device off it, because it follows `v-voice`'s push rather
+than polling.
+
+**A setting worth naming:** *show which job or gang a channel belongs to*. Turning it off
+hides the padlock, so a player has to know a channel exists to go looking for it.
+
 ### `v-voice` ✅ - proximity, radio channels and phone audio
 
 FiveM already ships a Mumble voice server, so this module implements no audio. It decides
@@ -1283,7 +1316,6 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 |--------|----------|----------------|
 | `v-phone` | high | **iFruitz** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
-| `v-radio` | high | The handheld radio **device**: multi-channel listening, presets, per-channel volume. The transport is `v-voice`; this is the thing in your hand. |
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |
 | `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
 | `v-motel` | medium | Short-term rented rooms. A **tenancy type inside `v-housing`**, not a second housing system. |
@@ -1345,27 +1377,6 @@ retention, whether the camera can upload and where, and per-app job or gang gati
 transfer, every purchase and every job action goes through the module that owns it, so the
 audit log stays in one place and the anticheat keeps seeing the same events it already
 watches.
-
-#### `v-radio` - the device, not the transport
-
-`v-voice` already owns radio **channels**: who may join, who may transmit, and the Mumble
-plumbing. `v-radio` is deliberately the other half - **the object in your hand**.
-
-**Multi-channel is the point.** `v-voice` today joins one channel; the device lets you
-**listen to several at once** while transmitting on one selected channel, which is how a
-real handheld works and what a police officer monitoring dispatch and a tac channel needs.
-That means one change inside `v-voice`: the joined channel becomes a *set* of listens plus
-a single transmit target. `MumbleAddVoiceChannelListen` already supports several; the
-authority check simply runs per channel.
-
-**What the device adds:** a NUI with the channel list filtered to what you may use, presets
-you can name and save, **per-channel volume** (`MumbleSetVolumeOverrideByServerId` for
-people, a gain per channel for the mix), a click when somebody keys up, and the radio going
-dead when the item leaves your inventory.
-
-**Boundary:** `v-radio` never decides permission. It asks `v-voice`, which asks
-`v-factions` / `v-police`. A device that decides its own channel list is a device that can
-be edited.
 
 #### `v-chat` - local, OOC and emotes, without becoming a command surface
 

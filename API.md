@@ -279,13 +279,18 @@ exports['v-anticheat']:GetFlags(src)               -- flags this session
 -- kinds: teleport | health | explosion | entity | money | weapon
 
 -- v-voice
-exports['v-voice']:GetChannel(src)          -- server: the channel this player is on
+exports['v-voice']:GetChannel(src)          -- server: the channel this player TRANSMITS on
+exports['v-voice']:GetListening(src)        -- server: every channel they monitor
 exports['v-voice']:GetChannels()            -- server: every channel definition
 exports['v-voice']:JoinChannel(src, id)     -- server: still gated; the gate is the point
 exports['v-voice']:Mute(cid) / Unmute(cid) / IsMuted(cid)   -- server, survives a relog
 -- client:
 exports['v-voice']:GetState()               -- { step, label, range, channel, radio, talking, muted, injured }
-exports['v-voice']:GetChannel() / GetStepLabel()
+exports['v-voice']:GetChannel() / GetListening() / GetStepLabel()
+-- client event: AddEventHandler('v-voice:client:onChannels', function(list, transmit) end)
+
+-- v-radio (client) - the device; it decides no permission
+exports['v-radio']:GetPresets() / IsOpen()
 exports['v-voice']:PhoneCallStart() / PhoneCallEnd()   -- what v-phone will call
 
 -- v-drugs (server)
