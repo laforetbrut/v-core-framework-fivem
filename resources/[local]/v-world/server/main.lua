@@ -16,6 +16,7 @@ local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local Gangs, Turfs, Charges, Drugs, Radio, Jukebox = {}, {}, {}, {}, {}, {}
 local Nodes, Benches, Spawns, Halls, AppSpots = {}, {}, {}, {}, {}
 local Props = {}
+local PhoneApps = {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -360,6 +361,21 @@ local function ensureTables()
         PRIMARY KEY (`id`), KEY `kind_idx` (`kind`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Phone apps. The registry lives in v-phone (a resource declares its own app); this
+    -- table is the OPERATOR's say over it: enabled, ordered, and gated by job or gang.
+    -- An app nobody registered is simply never shown, so a stale row is inert rather than
+    -- a broken icon.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_apps` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(60) NOT NULL DEFAULT '',
+        `slot` INT NOT NULL DEFAULT 99,
+        `job` VARCHAR(50) NOT NULL DEFAULT '',
+        `job_grade` INT NOT NULL DEFAULT 0,
+        `gang` VARCHAR(50) NOT NULL DEFAULT '',
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- Property: a door on the map plus a shell to teleport into. `tenancy` is what makes
     -- a motel a motel rather than a second housing system - the same row, rented instead
     -- of owned, with a smaller stash and no garage.
@@ -484,6 +500,13 @@ local function loadProps()
     for _, r in ipairs(MySQL.query.await('SELECT * FROM world_properties ORDER BY label') or {}) do
         r.garage, r.blip, r.enabled = bool(r.garage), bool(r.blip), bool(r.enabled)
         Props[#Props + 1] = r
+    end
+end
+
+local function loadApps()
+    PhoneApps = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_apps ORDER BY slot, id') or {}) do
+        r.enabled = bool(r.enabled); PhoneApps[#PhoneApps + 1] = r
     end
 end
 
@@ -677,6 +700,7 @@ local function reload(domain)
     if domain == 'jukebox' or not domain then loadJukebox() end
     if domain == 'nodes'    or not domain then loadNodes() end
     if domain == 'properties' or not domain then loadProps() end
+    if domain == 'apps'       or not domain then loadApps() end
     if domain == 'benches'  or not domain then loadBenches() end
     if domain == 'spawns'   or not domain then loadSpawns() end
     if domain == 'cityhall' or not domain then loadHalls() end
@@ -768,6 +792,7 @@ exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
 exports('GetProperties', function() return Props end)
+exports('GetPhoneApps', function() return PhoneApps end)
 exports('GetNodes',     function() return Nodes end)
 exports('GetBenches',   function() return Benches end)
 exports('GetSpawns',    function() return Spawns end)
@@ -973,6 +998,21 @@ exports('SeedVehicleCatalogue', function(defaults)
     seedDone('vehcat', want)
     loadVehCat()
     print(('[v-world] seeded %d catalogue vehicle(s) from config'):format(#VehCat))
+    return true
+end)
+
+-- v-phone: list of { id, label, slot }
+exports('SeedApps', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('apps', defaults)
+    if not need then return false end
+    for _, a in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_apps (id, label, slot, enabled)
+            VALUES (?,?,?,1)]], { a.id, a.label or a.id, a.slot or 99 })
+    end
+    seedDone('apps', want)
+    loadApps()
+    print(('[v-world] seeded %d phone app(s) from config'):format(#PhoneApps))
     return true
 end)
 
@@ -1221,6 +1261,11 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
     elseif domain == 'properties' then
         resolve({ rows = Props, kinds = Config.PropertyKinds, shells = Config.PropertyShells,
                   tenancies = { 'own', 'rent' } })
+    elseif domain == 'apps' then
+        local jobs, gangs = {}, {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        for _, g in ipairs(Gangs) do gangs[#gangs + 1] = { name = g.name, label = g.label } end
+        resolve({ rows = PhoneApps, jobs = jobs, gangs = gangs })
     elseif domain == 'nodes' then
         resolve({ rows = Nodes, kinds = Config.NodeKinds })
     elseif domain == 'benches' then
@@ -1376,6 +1421,17 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'apps' then
+        local aid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
+        if aid == '' then resolve({ error = 'id' }); return end
+        MySQL.query.await([[INSERT INTO world_apps (id, label, slot, job, job_grade, gang, enabled)
+            VALUES (?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), slot=VALUES(slot), job=VALUES(job),
+                job_grade=VALUES(job_grade), gang=VALUES(gang), enabled=VALUES(enabled)]],
+            { aid, tostring(row.label or ''):sub(1, 60), math.floor(num(row.slot, 99)),
+              tostring(row.job or ''):sub(1, 50), math.floor(num(row.job_grade, 0)),
+              tostring(row.gang or ''):sub(1, 50), row.enabled == false and 0 or 1 })
 
     elseif d == 'properties' then
         local pid = tostring(row.id or ''):lower():gsub('[^%w_-]', ''):sub(1, 40)
@@ -1901,6 +1957,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local owned = MySQL.scalar.await('SELECT 1 FROM property_owners WHERE property = ? LIMIT 1', { pid })
         if owned then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_properties WHERE id = ?', { pid })
+    elseif d == 'apps' then
+        -- Deleting the row only removes the operator's OVERRIDE. The app itself belongs to
+        -- whichever resource registered it, and it comes back on the next seed.
+        MySQL.query.await('DELETE FROM world_apps WHERE id = ?', { tostring(id or '') })
     elseif d == 'nodes' then
         MySQL.query.await('DELETE FROM world_nodes WHERE id = ?', { math.floor(num(id)) })
     elseif d == 'benches' then

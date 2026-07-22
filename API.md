@@ -294,6 +294,15 @@ exports['v-core']:GetRegistry()                -- modules, services, hooks, even
 exports['v-core']:NoteEvent(event, 'emit'|'handle')
 exports['v-core']:NoteCommand(name, perm, help)
 
+-- v-phone (server) - numbers, contacts, messages, calls, and the app registry
+exports['v-phone']:GetNumber(cid) / FindByNumber(number) / IsOnline(number)
+exports['v-phone']:NumberOf(src) / IsOnCall(src)
+exports['v-phone']:SendMessage(fromCid, toNumber, body)    -- returns ok, errorKey
+exports['v-phone']:Notify(src, app, title, body)           -- a banner on their phone
+exports['v-phone']:RegisterApp(id, { label, icon, page, slot })
+exports['v-phone']:UnregisterApp(id) / GetApps(src)
+-- client: exports['v-phone']:IsOpen() / Open() / Close() / GetNumber() / OnCall()
+
 -- v-housing (server)
 exports['v-housing']:GetProperties() / OwnerOf(id) / HasKey(cid, id)
 exports['v-housing']:IsInside(src)      -- property id, or nil
@@ -334,7 +343,7 @@ exports['v-voice']:GetChannel() / GetListening() / GetStepLabel()
 
 -- v-radio (client) - the device; it decides no permission
 exports['v-radio']:GetPresets() / IsOpen()
-exports['v-voice']:PhoneCallStart() / PhoneCallEnd()   -- what v-phone will call
+exports['v-voice']:PhoneCallStart() / PhoneCallEnd()   -- what v-phone calls
 
 -- v-drugs (server)
 exports['v-drugs']:GetHeat(cid) / AddHeat(cid, n)   -- 0..100, decays on its own

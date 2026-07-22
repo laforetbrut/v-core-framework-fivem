@@ -36,9 +36,11 @@ CREATE TABLE IF NOT EXISTS `characters` (
   `metadata`   JSON         DEFAULT NULL,
   `inventory`  JSON         DEFAULT NULL,
   `appearance` JSON         DEFAULT NULL,
+  `phone`      VARCHAR(20)  DEFAULT NULL,          -- iFruit number, minted by v-phone
   `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `citizenid` (`citizenid`),
+  UNIQUE KEY `phone` (`phone`),
   KEY `license` (`license`),
   CONSTRAINT `fk_char_user` FOREIGN KEY (`license`) REFERENCES `users` (`license`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

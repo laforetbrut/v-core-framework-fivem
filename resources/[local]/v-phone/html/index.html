@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+  <script src="https://cfx-nui-v-ui/theme.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- The chrome is the phone's; every colour, radius and font below comes from v-ui, so a
+       server that themes the framework purple gets a purple phone. -->
+  <div id="device" class="device hidden">
+    <div class="bezel">
+      <span class="notch"></span>
+      <div class="screen" id="screen">
+
+        <div class="status" id="status">
+          <span class="carrier">iFruit</span>
+          <span class="sbits"><span id="clock">00:00</span><span class="batt"></span></span>
+        </div>
+
+        <!-- Lock screen -->
+        <section class="lock" id="lock">
+          <div class="lockclock" id="lockclock">00:00</div>
+          <div class="lockdate" id="lockdate"></div>
+          <div class="locknum" id="locknum"></div>
+          <button class="unlock" id="unlock" type="button"></button>
+        </section>
+
+        <!-- Home -->
+        <section class="home hidden" id="home">
+          <div class="grid" id="grid"></div>
+        </section>
+
+        <!-- An app -->
+        <section class="app hidden" id="app">
+          <header class="apphead">
+            <button class="back" id="appback" type="button" aria-label="back">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+            </button>
+            <span class="apptitle" id="apptitle"></span>
+          </header>
+          <div class="appbody" id="appbody"></div>
+        </section>
+
+        <!-- Call overlay -->
+        <section class="callui hidden" id="callui">
+          <div class="callnum" id="callnum"></div>
+          <div class="callstate" id="callstate"></div>
+          <div class="callbtns" id="callbtns"></div>
+        </section>
+
+        <div class="banner hidden" id="banner"></div>
+        <div class="homebar" id="homebar"></div>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

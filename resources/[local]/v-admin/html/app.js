@@ -353,6 +353,10 @@ function edRowTitle(r) {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.kind)} · ${esc(money)}` +
       ` · ${r.slots} ${esc(t('adm.ed_slots'))}${r.garage ? ' · 🚗' : ''}</i>`;
   }
+  if (edDomain === 'apps') {
+    const gate = r.job || r.gang || '';
+    return `${esc(r.label || r.id)} <i class="dim">${esc(r.id)} &middot; #${r.slot}${gate ? ' &middot; ' + esc(gate) : ''}</i>`;
+  }
   if (edDomain === 'nodes') {
     return `${esc(r.kind)} <i class="dim">#${r.id} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
@@ -709,6 +713,25 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'apps') {
+    const isNew = !row.id;
+    // The id is the app's own name, registered by whichever resource ships it. An id that
+    // matches nothing is an inert row rather than a broken icon, so it is not validated.
+    const jobs = (edData.jobs || []).map(j =>
+      `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('');
+    const gangs = (edData.gangs || []).map(g =>
+      `<option value="${esc(g.name)}"${g.name === row.gang ? ' selected' : ''}>${esc(g.label || g.name)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_appid'))}</span>` +
+        `<input id="ef-aid" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      field(t('adm.ed_appslot'), 'ef-slot', row.slot ?? 99, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>${jobs}</select></label>` +
+      field(t('adm.ed_mingrade'), 'ef-grade', row.job_grade ?? 0, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_onlygang'))}</span><select id="ef-gang">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>${gangs}</select></label>` +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0 && row.enabled !== false);
   } else if (edDomain === 'properties') {
     const isNew = !row.id;
     const opts = (list, sel) => (list || []).map(k =>
@@ -1025,6 +1048,11 @@ function openEdForm(row) {
     st.oninput = () => { st.value = st.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 40); };
   }
 
+  if (edDomain === 'apps' && !row.id) {
+    const e = byId('ef-aid');
+    e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
+  }
+
   if (edDomain === 'properties' && !row.id) {
     const e = byId('ef-pid');
     e.oninput = () => { e.value = e.value.toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 40); };
@@ -1141,6 +1169,11 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'apps') {
+      payload = { id: v('ef-aid'), label: v('ef-label'),
+                  slot: parseInt(v('ef-slot'), 10) || 99,
+                  job: v('ef-job'), job_grade: parseInt(v('ef-grade'), 10) || 0,
+                  gang: v('ef-gang'), enabled: ck('ef-en') };
     } else if (edDomain === 'properties') {
       payload = { id: v('ef-pid'), label: v('ef-label'), kind: v('ef-kind'), shell: v('ef-shell'),
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),

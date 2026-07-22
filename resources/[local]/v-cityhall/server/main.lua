@@ -139,3 +139,9 @@ CreateThread(function()
     if not exports['v-world']:IsReady() then return end
     exports['v-world']:SeedCityHalls(Config.Locations or {})
 end)
+
+-- ── Open positions, for anyone who wants to show them elsewhere ──
+-- The phone lists vacancies; **taking** a job still happens at a desk, because signing on
+-- is the roleplay act and `v-cityhall:take` is gated on standing at one. Exporting the
+-- list rather than letting a second module rebuild it keeps one definition of "open".
+exports('OpenPositions', function() return openJobs() end)
