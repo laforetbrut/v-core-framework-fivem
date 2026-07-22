@@ -337,3 +337,8 @@ html, body { width:100%; height:100%; background:transparent; overflow:hidden; u
 .gin { flex:1; padding:6px 9px; border:1px solid var(--v-line-2); border-radius:var(--v-r-sm);
   background:var(--v-bg-700); color:var(--v-text); font-family:var(--v-font-num); font-size:12px; }
 .gin.sm { flex:0 0 72px; }
+
+/* Fuel-station editor: a full-width group of type checkboxes. */
+.edf.full { grid-column:1 / -1; display:flex; flex-direction:column; gap:6px; }
+.ftypes { display:flex; flex-wrap:wrap; gap:10px; }
+.ftypes .edf.chk { margin:0; }

@@ -55,15 +55,19 @@ Core.RegisterCallback('v-garages:list', function(source, resolve, data)
 
     -- An impound lot shows every impounded car you own, wherever it was parked;
     -- a normal garage shows the cars parked in that specific garage.
+    -- `props` rides along so the showroom preview dresses the car exactly as it is parked.
     local rows
     if g.type == 'impound' then
         rows = MySQL.query.await(
-            'SELECT plate, model, fuel, engine, body, garage FROM character_vehicles WHERE citizenid = ? AND state = ?',
+            'SELECT plate, model, fuel, engine, body, garage, props FROM character_vehicles WHERE citizenid = ? AND state = ?',
             { p.citizenid, S.IMPOUND }) or {}
     else
         rows = MySQL.query.await(
-            'SELECT plate, model, fuel, engine, body, garage FROM character_vehicles WHERE citizenid = ? AND garage = ? AND state = ?',
+            'SELECT plate, model, fuel, engine, body, garage, props FROM character_vehicles WHERE citizenid = ? AND garage = ? AND state = ?',
             { p.citizenid, g.id, S.GARAGED }) or {}
+    end
+    for _, r in ipairs(rows) do
+        if type(r.props) == 'string' then r.props = json.decode(r.props) or {} end
     end
     resolve({ garage = { id = g.id, label = g.label, type = g.type, fee = g.fee or 0 },
               rows = rows, cash = p.money.cash, bank = p.money.bank })

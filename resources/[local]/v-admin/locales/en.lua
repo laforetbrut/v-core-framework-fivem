@@ -145,6 +145,10 @@ local T = {
     ['adm.ed_spawnz']       = 'Spawn Z',
     ['adm.ed_spawnh']       = 'Spawn heading',
     ['adm.ed_fee']          = 'Release fee (impound)',
+    ['adm.ed_stations']     = 'Fuel stations',
+    ['adm.ed_statid']       = 'Station id (immutable)',
+    ['adm.ed_fueltypes']    = 'Fuels sold',
+    ['adm.ed_pricemult']    = 'Price multiplier',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }

@@ -80,7 +80,23 @@ exports('ApplyProps', function(veh, props) applyProps(veh, props) end)
 exports('HasKeysLocal', function(plate) return myKeys[plate] == true end)
 exports('GetFuel', function(veh)
     local p = plateOf(veh)
-    return (p and fuelOf[p]) or 100
+    if p and fuelOf[p] then return fuelOf[p] end
+    -- an unowned/NPC car has no stored value: read the engine's own tank
+    if veh and veh ~= 0 and DoesEntityExist(veh) then
+        return math.min(100, (GetVehicleFuelLevel(veh) / 65.0) * 100)
+    end
+    return 100
+end)
+
+--- Set the working fuel level (0-100). v-fuel owns *when* this is called; we only keep
+--- the number and mirror it onto the entity so the dashboard needle agrees.
+exports('SetFuel', function(veh, pct)
+    if not veh or veh == 0 or not DoesEntityExist(veh) then return false end
+    pct = math.max(0, math.min(100, tonumber(pct) or 0))
+    local p = plateOf(veh)
+    if p then fuelOf[p] = pct end
+    SetVehicleFuelLevel(veh, (pct / 100.0) * 65.0)
+    return true
 end)
 
 -- ── State handed down by the server on spawn ───────────────────
@@ -155,17 +171,22 @@ CreateThread(function()
     end
 end)
 
--- ── Fuel drain ─────────────────────────────────────────────────
+-- ── Fuel drain (fallback only) ─────────────────────────────────
+-- `v-fuel` owns consumption: it knows the fuel types, the per-class tanks and the load
+-- model. This flat drain exists so a server running without v-fuel still burns fuel
+-- rather than handing out infinite range — it stands down as soon as v-fuel is up.
 CreateThread(function()
     while true do
         Wait(10000)   -- 6 ticks per minute
-        local veh = GetVehiclePedIsIn(PlayerPedId(), false)
-        if veh ~= 0 and GetIsVehicleEngineRunning(veh) then
-            local plate = plateOf(veh)
-            if plate and fuelOf[plate] then
-                fuelOf[plate] = math.max(0, fuelOf[plate] - (Config.FuelDrain / 6.0))
-                SetVehicleFuelLevel(veh, (fuelOf[plate] / 100.0) * 65.0)
-                if fuelOf[plate] <= 0 then SetVehicleEngineOn(veh, false, true, true) end
+        if GetResourceState('v-fuel') ~= 'started' then
+            local veh = GetVehiclePedIsIn(PlayerPedId(), false)
+            if veh ~= 0 and GetIsVehicleEngineRunning(veh) then
+                local plate = plateOf(veh)
+                if plate and fuelOf[plate] then
+                    fuelOf[plate] = math.max(0, fuelOf[plate] - (Config.FuelDrain / 6.0))
+                    SetVehicleFuelLevel(veh, (fuelOf[plate] / 100.0) * 65.0)
+                    if fuelOf[plate] <= 0 then SetVehicleEngineOn(veh, false, true, true) end
+                end
             end
         end
     end

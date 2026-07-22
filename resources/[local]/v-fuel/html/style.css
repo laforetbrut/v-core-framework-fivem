@@ -1,0 +1,116 @@
+/* v-fuel — "EMBER" pump panel.
+   Same rounded glass case as the other modules; the fuel-type cards carry their own
+   accent (--fc) so regular / premium / diesel / electric read apart at a glance.
+   Tokens + primitives come from v-ui/theme.css.
+   CEF-safe: no backdrop-filter / color-mix / :has / nesting / external fonts. */
+
+* { box-sizing:border-box; margin:0; padding:0; }
+html, body { width:100%; height:100%; background:transparent; overflow:hidden; user-select:none;
+  color:var(--v-text); font-family:var(--v-font-body); -webkit-font-smoothing:antialiased; }
+.hidden { display:none !important; }
+
+.fuel-overlay { position:fixed; inset:0; z-index:var(--z-overlay);
+  display:flex; align-items:center; justify-content:center;
+  background:
+    radial-gradient(55% 45% at 12% 0%,   rgba(255,122,26,.10), transparent 62%),
+    radial-gradient(48% 42% at 92% 100%, rgba(240,78,0,.08),  transparent 60%),
+    radial-gradient(135% 115% at 50% 8%, rgba(11,10,8,.42), rgba(11,10,8,.82) 72%, rgba(11,10,8,.94) 100%);
+  animation:v-fade var(--v-t-fast) var(--v-ease); }
+
+.fuel { position:relative; z-index:var(--z-raised); width:520px; max-height:86vh;
+  display:flex; flex-direction:column; padding:26px 22px 22px; }
+
+.close { position:absolute; top:12px; right:12px; z-index:var(--z-raised);
+  width:28px; height:28px; display:flex; align-items:center; justify-content:center;
+  background:transparent; border:1px solid transparent; border-radius:99px;
+  color:var(--v-text-dim); cursor:pointer;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease); }
+.close:hover { color:var(--v-accent-300); background:var(--v-accent-soft); border-color:var(--v-accent-line); }
+.close svg { width:15px; height:15px; }
+
+.sub { font-family:var(--v-font-display); font-size:11px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); padding-bottom:13px; margin-bottom:12px;
+  border-bottom:1px solid var(--v-line); }
+
+/* ── The car at the pump ── */
+.veh { display:grid; grid-template-columns:1fr auto; gap:4px 10px; align-items:center;
+  margin-bottom:14px; padding:11px 13px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px; }
+.vnone { grid-column:1 / -1; text-align:center; font-size:12px; color:var(--v-text-faint); padding:4px 0; }
+.vname { font-size:13px; font-weight:600; color:var(--v-text); text-transform:capitalize; }
+.vplate { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.14em;
+  color:var(--v-accent-300); text-align:right; }
+.vgauge { grid-column:1 / -1; display:flex; align-items:center; gap:8px; margin-top:3px; }
+.vgauge .v-progress { flex:1; }
+.vpct { font-size:10px; color:var(--v-text-dim); white-space:nowrap; }
+.vaccepts { grid-column:1 / -1; font-size:10px; color:var(--v-text-faint); }
+.vaccepts b { color:var(--v-text-dim); }
+
+/* ── Fuel type cards ── */
+.types { display:flex; flex-direction:column; gap:7px; margin-bottom:14px; }
+.ftype { display:flex; align-items:center; gap:10px; padding:10px 12px; cursor:pointer; text-align:left;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px; color:var(--v-text);
+  font-family:var(--v-font-body);
+  animation:v-fade-up var(--v-t-base) var(--v-ease) backwards; animation-delay:calc(var(--i) * 26ms);
+  transition:transform var(--v-t-base) var(--v-ease), border-color var(--v-t-base) var(--v-ease),
+             background var(--v-t-base) var(--v-ease); }
+.ftype:hover { transform:translateY(-1px); border-color:var(--v-accent-line); background:var(--v-panel-3); }
+.ftype.on { border-color:var(--fc); background:var(--v-panel-3);
+  box-shadow:0 0 0 1px var(--fc), 0 0 16px rgba(255,122,26,.12); }
+.ftype.bad { opacity:.62; }
+
+.fdot { width:9px; height:9px; border-radius:99px; background:var(--fc); flex:none;
+  box-shadow:0 0 10px var(--fc); }
+.fname { flex:1; font-size:13px; font-weight:600; }
+.foct { font-family:var(--v-font-display); font-size:9px; font-weight:700; letter-spacing:.08em;
+  padding:2px 6px; border-radius:99px; color:var(--v-text-faint);
+  background:rgba(0,0,0,.30); border:1px solid var(--v-line); }
+.fprice { font-size:13px; font-weight:700; color:var(--v-accent-300); }
+.fprice i { font-size:9px; font-style:normal; color:var(--v-text-faint); }
+.fwarn { font-size:9px; color:#e08a8a; text-transform:uppercase; letter-spacing:.08em; }
+
+/* ── Amount ── */
+.amount { padding:12px 13px; margin-bottom:12px;
+  background:var(--v-panel-2); border:1px solid var(--v-line); border-radius:12px; }
+.arow { display:flex; align-items:center; gap:10px; margin-bottom:9px; }
+.albl { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); }
+.arow input[type=range] { flex:1; accent-color:var(--v-accent); }
+.aval { font-size:12px; color:var(--v-text-dim); min-width:52px; text-align:right; }
+.aval b { color:var(--v-text); font-size:14px; }
+.spacer { flex:1; }
+.chk { display:flex; align-items:center; gap:5px; font-size:11px; color:var(--v-text-dim); cursor:pointer; }
+.chk input { accent-color:var(--v-accent); }
+.total { display:flex; align-items:center; justify-content:space-between; padding-top:9px;
+  border-top:1px solid var(--v-line);
+  font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--v-text-faint); }
+.total b { font-family:var(--v-font-body); font-size:18px; letter-spacing:0; text-transform:none;
+  color:var(--v-accent-300); }
+
+.acts { display:flex; align-items:center; gap:8px; }
+
+/* ── Nozzle gauge (shown alone while pumping, no NUI focus) ── */
+.pumpbar { position:fixed; left:50%; bottom:11vh; transform:translateX(-50%); z-index:var(--z-overlay);
+  display:flex; align-items:center; gap:12px; min-width:340px; padding:12px 18px;
+  background:var(--v-panel); border:1px solid var(--v-accent-line); border-radius:14px;
+  box-shadow:var(--v-shadow-sm), 0 0 26px rgba(255,122,26,.16);
+  animation:v-fade-up var(--v-t-base) var(--v-ease); }
+.plbl { font-family:var(--v-font-display); font-size:10px; font-weight:600; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--v-accent-300); white-space:nowrap; }
+.pumpbar .v-progress { flex:1; }
+.pval { font-size:13px; font-weight:700; color:var(--v-text); min-width:62px; text-align:right; }
+
+/* ── Buttons (shared .mini language) ── */
+.mini { padding:7px 15px; font-family:var(--v-font-display); font-size:11px; font-weight:600;
+  letter-spacing:.06em; text-transform:uppercase; color:var(--v-text-dim); cursor:pointer;
+  background:var(--v-panel-3); border:1px solid var(--v-line); border-radius:99px;
+  transition:color var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease),
+             border-color var(--v-t-base) var(--v-ease), opacity var(--v-t-base) var(--v-ease); }
+.mini:hover { color:var(--v-text); border-color:var(--v-accent-line); }
+.mini:disabled { opacity:.5; cursor:default; }
+.mini.accent { color:#1a1206; background:linear-gradient(135deg, var(--v-accent) 0%, var(--v-accent-600) 100%);
+  border-color:transparent; }
+.mini.accent:hover { filter:brightness(1.08); }
+.mini.ko { color:#fff; background:rgba(224,90,90,.28); border-color:rgba(224,90,90,.5); }
