@@ -42,8 +42,8 @@ Config.Calls = {
 -- `owner` is the module the app is a view of, and an app whose owner is stopped is not
 -- shown: an app that opens onto nothing is worse than an app that is not there.
 Config.Apps = {
-    { id = 'phone',    label = 'app.phone',    icon = 'phone',    owner = 'v-phone',    slot = 1, dock = true },
-    { id = 'messages', label = 'app.messages', icon = 'messages', owner = 'v-phone',    slot = 2, dock = true },
+    { id = 'phone',    label = 'app.phone',    icon = 'phone',    owner = 'v-phone',    slot = 1, dock = true, required = true },
+    { id = 'messages', label = 'app.messages', icon = 'messages', owner = 'v-phone',    slot = 2, dock = true, required = true },
     { id = 'contacts', label = 'app.contacts', icon = 'contacts', owner = 'v-phone',    slot = 3, dock = true },
     { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4, dock = true },
     { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 5 },
@@ -57,7 +57,10 @@ Config.Apps = {
     { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
       job = 'police' },
     { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12 },
-    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20 },
+    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 13,
+      required = true },
+    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 20,
+      required = true },
 }
 
 -- ── Look ───────────────────────────────────────────────────────

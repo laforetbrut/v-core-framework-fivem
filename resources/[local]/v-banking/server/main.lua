@@ -54,10 +54,70 @@ Core.RegisterCallback('v-banking:withdraw', function(source, resolve, amount)
     resolve(state(p))
 end)
 
+-- ══════════════════════════════════════════════════════════════
+-- The card
+-- ══════════════════════════════════════════════════════════════
+-- Minted once per character and kept in their metadata. It exists for the same reason a
+-- phone number does: a citizen id is a database key, and asking players to trade one so
+-- they can be paid is asking them to hand over an internal identifier.
+--
+-- Four groups of four, Fleeca's own prefix. Retried on collision -- two characters made
+-- in the same second would otherwise share an account number, which is the one mistake
+-- a bank cannot make.
+local function mintCard()
+    local out = { '4' .. tostring(math.random(100, 999)) }
+    for _ = 1, 3 do out[#out + 1] = string.format('%04d', math.random(0, 9999)) end
+    return table.concat(out, ' ')
+end
+
+local function cardOf(player)
+    if not player then return nil end
+    local m = player.GetMetadata('bankcard')
+    if type(m) == 'string' and m ~= '' then return m end
+
+    for _ = 1, 40 do
+        local n = mintCard()
+        local taken = MySQL.scalar.await(
+            "SELECT 1 FROM characters WHERE JSON_EXTRACT(metadata, '$.bankcard') = ? LIMIT 1", { n })
+        if not taken then
+            player.SetMetadata('bankcard', n)
+            return n
+        end
+    end
+    return nil
+end
+
+--- The citizen id behind a card number, or nil. Used to let a transfer address a card.
+local function cidOfCard(card)
+    return MySQL.scalar.await(
+        "SELECT citizenid FROM characters WHERE JSON_EXTRACT(metadata, '$.bankcard') = ? LIMIT 1",
+        { card })
+end
+
+exports('GetCard', function(src) return cardOf(Core.GetPlayer(src)) end)
+exports('FindByCard', function(card) return cidOfCard(tostring(card or '')) end)
+
+Core.RegisterCallback('v-banking:card', function(source, resolve)
+    local p = Core.GetPlayer(source)
+    if not p then resolve(false) return end
+    resolve({
+        ok = true,
+        card = cardOf(p),
+        holder = ((p.firstname or '') .. ' ' .. (p.lastname or '')):upper(),
+        bank = p.money.bank,
+    })
+end)
+
+
 Core.RegisterCallback('v-banking:transfer', function(source, resolve, data)
     local p = Core.GetPlayer(source)
     local amount = math.floor(tonumber(data and data.amount) or 0)
     local targetCid = tostring((data and data.target) or ''):upper()
+    -- A card number is what one player actually gives another, so accept it here rather
+    -- than making the phone translate it: the translation belongs next to the mint.
+    if targetCid:find('%d%d%d%d') and targetCid:find(' ') then
+        targetCid = tostring(cidOfCard(targetCid) or ''):upper()
+    end
     if not p or amount <= 0 or targetCid == '' or targetCid == p.citizenid then resolve(false) return end
 
     local minT = math.floor(tonumber(Core.GetSetting('v-banking', 'minTransfer', Config.MinTransfer)) or 1)

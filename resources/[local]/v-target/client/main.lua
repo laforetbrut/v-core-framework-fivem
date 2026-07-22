@@ -514,11 +514,13 @@ local function openEye()
     rayHandle, hitEntity, hitCoords = nil, nil, nil
 
     SetNuiFocus(true, true)
-    SetNuiFocusKeepInput(true)                       -- keep walking while the menu is up
     SendNUIMessage({ action = 'eyeon', hints = {
         nav = L('tgt.hint_nav'), pick = L('tgt.hint_pick'), close = L('tgt.hint_close'),
     } })
-    exports['v-core']:MenuOpened('v-target')
+    -- true: the eye is the one page that WANTS game input to keep flowing, so the
+    -- player can walk up to whatever they are pointing at. Every other page passes
+    -- nothing and gets the safe default.
+    exports['v-core']:MenuOpened('v-target', true)
 
     CreateThread(function()
         local lastRefresh, lastKey = 0, nil

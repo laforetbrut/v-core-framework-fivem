@@ -146,6 +146,8 @@ local function registerApp(id, info, owner)
         -- reaches for without thinking should not move when the page does.
         dock  = info.dock == true,
         job   = info.job, jobGrade = info.jobGrade, gang = info.gang,
+        -- A phone with no Phone app is a brick, so a few apps refuse to be removed.
+        required = info.required == true,
     }
     return true
 end
@@ -199,6 +201,7 @@ local function appsFor(src, p)
             out[#out + 1] = {
                 id = id, label = a.label, icon = a.icon, page = a.page, dock = a.dock or nil,
                 slot = (w and num(w.slot, a.slot)) or a.slot,
+                required = a.required or nil,
             }
         end
     end
@@ -230,7 +233,26 @@ local function prefsOf(p)
         dnd       = m.dnd == true,
         ringtone  = tostring(m.ringtone or 'default'),
         glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
+        -- What the player REMOVED, not what they installed. Storing the removals
+        -- means a new app an operator adds later is there without every existing
+        -- character having to go and find it in the store.
+        removed   = (type(m.removed) == 'table') and m.removed or {},
+        actionApp = m.actionApp and tostring(m.actionApp) or nil,
     }
+end
+
+--- Two lists, because they answer two different questions. `available` is what the
+--- OPERATOR permits this player to have; `installed` is what the PLAYER has chosen to
+--- keep. The store shows the first, the home screen shows the second.
+local function appsFrom(src, p)
+    local available = appsFor(src, p)
+    local removed = {}
+    for _, id in ipairs(prefsOf(p).removed or {}) do removed[id] = true end
+    local installed = {}
+    for _, a in ipairs(available) do
+        if not removed[a.id] or a.required then installed[#installed + 1] = a end
+    end
+    return available, installed
 end
 
 -- ══════════════════════════════════════════════════════════════
@@ -415,10 +437,12 @@ V.Callback('v-phone:open', function(src, resolve)
     if not requireItem(src) then resolve({ error = 'nophone' }) return end
 
     local number = ensureNumber(src, p)
+    local available, installed = appsFrom(src, p)
     resolve({
         ok       = true,
         number   = number,
-        apps     = appsFor(src, p),
+        apps      = installed,
+        available = available,
         prefs    = prefsOf(p),
         contacts = MySQL.query.await(
             'SELECT id, name, number, favourite FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name',
@@ -483,6 +507,9 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
+        if data.actionApp ~= nil then
+            prefs.actionApp = (data.actionApp ~= '') and tostring(data.actionApp) or nil
+        end
         if data.glass ~= nil then
             prefs.glass = math.max(0, math.min(100, math.floor(num(data.glass, Config.DefaultGlass))))
         end
@@ -563,6 +590,32 @@ local PLACE_SOURCES = {
     { key = 'cityhall', getter = 'GetCityHalls',     icon = 'jobs' },
     { key = 'dealer',   getter = 'GetDealers',       icon = 'garage' },
 }
+
+--- Install or remove an app for THIS character. It cannot make an app appear that the
+--- operator has not permitted, and it cannot remove one the phone needs to work: those
+--- are the operator's decision and the phone's, not the player's.
+V.Callback('v-phone:install', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local id = tostring((data and data.app) or '')
+    local want = data and data.install == true
+
+    local available = appsFor(src, p)
+    local found
+    for _, a in ipairs(available) do if a.id == id then found = a break end end
+    if not found then resolve({ error = 'unavailable' }) return end
+    if found.required and not want then resolve({ error = 'required' }) return end
+
+    local prefs = prefsOf(p)
+    local out = {}
+    for _, rid in ipairs(prefs.removed or {}) do
+        if rid ~= id then out[#out + 1] = rid end
+    end
+    if not want then out[#out + 1] = id end
+    prefs.removed = out
+    p.SetMetadata('phone', prefs)
+    resolve({ ok = true })
+end)
 
 V.Callback('v-phone:places', function(src, resolve)
     if GetResourceState('v-world') ~= 'started' then resolve({ error = 'off' }) return end
