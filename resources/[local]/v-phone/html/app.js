@@ -244,6 +244,7 @@ let arrWired = false;
 
 function enterArrange() {
   editing = true;
+  byId('arrangedone').textContent = L('ph.arrange_done');
   byId('home').classList.add('arrange');
   byId('pages').classList.add('jiggle');
 }
@@ -481,6 +482,7 @@ function enterApp(a, tile) {
 }
 
 function closeApp(instant) {
+  emojiClose();
   const app = byId('app');
   if (!app.classList.contains('on')) return;
   byId('screen').classList.remove('app-open');
@@ -663,9 +665,12 @@ function paintThread(messages) {
   wireLocButtons();
   foot(`<div class="compose">` +
     `<button class="attach" id="attach" type="button">+</button>` +
+    `<button class="emoji" id="msgemoji" type="button">😊</button>` +
     UI.field('msg', L('ph.write'), '', 'maxlength="250"') +
     `<button class="sendbtn" id="sendmsg" type="button">${svg('send')}</button></div>`);
   byId('attach').addEventListener('click', () => attachSheet());
+  byId('msgemoji').addEventListener('click', () => emojiOpen('msg'));
+  byId('msg').addEventListener('focus', emojiClose);
   const el = byId('thread');
   el.scrollTop = el.scrollHeight;
   byId('appbody').scrollTop = byId('appbody').scrollHeight;
@@ -1932,12 +1937,16 @@ async function socialFeed(kind, emptyKey) {
 RENDER.bleeter = () => needAccount('bleeter', async () => {
   setNav(L('app.bleeter'), null, { icon: 'add', onClick: () => {
     sheet(L('ph.bleet_new'),
-      UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') + UI.button(L('ph.bleet_send'), 'bgo'),
-      () => byId('bgo').addEventListener('click', async () => {
-        const r = await post('social', { op: 'post', kind: 'text', body: byId('btext').value });
-        closeSheet();
-        if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-      }));
+      UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') +
+        UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') + UI.button(L('ph.bleet_send'), 'bgo'),
+      () => {
+        byId('bemoji').addEventListener('click', () => emojiOpen('btext'));
+        byId('bgo').addEventListener('click', async () => {
+          const r = await post('social', { op: 'post', kind: 'text', body: byId('btext').value });
+          emojiClose(); closeSheet();
+          if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        });
+      });
   } });
   await socialFeed('text', 'ph.bleet_none');
 });
@@ -1952,14 +1961,18 @@ RENDER.snap = () => needAccount('snap', async () => {
     sheet(L('ph.snap_new'),
       '<div class="shots" style="margin-bottom:10px">' + shots.map((u, i) =>
         '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>' +
-      UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"'),
-      () => [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
-        el.addEventListener('click', async () => {
-          const r = await post('social', { op: 'post', kind: 'photo',
-            image: shots[Number(el.dataset.i)], body: byId('scap').value });
-          closeSheet();
-          if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-        })));
+      UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"') +
+        UI.button('😊 ' + L('ph.emoji'), 'semoji', 'plain'),
+      () => {
+        byId('semoji').addEventListener('click', () => emojiOpen('scap'));
+        [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
+          el.addEventListener('click', async () => {
+            const r = await post('social', { op: 'post', kind: 'photo',
+              image: shots[Number(el.dataset.i)], body: byId('scap').value });
+            emojiClose(); closeSheet();
+            if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+          }));
+      });
   } });
   await socialFeed('photo', 'ph.snap_none');
 });
@@ -2018,6 +2031,46 @@ RENDER.hush = async () => {
 };
 
 
+// ══ Emoji ══════════════════════════════════════════════════════
+// A picker any composer can raise - Messages and the social apps both point it at their
+// own input. Emoji are ordinary text, so they travel and store like the rest of a message.
+const EMOJI = {
+  faces: ['😀','😃','😄','😁','😅','😂','🤣','🙂','😉','😊','😇','🥰','😍','😘','😗','😋','😜','🤪','🤨','😎','🥳','😏','😒','😌','😔','😴','😪','😜','🤗','🤭','🤫','🤔','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','😌','😛','😳','🥺','😢','😭','😤','😠','😡','🤬','🤯','😱','😨','😰','😥','😓','🤥','🥴','🤢','🤮','🤧','😷'],
+  gestures: ['👍','👎','👌','🤌','✌️','🤞','🤟','🤙','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👋','🤝','🙏','💪','👏','🙌','👐','🤲','✊','👊','🤛','🤜','💅','👀','👁️','🧠','🫶'],
+  hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','♥️'],
+  things: ['🔥','⭐','🌟','✨','💫','🎉','🎊','💯','✅','❌','❓','❗','💤','💢','💥','💦','💨','🕳️','💣','💬','🗨️','👑','💎','🔔','🎵','🎶','🚗','🏠','💰','💵','💊','🍺','🍻','🥂','🍔','🍕','☕','⚽','🎧','📱','💻','⏰','📅','☀️','🌧️','⛈️','❄️','🌙','⚡','🌈','🎁'],
+};
+const EMOJI_TABS = [['faces','😀'],['gestures','👍'],['hearts','❤️'],['things','🔥']];
+let emojiTarget = null, emojiCat = 'faces';
+
+function paintEmoji() {
+  const pan = byId('emojipanel');
+  pan.innerHTML =
+    '<div class="emojitabs">' + EMOJI_TABS.map(([k, g]) =>
+      '<button data-c="' + k + '" class="' + (emojiCat === k ? 'on' : '') + '" type="button">' + g + '</button>').join('') + '</div>' +
+    '<div class="emojigrid">' + (EMOJI[emojiCat] || []).map((e) =>
+      '<button data-e="' + e + '" type="button">' + e + '</button>').join('') + '</div>';
+  [...pan.querySelectorAll('.emojitabs button')].forEach((b) =>
+    b.addEventListener('click', () => { emojiCat = b.dataset.c; paintEmoji(); }));
+  [...pan.querySelectorAll('.emojigrid button')].forEach((b) =>
+    b.addEventListener('click', () => {
+      const inp = byId(emojiTarget);
+      if (!inp) return;
+      // Insert at the caret if there is one, otherwise append; then keep typing.
+      const at = (inp.selectionStart != null) ? inp.selectionStart : inp.value.length;
+      inp.value = inp.value.slice(0, at) + b.dataset.e + inp.value.slice(at);
+      const pos = at + b.dataset.e.length;
+      try { inp.setSelectionRange(pos, pos); } catch (e) {}
+      inp.focus();
+    }));
+}
+function emojiOpen(inputId) {
+  if (emojiTarget === inputId && byId('emojipanel').classList.contains('on')) { emojiClose(); return; }
+  emojiTarget = inputId; emojiCat = 'faces'; paintEmoji();
+  byId('emojipanel').classList.add('on');
+}
+function emojiClose() { byId('emojipanel').classList.remove('on'); emojiTarget = null; }
+
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 function sheet(title, html, after) {
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
@@ -2026,6 +2079,7 @@ function sheet(title, html, after) {
   if (after) after();
 }
 function closeSheet() {
+  if (typeof emojiClose === 'function') emojiClose();
   byId('sheet').classList.remove('on');
   byId('scrim').classList.remove('on');
 }
