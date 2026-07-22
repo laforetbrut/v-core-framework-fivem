@@ -501,9 +501,27 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- The phone does no audio. It decides who is on a call and tells both clients to hand
 -- themselves to v-voice; v-voice owns the Mumble channel.
+-- A call log entry per participant: each sees it from their own side (in/out) with the
+-- other party's number, and whether it was answered. Missed calls are just inbound rows
+-- that were never answered - the app colours them, the table does not need to.
+local function logCall(c, answered)
+    local rows = {
+        { cid = cidOfNumber(c.aNum), other = c.bNum, dir = 'out' },
+        { cid = cidOfNumber(c.bNum), other = c.anonymous and '' or c.aNum, dir = 'in' },
+    }
+    for _, r in ipairs(rows) do
+        if r.cid then
+            MySQL.insert('INSERT INTO phone_calls (citizenid, other_num, direction, answered) VALUES (?,?,?,?)',
+                { r.cid, r.other or '', r.dir, answered and 1 or 0 })
+        end
+    end
+end
+
 local function endCall(id, reason)
     local c = Calls[id]
     if not c then return end
+    -- Log it once, as it ends, from the state it reached: active means it connected.
+    logCall(c, c.state == 'active')
     Calls[id] = nil
     for _, s in ipairs({ c.a, c.b }) do
         if s and CallOf[s] == id then
@@ -1162,6 +1180,16 @@ V.Callback('v-phone:places', function(src, resolve)
     resolve({ ok = true, places = out })
 end)
 
+-- The player's recent calls, newest first, capped. The number comes back raw; the app
+-- resolves it to a contact name the same way every other screen does.
+V.Callback('v-phone:calls', function(src, resolve)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local rows = MySQL.query.await([[SELECT other_num AS number, direction, answered, at
+        FROM phone_calls WHERE citizenid = ? ORDER BY id DESC LIMIT 60]], { p.citizenid }) or {}
+    resolve({ ok = true, calls = rows })
+end)
+
 V.Callback('v-phone:call', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -1297,6 +1325,18 @@ CreateThread(function()
         `citizenid` VARCHAR(16) NOT NULL,
         PRIMARY KEY (`group_id`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_calls` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `other_num` VARCHAR(20) NOT NULL DEFAULT '',
+        `direction` VARCHAR(4)  NOT NULL DEFAULT 'out',
+        `answered`  TINYINT(1)  NOT NULL DEFAULT 0,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `owner_idx` (`citizenid`, `id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+    -- A call log is history, not an archive: keep the last while, then let it go.
+    MySQL.query('DELETE FROM phone_calls WHERE at < DATE_SUB(NOW(), INTERVAL 30 DAY)')
 
     -- Messages grew a kind, an attachment and a group. Idempotent, so an existing
     -- database upgrades without a migration step nobody would run.

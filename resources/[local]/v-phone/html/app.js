@@ -558,9 +558,36 @@ let phoneTab = 'keypad';
 RENDER.phone = () => {
   tabbar([
     { id: 'favourites', icon: 'star', label: 'ph.favourites' },
+    { id: 'recents', icon: 'phone', label: 'ph.recents' },
     { id: 'contacts', icon: 'contacts', label: 'app.contacts' },
     { id: 'keypad', icon: 'keypad', label: 'ph.keypad_tab' },
   ], phoneTab, (t) => { phoneTab = t; RENDER.phone(); });
+
+  if (phoneTab === 'recents') {
+    body('<div id="recents">' + UI.empty(L('ph.loading'), 'phone') + '</div>');
+    post('calls').then((r) => {
+      const host = byId('recents');
+      if (!host) return;
+      const calls = (r && r.calls) || [];
+      if (!calls.length) { host.innerHTML = UI.empty(L('ph.no_recents_call'), 'phone'); return; }
+      host.innerHTML = UI.group(calls.map((c) => {
+        const missed = c.direction === 'in' && !Number(c.answered);
+        const dir = missed ? 'missed' : c.direction;
+        const name = c.number ? nameOfNumber(c.number) : L('ph.unknown');
+        return UI.row({
+          icon: dir === 'out' ? 'callout' : (missed ? 'callmissed' : 'callin'),
+          tint: missed ? '#FF453A' : '#34C759',
+          title: name,
+          subtitle: (L('ph.call_' + dir) + '  ') + String(c.at || '').slice(5, 16),
+          value: c.number || '', chevron: true, data: { n: c.number || '' },
+        });
+      }));
+      qrows('recents', '.row', (el) => el.addEventListener('click', () => {
+        if (el.dataset.n) post('call', { number: el.dataset.n });
+      }));
+    });
+    return;
+  }
 
   if (phoneTab !== 'keypad') {
     // Favourites is the contacts the player marked, not a second address book.
