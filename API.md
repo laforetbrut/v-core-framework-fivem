@@ -188,6 +188,9 @@ exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage)
 exports['v-vehicles']:GetProps(veh) / ApplyProps(veh, props)
 exports['v-vehicles']:GetFuel(veh) / SetFuel(veh, pct)
 exports['v-vehicles']:IsBuckled()     -- client: seatbelt state, for HUDs and EMS scripts
+exports['v-vehicles']:IsLocked(plate)         -- server + client
+exports['v-vehicles']:SetLocked(plate, bool)  -- server: for police impound, scripted scenes
+-- client: exports['v-vehicles']:GetIndicator() -> { left, right, hazards }
 
 -- v-factions (server) - a faction is (name, kind) with kind = 'job' | 'gang'
 exports['v-factions']:Get(name, kind)              -- definition, or nil

@@ -201,6 +201,14 @@ exports('SpawnOwned',    function(src, plate, coords, heading) return spawnOwned
 exports('DespawnOwned',  function(plate, data, state) return despawnOwned(plate, data, state) end)
 exports('CreateOwned',   function(cid, model, garage, props) return createOwned(cid, model, garage, props) end)
 exports('IsLive',        function(plate) return Live[plate] ~= nil end)
+exports('IsLocked',      function(plate) return Locked[tostring(plate or '')] == true end)
+exports('SetLocked',     function(plate, on)
+    plate = tostring(plate or ''):gsub('%s+$', '')
+    if plate == '' then return false end
+    Locked[plate] = on and true or nil
+    pushLocks()
+    return true
+end)
 exports('SetState',      function(plate, state)
     MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { state, plate })
     return true
@@ -213,6 +221,113 @@ end)
 -- ── Client-driven checks ───────────────────────────────────────
 -- The client asks before starting an engine or toggling a lock. The answer is derived
 -- server-side; the client-side gate that follows is UX, not security.
+-- ── Locks ─────────────────────────────────────────────────────
+-- The lock lives here, not on whichever client happens to own the entity. Clients are told
+-- the whole set and apply it to vehicles near them.
+local Locked = {}      -- [plate] = true
+
+local function pushLocks(src)
+    TriggerClientEvent('v-vehicles:client:locks', src or -1, Locked)
+end
+
+RegisterNetEvent('v-vehicles:server:requestLocks', function() pushLocks(source) end)
+
+Core.RegisterCallback('v-vehicles:toggleLock', function(source, resolve, data)
+    local plate = tostring((data and data.plate) or ''):gsub('%s+$', '')
+    if plate == '' then resolve({ error = 'novehicle' }) return end
+    if not hasKeys(source, plate) then resolve({ error = 'nokeys' }) return end
+
+    -- Proximity is re-derived: a key that works from across the map is not a key.
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then resolve(false) return end
+    local range = tonumber(Config.Controls and Config.Controls.lockRange) or 6.0
+    local veh = 0
+    for _, ent in ipairs(GetAllVehicles and GetAllVehicles() or {}) do
+        if GetVehicleNumberPlateText(ent):gsub('%s+$', '') == plate then veh = ent break end
+    end
+    if veh ~= 0 and #(GetEntityCoords(ped) - GetEntityCoords(veh)) > (range + 3.0) then
+        resolve({ error = 'far' }) return
+    end
+
+    Locked[plate] = not Locked[plate] or nil
+    pushLocks()
+    resolve({ ok = true, locked = Locked[plate] == true })
+end)
+
+--- The engine gate. With `lockEngine` on, no keys means no engine - and that is not a
+--- decision a client gets to make about a car it does not own.
+Core.RegisterCallback('v-vehicles:engine', function(source, resolve, data)
+    local plate = tostring((data and data.plate) or ''):gsub('%s+$', '')
+    if plate == '' then resolve(false) return end
+    if not Config.Keys.lockEngine then resolve(true) return end
+    resolve(hasKeys(source, plate) == true)
+end)
+
+-- ── Lockpicking ───────────────────────────────────────────────
+-- The illegal counterpart of a key. A failure is what draws attention: a clean job should
+-- be quiet, or there is no reason to be good at it.
+Core.RegisterCallback('v-vehicles:lockpick', function(source, resolve, data)
+    local p = Core.GetPlayer(source)
+    local plate = tostring((data and data.plate) or ''):gsub('%s+$', '')
+    if not p or plate == '' then resolve(false) return end
+    if not Core.GetSetting('v-vehicles', 'lockpicking', true) then resolve({ error = 'off' }) return end
+    if not Locked[plate] then resolve({ error = 'notlocked' }) return end
+    if hasKeys(source, plate) then resolve({ error = 'haskeys' }) return end
+
+    local item = tostring(Core.GetSetting('v-vehicles', 'lockpickItem', Config.Lockpick.item) or '')
+    if item ~= '' then
+        local n = exports['v-inventory'] and exports['v-inventory']:GetItemCount(source, item) or 0
+        if (tonumber(n) or 0) < 1 then resolve({ error = 'nopick' }) return end
+    end
+
+    -- The wait happens here, so a client that skips its own animation gains nothing.
+    local seconds = math.max(1, math.floor(tonumber(Core.GetSetting('v-vehicles', 'lockpickSeconds', Config.Lockpick.seconds)) or 8))
+    Wait(seconds * 1000)
+
+    -- Still there? A player who walked away mid-pick does not get the car.
+    local ped = GetPlayerPed(source)
+    if not ped or ped == 0 then resolve(false) return end
+
+    local chance = tonumber(Core.GetSetting('v-vehicles', 'lockpickChance', Config.Lockpick.chance)) or 0.45
+    local ok = math.random() < math.max(0.0, math.min(1.0, chance))
+
+    local broke = false
+    if not ok then
+        local br = tonumber(Core.GetSetting('v-vehicles', 'lockpickBreak', Config.Lockpick.breakChance)) or 0.3
+        broke = math.random() < br
+        if broke and item ~= '' then
+            pcall(function() exports['v-inventory']:RemoveItem(source, item, 1) end)
+        end
+    end
+
+    if ok then
+        Locked[plate] = nil
+        pushLocks()
+        giveKeys(source, plate)
+        Core.Log('vehicles', ('%s lockpicked %s'):format(p.citizenid, plate), nil, p.citizenid)
+    end
+
+    -- Noticed, not caught: the alert is a lead for the police, not an arrest.
+    if Core.GetSetting('v-vehicles', 'lockpickAlert', Config.Lockpick.alertPolice) then
+        local alertChance = tonumber(Core.GetSetting('v-vehicles', 'lockpickAlertChance', Config.Lockpick.alertChance)) or 0.5
+        if (not ok) or math.random() < alertChance then
+            local coords = GetEntityCoords(ped)
+            for _, sid in ipairs(GetPlayers()) do
+                local o = tonumber(sid)
+                if o and GetResourceState('v-police') == 'started' then
+                    local isCop = false
+                    pcall(function() isCop = exports['v-police']:IsCop(o) == true end)
+                    if isCop then
+                        TriggerClientEvent('v-drugs:client:bustAlert', o, coords, 70.0)
+                    end
+                end
+            end
+        end
+    end
+
+    resolve({ ok = ok, broke = broke })
+end)
+
 Core.RegisterCallback('v-vehicles:hasKeys', function(source, resolve, plate)
     resolve(hasKeys(source, tostring(plate or '')) and true or false)
 end)
@@ -297,6 +412,14 @@ local function declareSettings()
             { key = 'saveInterval', label = 'Condition save interval (s)', type = 'number', default = Config.SaveInterval, min = 15, max = 900, step = 1 },
             { key = 'lockEngine',   label = 'No keys, no engine',         type = 'bool',   default = Config.Keys.lockEngine },
             { key = 'platePrefix',  label = 'Plate prefix',               type = 'string', default = Config.PlatePrefix, maxLength = 3 },
+            { key = 'leaveRunning', label = 'Engine keeps running when the driver gets out', type = 'bool', default = true },
+            { key = 'lockpicking',  label = 'Lockpicking enabled',        type = 'bool',   default = true },
+            { key = 'lockpickItem', label = 'Lockpick item (blank = none)', type = 'string', default = Config.Lockpick.item, maxLength = 40 },
+            { key = 'lockpickSeconds', label = 'Lockpick attempt (s)',    type = 'number', default = Config.Lockpick.seconds, min = 1, max = 120, step = 1 },
+            { key = 'lockpickChance', label = 'Lockpick success chance',  type = 'number', default = Config.Lockpick.chance, min = 0, max = 1, step = 0.05 },
+            { key = 'lockpickBreak', label = 'Chance the pick snaps on a failure', type = 'number', default = Config.Lockpick.breakChance, min = 0, max = 1, step = 0.05 },
+            { key = 'lockpickAlert', label = 'Lockpicking can alert the police', type = 'bool', default = Config.Lockpick.alertPolice },
+            { key = 'lockpickAlertChance', label = 'Chance a successful pick is noticed', type = 'number', default = Config.Lockpick.alertChance, min = 0, max = 1, step = 0.05 },
             { key = 'seatbelt',     label = 'Seatbelt enabled',           type = 'bool',   default = true },
             { key = 'ejectDrop',    label = 'Eject on speed drop over (km/h)', type = 'number', default = 55, min = 20, max = 200, step = 1 },
             { key = 'ejectMinSpeed', label = 'No ejection below (km/h)',  type = 'number', default = 60, min = 10, max = 200, step = 1 },
