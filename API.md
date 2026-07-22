@@ -89,9 +89,9 @@ Core.GetSetting(module, key, fallback)       -- mirrored from the server
 
 ## v-world — admin-editable content
 
-The single owner of every content table. 13 domains: `blips`, `shops`, `jobs`, `items`,
+The single owner of every content table. 14 domains: `blips`, `shops`, `jobs`, `items`,
 `recipes`, `clothstores`, `clothcats`, `garages`, `stations`, `mechshops`, `dealers`,
-`vehcat`, `licenses`.
+`vehcat`, `licenses`, `uitheme`.
 
 ```lua
 exports['v-world']:IsReady()
@@ -231,7 +231,23 @@ exports['v-ui']:Version()      -- client: current theme version
 exports['v-ui']:Push()         -- client: push the theme into THIS resource's NUI
 exports['v-ui']:GetPresets()   -- server
 exports['v-ui']:Rebuild()      -- server: regenerate theme-vars.css
+exports['v-world']:GetUiThemes()   -- server: the per-module overrides
 ```
+
+### Theming your page
+The global theme lives in `v-ui/config.lua` + **Admin -> Settings -> Interface**. A single
+module can override it in **Admin -> Editor -> Look -> Module themes** — preset, accent,
+panel transparency, backdrop, roundness, motion, font scale — and **anything left blank is
+inherited**.
+
+`theme.js` stamps the owning resource onto `<html data-vmod="…">`, and the generated
+stylesheet carries a scoped block per module:
+```css
+:root { /* global */ }
+:root[data-vmod="my-script"] { /* only the overrides */ }
+```
+So your page is themeable the moment it links the three files — including per-module, with
+no change to v-ui.
 
 ---
 

@@ -136,17 +136,32 @@
   border-radius: var(--v-r-lg);
   background:
     linear-gradient(165deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, 0) 42%),
-    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, rgba(14, 12, 10, .92));
+    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, var(--v-bg-900));
   box-shadow: var(--v-shadow-box), inset 0 1px 0 rgba(255, 255, 255, .05);
 }
+/* The top light-streak follows the ACCENT, not a fixed orange: on a violet or green
+   theme a hardcoded warm streak is the one thing that gives the reskin away.
+   `--v-streak` (block|none) is the admin switch. */
 .v-chamfer::before {
-  content: ''; position: absolute; top: 0; left: 12%; right: 12%; height: 1px; z-index: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 150, 60, .55), transparent);
+  content: ''; display: var(--v-streak, block);
+  position: absolute; top: 0; left: 12%; right: 12%; height: 1px; z-index: 0;
+  background: linear-gradient(90deg, transparent, var(--v-accent-glow), transparent);
   pointer-events: none;
 }
 .v-chamfer > * { position: relative; z-index: var(--z-raised); }
 
-.v-panel { }
+/* `.v-panel` used to be an empty legacy hook, which meant a page using it ALONE got no
+   panel at all — every module happens to pair it with .v-chamfer, so the gap never showed.
+   It is now a real, self-sufficient surface. */
+.v-panel {
+  background: var(--v-panel);
+  border: 1px solid var(--v-line);
+  border-radius: var(--v-r-lg);
+}
+/* Paired with .v-chamfer (as every module does), the chamfer's richer fill wins. */
+.v-panel.v-chamfer { background:
+    linear-gradient(165deg, rgba(255, 255, 255, .045), rgba(255, 255, 255, 0) 42%),
+    linear-gradient(180deg, var(--v-panel-2), var(--v-panel) 55%, var(--v-bg-900)); }
 .v-panel__header { display: flex; align-items: center; gap: 10px; padding: 18px 22px; border-bottom: 1px solid var(--v-line); }
 
 /* Section pill riding the top edge — gradient orange, glowing. */

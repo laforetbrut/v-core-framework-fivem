@@ -326,6 +326,26 @@ changes. One channel that reaches all 16 pages, and it survives a page reload fo
 values were routed through `--v-accent-glow` / `--v-accent`, which is what makes a preset
 switch actually reach every shadow and filter.
 
+**One global theme, with a per-module override.** A server owner who wants the inventory
+more transparent, or the admin panel in a different colour, does not have to fork anything:
+`ui_overrides` holds one row per module and **every column is nullable — NULL means
+inherit**, so a row carries only what genuinely differs. The generated stylesheet is
+therefore
+
+```css
+:root { /* the global theme */ }
+:root[data-vmod="v-inventory"] { /* only what this module overrides */ }
+```
+
+and `theme.js` stamps the owning resource onto `<html>` (a NUI page is served from the
+resource that owns it, so `location.hostname` *is* the module name). A page picks up its own
+block and inherits the rest. Managed in one place: **Admin → Editor → Look → Module themes**,
+where the module list comes from the live registry — so a third-party script that declared
+itself is themeable with no change to v-ui.
+
+An accent override with no preset derives its own gradient partner; otherwise a green accent
+would still end in the global orange.
+
 **Boot notes.** v-ui is ensured *before* v-core (every NUI needs the stylesheet first), so
 the core is resolved lazily rather than at file scope, and a fallback `theme-vars.css` is
 committed so the resource loads before its first generation.
