@@ -285,6 +285,17 @@ local function prefsOf(p)
     return {
         wallpaper = tostring(m.wallpaper or Config.DefaultWallpaper),
         dnd       = m.dnd == true,
+        -- Control centre toggles. Each one is real: airplane and cellular drive the
+        -- signal the status bar draws, wifi and bluetooth their own glyphs, brightness a
+        -- dimming layer. A control that changed nothing would be a lie about the phone.
+        airplane  = m.airplane == true,
+        cellular  = (m.cellular == nil) and true or (m.cellular == true),
+        wifi      = (m.wifi == nil) and true or (m.wifi == true),
+        bluetooth = m.bluetooth == true,
+        brightness = math.max(0.35, math.min(1, tonumber(m.brightness) or 1)),
+        -- Which apps the player has silenced. A muted app still exists; it just does not
+        -- light up the island or land in the list.
+        notifMuted = (type(m.notifMuted) == 'table') and m.notifMuted or {},
         -- Apps are light by default, as they are on iOS. This flips the six
         -- surface values and nothing else.
         dark      = m.dark == true,
@@ -839,6 +850,12 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
+        if data.airplane  ~= nil then prefs.airplane  = data.airplane == true end
+        if data.cellular  ~= nil then prefs.cellular  = data.cellular == true end
+        if data.wifi      ~= nil then prefs.wifi      = data.wifi == true end
+        if data.bluetooth ~= nil then prefs.bluetooth = data.bluetooth == true end
+        if data.brightness ~= nil then prefs.brightness = math.max(0.35, math.min(1, num(data.brightness, 1))) end
+        if type(data.notifMuted) == 'table' then prefs.notifMuted = data.notifMuted end
         if data.dark ~= nil then prefs.dark = data.dark == true end
         if data.wallpaperUrl ~= nil then
             local url = tostring(data.wallpaperUrl):sub(1, 400)

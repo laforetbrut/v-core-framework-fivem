@@ -11,6 +11,7 @@
 -- channel. The phone only decides who is talking to whom, and the server decides that.
 
 local isOpen  = false
+local phoneTorch = false   -- control-centre flashlight
 local myNumber = nil
 local call    = nil          -- { id, state = 'out'|'in'|'active', number }
 local power   = { battery = 100, charging = false, signal = 4 }
@@ -138,6 +139,13 @@ end)
 
 --- Setting a waypoint is the one thing a phone map is actually for. Purely local: it
 --- moves a marker on this player's own minimap and touches nothing else.
+-- The flashlight is the phone's own: a light drawn at the handset while it is out, so
+-- the control centre torch does something you can see in the dark.
+RegisterNUICallback('torch', function(data, cb)
+    phoneTorch = data and data.on == true
+    cb({ ok = true })
+end)
+
 RegisterNUICallback('waypoint', function(data, cb)
     local x, y = tonumber(data and data.x), tonumber(data and data.y)
     if not x or not y then cb({ error = 'x' }) return end
@@ -399,4 +407,20 @@ local function pushTheme()
 end
 
 AddEventHandler('v-ui:client:themeChanged', function() pushTheme() end)
+-- The flashlight: a white light at the player while the phone is out and the control
+-- centre torch is on. It costs a draw call only while lit.
+CreateThread(function()
+    while true do
+        if phoneTorch and isOpen then
+            local ped = PlayerPedId()
+            local c = GetEntityCoords(ped)
+            local fwd = GetEntityForwardVector(ped)
+            DrawLightWithRange(c.x + fwd.x, c.y + fwd.y, c.z + 0.2, 255, 255, 240, 6.0, 3.0)
+            Wait(0)
+        else
+            Wait(300)
+        end
+    end
+end)
+
 CreateThread(function() Wait(4000); pushTheme() end)

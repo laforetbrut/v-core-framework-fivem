@@ -33,7 +33,23 @@ let openApp = null;
 let thread = null;
 let dialed = '';
 let page = 0;
-let notifs = [];        // lock-screen stack
+let notifs = [];        // the notification centre, newest first
+let notifSeq = 0;       // stable ids so a card can be dismissed by hand
+let shadeManage = false;
+
+// An app id from whatever the banner carried. Most callers name the app; the SDK path
+// only knows an icon, so it falls back to that.
+function notifApp(b) { return b.app || b.icon || 'dot'; }
+
+// A player can silence an app from the shade. A muted app still runs; it just does not
+// light the island or land in the centre. The list lives in prefs, so it survives.
+function appMuted(id) { return ((state.prefs || {}).notifMuted || []).indexOf(id) !== -1; }
+async function setAppMuted(id, on) {
+  const cur = ((state.prefs || {}).notifMuted || []).filter((x) => x !== id);
+  if (on) cur.push(id);
+  const r = await post('prefs', { notifMuted: cur });
+  if (r && r.ok) state.prefs = r.prefs;
+}
 let recents = [];       // app ids, most recently opened first
 let available = [];     // what the operator permits; the store lists these
 let editing = false;    // home screen in arrange mode
@@ -372,6 +388,7 @@ const body = (html) => { byId('appbody').innerHTML = html; };
 const foot = (html) => { byId('appfoot').innerHTML = html || ''; };
 const loading = () => body(UI.empty(L('ph.loading')));
 const rows = (sel, fn) => [...byId('appbody').querySelectorAll(sel)].forEach(fn);
+const qrows = (root, sel, fn) => [...byId(root).querySelectorAll(sel)].forEach(fn);
 
 // The iOS push: new content slides in from the right. A swap with no motion reads as a
 // refresh rather than a step deeper.
@@ -918,11 +935,31 @@ function applyPower(p) {
   el.style.setProperty('--batt-col', p.charging ? '#34C759' : (b <= 5 ? '#FF3B30' : (b <= 20 ? '#FF9500' : 'var(--sb-ink, #fff)')));
   byId('battpct').textContent = Math.round(b);
 
-  const bars = Math.max(0, Math.min(4, Number(p.signal ?? 4)));
+  state._power = p;
+  const pr = state.prefs || {};
+  // Airplane and a cellular kill-switch both mean no service, whatever the tower says.
+  const off = pr.airplane || pr.cellular === false;
+  const bars = off ? 0 : Math.max(0, Math.min(4, Number(p.signal ?? 4)));
   [...byId('bars').querySelectorAll('rect')].forEach((r) =>
     r.classList.toggle('off', Number(r.dataset.b) > bars));
   // No service is worth saying in words: an icon of four empty bars reads as a glitch.
-  byId('nosvc').classList.toggle('hidden', bars > 0);
+  byId('nosvc').classList.toggle('hidden', bars > 0 || pr.airplane);
+  applyStatusFlags();
+}
+
+// Airplane replaces the bars with its own glyph; wifi hides when switched off.
+function applyStatusFlags() {
+  const p = state.prefs || {};
+  byId('apmode').classList.toggle('hidden', !p.airplane);
+  byId('bars').classList.toggle('hidden', !!p.airplane);
+  const wifi = byId('status').querySelector('.sright > svg:not(#bars):not(#apmode)');
+  if (wifi) wifi.style.opacity = p.wifi === false ? '0' : '';
+}
+
+// Brightness is a real dimming veil, 0.35 to 1 of the wallpaper's light.
+function applyBrightness() {
+  const b = Math.max(0.35, Math.min(1, (state.prefs || {}).brightness ?? 1));
+  byId('screen').style.setProperty('--dim', String(1 - b));
 }
 
 function applyTheme() {
@@ -1173,7 +1210,7 @@ byId('screen').addEventListener('pointerup', (e) => {
   // Top edge, downwards: left half is the notification shade, right half the control
   // centre. Same split iOS uses, and it means neither one needs a button.
   if (gg.fromTop && dy > SWIPE) {
-    if (gg.x0 < gg.w / 2) openShade(); else { byId('cc').classList.add('on'); renderCC(); }
+    if (gg.x0 < gg.w / 2) openShade(); else openCC();
     return;
   }
 
@@ -1238,14 +1275,73 @@ function openShade() {
     String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   byId('shadedate').textContent =
     d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
-  byId('shadelist').innerHTML = notifs.length
-    ? notifs.map((n, i) =>
-        '<div class="lnotif glass" style="--i:' + i + '"><span class="lic">' + svg(n.icon) + '</span>' +
-        '<span class="lbody"><span class="lt">' + esc(n.title || '') + '</span>' +
-        '<span class="lb">' + esc(n.body || '') + '</span></span></div>').join('')
-    : '<div class="empty">' + esc(L('ph.no_notifs')) + '</div>';
+  shadeManage = false;
+  renderShade();
   byId('shade').classList.add('on');
 }
+
+// The app a notification belongs to, resolved to something printable.
+function appOf(id) {
+  return (state.apps || available || []).find((a) => a.id === id)
+      || (available || []).find((a) => a.id === id) || { id, label: id, icon: id };
+}
+
+function renderShade() {
+  const sh = byId('shade');
+  sh.classList.toggle('manage', shadeManage);
+  byId('shtitle').textContent = L('ph.notifs');
+  const mng = byId('shmanage'), clr = byId('shclear');
+  mng.textContent = shadeManage ? L('ph.notif_done') : L('ph.notif_manage');
+  clr.textContent = L('ph.clear_all');
+  clr.classList.toggle('hidden', !notifs.length || shadeManage);
+
+  const list = byId('shadelist');
+  if (!notifs.length) { list.innerHTML = '<div class="nempty">' + esc(L('ph.notif_empty')) + '</div>'; return; }
+
+  // Grouped by app, groups in the order their newest notification arrived.
+  const order = [], byApp = {};
+  notifs.forEach((n) => { if (!byApp[n.app]) { byApp[n.app] = []; order.push(n.app); } byApp[n.app].push(n); });
+
+  list.innerHTML = order.map((appId) => {
+    const a = appOf(appId);
+    const muted = appMuted(appId);
+    const head = '<div class="ngrouphead">' + UI.appIcon(a.icon) +
+      '<span class="gname">' + esc(L(a.label) || a.id) + '</span>' +
+      (shadeManage ? '<button class="gmute ' + (muted ? 'on' : '') + '" data-mute="' + esc(appId) + '">' +
+        esc(muted ? L('ph.notif_muted') : L('ph.notif_mute_app')) + '</button>' : '') + '</div>';
+    const cards = byApp[appId].map((n) =>
+      '<div class="ncard" data-nid="' + n.id + '">' +
+        '<span class="nic">' + UI.appIcon(n.icon) + '</span>' +
+        '<span class="nbody"><span class="nt">' + esc(n.title) + '</span>' +
+        '<span class="nb">' + esc(n.body) + '</span></span>' +
+        '<span class="nw">' + esc(relTime(n.at)) + '</span>' +
+        '<button class="nx" data-x="' + n.id + '">' + svg('xmark') + '</button></div>').join('');
+    return '<div class="ngroup">' + head + cards + '</div>';
+  }).join('');
+
+  qrows('shadelist', '.ncard', (c) => c.addEventListener('click', (e) => {
+    if (e.target.closest('.nx')) return;
+    if (shadeManage) return;
+    const n = notifs.find((x) => String(x.id) === c.dataset.nid);
+    byId('shade').classList.remove('on');
+    if (n && n.onClick) n.onClick();
+  }));
+  qrows('shadelist', '.nx', (x) => x.addEventListener('click', (e) => {
+    e.stopPropagation();
+    notifs = notifs.filter((n) => String(n.id) !== x.dataset.x);
+    paintNotifs(); renderShade();
+  }));
+  qrows('shadelist', '.gmute', (b) => b.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    await setAppMuted(b.dataset.mute, !appMuted(b.dataset.mute));
+    renderShade();
+  }));
+}
+
+function openCC() { byId('cc').classList.add('on'); renderCC(); primeNowPlaying().then(() => { if (byId('cc').classList.contains('on')) renderCC(); }); }
+
+byId('shmanage').addEventListener('click', () => { shadeManage = !shadeManage; renderShade(); });
+byId('shclear').addEventListener('click', () => { notifs = []; paintNotifs(); renderShade(); });
 
 // ══ Side buttons ═══════════════════════════════════════════════
 // Real controls, not decoration. Volume moves the volume of whatever v-music says this
@@ -1787,7 +1883,7 @@ RENDER.hush = async () => {
     const c = await post('social', { op: 'hushChoice', ref: pf.ref, like });
     if (c && c.error) { toast(L('ph.err_' + ((c && c.error) || 'x'))); return; }
     if (c && c.match) {
-      banner({ icon: 'hush', title: L('ph.hush_match'),
+      banner({ app: 'hush', icon: 'hush', title: L('ph.hush_match'),
                body: (c.name || '?') + (c.number ? '  ' + c.number : '') });
     }
     RENDER.hush();
@@ -1819,24 +1915,54 @@ function toast(text) {
   toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
 }
 
-let bannerTimer = null;
+// A notification now grows out of the black camera pill, iOS 27 style, and is filed in
+// the centre. A muted app is filed nowhere and shows nothing.
+let islandTimer = null;
 function banner(b) {
-  const el = byId('banner');
-  el.innerHTML = `<span class="bic">${UI.appIcon(b.icon || 'messages')}</span>` +
-    `<span class="btext"><span class="bt">${esc(b.title || '')}</span>` +
-    `<span class="bb">${esc(b.body || '')}</span></span>`;
-  el.classList.add('on');
-  el.onclick = () => { el.classList.remove('on'); if (b.onClick) b.onClick(); };
-  clearTimeout(bannerTimer);
-  bannerTimer = setTimeout(() => el.classList.remove('on'), 4500);
+  const app = notifApp(b);
+  if (appMuted(app)) return;
 
-  notifs.unshift({ icon: b.icon || 'messages', title: b.title, body: b.body });
-  notifs = notifs.slice(0, 4);
+  const n = { id: ++notifSeq, app, icon: b.icon || app, title: b.title || '', body: b.body || '',
+              at: Date.now(), onClick: b.onClick || null };
+  notifs.unshift(n);
+  notifs = notifs.slice(0, 40);
   paintNotifs();
+  if (byId('shade').classList.contains('on')) renderShade();
+  islandNotify(n);
 }
 
+// The pill expands, holds the notification, then collapses back. It yields to a live
+// call, which owns the island outright.
+function islandNotify(n) {
+  if (call) return;
+  const isl = byId('island');
+  byId('inicon').innerHTML = UI.appIcon(n.icon);
+  byId('inTitle').textContent = n.title;
+  byId('inBody').textContent = n.body;
+  isl.classList.add('notif');
+  isl.dataset.notif = n.id;
+  clearTimeout(islandTimer);
+  islandTimer = setTimeout(() => { if (!call) isl.classList.remove('notif'); }, 4200);
+}
+byId('island').addEventListener('click', () => {
+  const isl = byId('island');
+  if (!isl.classList.contains('notif')) return;
+  const n = notifs.find((x) => String(x.id) === isl.dataset.notif);
+  isl.classList.remove('notif');
+  clearTimeout(islandTimer);
+  if (n && n.onClick) n.onClick();
+});
+
+function relTime(t) {
+  const m = Math.round((Date.now() - t) / 60000);
+  if (m < 1) return L('ph.now') || 'now';
+  if (m < 60) return m + ' min';
+  return Math.round(m / 60) + ' h';
+}
+
+// The lock screen shows the most recent handful; the shade shows everything, grouped.
 function paintNotifs() {
-  byId('locknotifs').innerHTML = notifs.map((n, i) =>
+  byId('locknotifs').innerHTML = notifs.slice(0, 4).map((n, i) =>
     `<div class="lnotif glass" style="--i:${i}"><span class="lic">${UI.appIcon(n.icon)}</span>` +
     `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
     `<span class="lb">${esc(n.body || '')}</span></span></div>`).join('');
@@ -1908,29 +2034,95 @@ function renderCall() {
 }
 
 // ══ Control centre ═════════════════════════════════════════════
-// Only real controls. A tile that toggles nothing is decoration, and decoration that
-// looks like a switch is a lie about what the phone can do.
+// iOS 27 Liquid Glass. Every control is real: airplane and cellular drive the signal
+// the status bar draws, wifi and bluetooth their own glyphs, the sliders brightness and
+// volume, the toggles focus and the flashlight. A switch that changed nothing would be a
+// lie about what the phone can do.
+let ccNow = null;   // last-known now-playing, so the panel opens without a flash
+
+async function toggleCC(key) {
+  const p = state.prefs || {};
+  const r = await post('prefs', { [key]: !p[key] });
+  if (r && r.ok) { state.prefs = r.prefs; applyPower(state._power || {}); applyStatusFlags(); renderCC(); }
+}
+
 function renderCC() {
   const p = state.prefs || {};
-  byId('ccgrid').innerHTML =
-    `<div class="cctile glass w2 h2"><div class="cch">${svg('wall')}<span>${esc(L('ph.wallpaper'))}</span></div>` +
-      `<div class="ccv" id="ccwall">${esc(L('ph.wall_' + (p.wallpaper || 'ember')))}</div></div>` +
-    `<div class="cctile glass"><div class="cch">${svg('moon')}</div>` +
-      `<button class="ccpill ${p.dnd ? 'on' : ''}" id="ccdnd" type="button">${svg('moon')}</button></div>` +
-    `<div class="cctile glass"><div class="cch">${svg('phone')}</div>` +
-      `<div class="ccv" style="font-size:12px">${esc(state.number || '')}</div></div>` +
-    `<div class="cctile glass w2"><div class="cch">${svg('messages')}<span>${esc(L('ph.unread'))}</span></div>` +
-      `<div class="ccv">${unreadTotal()}</div></div>`;
 
-  byId('ccdnd').addEventListener('click', async () => {
-    const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
-    if (res && res.ok) { state.prefs = res.prefs; renderCC(); }
+  byId('ccconn').innerHTML =
+    `<button class="ccbtn air ${p.airplane ? 'on' : ''}" data-t="airplane" type="button">${svg('airplane')}</button>` +
+    `<button class="ccbtn cel ${p.cellular !== false && !p.airplane ? 'on' : ''}" data-t="cellular" type="button">${svg('cell')}</button>` +
+    `<button class="ccbtn wif ${p.wifi !== false ? 'on' : ''}" data-t="wifi" type="button">${svg('wifi')}</button>` +
+    `<button class="ccbtn blu ${p.bluetooth ? 'on' : ''}" data-t="bluetooth" type="button">${svg('bt')}</button>`;
+  qrows('ccconn', '.ccbtn', (b) => b.addEventListener('click', () => toggleCC(b.dataset.t)));
+
+  const m = ccNow;
+  byId('ccnow').innerHTML =
+    `<div class="nowlab">${esc(L('ph.nowplaying'))}</div>` +
+    (m
+      ? `<div class="nowmid"><span class="nowart">${svg('music')}</span>` +
+          `<span style="min-width:0"><span class="nowt">${esc(m.title || L('ph.untitled'))}</span>` +
+          `<span class="nows">${esc(L('ph.music_' + (m.kind || 'boombox')))}</span></span></div>` +
+        `<div class="nowbtns"><button data-n="toggle">${svg(m.paused ? 'play' : 'pause')}</button></div>`
+      : `<div class="nowmid"><span class="nowart">${svg('music')}</span>` +
+          `<span class="nows">${esc(L('ph.nothing_playing'))}</span></div>`);
+  if (m) byId('ccnow').querySelector('[data-n="toggle"]').addEventListener('click', async () => {
+    await post('music', { id: m.id, action: m.paused ? 'play' : 'pause' });
+    m.paused = !m.paused; renderCC();
   });
-  byId('ccwall').parentElement.addEventListener('click', () => {
-    byId('cc').classList.remove('on');
-    const a = (state.apps || []).find((x) => x.id === 'settings');
-    if (a) enterApp(a, null);
+
+  const bright = Math.max(0.35, Math.min(1, p.brightness ?? 1));
+  byId('ccbright').innerHTML =
+    `<div class="fill" style="height:${Math.round(bright * 100)}%"></div><div class="gl">${svg('sun')}</div>`;
+  byId('ccvol').innerHTML =
+    `<div class="fill" style="height:${Math.round(volume * 100)}%"></div><div class="gl">${svg('speaker')}</div>`;
+  wireSlab('ccbright', async (v) => {
+    const r = await post('prefs', { brightness: 0.35 + v * 0.65 });
+    if (r && r.ok) { state.prefs = r.prefs; applyBrightness(); }
+    byId('ccbright').querySelector('.fill').style.height = Math.round((0.35 + v * 0.65) * 100) + '%';
   });
+  wireSlab('ccvol', async (v) => {
+    volume = v;
+    byId('ccvol').querySelector('.fill').style.height = Math.round(v * 100) + '%';
+    if (ccNow) await post('music', { id: ccNow.id, action: 'volume', volume: v });
+  });
+
+  byId('cctoggles').innerHTML =
+    `<button class="ccpill focus ${p.dnd ? 'on' : ''}" data-c="dnd" type="button">${svg('focus')}</button>` +
+    `<button class="ccpill torch ${ccTorch ? 'on' : ''}" data-c="torch" type="button">${svg('torch')}</button>` +
+    `<button class="ccpill" data-c="wall" type="button">${svg('wall')}</button>` +
+    `<button class="ccpill" data-c="camera" type="button">${svg('camera')}</button>`;
+  qrows('cctoggles', '.ccpill', (b) => b.addEventListener('click', () => ccToggle(b.dataset.c)));
+}
+
+let ccTorch = false;
+async function ccToggle(c) {
+  if (c === 'dnd') { await toggleCC('dnd'); return; }
+  if (c === 'torch') { ccTorch = !ccTorch; post('torch', { on: ccTorch }); toast(L(ccTorch ? 'ph.torch_on' : 'ph.torch_off')); renderCC(); return; }
+  byId('cc').classList.remove('on');
+  const id = c === 'camera' ? 'camera' : 'settings';
+  const a = (state.apps || []).find((x) => x.id === id);
+  if (a) enterApp(a, null);
+}
+
+// A vertical slider: press or drag anywhere in the slab, the fill follows the finger.
+function wireSlab(id, onChange) {
+  const el = byId(id);
+  const to = (e) => {
+    const r = el.getBoundingClientRect();
+    return Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
+  };
+  let down = false;
+  el.addEventListener('pointerdown', (e) => { down = true; el.setPointerCapture(e.pointerId); onChange(to(e)); });
+  el.addEventListener('pointermove', (e) => { if (down) onChange(to(e)); });
+  el.addEventListener('pointerup', () => { down = false; });
+}
+
+// The control centre's media tile reads from v-music, refreshed each time it opens.
+async function primeNowPlaying() {
+  const d = await post('app', { app: 'music' });
+  const list = (d && d.sources) || [];
+  ccNow = list[0] || null;
 }
 
 // ══ Third-party app bridge ═════════════════════════════════════
@@ -1959,7 +2151,7 @@ window.addEventListener('message', async (e) => {
   if (d.op === 'title') { setNav(d.data && d.data.title, null); byId('navbar').classList.remove('hidden'); return reply({ ok: true }); }
   if (d.op === 'close') { closeApp(); return reply({ ok: true }); }
   if (d.op === 'toast') { toast((d.data && d.data.text) || ''); return reply({ ok: true }); }
-  if (d.op === 'notify') { banner({ icon: (openApp && openApp.icon) || 'dot', title: d.data.title, body: d.data.body }); return reply({ ok: true }); }
+  if (d.op === 'notify') { banner({ app: (openApp && openApp.id) || 'dot', icon: (openApp && openApp.icon) || 'dot', title: d.data.title, body: d.data.body }); return reply({ ok: true }); }
   if (d.op === 'badge') {
     const a = (state.apps || []).find((x) => openApp && x.id === openApp.id);
     if (a) {
@@ -2072,6 +2264,9 @@ window.addEventListener('message', (e) => {
     applyTheme();
     applyPower(d.power || { battery: d.battery, charging: d.charging, signal: d.signal });
     applyGlass((d.prefs && d.prefs.glass) ?? 55);
+    applyBrightness();
+    applyStatusFlags();
+    primeNowPlaying();
     tick();
     paintNotifs();
     const sp = byId('spilltxt'); if (sp) sp.textContent = L('ph.search');
@@ -2102,7 +2297,7 @@ window.addEventListener('message', (e) => {
         byId('appbody').scrollTop = byId('appbody').scrollHeight;
       }
     } else {
-      banner({ icon: 'messages', title: d.message.group ? (d.message.groupName || L('ph.groups')) : nameOfNumber(d.message.from), body: d.message.body || L('ph.attach'),
+      banner({ app: 'messages', icon: 'messages', title: d.message.group ? (d.message.groupName || L('ph.groups')) : nameOfNumber(d.message.from), body: d.message.body || L('ph.attach'),
                onClick: () => { const a = (state.apps || []).find((x) => x.id === 'messages');
                                 if (a) { enterApp(a, null); openThread(d.message.from); } } });
       refresh().then(() => { if (!openApp) renderHome(); });
