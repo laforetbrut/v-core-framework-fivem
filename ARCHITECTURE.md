@@ -309,7 +309,28 @@ Schema lives in **`database/schema.sql`** (25 tables; `world_blips` gains `job`/
 
 Legend: ✅ shipped · ⚠️ shipped with a known hole · ⬜ not built.
 
-### `v-ui` ✅ — shared design system
+### `v-ui` ✅ — shared design system, themeable at runtime
+**Done.** `config.lua` owns the whole look: **6 presets**, an accent from which the entire
+highlight family is derived (hover, glow, selection, gradients), corner roundness, density,
+animation speed, panel opacity, backdrop darkness, font scale, rarity colours and three
+feature switches (corner brackets, panel top light, film grain). Every one is an admin
+setting, applied live.
+
+The delivery mechanism is the interesting part: a NUI page can only be messaged by the
+resource that owns it, so v-ui cannot push variables into v-inventory's page. Instead the
+server resolves the theme into **`theme-vars.css`** (`SaveResourceFile`), which every page
+links after `theme.css`; `theme.js` re-links it with a new cache-buster when the version
+changes. One channel that reaches all 16 pages, and it survives a page reload for free.
+
+`theme.css` no longer contains a single hardcoded colour — its 19 literal brand-orange
+values were routed through `--v-accent-glow` / `--v-accent`, which is what makes a preset
+switch actually reach every shadow and filter.
+
+**Boot notes.** v-ui is ensured *before* v-core (every NUI needs the stylesheet first), so
+the core is resolved lazily rather than at file scope, and a fallback `theme-vars.css` is
+committed so the resource loads before its first generation.
+
+### `v-ui` (original notes) — shared design system
 **Done.** `theme.css` only: the full "EMBER" token set (warm-graphite surfaces, **dominant**
 brand orange with gradient/glow variants, muted status + rarity scales, 8–22px rounded geometry,
 soft layered shadows, `--z-*` scale, fluid/spring motion tokens) plus the primitives `.v-chamfer`

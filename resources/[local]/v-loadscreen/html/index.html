@@ -8,6 +8,7 @@
   <video class="bg-video" autoplay muted loop playsinline poster="poster.jpg" aria-hidden="true">
     <source src="bg.mp4" type="video/mp4" />
   </video>
+  <div class="bg-image" aria-hidden="true"></div>
   <div class="bg-overlay" aria-hidden="true"></div>
   <div class="grain" aria-hidden="true"></div>
   <div class="vignette" aria-hidden="true"></div>
@@ -15,13 +16,13 @@
 
   <main class="stage">
     <header class="brand" style="--i:0">
-      <div class="kicker">Los Santos Roleplay</div>
-      <h1 class="mark">PROJET <span>R</span></h1>
+      <div class="kicker" id="ls-kicker">Los Santos Roleplay</div>
+      <h1 class="mark"><span id="ls-title">PROJET</span> <span id="ls-title-accent">R</span></h1>
     </header>
 
     <section class="loader" style="--i:1">
       <i class="brk brk-tr" aria-hidden="true"></i><i class="brk brk-bl" aria-hidden="true"></i>
-      <span class="tab">System Boot</span>
+      <span class="tab" id="ls-panel">System Boot</span>
       <div class="loader-body">
         <div class="row">
           <span class="status" id="status" aria-live="polite">Connexion au serveur…</span>
@@ -34,12 +35,13 @@
 
   <footer class="foot" style="--i:2">
     <div class="tip">
-      <span class="tip-tag">Astuce</span>
+      <span class="tip-tag" id="ls-tiptag">Astuce</span>
       <span class="tip-text" id="tip"></span>
     </div>
-    <div class="sig">projet&nbsp;r · laforetbrut</div>
+    <div class="sig" id="ls-sig">projet r · laforetbrut</div>
   </footer>
 
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

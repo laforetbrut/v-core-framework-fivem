@@ -14,6 +14,7 @@ loadscreen 'html/index.html'
 
 files {
     'html/index.html',
+    'html/config.js',
     'html/style.css',
     'html/app.js',
     'html/bg.mp4',

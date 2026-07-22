@@ -43,11 +43,11 @@
   --v-accent-300:  #FFA85C;
   --v-accent-600:  #E14E00;
   --v-accent-700:  #B23C00;
-  --v-accent-soft: rgba(255, 122, 26, .14);
-  --v-accent-line: rgba(255, 122, 26, .45);
-  --v-accent-glow: 0 0 24px -6px rgba(255, 122, 26, .55);
+  --v-accent-soft: var(--v-accent-glow);
+  --v-accent-line: var(--v-accent-glow);
+  --v-accent-glow: 0 0 24px -6px var(--v-accent-glow);
   --v-grad-accent: linear-gradient(135deg, #FFB25C 0%, #FF7A1A 48%, #F04E00 100%);
-  --v-grad-soft:   linear-gradient(135deg, rgba(255,122,26,.20), rgba(255,122,26,.05));
+  --v-grad-soft:   linear-gradient(135deg, var(--v-accent-glow), var(--v-accent-glow));
 
   /* ── Status (modern but quieter than the brand orange) ── */
   --v-success: #3FA663;
@@ -82,7 +82,7 @@
   --v-shadow:      drop-shadow(0 20px 40px rgba(0, 0, 0, .60));  /* filter value */
   --v-shadow-box:  0 24px 48px -12px rgba(0, 0, 0, .65), 0 4px 12px -4px rgba(0, 0, 0, .50);
   --v-shadow-sm:   0 6px 16px -6px rgba(0, 0, 0, .55);
-  --v-shadow-glow: 0 10px 30px -8px rgba(255, 122, 26, .50);
+  --v-shadow-glow: 0 10px 30px -8px var(--v-accent-glow);
 
   /* ── Type — clean modern sans; tabular figures for readouts ── */
   --v-font-display: 'Bahnschrift', 'Segoe UI', 'Inter', system-ui, sans-serif;
@@ -111,17 +111,17 @@
   -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: rgba(255, 122, 26, .35); color: var(--v-text); }
+::selection { background: var(--v-accent-glow); color: var(--v-text); }
 
 /* ── Backdrop: dark vignette + two soft orange aura blobs ── */
 .v-backdrop {
   background:
-    radial-gradient(55% 45% at 12% 0%,   rgba(255, 122, 26, .10), transparent 62%),
+    radial-gradient(55% 45% at 12% 0%,   var(--v-accent-glow), transparent 62%),
     radial-gradient(48% 42% at 92% 100%, rgba(240, 78, 0, .08),  transparent 60%),
     radial-gradient(135% 115% at 50% 8%, rgba(11, 10, 8, .42), rgba(11, 10, 8, .82) 72%, rgba(11, 10, 8, .94) 100%);
 }
 /* Static SVG noise tile — cheap in CEF. Put on an overlay child. */
-.v-grain {
+.v-grain { opacity: var(--v-grain, .04);
   position: absolute; inset: 0; pointer-events: none; opacity: .04;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
@@ -157,13 +157,13 @@
   letter-spacing: .16em; text-transform: uppercase; color: var(--v-ink);
   background: var(--v-grad-accent);
   border-radius: 99px;
-  box-shadow: 0 6px 18px -4px rgba(255, 122, 26, .55), inset 0 1px 0 rgba(255, 255, 255, .35);
+  box-shadow: 0 6px 18px -4px var(--v-accent-glow), inset 0 1px 0 rgba(255, 255, 255, .35);
 }
 
 /* Glowing corner accents on two diagonal corners. */
-.v-brk { position: absolute; z-index: var(--z-base); width: 18px; height: 18px; opacity: .65; pointer-events: none; }
-.v-brk--tr { top: 9px; right: 9px; border-top: 2px solid var(--v-accent); border-right: 2px solid var(--v-accent); border-top-right-radius: 8px; filter: drop-shadow(0 0 6px rgba(255, 122, 26, .6)); }
-.v-brk--bl { bottom: 9px; left: 9px; border-bottom: 2px solid var(--v-accent); border-left: 2px solid var(--v-accent); border-bottom-left-radius: 8px; filter: drop-shadow(0 0 6px rgba(255, 122, 26, .6)); }
+.v-brk { display: var(--v-brackets, block); position: absolute; z-index: var(--z-base); width: 18px; height: 18px; opacity: .65; pointer-events: none; }
+.v-brk--tr { top: 9px; right: 9px; border-top: 2px solid var(--v-accent); border-right: 2px solid var(--v-accent); border-top-right-radius: 8px; filter: drop-shadow(0 0 6px var(--v-accent-glow)); }
+.v-brk--bl { bottom: 9px; left: 9px; border-bottom: 2px solid var(--v-accent); border-left: 2px solid var(--v-accent); border-bottom-left-radius: 8px; filter: drop-shadow(0 0 6px var(--v-accent-glow)); }
 
 /* ── Typography ── */
 .v-title  { font-family: var(--v-font-display); font-weight: 700; letter-spacing: .03em; font-size: 20px; }
@@ -190,9 +190,9 @@
 .v-btn--accent {
   background: var(--v-grad-accent); border-color: rgba(255, 150, 60, .6);
   color: var(--v-ink); font-weight: 700;
-  box-shadow: 0 8px 22px -6px rgba(255, 122, 26, .55), inset 0 1px 0 rgba(255, 255, 255, .35);
+  box-shadow: 0 8px 22px -6px var(--v-accent-glow), inset 0 1px 0 rgba(255, 255, 255, .35);
 }
-.v-btn--accent:hover { color: var(--v-ink); filter: brightness(1.07); border-color: rgba(255, 150, 60, .8); box-shadow: 0 12px 28px -6px rgba(255, 122, 26, .70), inset 0 1px 0 rgba(255, 255, 255, .35); }
+.v-btn--accent:hover { color: var(--v-ink); filter: brightness(1.07); border-color: rgba(255, 150, 60, .8); box-shadow: 0 12px 28px -6px var(--v-accent-glow), inset 0 1px 0 rgba(255, 255, 255, .35); }
 .v-btn--ghost  { background: transparent; }
 .v-btn--danger { background: transparent; border-color: rgba(229, 72, 77, .5); color: var(--v-danger-300); }
 .v-btn--danger:hover { background: rgba(229, 72, 77, .12); border-color: var(--v-danger); color: var(--v-danger-300); }
@@ -211,7 +211,7 @@
   font-family: var(--v-font-display); font-style: normal; font-weight: 700; font-size: 10px;
   letter-spacing: .12em; text-transform: uppercase;
   color: var(--v-ink); background: var(--v-fill, var(--v-grad-accent));
-  box-shadow: 0 3px 10px -3px rgba(255, 122, 26, .50);
+  box-shadow: 0 3px 10px -3px var(--v-accent-glow);
 }
 
 /* ── Inputs ── */
@@ -222,7 +222,7 @@
   transition: border-color var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease), background var(--v-t-base) var(--v-ease);
 }
 .v-input:hover { border-color: var(--v-line-2); }
-.v-input:focus { border-color: var(--v-accent-line); background: rgba(0, 0, 0, .42); box-shadow: inset 0 1px 2px rgba(0,0,0,.4), 0 0 0 3px rgba(255, 122, 26, .16); }
+.v-input:focus { border-color: var(--v-accent-line); background: rgba(0, 0, 0, .42); box-shadow: inset 0 1px 2px rgba(0,0,0,.4), 0 0 0 3px var(--v-accent-glow); }
 .v-input::placeholder { color: var(--v-text-faint); }
 
 /* ── Slot tile — soft card, lifts and glows orange on hover ── */
@@ -235,20 +235,20 @@
 }
 .v-slot:hover {
   transform: translateY(-2px);
-  background: rgba(255, 122, 26, .06); border-color: var(--v-accent-line);
-  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, .65), 0 0 0 1px rgba(255, 122, 26, .25), 0 0 22px -4px rgba(255, 122, 26, .35);
+  background: var(--v-accent-glow); border-color: var(--v-accent-line);
+  box-shadow: 0 12px 24px -10px rgba(0, 0, 0, .65), 0 0 0 1px var(--v-accent-glow), 0 0 22px -4px var(--v-accent-glow);
 }
 
 /* ── Segmented gauge — rounded track, glowing gradient notches ── */
 .v-gauge { display: flex; gap: 2px; height: 10px; padding: 2px; border-radius: 99px;
   background: rgba(0, 0, 0, .38); border: 1px solid var(--v-line); }
 .v-gauge__seg { flex: 1; border-radius: 99px; background: rgba(255, 255, 255, .05); transition: background var(--v-t-base) var(--v-ease), box-shadow var(--v-t-base) var(--v-ease); }
-.v-gauge__seg.is-on { background: var(--v-grad-accent); box-shadow: 0 0 8px rgba(255, 122, 26, .45); }
+.v-gauge__seg.is-on { background: var(--v-grad-accent); box-shadow: 0 0 8px var(--v-accent-glow); }
 .v-gauge.is-over .v-gauge__seg.is-on { background: linear-gradient(180deg, var(--v-danger-300), var(--v-danger)); box-shadow: 0 0 8px rgba(229, 72, 77, .5); }
 
 /* ── Smooth progress bar (continuous fill counterpart of .v-gauge) ── */
 .v-progress { height: 8px; border-radius: 99px; background: rgba(0, 0, 0, .38); border: 1px solid var(--v-line); overflow: hidden; }
-.v-progress__fill { display: block; height: 100%; border-radius: 99px; background: var(--v-grad-accent); box-shadow: 0 0 12px rgba(255, 122, 26, .5); transition: width var(--v-t-slow) var(--v-ease); }
+.v-progress__fill { display: block; height: 100%; border-radius: 99px; background: var(--v-grad-accent); box-shadow: 0 0 12px var(--v-accent-glow); transition: width var(--v-t-slow) var(--v-ease); }
 
 /* ── Glass float — small translucent surface (menus, tooltips) ── */
 .v-glass {
@@ -263,7 +263,7 @@
 .v-scroll::-webkit-scrollbar { width: 8px; height: 8px; }
 .v-scroll::-webkit-scrollbar-track { background: transparent; }
 .v-scroll::-webkit-scrollbar-thumb { background: rgba(255, 221, 194, .14); border-radius: 99px; }
-.v-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255, 122, 26, .5); }
+.v-scroll::-webkit-scrollbar-thumb:hover { background: var(--v-accent-glow); }
 
 /* ── Keyboard focus ── */
 .v-btn:focus-visible, .v-input:focus-visible, [tabindex]:focus-visible,

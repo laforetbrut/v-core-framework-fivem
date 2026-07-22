@@ -148,6 +148,17 @@ function VCore.GetSetting(name, key, fallback)
     return fallback
 end
 
+--- The stored value only — nil when the operator has never touched this setting. A module
+--- needs this to tell "left at the default" from "deliberately set to the default value",
+--- which is the difference between an override that applies and one that does not.
+function VCore.GetRawSetting(name, key)
+    return Values[name] and Values[name][key]
+end
+
+function VCore.IsOverridden(name, key)
+    return (Values[name] or {})[key] ~= nil
+end
+
 --- Every setting of a module as a plain table, defaults filled in.
 function VCore.GetSettings(name)
     local out = {}
@@ -305,6 +316,8 @@ end)
 exports('RegisterModule', function(name, info) return VCore.RegisterModule(name, info) end)
 exports('GetSetting',     function(name, key, fallback) return VCore.GetSetting(name, key, fallback) end)
 exports('GetSettings',    function(name) return VCore.GetSettings(name) end)
+exports('GetRawSetting',  function(name, key) return VCore.GetRawSetting(name, key) end)
+exports('IsOverridden',   function(name, key) return VCore.IsOverridden(name, key) end)
 exports('SetSetting',     function(name, key, value) return VCore.SetSetting(name, key, value, 'script') end)
 exports('GetModules',     function() return VCore.GetModules() end)
 exports('IsModule',       function(name) return VCore.GetModules()[name] ~= nil end)
