@@ -137,3 +137,23 @@
 **Root cause:** FiveM's CEF *parses and reports support* for `backdrop-filter` (so `@supports` passes) but renders it as an opaque black box. The `@supports` guard is therefore useless as protection. This exact trap was already documented in the 2026-07-10 ERROR_LOG entry ("CEF-sensitive CSS … reliance on backdrop-filter/mask-image … brittle in-game") and in pre-EMBER RULES.md ("renders as an opaque black box in CEF 103 anyway") — and was reintroduced anyway on the assumption that "newer CEF" fixed it.
 **Fix:** Deleted all 19 `@supports (backdrop-filter…)` blocks across 10 stylesheets (theme.css, v-hud ×6, v-inventory ×4, v-notify, v-loadscreen, v-admin, v-target, v-clothing ×2, v-spawn). The near-opaque `--v-panel*` gradient fills — always declared outside the blocks — now do all the work; no visual regression beyond losing blur. Docs re-synced: RULES.md §3.5 forbids `backdrop-filter` again, ARCHITECTURE.md (v-ui) and CHANGELOG [1.1.0] amended.
 **Prevention:** `backdrop-filter` is FORBIDDEN in this project — not "behind @supports", not "as an enhancement": CEF's support detection lies. Trust ERROR_LOG/RULES entries over assumptions about newer CEF builds, and smoke-test any CEF-sensitive CSS in-game before rolling it out framework-wide.
+
+## [2026-07-22 06:10] — Dead config: Config.StoreMaxDamage
+**Context:** framework-wide audit of config completeness in v-garages
+**Error:** `Config.StoreMaxDamage = true` was declared with a comment promising a burning wreck could not be parked. No code anywhere read the value, so a destroyed vehicle could be stored and retrieved fully repaired — the garage was a free repair shop.
+**Root cause:** the config entry was written at the same time as the comment describing the intent, and the enforcement was never added. Nothing in the toolchain flags a config key that is declared but never read.
+**Fix:** enforced in the `v-garages:store` callback using the server-side entity health natives (engine, body, petrol tank), and exposed as an admin setting.
+**Prevention:** a config key or a registered setting that no code path reads is worse than no config: it lies to the operator. Grep every new `Config.X` and every `{ key = 'x' }` for a matching read before considering the module done.
+
+## [2026-07-22 06:12] — Refund only covered one branch
+**Context:** adding a retrieval fee to public garages
+**Error:** on a failed vehicle spawn, `v-garages:take` refunded only `g.fee` and only when `g.type == 'impound'`. My first patch put the new public-garage fee inside the impound branch, where it was unreachable.
+**Root cause:** the fee was computed inside a type-specific branch instead of once above it, so every new fee source needed its own duplicated refund.
+**Fix:** the fee is computed once before the branch and refunded unconditionally when the spawn fails.
+**Prevention:** when adding a second source of a charge, move the charge out of the branch first; never add a parallel one.
+
+## [2026-07-22 06:14] — NUI collapsed every error code to one message
+**Context:** adding limit errors to v-banking
+**Error:** `v-banking/html/app.js` mapped `res.error === 'target'` to one string and *everything else* to "insufficient funds". A transfer refused for exceeding the maximum told the player the opposite of the truth.
+**Root cause:** the handler was written when only two error codes existed and used an inline ternary instead of a lookup.
+**Prevention:** map server error codes through `t('prefix.err_' + code)` with a fallback, never a ternary chain — the fallback then degrades gracefully instead of lying.
