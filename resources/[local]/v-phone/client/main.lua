@@ -24,6 +24,74 @@ local function L(k) return strings()[k] or k end
 local function voice() return GetResourceState('v-voice') == 'started' end
 
 -- ══════════════════════════════════════════════════════════════
+-- In hand: a prop and an animation, while you keep walking and driving
+-- ══════════════════════════════════════════════════════════════
+-- The phone is a real object in the world now. Opening it puts the prop in the right hand
+-- and plays a one-handed animation; a call raises it to the ear. The NUI takes cursor
+-- focus but keeps game input flowing, and a guard thread disables only aiming, shooting
+-- and camera-look - so a tap on the screen does not fire a gun, but movement survives.
+local phoneProp = nil
+local phoneAnim = nil        -- which clip is playing, so we do not restart it every frame
+
+local function playHold(clip)
+    if phoneAnim == clip then return end
+    phoneAnim = clip
+    local ped = PlayerPedId()
+    local dict = Config.Hold.dict
+    RequestAnimDict(dict)
+    local tries = 0
+    while not HasAnimDictLoaded(dict) and tries < 50 do Wait(10) tries = tries + 1 end
+    -- Flag 51 = upper body + secondary + allow player movement, so the legs still walk.
+    TaskPlayAnim(ped, dict, clip, 3.0, 3.0, -1, 51, 0, false, false, false)
+end
+
+local function attachProp()
+    if phoneProp then return end
+    local model = joaat(Config.Hold.prop)
+    RequestModel(model)
+    local tries = 0
+    while not HasModelLoaded(model) and tries < 50 do Wait(10) tries = tries + 1 end
+    if not HasModelLoaded(model) then return end
+    local ped = PlayerPedId()
+    phoneProp = CreateObject(model, GetEntityCoords(ped), true, true, false)
+    local p, r = Config.Hold.pos, Config.Hold.rot
+    AttachEntityToEntity(phoneProp, ped, GetPedBoneIndex(ped, Config.Hold.bone),
+        p.x, p.y, p.z, r.x, r.y, r.z, true, true, false, true, 1, true)
+    SetModelAsNoLongerNeeded(model)
+end
+
+local function clearHand()
+    if phoneProp then DeleteObject(phoneProp) phoneProp = nil end
+    phoneAnim = nil
+    local ped = PlayerPedId()
+    StopAnimTask(ped, Config.Hold.dict, Config.Hold.browse, 3.0)
+    StopAnimTask(ped, Config.Hold.dict, Config.Hold.call, 3.0)
+end
+
+-- The pose depends on what the phone is doing: to the ear on an active call, otherwise
+-- one-handed at reading height. Re-applied when the state changes.
+local function refreshPose()
+    if not isOpen then return end
+    playHold((call and call.state == 'active') and Config.Hold.call or Config.Hold.browse)
+end
+
+-- The control guard: everything in Config.Hold.block is disabled each frame while the
+-- phone is up. It also keeps the animation alive if something interrupts it.
+local function startGuard()
+    CreateThread(function()
+        while isOpen do
+            for _, c in ipairs(Config.Hold.block) do DisableControlAction(0, c, true) end
+            local ped = PlayerPedId()
+            if phoneAnim and not IsEntityPlayingAnim(ped, Config.Hold.dict, phoneAnim, 3) then
+                phoneAnim = nil
+                refreshPose()
+            end
+            Wait(0)
+        end
+    end)
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- Open / close
 -- ══════════════════════════════════════════════════════════════
 local function openPhone()
@@ -38,6 +106,12 @@ local function openPhone()
         isOpen = true
         myNumber = state.number
         SetNuiFocus(true, true)          -- focus is per-resource: only the page owner may take it
+        -- Keep game input flowing so the player can still walk and drive; the guard thread
+        -- disables only aim/shoot/look so the cursor and the world do not fight.
+        SetNuiFocusKeepInput(true)
+        attachProp()
+        refreshPose()
+        startGuard()
         exports['v-core']:MenuOpened('v-phone')
         -- The screen is what drains a phone, so the server has to know it is on.
         TriggerServerEvent('v-phone:server:screen', true)
@@ -52,7 +126,9 @@ end
 local function closePhone()
     if not isOpen then return end
     isOpen = false
+    SetNuiFocusKeepInput(false)
     SetNuiFocus(false, false)
+    clearHand()
     exports['v-core']:MenuClosed('v-phone')
     TriggerServerEvent('v-phone:server:screen', false)
     SendNUIMessage({ action = 'close' })
@@ -144,6 +220,14 @@ end)
 --- moves a marker on this player's own minimap and touches nothing else.
 -- The flashlight is the phone's own: a light drawn at the handset while it is out, so
 -- the control centre torch does something you can see in the dark.
+-- The NUI raises this when a text field takes or loses focus. While typing, the keyboard
+-- must go to the page only (or 'w' walks you off); the rest of the time it flows to the
+-- game so movement works.
+RegisterNUICallback('holdInput', function(data, cb)
+    if isOpen then SetNuiFocusKeepInput(not (data and data.focused == true)) end
+    cb({ ok = true })
+end)
+
 RegisterNUICallback('torch', function(data, cb)
     phoneTorch = data and data.on == true
     cb({ ok = true })
@@ -341,6 +425,7 @@ end)
 RegisterNetEvent('v-phone:client:callActive', function(data)
     call = { id = data.id, state = 'active', number = call and call.number or nil }
     joinCallAudio()
+    refreshPose()
     SendNUIMessage({ action = 'call', call = call })
 end)
 
@@ -349,6 +434,7 @@ RegisterNetEvent('v-phone:client:callEnd', function(reason)
     -- release the channel leaves the player audible to strangers across the map.
     leaveCallAudio()
     call = nil
+    refreshPose()
     SendNUIMessage({ action = 'call', call = nil })
     if reason and reason ~= 'hangup' then V.Notify(L('ph.call_' .. reason), 'info') end
 end)

@@ -2643,6 +2643,17 @@ document.addEventListener('keydown', (e) => {
 
 byId('pages').addEventListener('wheel', (e) => { flipPage(e.deltaY > 0 ? 1 : -1); }, { passive: true });
 
+// The phone keeps game input flowing so you can walk and drive while using it. A focused
+// text field is the exception: the client holds the keyboard for the page while you type,
+// so pressing "w" writes a w instead of walking you off, and releases it on blur.
+const TYPEABLE = 'input, textarea, [contenteditable="true"]';
+document.addEventListener('focusin', (e) => {
+  if (e.target && e.target.matches && e.target.matches(TYPEABLE)) post('holdInput', { focused: true });
+});
+document.addEventListener('focusout', (e) => {
+  if (e.target && e.target.matches && e.target.matches(TYPEABLE)) post('holdInput', { focused: false });
+});
+
 // ══ Lua → page ═════════════════════════════════════════════════
 window.addEventListener('message', (e) => {
   const d = e.data || {};
