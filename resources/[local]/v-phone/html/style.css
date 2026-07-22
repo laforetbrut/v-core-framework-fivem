@@ -474,8 +474,14 @@ input { font: inherit; }
 .key b { font-family: var(--ios-num); font-size: 32px; font-weight: 400; line-height: 1; color: var(--key-label); }
 .key i { font-size: 10px; font-style: normal; letter-spacing: .12em; color: var(--app-label2);
   height: 11px; }
-.dialrow { display: flex; align-items: center; justify-content: center; gap: 22px;
-  padding: 10px 0 4px; }
+/* A three-column grid matching the keypad, so the call button stays in the middle column
+   whether or not the delete button is showing. As a flex row it drifted off-centre the
+   moment the (hidden) delete button left the layout. */
+.dialrow { display: grid; grid-template-columns: repeat(3, 74px); gap: 14px 22px;
+  justify-content: center; align-items: center; padding: 10px 0 4px; }
+.dialrow .callbtn { grid-column: 2; }
+.dialrow .delbtn { grid-column: 3; }
+.dialrow .dialspace { grid-column: 1; }
 .callbtn { width: 74px; height: 74px; border-radius: 50%; background: var(--ios-green); color: #fff;
   display: flex; align-items: center; justify-content: center;
   transition: transform .16s var(--snap); }
