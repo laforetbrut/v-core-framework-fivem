@@ -138,6 +138,15 @@ exports('Get',        function(src)
     local cid = cidOf(src)
     return cid and freshen(cid) or {}
 end)
+--- Every licence a citizen holds, by citizen id — the offline lookup an MDT or a records
+--- desk needs. `Get` only answers for a connected player.
+exports('GetAllByCid', function(cid)
+    local rows = MySQL.query.await(
+        'SELECT type, status, points, issued_at, expires_at, issuer FROM character_licenses WHERE citizenid = ?',
+        { tostring(cid or '') }) or {}
+    return rows
+end)
+
 exports('GetTypes',   function() return Types end)
 exports('Grant',      function(cid, key, issuer) return grant(cid, key, issuer or 'admin') end)
 exports('Revoke',     function(cid, key) return setStatus(cid, key, S.revoked) end)

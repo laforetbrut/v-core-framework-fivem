@@ -1,0 +1,107 @@
+/* v-police — theme tokens only, so the panel follows the server palette and any
+   per-module override without a literal colour here. */
+.pol-overlay {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(0, 0, 0, var(--v-backdrop-a));
+}
+.pol-overlay.hidden { display: none; }
+
+.panel { width: min(70vw, 960px); max-height: 82vh; display: flex; flex-direction: column; }
+
+.panel__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 1.1rem 1.4rem; border-bottom: 1px solid var(--v-line);
+}
+.ttl { font-family: var(--v-font-display); font-size: 1.35rem; color: var(--v-text); }
+.sub { font-size: .82rem; color: var(--v-text-dim); margin-top: .15rem; }
+.x {
+  background: none; border: 0; color: var(--v-text-dim); font-size: 1.6rem; line-height: 1;
+  cursor: pointer; transition: color var(--v-t-fast);
+}
+.x:hover { color: var(--v-text); }
+
+.tabs { display: flex; gap: .3rem; padding: .7rem 1.4rem 0; border-bottom: 1px solid var(--v-line); }
+.tab {
+  background: none; border: 0; cursor: pointer; padding: .5rem .9rem;
+  font-family: var(--v-font-display); font-size: .9rem; color: var(--v-text-dim);
+  border-bottom: 2px solid transparent;
+  transition: color var(--v-t-fast), border-color var(--v-t-fast);
+}
+.tab:hover { color: var(--v-text); }
+.tab.on { color: var(--v-accent); border-bottom-color: var(--v-accent); }
+
+.panel__body { padding: 1.1rem 1.4rem; overflow-y: auto; }
+.pane.hidden { display: none; }
+
+.actions { display: flex; flex-wrap: wrap; gap: .6rem; margin-bottom: 1rem; }
+
+.btn {
+  padding: .5rem .9rem; border: 0; cursor: pointer; border-radius: var(--v-r-sm);
+  font-family: var(--v-font-display); font-size: .86rem;
+  color: var(--v-ink); background: var(--v-grad-accent); transition: filter var(--v-t-fast);
+}
+.btn:hover { filter: brightness(1.08); }
+.btn.ghost { background: none; color: var(--v-text-dim); border: 1px solid var(--v-line); }
+.btn.ghost:hover { color: var(--v-text); border-color: var(--v-accent-line); }
+.btn.danger { background: none; color: var(--v-danger); border: 1px solid var(--v-danger); }
+.btn.danger:hover { background: var(--v-danger); color: var(--v-ink); filter: none; }
+
+input[type="text"], input[type="number"], textarea, select {
+  background: var(--v-bg-700); color: var(--v-text);
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  padding: .4rem .55rem; font-size: .85rem; font-family: inherit;
+}
+input:focus, textarea:focus, select:focus { outline: none; border-color: var(--v-accent-line); }
+textarea { width: 100%; resize: vertical; }
+
+.section-ttl {
+  font-family: var(--v-font-display); font-size: .78rem; text-transform: uppercase;
+  letter-spacing: .14em; color: var(--v-text-faint); margin: 1rem 0 .5rem;
+}
+.section-ttl:first-child { margin-top: 0; }
+
+.rowitem {
+  display: flex; align-items: center; gap: .7rem; padding: .5rem .7rem;
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  background: var(--v-panel-2); margin-bottom: .4rem;
+}
+.rowitem__main { flex: 1; min-width: 0; }
+.rowitem__name { color: var(--v-text); font-size: .9rem; }
+.rowitem__meta { color: var(--v-text-faint); font-size: .74rem; margin-top: .08rem; }
+
+/* Charge sheet: a dense grid, because an officer picks from twenty of these. */
+.charges { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .4rem; }
+.charge {
+  display: flex; align-items: center; gap: .55rem; padding: .45rem .6rem;
+  border: 1px solid var(--v-line); border-radius: var(--v-r-sm);
+  background: var(--v-panel-2); cursor: pointer; user-select: none;
+  transition: border-color var(--v-t-fast), background var(--v-t-fast);
+}
+.charge:hover { border-color: var(--v-accent-line); }
+.charge.on { border-color: var(--v-accent); background: var(--v-accent-soft); }
+.charge__code {
+  font-variant-numeric: tabular-nums; font-size: .74rem; color: var(--v-accent);
+  min-width: 2.4rem;
+}
+.charge__label { flex: 1; font-size: .84rem; color: var(--v-text); }
+.charge__cost { font-size: .72rem; color: var(--v-text-faint); font-variant-numeric: tabular-nums; }
+
+.total {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: .7rem .8rem; margin-top: .8rem;
+  border: 1px solid var(--v-accent-line); border-radius: var(--v-r-sm);
+  background: var(--v-accent-soft); color: var(--v-text); font-size: .9rem;
+}
+.total b { font-variant-numeric: tabular-nums; }
+
+.search-row { display: flex; gap: .5rem; margin-bottom: .8rem; }
+.search-row input { flex: 1; }
+
+.badge {
+  font-size: .7rem; padding: .12rem .45rem; border-radius: var(--v-r-sm);
+  border: 1px solid var(--v-line); color: var(--v-text-dim);
+}
+.badge.warn { color: var(--v-danger); border-color: var(--v-danger); }
+.badge.ok { color: var(--v-success); border-color: var(--v-success); }
+
+.empty { text-align: center; color: var(--v-text-faint); padding: 1.6rem 0; font-size: .86rem; }

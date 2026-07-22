@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
+  <script src="https://cfx-nui-v-ui/theme.js"></script>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="pol" class="pol-overlay hidden">
+    <div class="panel v-panel v-chamfer">
+      <div class="panel__head">
+        <div>
+          <div class="ttl" id="p-title">Police</div>
+          <div class="sub" id="p-sub"></div>
+        </div>
+        <button class="x" id="p-close" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="tabs">
+        <button class="tab on" data-tab="street" id="tb-street">Street</button>
+        <button class="tab" data-tab="book" id="tb-book">Charges</button>
+        <button class="tab" data-tab="mdt" id="tb-mdt">MDT</button>
+      </div>
+
+      <div class="panel__body v-scroll">
+        <section class="pane" id="pane-street"></section>
+        <section class="pane hidden" id="pane-book"></section>
+        <section class="pane hidden" id="pane-mdt"></section>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -829,6 +829,40 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-police` ✅ — cuffs, escort, search, charges, jail, MDT
+
+**Police is a job, not a permission.** Staff are not police, and an admin who wants to
+arrest somebody should be given the job. Every callback checks the job (and duty, by
+default), never a permission tier.
+
+**The penal code is data.** Every server rewrites its charge sheet first, so charges live
+in `world_charges` — code, label, category, fine, jail minutes, licence points and which
+licence those points hit — and are edited in **Admin → Editor → Penal code**. Twenty-one
+charges ship as a starting point.
+
+**The client sends codes; the server derives the sentence.** The NUI shows a running total
+as a preview only. A client that could name its own fine could also name a negative one.
+
+**Only a cuffed detainee can be escorted**, otherwise "escort" is a way to move any player
+anywhere against their will. **Seized goods leave the world** rather than moving to the
+officer — evidence that lands in a policeman's pocket is indistinguishable from theft.
+Search reads `v-inventory`'s own `GetSearchable`, which already never exposes the hidden
+pocket; re-deriving that rule here would fork it.
+
+**Jail is a row with an absolute release time, not a timer.** A timer dies with a restart
+and a relog would be an escape. The sentence is re-read on spawn, and the client can only
+release itself when the row agrees.
+
+**A fine that cannot be paid is a debt, not a failed arrest** — the sentence stands and the
+record is marked unpaid. Fines can optionally be paid into the department's `v-factions`
+treasury, which closes the loop between policing and the faction economy. Licence points
+reach `v-licenses` through the charge row rather than a hardcoded list here, and impound
+goes through `v-vehicles`/`v-garages` so the owner can buy the car back at the lot.
+
+The **MDT** looks a citizen up by name or id and shows their record, active warrants,
+licences (with points) and registered vehicles; warrants can be issued and cleared. Nine
+settings, including whether charging clears outstanding warrants.
+
 ### `v-gangs` ✅ — territory, capture and influence
 
 Membership, ranks and the treasury are **not** here — they are `v-factions`'. This module
@@ -1064,7 +1098,7 @@ spawn path** — nothing else in the framework is allowed to `CreateVehicle` an 
 | 5 | ✅ **`v-factions`** — the shared org layer (**shipped**) | `v-jobs`, `v-world` | One engine for **legal factions** (PD, EMS, mechanics, taxi, news) and **illegal ones** (gangs, mafias) — they differ by data, not by code. Owns membership, ranks (reusing `jobs.grades`), a **faction treasury** (a real account with its own transaction log, not a number in a config), owned garages/stashes/vehicles, and a territory concept for the illegal side. `gangs` already exists in the schema and is still empty. |
 | 6 | ✅ **`v-bossmenu`** — the boss/patron panel (**shipped**) | `v-factions`, `v-banking` | The management UI a faction leader actually needs, gated on **rank**, not on admin permission: **hire / fire / promote / demote** members, see who is on duty, **deposit & withdraw from the treasury** with a full audit trail, **pay salaries**, manage the faction's **garage and stash access per rank**, and set the recruitment state. Every action is server-verified against the caller's rank and logged — a boss menu that trusts the client is a money printer. |
 | 7 | ✅ **`v-gangs`** — the illegal org flavour (**shipped**) | `v-factions` | What `v-factions` doesn't share: **territories** (capture, influence decay, contested state), turf-gated drug sales, gang stashes and gang wars. Reuses the faction engine for membership and the treasury. |
-| 8 | **`v-police`** | `v-factions`, `v-vehicles` | Cuffs, escort, search (reusing `v-inventory`'s `GetSearchable`, which already never exposes the hidden pocket), **evidence**, an MDT (records, warrants, BOLOs), fines, jail, and **impound** through `v-garages`. |
+| 8 | ✅ **`v-police`** (**shipped**) | `v-factions`, `v-vehicles` | Cuffs, escort, search (reusing `v-inventory`'s `GetSearchable`, which already never exposes the hidden pocket), **evidence**, an MDT (records, warrants, BOLOs), fines, jail, and **impound** through `v-garages`. |
 
 ### 5.3 Papers — licences & permits
 

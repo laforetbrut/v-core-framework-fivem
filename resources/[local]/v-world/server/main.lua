@@ -13,7 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
-local Gangs, Turfs = {}, {}
+local Gangs, Turfs, Charges = {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -253,6 +253,20 @@ local function ensureTables()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- The penal code. Every server rewrites its charge sheet, so it is data, not Lua.
+    -- `points` is licence points, which is how a driving offence reaches v-licenses.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_charges` (
+        `code` VARCHAR(20) NOT NULL,
+        `label` VARCHAR(120) NOT NULL,
+        `cat` VARCHAR(30) NOT NULL DEFAULT 'misc',
+        `fine` INT NOT NULL DEFAULT 0,
+        `jail` INT NOT NULL DEFAULT 0,               -- minutes
+        `points` INT NOT NULL DEFAULT 0,             -- licence points
+        `license` VARCHAR(40) DEFAULT NULL,          -- which licence the points hit
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`code`), KEY `cat_idx` (`cat`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -350,6 +364,14 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadCharges()
+    Charges = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_charges ORDER BY cat, code') or {}) do
+        r.enabled = bool(r.enabled)
+        Charges[#Charges + 1] = r
     end
 end
 
@@ -470,6 +492,7 @@ local function reload(domain)
     if domain == 'jobs'    or not domain then loadJobs() end
     if domain == 'gangs'   or not domain then loadGangs() end
     if domain == 'turfs'   or not domain then loadTurfs() end
+    if domain == 'charges' or not domain then loadCharges() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -556,6 +579,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetCharges', function() return Charges end)
 exports('GetGangs',   function() return Gangs end)
 exports('GetTurfs',   function() return Turfs end)
 exports('GetRentals', function() return Rentals end)
@@ -755,6 +779,23 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-police: list of { code, label, cat, fine, jail, points, license }
+exports('SeedCharges', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('charges', defaults)
+    if not need then return false end
+    for _, c in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_charges
+            (code, label, cat, fine, jail, points, license, enabled) VALUES (?,?,?,?,?,?,?,1)]],
+            { c.code, c.label or c.code, c.cat or 'misc', c.fine or 0, c.jail or 0,
+              c.points or 0, c.license })
+    end
+    seedDone('charges', want)
+    loadCharges()
+    print(('[v-world] seeded %d charge(s) from config'):format(#Charges))
+    return true
+end)
+
 -- v-gangs: { [name] = { label, type, grades = { [n] = { name } } } }
 exports('SeedGangs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
@@ -836,6 +877,10 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'charges' then
+        local lics = {}
+        for _, l in ipairs(LicTypes) do lics[#lics + 1] = { key = l.key, label = l.label } end
+        resolve({ rows = Charges, licenses = lics, cats = Config.ChargeCategories })
     elseif domain == 'turfs' then
         -- the owner and the influence live in v-gangs, not here: the turf row is only
         -- the shape on the map
@@ -962,6 +1007,21 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'charges' then
+        local code = tostring(row.code or ''):upper():gsub('[^%w%.%-]', ''):sub(1, 20)
+        if code == '' then resolve({ error = 'code' }); return end
+        local label = tostring(row.label or ''):sub(1, 120)
+        if label == '' then resolve({ error = 'label' }); return end
+        local lic = tostring(row.license or ''):sub(1, 40); if lic == '' then lic = nil end
+        MySQL.query.await([[INSERT INTO world_charges (code, label, cat, fine, jail, points, license, enabled)
+            VALUES (?,?,?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), cat=VALUES(cat), fine=VALUES(fine),
+                jail=VALUES(jail), points=VALUES(points), license=VALUES(license), enabled=VALUES(enabled)]],
+            { code, label, tostring(row.cat or 'misc'):sub(1, 30),
+              math.max(0, math.floor(num(row.fine))), math.max(0, math.floor(num(row.jail))),
+              math.max(0, math.floor(num(row.points))), lic,
+              bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'gangs' then
         local name = tostring(row.name or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
@@ -1331,6 +1391,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'charges' then
+        local code = tostring(id or '')
+        if code == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_charges WHERE code = ?', { code })
     elseif d == 'gangs' then
         local name = tostring(id or '')
         if name == '' then resolve({ error = 'protected' }); return end
