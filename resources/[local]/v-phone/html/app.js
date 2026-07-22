@@ -608,7 +608,7 @@ RENDER.phone = () => {
     `<div class="keypad">${KEYS.map(([k, l]) =>
       `<button class="key" data-k="${k}" type="button"><b>${k}</b><i>${l}</i></button>`).join('')}</div>` +
     `<div class="dialrow">` +
-      `<span style="width:74px"></span>` +
+      `<span class="dialspace"></span>` +
       `<button class="callbtn" id="dial" type="button">${svg('answer')}</button>` +
       `<button class="delbtn ${dialed ? '' : 'hidden'}" id="delkey" type="button">${svg('del')}</button>` +
     `</div>`
