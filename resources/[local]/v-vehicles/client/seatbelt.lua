@@ -9,6 +9,7 @@
 local buckled   = false
 local wasInVeh  = false
 local lastSpeed = 0.0
+local lastTick  = 0
 
 local function core()
     if GetResourceState('v-core') ~= 'started' then return nil end
@@ -83,18 +84,24 @@ CreateThread(function()
                 -- A fresh vehicle always starts unbuckled: carrying the belt over from
                 -- the last car is how players end up "protected" without ever buckling.
                 wasInVeh, buckled = true, false
-                lastSpeed = GetEntitySpeed(veh)
+                lastSpeed, lastTick = GetEntitySpeed(veh), GetGameTimer()
                 applyFlag(ped)
             end
 
             local speed = GetEntitySpeed(veh)
+            local now = GetGameTimer()
+            local dt = math.max(1, now - lastTick)
+            lastTick = now
 
             if buckled then
                 -- Holding the flag off every tick: scripts and the engine both reset it.
                 applyFlag(ped)
             else
-                -- Deceleration in m/s per tick, converted to km/h for a readable setting.
-                local drop = (lastSpeed - speed) * 3.6
+                -- Deceleration normalised to a fixed 100 ms window, so the admin setting
+                -- means the same thing whatever the tick rate — and so this loop does not
+                -- have to run every frame to stay accurate. A crash dumps far more than
+                -- the threshold in 100 ms; hard braking dumps roughly 4 km/h.
+                local drop = (lastSpeed - speed) * 3.6 * (100.0 / dt)
                 local trigger = tonumber(setting('ejectDrop', 55)) or 55
                 local minSpeed = (tonumber(setting('ejectMinSpeed', 60)) or 60) / 3.6
 
@@ -117,7 +124,7 @@ CreateThread(function()
             end
 
             lastSpeed = speed
-            Wait(0)
+            Wait(50)
         end
     end
 end)

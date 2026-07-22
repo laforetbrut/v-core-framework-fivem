@@ -216,6 +216,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Performance (English first)
 
+- **The minimap loop was the most expensive thing the HUD did** — it ran at 60 fps forever, and every single frame it re-applied three `SetMinimapComponentPosition` calls, a scaleform method and a `SetScriptGfxAlign` round-trip. All of those are **persistent**, not per-frame: they now run when the map state actually changes (bigmap toggle, or a drag/resize, which re-applies from its own NUI callback so dragging still follows the cursor), plus a slow self-heal every 2 s in case another resource stomps the layout. The loop itself dropped from `Wait(0)` to `Wait(100)`.
+- **The seatbelt loop no longer runs every frame** — its deceleration threshold is normalised to a fixed 100 ms window, so the admin setting means the same thing whatever the tick rate, and a 50 ms tick catches the same impacts (a crash lasts far longer than one frame) at a third of the cost.
+
 - **Inventory payloads slimmed** — the item catalogue (`defs`, ~170 rows) is now sent to the NUI **once on open** and cached client-side; every move / use / drop / give response omits it, so per-action payloads shrank from the full catalogue to just the changed state. **Ground drops** became real world props that are **garbage-collected the moment they're emptied** — fixing the previously unbounded `Stashes` growth (drops were never removed, even when empty). Drop position is also now taken from the player's server-side coords (not a client-supplied point).
 
 ### Changed (English first)
@@ -287,6 +290,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Project docs** — `README.md`, `RULES.md`, `.gitignore` tailored to a vanilla FiveM workflow.
 
 ### Performance (miroir français)
+
+- **La boucle de la minimap était ce que le HUD faisait de plus coûteux** — elle tournait à 60 fps en permanence, et à chaque frame elle réappliquait trois `SetMinimapComponentPosition`, un appel scaleform et un aller-retour `SetScriptGfxAlign`. Tous ces appels sont **persistants**, pas par frame : ils ne s'exécutent plus que quand l'état de la carte change réellement (bascule bigmap, ou déplacement/redimensionnement, qui réapplique depuis son propre callback NUI pour que le glisser reste collé au curseur), plus une réparation lente toutes les 2 s au cas où une autre ressource écraserait la disposition. La boucle elle-même passe de `Wait(0)` à `Wait(100)`.
+- **La boucle de la ceinture ne tourne plus à chaque frame** — son seuil de décélération est normalisé sur une fenêtre fixe de 100 ms, donc le réglage admin veut dire la même chose quel que soit le rythme de la boucle, et un tick de 50 ms détecte les mêmes impacts (un choc dure bien plus qu'une frame) pour un tiers du coût.
 
 - **Charges NUI de l'inventaire allégées** — le catalogue d'items (`defs`, ~170 lignes) n'est envoyé à la NUI **qu'à l'ouverture** puis mis en cache ; chaque réponse de déplacement / usage / jet / don l'omet, donc la charge par action passe du catalogue complet au seul état modifié. Les **drops au sol** deviennent de vrais objets du monde **nettoyés dès qu'ils sont vidés** — corrige la croissance non bornée de `Stashes` (les drops n'étaient jamais supprimés). La position du drop vient aussi des coords serveur du joueur (plus d'un point fourni par le client).
 
