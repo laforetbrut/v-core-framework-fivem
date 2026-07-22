@@ -327,6 +327,7 @@ function enterApp(a, tile) {
   }
   byId('appbody').style.padding = '';
   byId('app').classList.remove('black');
+  byId('screen').classList.remove('appblack');
   byId('navbar').classList.remove('hidden');
   const fn = RENDER[a.id];
   if (fn) fn(); else body(UI.empty(L('ph.no_app')));
@@ -336,11 +337,11 @@ function closeApp(instant) {
   const app = byId('app');
   if (!app.classList.contains('on')) return;
   byId('screen').classList.remove('app-open');
-  if (instant) { app.classList.remove('on'); openApp = null; thread = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null; return; }
+  if (instant) { app.classList.remove('on'); openApp = null; thread = null; threadGroup = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null; return; }
   app.classList.remove('on');
   app.classList.add('closing');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
-  openApp = null; thread = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null;
+  openApp = null; thread = null; threadGroup = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null;
 }
 
 function setNav(title, backLabel, action) {
@@ -439,18 +440,38 @@ function nameOfNumber(number) {
 }
 
 RENDER.messages = () => {
+  threadGroup = null;
   setNav(L('app.messages'), null, { icon: 'add', onClick: newMessageSheet });
   const list = state.conversations || [];
-  if (!list.length) { body(UI.empty(L('ph.no_messages'), 'messages')); return; }
-  body(UI.group(list.map((c) => UI.row({
-    avatar: nameOfNumber(c.number), title: nameOfNumber(c.number), subtitle: c.body,
-    badge: c.unread > 0 ? c.unread : null, chevron: true, data: { n: c.number },
-  }))));
-  rows('.row', (r) => r.addEventListener('click', () => openThread(r.dataset.n)));
+  const groups = state.groups || [];
+  if (!list.length && !groups.length) { body(UI.empty(L('ph.no_messages'), 'messages')); return; }
+  body(
+    (groups.length ? UI.group(groups.map((g) => UI.row({
+      icon: 'contacts', tint: '#34C759', title: g.name, chevron: true, data: { g: g.id, gn: g.name },
+    })), { header: L('ph.groups') }) : '') +
+    (list.length ? UI.group(list.map((c) => UI.row({
+      avatar: nameOfNumber(c.number), title: nameOfNumber(c.number), subtitle: c.body,
+      badge: c.unread > 0 ? c.unread : null, chevron: true, data: { n: c.number },
+    }))) : '')
+  );
+  rows('.row[data-n]', (r) => r.addEventListener('click', () => openThread(r.dataset.n)));
+  rows('.row[data-g]', (r) => r.addEventListener('click', () =>
+    openGroup(Number(r.dataset.g), r.dataset.gn)));
 };
+
+async function openGroup(id, name) {
+  thread = null;
+  threadGroup = { id, name };
+  setNav(name, L('app.messages'));
+  loading();
+  const res = await post('conversation', { group: id });
+  if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
+  paintThread(res.messages || []);
+}
 
 async function openThread(number) {
   thread = number;
+  threadGroup = null;
   setNav(nameOfNumber(number), L('app.messages'), {
     icon: 'phone', onClick: () => post('call', { number }),
   });
@@ -463,28 +484,98 @@ async function openThread(number) {
   if (c) c.unread = 0;
 }
 
+function bubbleHtml(m) {
+  let inner;
+  if (m.kind === 'image') {
+    inner = '<img class="mimg" src="' + esc(m.attachment) + '" />' +
+      (m.body ? '<div class="mcap">' + esc(m.body) + '</div>' : '');
+  } else if (m.kind === 'location') {
+    // A shared position opens in Maps, which here means: it sets your waypoint.
+    inner = '<button class="locbtn" type="button" data-loc="' + esc(m.attachment) + '">' +
+      svg('map') + esc(L('ph.msg_location')) + '</button>';
+  } else {
+    inner = esc(m.body);
+  }
+  const sender = (!m.mine && threadGroup && m.from)
+    ? '<div class="gsender">' + esc(nameOfNumber(m.from)) + '</div>' : '';
+  return sender + '<div class="bub ' + (m.mine ? 'me' : 'them') +
+    (m.kind === 'image' ? ' imgb' : '') + '">' + inner + '</div>';
+}
+
+function wireLocButtons() {
+  rows('.locbtn', (b) => b.addEventListener('click', async () => {
+    const parts = String(b.dataset.loc || '').split(';');
+    const r = await post('waypoint', { x: Number(parts[0]), y: Number(parts[1]) });
+    if (r && r.ok) toast(L('ph.waypoint_set'));
+  }));
+}
+
 function paintThread(messages) {
-  body(`<div class="thread" id="thread">${messages.map((m) =>
-    `<div class="bub ${m.mine ? 'me' : 'them'}">${esc(m.body)}</div>`).join('')}</div>`);
+  body(`<div class="thread" id="thread">${messages.map(bubbleHtml).join('')}</div>`);
+  wireLocButtons();
   foot(`<div class="compose">` +
+    `<button class="attach" id="attach" type="button">+</button>` +
     UI.field('msg', L('ph.write'), '', 'maxlength="250"') +
     `<button class="sendbtn" id="sendmsg" type="button">${svg('send')}</button></div>`);
+  byId('attach').addEventListener('click', () => attachSheet());
   const el = byId('thread');
   el.scrollTop = el.scrollHeight;
   byId('appbody').scrollTop = byId('appbody').scrollHeight;
 
+  const target = () => threadGroup ? { group: threadGroup.id } : { number: thread };
   const send = async () => {
     const input = byId('msg');
     const text = input.value.trim();
     if (!text) return;
     input.value = '';
-    const res = await post('send', { number: thread, body: text });
+    const res = await post('send', Object.assign({ body: text }, target()));
     if (res && res.ok) {
-      el.insertAdjacentHTML('beforeend', `<div class="bub me">${esc(res.body)}</div>`);
+      el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, body: res.body, kind: res.kind, attachment: res.attachment }));
       byId('appbody').scrollTop = byId('appbody').scrollHeight;
     } else {
       toast(L('ph.err_' + ((res && res.error) || 'x')));
     }
+  };
+
+  // Anything that is not typed: a photo from the gallery, an image or GIF by link, or
+  // where you are standing. All of it lands as a message like any other.
+  window.attachSheet = () => {
+    const shots = state.photos || [];
+    sheet(L('ph.attach'),
+      (shots.length
+        ? '<div class="grouphead">' + esc(L('ph.attach_photo')) + '</div>' +
+          '<div class="shots" style="margin-bottom:12px">' + shots.map((u, i) =>
+            '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>'
+        : '') +
+      UI.field('aturl', L('ph.attach_url'), '', 'maxlength="300"') +
+      UI.button(L('ph.attach_send'), 'atgo') +
+      UI.button(L('ph.attach_loc'), 'atloc', 'plain'),
+      () => {
+        const sendMedia = async (payload) => {
+          const res = await post('send', Object.assign(payload, target()));
+          closeSheet();
+          if (res && res.ok) {
+            el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, body: res.body, kind: res.kind, attachment: res.attachment }));
+            wireLocButtons();
+            byId('appbody').scrollTop = byId('appbody').scrollHeight;
+          } else toast(L('ph.err_' + ((res && res.error) || 'x')));
+        };
+        [...byId('sheet').querySelectorAll('.shot')].forEach((sh) =>
+          sh.addEventListener('click', () => sendMedia({ kind: 'image', attachment: shots[Number(sh.dataset.i)], body: '' })));
+        byId('atgo').addEventListener('click', () => {
+          const u = byId('aturl').value.trim();
+          if (u) sendMedia({ kind: 'image', attachment: u, body: '' });
+        });
+        byId('atloc').addEventListener('click', async () => {
+          const res = await post('sendloc', target());
+          closeSheet();
+          if (res && res.ok) {
+            el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, kind: 'location', attachment: res.attachment || '0;0', body: '' }));
+            wireLocButtons();
+            byId('appbody').scrollTop = byId('appbody').scrollHeight;
+          } else toast(L('ph.err_' + ((res && res.error) || 'x')));
+        });
+      });
   };
   byId('sendmsg').addEventListener('click', send);
   byId('msg').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
@@ -492,12 +583,36 @@ function paintThread(messages) {
 
 function newMessageSheet() {
   sheet(L('ph.new_message_to'),
-    UI.field('nmnum', L('ph.number')) + UI.button(L('ph.write'), 'nmgo'),
-    () => { byId('nmgo').addEventListener('click', () => {
-      const n = byId('nmnum').value.trim();
+    UI.field('nmnum', L('ph.number')) + UI.button(L('ph.write'), 'nmgo') +
+    UI.button(L('ph.new_group'), 'nggo', 'plain'),
+    () => {
+      byId('nmgo').addEventListener('click', () => {
+        const n = byId('nmnum').value.trim();
+        closeSheet();
+        if (n) openThread(n);
+      });
+      byId('nggo').addEventListener('click', newGroupSheet);
+    });
+}
+
+// A group is a name and some contacts. Every number must be somebody real - the server
+// refuses ghosts - and you are a member by construction.
+function newGroupSheet() {
+  const contacts = state.contacts || [];
+  sheet(L('ph.new_group'),
+    UI.field('gname', L('ph.group_name'), '', 'maxlength="40"') +
+    (contacts.length
+      ? contacts.map((c) => '<label class="gpick"><input type="checkbox" value="' + esc(c.number) + '" />' +
+          esc(c.name) + '</label>').join('')
+      : UI.empty(L('ph.no_contacts'))) +
+    UI.button(L('ph.group_make'), 'ggo'),
+    () => byId('ggo').addEventListener('click', async () => {
+      const numbers = [...byId('sheet').querySelectorAll('input:checked')].map((i) => i.value);
+      const r = await post('groupCreate', { name: byId('gname').value.trim(), numbers });
       closeSheet();
-      if (n) openThread(n);
-    }); });
+      if (r && r.ok) { await refresh(); RENDER.messages(); openGroup(r.id, r.name); }
+      else toast(L('ph.err_' + ((r && r.error) || 'x')));
+    }));
 }
 
 // ── Contacts ───────────────────────────────────────────────────
@@ -793,7 +908,7 @@ function applyPower(p) {
   const b = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 100;
   const el = byId('battery');
   el.style.setProperty('--batt', String(b / 100));
-  el.style.setProperty('--batt-col', p.charging ? '#34C759' : (b <= 5 ? '#FF3B30' : (b <= 20 ? '#FF9500' : '#fff')));
+  el.style.setProperty('--batt-col', p.charging ? '#34C759' : (b <= 5 ? '#FF3B30' : (b <= 20 ? '#FF9500' : 'var(--sb-ink, #fff)')));
   byId('battpct').textContent = Math.round(b);
 
   const bars = Math.max(0, Math.min(4, Number(p.signal ?? 4)));
@@ -986,6 +1101,7 @@ function calcPress(k) {
 
 RENDER.calc = () => {
   byId('app').classList.add('black');
+  byId('screen').classList.add('appblack');
   const K = [['c', 'fn', 'AC'], ['neg', 'fn', '+/-'], ['pct', 'fn', '%'], ['/', 'op', '÷'],
              ['7', '', '7'], ['8', '', '8'], ['9', '', '9'], ['*', 'op', '×'],
              ['4', '', '4'], ['5', '', '5'], ['6', '', '6'], ['-', 'op', '−'],
@@ -1819,7 +1935,14 @@ byId('navback').addEventListener('click', () => {
     RENDER.store();
     return;
   }
-  if (openApp && openApp.id === 'messages' && thread) {
+  if (openApp && openApp.id === 'messages' && (thread || threadGroup)) {
+    if (threadGroup) {
+      // Back from a group steps to the list, exactly as it does from a DM. Falling
+      // through to closeApp here is how back used to throw you out of the app.
+      threadGroup = null; foot('');
+      RENDER.messages();
+      return;
+    }
     thread = null; foot('');
     RENDER.messages();
     return;
@@ -1880,14 +2003,18 @@ window.addEventListener('message', (e) => {
     if (call && call.state !== was) { callMuted = false; callSpeaker = false; }
     renderCall();
   } else if (d.action === 'message') {
-    if (thread && d.message && d.message.from === thread) {
+    const m = d.message || {};
+    const inOpenThread = (threadGroup && m.group === threadGroup.id) ||
+                         (!m.group && thread && m.from === thread);
+    if (inOpenThread) {
       const el = byId('thread');
       if (el) {
-        el.insertAdjacentHTML('beforeend', `<div class="bub them">${esc(d.message.body)}</div>`);
+        el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: false, body: m.body, kind: m.kind, attachment: m.attachment, from: m.from }));
+        wireLocButtons();
         byId('appbody').scrollTop = byId('appbody').scrollHeight;
       }
     } else {
-      banner({ icon: 'messages', title: nameOfNumber(d.message.from), body: d.message.body,
+      banner({ icon: 'messages', title: d.message.group ? (d.message.groupName || L('ph.groups')) : nameOfNumber(d.message.from), body: d.message.body || L('ph.attach'),
                onClick: () => { const a = (state.apps || []).find((x) => x.id === 'messages');
                                 if (a) { enterApp(a, null); openThread(d.message.from); } } });
       refresh().then(() => { if (!openApp) renderHome(); });

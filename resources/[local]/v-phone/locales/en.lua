@@ -298,5 +298,15 @@ local T = {
     ['ph.desc_bleeter'] = 'What the city is saying, 280 characters at a time.',
     ['ph.desc_snap'] = 'The photo feed. The camera shoots, Snapmatic shows.',
     ['ph.desc_hush'] = 'First names and faces. Numbers are exchanged only when you both said yes.',
+    ['ph.groups'] = 'Groups',
+    ['ph.new_group'] = 'New group',
+    ['ph.group_name'] = 'Group name',
+    ['ph.group_make'] = 'Create the group',
+    ['ph.attach'] = 'Attachment',
+    ['ph.attach_photo'] = 'From your gallery',
+    ['ph.attach_url'] = 'Image or GIF link',
+    ['ph.attach_send'] = 'Send the image',
+    ['ph.attach_loc'] = 'Share my position',
+    ['ph.msg_location'] = 'Shared position — tap to set a waypoint',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

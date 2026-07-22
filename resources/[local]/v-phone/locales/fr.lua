@@ -300,5 +300,15 @@ local T = {
     ['ph.desc_bleeter'] = 'Ce que la ville raconte, 280 caractères à la fois.',
     ['ph.desc_snap'] = "Le fil photo. L'appareil prend, Snapmatic montre.",
     ['ph.desc_hush'] = "Des prénoms et des visages. Les numéros ne s'échangent que quand vous avez dit oui tous les deux.",
+    ['ph.groups'] = 'Groupes',
+    ['ph.new_group'] = 'Nouveau groupe',
+    ['ph.group_name'] = 'Nom du groupe',
+    ['ph.group_make'] = 'Créer le groupe',
+    ['ph.attach'] = 'Pièce jointe',
+    ['ph.attach_photo'] = 'Depuis votre galerie',
+    ['ph.attach_url'] = "Lien d'image ou de GIF",
+    ['ph.attach_send'] = "Envoyer l'image",
+    ['ph.attach_loc'] = 'Partager ma position',
+    ['ph.msg_location'] = 'Position partagée — touchez pour poser un repère',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

@@ -95,6 +95,16 @@ RegisterNUICallback('conversation',  relay('v-phone:conversation'))
 RegisterNUICallback('send',          relay('v-phone:send'))
 RegisterNUICallback('contactSave',   relay('v-phone:contactSave'))
 RegisterNUICallback('contactDelete', relay('v-phone:contactDelete'))
+RegisterNUICallback('groupCreate',   relay('v-phone:groupCreate'))
+
+--- Share where you are. The coordinates come from the PED, not from the page: a page
+--- that could name a position could claim to be anywhere.
+RegisterNUICallback('sendloc', function(data, cb)
+    local c = GetEntityCoords(PlayerPedId())
+    local payload = { kind = 'location', attachment = string.format('%.1f;%.1f', c.x, c.y) }
+    if data and data.group then payload.group = data.group else payload.number = data and data.number end
+    V.Request('v-phone:send', function(res) cb(res or { error = 'x' }) end, payload)
+end)
 RegisterNUICallback('prefs',         relay('v-phone:prefs'))
 RegisterNUICallback('lookup',        relay('v-phone:lookup'))
 
