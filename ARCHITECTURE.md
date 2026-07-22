@@ -77,7 +77,7 @@ The two other in-flight workstreams. `✅ done · 🔨 in progress · ⬜ not st
 
 **Not achievable as the vendor markets it** (verified against the FiveM natives, see the plan): the 46 000 pre-tagged catalogue and "AI labelling"/sub-types are a shipped hand-authored dataset, not runtime-derivable; character height is visual-only and glitchy (no `SET_PED_SCALE` on GTA V). We reach parity by curation + our colour extractor, and ship height opt-in/experimental.
 
-### Inventory (Quasar-parity roadmap the owner asked for)
+### Inventory (feature-parity roadmap the owner asked for)
 
 | # | Feature | State |
 |---|---------|-------|
@@ -521,7 +521,7 @@ Exports: `AddItem` / `RemoveItem` / `GetItemCount` / `RegisterUsableItem`.
 Callbacks: `getState` / `move` / `use` / `drop` / `give` / `rename` / `unequipCloth`.
 
 **Remaining — this is the biggest backlog in the project.** The owner has asked for the full
-Quasar-inventory feature set:
+premium-inventory feature set:
 1. Unified player top-nav menu.
 2. **Weapons & attachments** (serial/ammo metadata exists; attachments, weapon-on-back, draw anims do not).
 3. Shared stashes **with permissions** (stashes exist; access control does not).

@@ -12,8 +12,14 @@ license.cfg
 *.local
 .env
 
-# ─── MariaDB local data (machine-specific — never commit) ───
+# ─── Local MariaDB launchers + data (machine-specific — never commit) ───
+# The framework does not care how your database is started: point
+# `mysql_connection_string` at any MySQL/MariaDB. Only schema.sql is shared.
 database/data/
+database/start-db.ps1
+database/stop-db.ps1
+start-db.bat
+stop-db.bat
 
 # ─── Claude Code (local-only configuration) ───
 .claude/
