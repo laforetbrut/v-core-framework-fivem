@@ -5,8 +5,21 @@ local spawned = {}
 local preview = {}     -- category key -> { drawable, texture }
 local savedApp = nil   -- appearance snapshot to revert previews on close
 
+-- Categories and store locations come from the server (DB-backed, admin-editable).
+-- Config.* is the fallback used until the first push lands.
+local Categories = Config.Categories
+local Locations = {}
+for i, l in ipairs(Config.Locations) do
+    Locations[i] = { id = -i, label = l.label, x = l.coords.x, y = l.coords.y, z = l.coords.z,
+                     h = l.coords.w, ped = Config.PedModel, blip = 1 }
+end
+
 local CatByKey = {}
-for _, c in ipairs(Config.Categories) do CatByKey[c.key] = c end
+local function indexCats()
+    CatByKey = {}
+    for _, c in ipairs(Categories) do CatByKey[c.key] = c end
+end
+indexCats()
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -109,7 +122,7 @@ local function applySaved(c, saved)
 end
 
 local function restoreSlots(snap)
-    for _, c in ipairs(Config.Categories) do
+    for _, c in ipairs(Categories) do
         local saved = snap and (c.kind == 'comp'
             and (snap.components or {})[tostring(c.id)]
             or  (snap.props or {})[tostring(c.id)])
@@ -210,7 +223,7 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
         DisplayRadar(false)
         local leaveStudio = enterStudio(ped)
         -- strip every slot: each piece is shot on a bare body
-        if isolate then for _, c in ipairs(Config.Categories) do applyBare(c) end end
+        if isolate then for _, c in ipairs(Categories) do applyBare(c) end end
         local cam = CreateCamWithParams('DEFAULT_SCRIPTED_CAMERA', 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 42.0, false, 0)
         SetCamActive(cam, true)
         RenderScriptCams(true, false, 0, true, false)
@@ -218,7 +231,7 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
 
         -- categories to scan
         local targets = {}
-        for _, c in ipairs(Config.Categories) do
+        for _, c in ipairs(Categories) do
             if not onlyCat or onlyCat == c.key then targets[#targets + 1] = c end
         end
 
@@ -247,7 +260,7 @@ RegisterNetEvent('v-clothing:client:startScan', function(mode, onlyCat, token)
 
         local done, fails = 0, 0
         for _, c in ipairs(targets) do
-            local fr = Config.Framing[Config.CatFraming[c.key] or 'body']
+            local fr = Config.Framing[c.framing or Config.DefaultFraming] or Config.Framing.body
             local n  = (c.kind == 'comp') and GetNumberOfPedDrawableVariations(ped, c.id) or GetNumberOfPedPropDrawableVariations(ped, c.id)
             for d = 0, n - 1 do
                 if scanning and wanted(c.key, d) then
@@ -297,7 +310,7 @@ end)
 -- Category keys for the admin panel's picker (Config is a shared_script, so this is client-side).
 exports('GetScanCategories', function()
     local out = {}
-    for _, c in ipairs(Config.Categories) do out[#out + 1] = c.key end
+    for _, c in ipairs(Categories) do out[#out + 1] = c.key end
     return out
 end)
 
@@ -314,7 +327,7 @@ local function openStore()
     -- build initial per-category data (drawable count for the tile grid) from the ped
     local ped = PlayerPedId()
     local cats = {}
-    for _, c in ipairs(Config.Categories) do
+    for _, c in ipairs(Categories) do
         local cur = current(c)
         preview[c.key] = cur
         local count = (c.kind == 'comp')
@@ -322,6 +335,9 @@ local function openStore()
             or GetNumberOfPedPropDrawableVariations(ped, c.id)
         cats[#cats + 1] = {
             key = c.key, i18n = c.i18n, price = c.price, kind = c.kind,
+            -- an admin-created category has no `cl.<key>` translation: fall back to
+            -- the label typed in the editor rather than showing the raw i18n key
+            label = (strings()[c.i18n] == nil) and (c.label or c.key) or nil,
             count = count, min = (c.kind == 'prop') and -1 or 0,
             drawable = cur.drawable, texture = cur.texture,
         }
@@ -335,7 +351,7 @@ end
 local function revert()
     -- re-apply saved components/props to undo previews (ref-aware)
     if not savedApp then return end
-    for _, c in ipairs(Config.Categories) do
+    for _, c in ipairs(Categories) do
         local saved = c.kind == 'comp' and (savedApp.components or {})[tostring(c.id)] or (savedApp.props or {})[tostring(c.id)]
         if saved then applySaved(c, saved) end
     end
@@ -406,28 +422,68 @@ RegisterNUICallback('close', function(_, cb)
     cb('ok')
 end)
 
--- ── Blips + peds + interaction ─────────────────────────────────
-CreateThread(function()
-    for _, loc in ipairs(Config.Locations) do
-        local blip = AddBlipForCoord(loc.coords.x, loc.coords.y, loc.coords.z)
-        SetBlipSprite(blip, Config.Blip.sprite); SetBlipColour(blip, Config.Blip.color)
-        SetBlipScale(blip, Config.Blip.scale); SetBlipAsShortRange(blip, true)
-        BeginTextCommandSetBlipName('STRING'); AddTextComponentSubstringPlayerName(strings()['cl.blip'] or 'Clothing'); EndTextCommandSetBlipName(blip)
+-- ── Blips + peds + interaction (all driven by the admin-managed list) ──
+local blips = {}
+
+local function clearWorld()
+    for _, b in ipairs(blips) do if DoesBlipExist(b) then RemoveBlip(b) end end
+    blips = {}
+    for i, p in pairs(spawned) do
+        if p and DoesEntityExist(p) then DeletePed(p) end
+        spawned[i] = nil
     end
+end
+
+local function buildBlips()
+    for _, b in ipairs(blips) do if DoesBlipExist(b) then RemoveBlip(b) end end
+    blips = {}
+    for _, loc in ipairs(Locations) do
+        if loc.blip ~= 0 then
+            local blip = AddBlipForCoord(loc.x + 0.0, loc.y + 0.0, loc.z + 0.0)
+            SetBlipSprite(blip, Config.Blip.sprite); SetBlipColour(blip, Config.Blip.color)
+            SetBlipScale(blip, Config.Blip.scale); SetBlipAsShortRange(blip, true)
+            BeginTextCommandSetBlipName('STRING')
+            AddTextComponentSubstringPlayerName(loc.label or strings()['cl.blip'] or 'Clothing')
+            EndTextCommandSetBlipName(blip)
+            blips[#blips + 1] = blip
+        end
+    end
+end
+
+-- Server pushes the authoritative (admin-managed) lists.
+RegisterNetEvent('v-clothing:client:stores', function(list)
+    if type(list) ~= 'table' then return end
+    Locations = list
+    clearWorld()
+    buildBlips()
+end)
+
+RegisterNetEvent('v-clothing:client:categories', function(list)
+    if type(list) ~= 'table' or #list == 0 then return end
+    Categories = list
+    indexCats()
+end)
+
+CreateThread(function()
+    Wait(2000)
+    TriggerServerEvent('v-clothing:server:request')
+    buildBlips()
 end)
 
 CreateThread(function()
     while true do
         Wait(1500)
         local coords = GetEntityCoords(PlayerPedId())
-        for i, loc in ipairs(Config.Locations) do
-            local d = #(coords - vector3(loc.coords.x, loc.coords.y, loc.coords.z))
-            if d < 45.0 and not (spawned[i] and DoesEntityExist(spawned[i])) then
-                local model = GetHashKey(Config.PedModel)
+        for i, loc in ipairs(Locations) do
+            local d = #(coords - vector3(loc.x + 0.0, loc.y + 0.0, loc.z + 0.0))
+            if d < 45.0 and not (spawned[i] and DoesEntityExist(spawned[i])) and loc.ped then
+                local model = GetHashKey(loc.ped)
                 RequestModel(model); local t = 0; while not HasModelLoaded(model) and t < 50 do Wait(20); t = t + 1 end
-                local ped = CreatePed(4, model, loc.coords.x, loc.coords.y, loc.coords.z - 1.0, loc.coords.w, false, false)
-                SetEntityInvincible(ped, true); FreezeEntityPosition(ped, true); SetBlockingOfNonTemporaryEvents(ped, true)
-                spawned[i] = ped; SetModelAsNoLongerNeeded(model)
+                if HasModelLoaded(model) then
+                    local ped = CreatePed(4, model, loc.x + 0.0, loc.y + 0.0, loc.z - 1.0, (loc.h or 0.0) + 0.0, false, false)
+                    SetEntityInvincible(ped, true); FreezeEntityPosition(ped, true); SetBlockingOfNonTemporaryEvents(ped, true)
+                    spawned[i] = ped; SetModelAsNoLongerNeeded(model)
+                end
             elseif d >= 60.0 and spawned[i] and DoesEntityExist(spawned[i]) then
                 DeletePed(spawned[i]); spawned[i] = nil
             end
@@ -440,8 +496,8 @@ CreateThread(function()
         local wait = 700
         if not isOpen then
             local coords = GetEntityCoords(PlayerPedId())
-            for _, loc in ipairs(Config.Locations) do
-                if #(coords - vector3(loc.coords.x, loc.coords.y, loc.coords.z)) < Config.Distance then
+            for _, loc in ipairs(Locations) do
+                if #(coords - vector3(loc.x + 0.0, loc.y + 0.0, loc.z + 0.0)) < Config.Distance then
                     wait = 0
                     BeginTextCommandDisplayHelp('STRING')
                     AddTextComponentSubstringPlayerName('~INPUT_CONTEXT~ ' .. (strings()['cl.help'] or 'Clothing'))

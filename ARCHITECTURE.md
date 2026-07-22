@@ -26,6 +26,8 @@ the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains a
 | **Jobs** | `jobs` | `v-jobs` (`JobDefs`, grades, pay) | ✅ |
 | **Items** | `items` | `v-inventory` (`ItemDefs` + type-driven use handlers) | ✅ |
 | **Craft** | `craft_recipes` | `v-crafting` (`Recipes`) | ✅ |
+| **Clothing stores** | `world_clothing` | `v-clothing` (blips, clerk peds, `atStore`) | ✅ |
+| **Clothing slots** | `clothing_categories` | `v-clothing` (`Categories`, item defs, use handlers) | ✅ |
 
 Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
 + audit-logged), which reload the domain and fire the **server-to-server** event
@@ -42,6 +44,14 @@ player** (`blipsFor(src)`) — a restricted location is never sent to a client t
 it, so it can't be read out of client memory. The set is re-pushed on `v-jobs:server:changed` and
 `v-core:server:permissionChanged`. A job row carries `whitelisted`: whitelisted jobs are hidden from the
 city hall and handed out by their own chain of command.
+
+**Clothing slots are data now.** `clothing_categories` holds the wearable slots themselves — key, label,
+`kind` (comp/prop), the GTA component/prop id, the inventory item the slot mints, price, thumbnail
+framing and sort order. An admin can add a whole new wearable category from the panel: v-clothing
+rebuilds its runtime list, inserts the item definition, binds the use handler and pushes the new set to
+every client, live. The slot **key** is immutable once created (it is stamped into every garment's
+metadata). A category's `slot` is validated against the real component/prop range, so an id that would
+render nothing is refused.
 
 **Remaining for the editor:** vehicles, gangs, gathering nodes, crafting *stations* (only recipes are
 editable, the benches are still `config.lua`), shop price lists / sell lists, and a live map-picker
@@ -192,7 +202,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (14 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (16 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -478,26 +488,41 @@ fr+en. No new DB tables.
 - Node coords are boot-static in `config.lua`.
 
 ### `v-clothing` ✅ — clothing store
-**Done.** Proximity store (5 branded locations, streamed shopkeepers), live on-ped preview with a
+**Done.** Proximity store (**10 branded locations**, streamed shopkeepers), live on-ped preview with a
 drag-orbit camera, per-drawable texture picker, buy-as-item, equip by using the item (swaps the worn
 piece back to inventory), unequip from the wardrobe tab or via the `Unequip` export. **Admin
 thumbnail scanner**: studio teleport, bare-vs-dressed pixel diff so only the garment survives on a
 transparent background, crop + downscale in the NUI, one-shot-token HTTP upload (works around the
 net-event size kick), lazy batched loading. 1848 thumbnails already generated. Arms are free.
 
-Exports: `Unequip(src, catKey)` / `GetWorn(src)`.
+**16 wearable slots** (was 8): masks, hats, glasses, **earrings**, undershirts, tops, arms,
+**gloves**, **body armor**, **decals**, **necklaces**, **bags**, **watches**, **bracelets**, pants,
+shoes — i.e. every component (1,3,4,5,6,7,8,9,10,11) and every prop (0,1,2,6,7) the appearance engine
+already supported. `arms` and `gloves` deliberately share component 3: GTA renders one drawable per
+component, so equipping gloves **evicts** bare arms (`sameSlot()` returns the displaced garment to the
+inventory first, and aborts the swap if it can't fit). That is the honest model — the ped cannot wear
+both, and pretending otherwise would leave a garment "worn" in the data but invisible.
+
+**Everything is admin-editable.** Store locations live in `world_clothing` (position, heading, clerk
+ped, blip, **job lock**, enabled) and the slots themselves in `clothing_categories`; both are seeded
+from `config.lua` with `INSERT IGNORE` on first boot and then read from the DB. `rebuildCategories()`
+re-reads the slots on `v-world:server:changed('clothcats')`, (re-)creates each slot's item definition,
+binds its use handler once and pushes the list to every client; store edits re-push the locations and
+the client tears down and rebuilds blips and peds — **no restart**.
+
+**Buying is now server-authoritative.** `atStore(src)` re-derives the player's distance from the
+server-owned ped and enforces the store's job lock, closing the buy-from-anywhere hole.
+
+Exports: `Unequip(src, catKey)` / `GetWorn(src)` / `GetCategories()`.
 
 **Remaining.**
 - **Gender blindness.** Thumbnails are captured on the *admin's* ped and stored as one set, but
   freemode drawable indices differ between `mp_m` and `mp_f`. A female player browses images shot on a
   male ped, and a purchased item maps to a different garment on another model.
-- **Item loss bug:** `equip()` and `doUnequip()` ignore `AddItem`'s return value — with a full
-  inventory, the swapped-out garment is silently destroyed.
 - The buy payload's `drawable` / `texture` are **client-trusted and unvalidated** (the server cannot
   call the ped natives), so arbitrary or dev components are purchasable.
 - Buying with a full inventory fails **silently** — no notification and no locale key for it.
-- No accessories yet: bag, watch, ring, necklace, vest, armor.
-- Flat per-category pricing; no per-drawable price, rarity or stock.
+- Flat per-category pricing (editable in-game); no per-drawable price, rarity or stock.
 - Direct SQL: `INSERT IGNORE INTO items` on boot.
 - Thumbnails are 1848 loose base64 `.txt` files + an `index.json` under the resource.
 - `screenshot-basic` and `oxmysql` are not declared in `dependencies{}`.

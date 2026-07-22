@@ -55,3 +55,6 @@ Config.BlipColors = {
     { label = 'Purple', color = 27 }, { label = 'Pink',   color = 48 },
     { label = 'Grey',   color = 40 }, { label = 'Cyan',   color = 26 },
 }
+
+-- Thumbnail camera framings a clothing category can use (must match v-clothing's Config.Framing).
+Config.ClothFramings = { 'head', 'upper', 'lower', 'body' }

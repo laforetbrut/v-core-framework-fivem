@@ -195,6 +195,12 @@ function edRowTitle(r) {
   }
   if (edDomain === 'shops') return `${esc(r.shop)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)} · ${r.ped ? esc(r.ped) : 'no ped'}</i>`;
   if (edDomain === 'items') return `${esc(r.label)} <i class="dim">${esc(r.name)} · ${esc(r.category)} · ${r.weight}g${r.usable ? ' · usable' : ''}</i>`;
+  if (edDomain === 'clothstores') {
+    return `${esc(r.label)} <i class="dim">${Math.round(r.x)}, ${Math.round(r.y)}${r.ped ? ' · ' + esc(r.ped) : ' · no ped'}${r.job ? ' · 🔒 ' + esc(r.job) : ''}</i>`;
+  }
+  if (edDomain === 'clothcats') {
+    return `${esc(r.label)} <i class="dim">${esc(r.key)} · ${esc(r.kind)} ${r.slot} · ${fmt(r.price)} · ${esc(r.item)}</i>`;
+  }
   if (edDomain === 'recipes') {
     const ing = Object.entries(r.inputs || {}).map(([k, v]) => `${v}× ${k}`).join(', ');
     return `${esc(r.output)} ×${r.count} <i class="dim">${esc(r.station)} · ${esc(ing)}</i>`;
@@ -222,7 +228,8 @@ function renderEdList() {
       </span>`;
     el.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     el.querySelector('[data-act="del"]').onclick = async () => {
-      const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name : r.id;
+      const id = (edDomain === 'jobs' || edDomain === 'items') ? r.name
+        : (edDomain === 'clothcats') ? r.key : r.id;
       const ok = await post('worldDelete', { domain: edDomain, id });
       if (ok && ok.ok) loadEditor();
     };
@@ -280,6 +287,32 @@ function openEdForm(row) {
       field(t('adm.ed_rarity'), 'ef-rarity', m.rarity ?? 'common') +
       field(t('adm.ed_desc'), 'ef-desc', m.desc ?? '') +
       check(t('adm.ed_stack'), 'ef-stack', row.stackable !== 0) + check(t('adm.ed_usable'), 'ef-usable', row.usable === 1);
+  } else if (edDomain === 'clothstores') {
+    html = field(t('adm.ed_label'), 'ef-label', row.label ?? '') +
+      field('X', 'ef-x', row.x ?? '', 'number') + field('Y', 'ef-y', row.y ?? '', 'number') +
+      field('Z', 'ef-z', row.z ?? '', 'number') + field(t('adm.ed_head'), 'ef-h', row.h ?? 0, 'number') +
+      field(t('adm.ed_ped'), 'ef-ped', row.ped ?? '') +
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>` +
+        (edData.jobs || []).map(j => `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('') +
+      `</select></label>` +
+      check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'clothcats') {
+    const isNew = !row.key;
+    const kinds = (edData.kinds || ['comp', 'prop'])
+      .map(k => `<option value="${esc(k)}"${k === row.kind ? ' selected' : ''}>${esc(k)}</option>`).join('');
+    const frs = (edData.framings || [])
+      .map(f => `<option value="${esc(f)}"${f === row.framing ? ' selected' : ''}>${esc(f)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_catkey'))}</span><input id="ef-key" value="${esc(row.key ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      `<label class="edf"><span>${esc(t('adm.ed_kind'))}</span><select id="ef-kind">${kinds}</select></label>` +
+      field(t('adm.ed_slot'), 'ef-slot', row.slot ?? 0, 'number') +
+      field(t('adm.ed_catitem'), 'ef-item', row.item ?? '') +
+      field(t('adm.ed_price'), 'ef-price', row.price ?? 0, 'number') +
+      `<label class="edf"><span>${esc(t('adm.ed_framing'))}</span><select id="ef-framing">${frs}</select></label>` +
+      field(t('adm.ed_sort'), 'ef-sort', row.sort ?? 0, 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'recipes') {
     const stations = (edData.stations || []).map(s => `<option value="${esc(s)}"${s === row.station ? ' selected' : ''}>${esc(s)}</option>`).join('');
     const opts = (edData.items || []).map(i => `<option value="${esc(i.name)}"${i.name === row.output ? ' selected' : ''}>${esc(i.label)} (${esc(i.name)})</option>`).join('');
@@ -297,7 +330,7 @@ function openEdForm(row) {
   }
   f.innerHTML = `<div class="edfields">${html}</div>
     <div class="edbtns">
-      ${(edDomain === 'blips' || edDomain === 'shops') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
+      ${(edDomain === 'blips' || edDomain === 'shops' || edDomain === 'clothstores') ? `<button class="mini" id="ef-here">${esc(t('adm.ed_here'))}</button>` : ''}
       <span class="spacer"></span>
       <button class="mini" id="ef-cancel">${esc(t('adm.cancel'))}</button>
       <button class="mini accent" id="ef-save">${esc(t('adm.ed_save'))}</button>
@@ -335,6 +368,11 @@ function openEdForm(row) {
     byId('ef-adding').onclick = () => addIng(undefined, 1);
   }
 
+  if (edDomain === 'clothcats' && !row.key) {
+    const k = byId('ef-key');
+    k.oninput = () => { k.value = k.value.toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30); };
+  }
+
   if (edDomain === 'items' && !row.name) {
     // Mirror the server-side slug so the admin sees the real internal name before saving.
     const n = byId('ef-name');
@@ -369,6 +407,15 @@ function openEdForm(row) {
       payload = { name: v('ef-name'), isNew: !row.name, label: v('ef-label'), category: v('ef-cat'),
                   itype: v('ef-itype'), weight: parseInt(v('ef-weight'), 10) || 0, image: v('ef-image'),
                   rarity: v('ef-rarity'), desc: v('ef-desc'), stackable: ck('ef-stack'), usable: ck('ef-usable') };
+    } else if (edDomain === 'clothstores') {
+      payload = { id: row.id, label: v('ef-label'), x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')),
+                  z: parseFloat(v('ef-z')), h: parseFloat(v('ef-h')) || 0, ped: v('ef-ped'),
+                  job: v('ef-job'), blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'clothcats') {
+      payload = { key: v('ef-key'), isNew: !row.key, label: v('ef-label'), kind: v('ef-kind'),
+                  slot: parseInt(v('ef-slot'), 10) || 0, item: v('ef-item'),
+                  price: parseInt(v('ef-price'), 10) || 0, framing: v('ef-framing'),
+                  sort: parseInt(v('ef-sort'), 10) || 0, enabled: ck('ef-en') };
     } else if (edDomain === 'recipes') {
       const inputs = [...byId('ef-ing').children].map(d => ({
         item: d.querySelector('.ing-name').value, qty: +d.querySelector('.ing-qty').value || 1,

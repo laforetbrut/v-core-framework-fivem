@@ -12,6 +12,11 @@ dependencies {
     'v-ui',
     'v-inventory',
     'v-appearance',
+    'v-world',        -- owns the store locations + the wearable slot definitions
+    'oxmysql',
+    -- screenshot-basic is NOT listed: it is only needed for the admin thumbnail scan,
+    -- which already guards on GetResourceState. A hard dependency would stop the whole
+    -- store from loading on a server that doesn't run it.
 }
 
 shared_scripts {

@@ -3,6 +3,8 @@
 --   * world_blips  — free-form map blips
 --   * world_shops  — shop/store locations (v-shops consumes them)
 --   * jobs         — jobs + grades + salaries (v-jobs consumes them)
+--   * world_clothing       — clothing store locations (v-clothing consumes them)
+--   * clothing_categories  — the wearable slots themselves (v-clothing consumes them)
 --
 -- Each domain is SEEDED from the owning module's static config the first time the
 -- table is empty, so behaviour is identical to the hardcoded setup until an admin
@@ -11,6 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
+local ClothStores, ClothCats = {}, {}
 local ready = false
 
 local function isAdmin(src)
@@ -63,6 +66,33 @@ local function ensureTables()
         `blip` TINYINT(1) NOT NULL DEFAULT 1,
         `enabled` TINYINT(1) NOT NULL DEFAULT 1,
         PRIMARY KEY (`id`), KEY `shop_idx` (`shop`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_clothing` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `label` VARCHAR(80) NOT NULL DEFAULT 'Clothing Store',
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL, `h` FLOAT NOT NULL DEFAULT 0,
+        `ped` VARCHAR(60) DEFAULT NULL,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `job` VARCHAR(50) DEFAULT NULL,                   -- job-locked store (NULL = open to all)
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- The wearable slots. `kind`+`slot` is the GTA component/prop id; several
+    -- categories may legitimately share one (gloves and bare arms are both
+    -- component 3 — the ped can only render one, which is exactly how gloves work).
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `clothing_categories` (
+        `key`   VARCHAR(30) NOT NULL,
+        `label` VARCHAR(60) NOT NULL,
+        `kind`  VARCHAR(4)  NOT NULL DEFAULT 'comp',      -- comp | prop
+        `slot`  INT NOT NULL,
+        `item`  VARCHAR(50) NOT NULL,                     -- inventory item this category mints
+        `price` INT NOT NULL DEFAULT 0,
+        `framing` VARCHAR(10) NOT NULL DEFAULT 'body',    -- thumbnail camera framing
+        `sort`  INT NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`key`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
@@ -130,12 +160,30 @@ local function loadRecipes()
     end
 end
 
+local function loadClothStores()
+    ClothStores = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_clothing ORDER BY id') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        ClothStores[#ClothStores + 1] = r
+    end
+end
+
+local function loadClothCats()
+    ClothCats = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM clothing_categories ORDER BY sort, `key`') or {}) do
+        r.enabled = bool(r.enabled)
+        ClothCats[#ClothCats + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
     if domain == 'jobs'    or not domain then loadJobs() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
+    if domain == 'clothstores' or not domain then loadClothStores() end
+    if domain == 'clothcats'   or not domain then loadClothCats() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -199,6 +247,8 @@ exports('GetShopLocations', function() return ShopLocs end)
 exports('GetJobs', function() return Jobs end)
 exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
+exports('GetClothStores', function() return ClothStores end)
+exports('GetClothCategories', function() return ClothCats end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -230,6 +280,34 @@ exports('SeedShopLocations', function(defaults)
 end)
 
 -- v-jobs: map jobId -> { label, grades = { [n] = { name, salary } } }
+-- v-clothing: list of { x, y, z, h, label?, ped? }
+exports('SeedClothStores', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #ClothStores > 0 then return false end
+    for _, l in ipairs(defaults) do
+        MySQL.insert.await('INSERT INTO world_clothing (label, x, y, z, h, ped, blip, enabled) VALUES (?,?,?,?,?,?,1,1)',
+            { l.label or 'Clothing Store', l.x, l.y, l.z, l.h or 0.0, l.ped })
+    end
+    loadClothStores()
+    print(('[v-world] seeded %d clothing store(s) from config'):format(#ClothStores))
+    return true
+end)
+
+-- v-clothing: list of { key, label, kind, slot, item, price, framing, sort }
+exports('SeedClothCategories', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #ClothCats > 0 then return false end
+    for i, c in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO clothing_categories
+            (`key`, label, kind, slot, item, price, framing, sort, enabled) VALUES (?,?,?,?,?,?,?,?,1)]],
+            { c.key, c.label or c.key, c.kind or 'comp', c.slot or c.id or 0, c.item or c.key,
+              c.price or 0, c.framing or 'body', c.sort or i })
+    end
+    loadClothCats()
+    print(('[v-world] seeded %d clothing category(ies) from config'):format(#ClothCats))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     if #Jobs > 0 then return false end
@@ -269,6 +347,12 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local names = {}
         for _, it in ipairs(Items) do names[#names + 1] = { name = it.name, label = it.label } end
         resolve({ rows = Recipes, items = names, stations = Config.CraftStations })
+    elseif domain == 'clothstores' then
+        local jobs = {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        resolve({ rows = ClothStores, jobs = jobs })
+    elseif domain == 'clothcats' then
+        resolve({ rows = ClothCats, kinds = { 'comp', 'prop' }, framings = Config.ClothFramings })
     else resolve(false) end
 end)
 
@@ -358,6 +442,52 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   tostring(row.category or 'misc'):sub(1, 30), img, meta, name })
         end
 
+    elseif d == 'clothstores' then
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then label = 'Clothing Store' end
+        local ped = row.ped;  if ped == '' then ped = nil end
+        local job = tostring(row.job or ''):sub(1, 50); if job == '' then job = nil end
+        if row.id then
+            MySQL.update.await([[UPDATE world_clothing SET label=?, x=?, y=?, z=?, h=?, ped=?, blip=?, job=?, enabled=?
+                WHERE id=?]],
+                { label, num(row.x), num(row.y), num(row.z), num(row.h), ped,
+                  bool(row.blip), job, bool(row.enabled), num(row.id) })
+        else
+            MySQL.insert.await([[INSERT INTO world_clothing (label, x, y, z, h, ped, blip, job, enabled)
+                VALUES (?,?,?,?,?,?,?,?,?)]],
+                { label, num(row.x), num(row.y), num(row.z), num(row.h), ped,
+                  bool(row.blip == nil or row.blip), job, bool(row.enabled == nil or row.enabled) })
+        end
+
+    elseif d == 'clothcats' then
+        -- `key` is referenced by every worn-clothing metadata blob: settable on CREATE,
+        -- never changed afterwards (that would orphan every garment already owned).
+        local key = tostring(row.key or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
+        if key == '' then resolve({ error = 'key' }); return end
+        local label = tostring(row.label or ''):sub(1, 60)
+        if label == '' then resolve({ error = 'label' }); return end
+        local kind = (row.kind == 'prop') and 'prop' or 'comp'
+        local slot = math.max(0, math.floor(num(row.slot)))
+        -- a slot that doesn't exist on a ped would silently render nothing
+        local maxSlot = (kind == 'prop') and 7 or 11
+        if slot > maxSlot then resolve({ error = 'slot' }); return end
+        local item = tostring(row.item or ''):lower():gsub('[^%w_]', ''):sub(1, 50)
+        if item == '' then item = key end
+        local framing = tostring(row.framing or 'body'):sub(1, 10)
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM clothing_categories WHERE `key` = ?', { key })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO clothing_categories
+                (`key`, label, kind, slot, item, price, framing, sort, enabled) VALUES (?,?,?,?,?,?,?,?,?)]],
+                { key, label, kind, slot, item, math.max(0, math.floor(num(row.price))), framing,
+                  math.floor(num(row.sort)), bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE clothing_categories SET label=?, kind=?, slot=?, item=?, price=?,
+                framing=?, sort=?, enabled=? WHERE `key`=?]],
+                { label, kind, slot, item, math.max(0, math.floor(num(row.price))), framing,
+                  math.floor(num(row.sort)), bool(row.enabled), key })
+        end
+
     elseif d == 'recipes' then
         local station = tostring(row.station or ''):sub(1, 40)
         local output  = tostring(row.output or ''):sub(1, 60)
@@ -405,6 +535,12 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
             { name, name })
         if used then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM items WHERE name = ?', { name })
+    elseif d == 'clothstores' then
+        MySQL.query.await('DELETE FROM world_clothing WHERE id = ?', { num(id) })
+    elseif d == 'clothcats' then
+        local key = tostring(id or '')
+        if key == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM clothing_categories WHERE `key` = ?', { key })
     elseif d == 'recipes' then
         MySQL.query.await('DELETE FROM craft_recipes WHERE id = ?', { num(id) })
     else resolve(false); return end
