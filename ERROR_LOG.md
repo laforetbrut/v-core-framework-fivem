@@ -157,3 +157,10 @@
 **Error:** `v-banking/html/app.js` mapped `res.error === 'target'` to one string and *everything else* to "insufficient funds". A transfer refused for exceeding the maximum told the player the opposite of the truth.
 **Root cause:** the handler was written when only two error codes existed and used an inline ternary instead of a lookup.
 **Prevention:** map server error codes through `t('prefix.err_' + code)` with a fallback, never a ternary chain - the fallback then degrades gracefully instead of lying.
+
+## [2026-07-22 20:40] — A failed write truncated v-admin/html/app.js to zero bytes
+**Context:** Adding the "Phone apps" editor subtab to the admin panel with a Python patch script.
+**Error:** `UnicodeEncodeError: 'utf-8' codec can't encode characters ... surrogates not allowed` on `io.open(p, 'w').write(s)`. The next grep showed the file at 0 lines: 1350 lines gone.
+**Root cause:** Two compounding mistakes. The file contains an emoji outside the BMP, and reading it without `errors='surrogatepass'` produced lone surrogates that the encoder then refused on the way out. Worse, `open(path, 'w')` truncates the target *before* the encoder ever runs, so the failure destroyed the file it was supposed to edit.
+**Fix:** `git checkout --` restored it, then the patch was rewritten to read and write with `errors='surrogatepass'` and to write to `path + '.tmp'` followed by `os.replace`.
+**Prevention:** Never write a patched file in place. Write to a temp path and `os.replace` only after the write returns. Any in-place `open(p, 'w')` on a file that already exists is a destructive operation waiting for its first exception.

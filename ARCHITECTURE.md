@@ -1011,6 +1011,48 @@ owes exactly a week.
 Deleting a property somebody lives in is refused outright - the row is what their storage
 hangs off. Eleven settings, and **Editor - Properties** for the rest.
 
+### `v-phone` - iFruit, and what a shell has to refuse to do
+
+**The phone is a shell.** Messages and contacts are the only things it owns; every other app
+is a thin view over the module that already holds the data, and the client asks that module
+directly rather than going through v-phone. Proxying a balance through the phone would put a
+second copy of the bank's rules in the phone, and a second copy is a second answer.
+
+Building it turned up two places where being a shell means shipping **less**, not faking more:
+
+- **The jobs app is read only.** `v-cityhall:take` is gated on standing at a desk, and it
+  should stay that way - browsing vacancies from a sofa is fine, being hired from one is not.
+  The vacancy list comes from a new `v-cityhall:OpenPositions()` export rather than a second
+  copy of "what counts as open".
+- **The camera ships disabled with no upload target.** Where a photo goes is an operator
+  decision; a default would be one made for them.
+
+**A number is a column on the character**, minted server-side in a configurable format and
+retried on collision, because two characters made in the same second would otherwise share an
+inbox. Numbers address contacts, calls and messages - never the citizen id, which is a
+database key a player should not be trading.
+
+**Server-authoritative in exactly two places.** A message is stored and relayed by the server,
+because a client that could write another player's history could forge it; every query is
+scoped to the requester's citizen id in SQL, so a client cannot ask for a conversation it is
+not in. A call is routed by the server, so ringing somebody does not depend on the caller
+knowing where they are. **The phone does no audio at all** - a connected call hands both ends
+to `v-voice`, which owns the Mumble channel, and the hang-up releases it even if the UI never
+saw the start, because a call that ends without releasing the channel leaves a player audible
+to strangers across the map.
+
+**Apps are a registry, not a list.** `RegisterApp(id, { label, icon, page, slot })` and a third
+party ships its own app without touching v-phone. What the operator controls is separate and
+lives in `world_apps`: enabled, ordered, and gated by job or gang, edited from **Editor - Phone
+apps** like every other content list. Three gates decide whether an icon appears, and they are
+not interchangeable - the operator's switch, the owning module actually running, and the
+job/gang on the row. An app whose owner is stopped is hidden, because an app that opens onto
+nothing is worse than an app that is not there.
+
+Ten settings. The conversation list is three plain queries rather than one with window
+functions: MariaDB only grew those in 10.2, and working on the operator's database matters
+more than a clever statement.
+
 ### `v-music` ✅ - boomboxes, jukeboxes and the car stereo
 
 Same rule as `v-3dsound`: the server sends a URL, a start timestamp and a position, and
@@ -1616,10 +1658,11 @@ flood limit is a setting rather than a constant. Every message is logged through
    existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
    reason to exist on the illegal side, and it needs the police module that now ships. Building
    housing first would mean shipping it twice.
-9. **`v-phone` after the modules it is a view of, which is now most of them.** Every app is a
-   shell over a module that already owns its data; building the phone first would mean each app
-   inventing its own copy and then unpicking it. Messages and contacts are the only thing it
-   owns outright.
+9. Done - **`v-phone` after the modules it is a view of.** Every app turned out to be a shell
+   over a module that already owned its data, exactly as planned; messages and contacts are the
+   only things it owns outright. Two apps had to be cut back rather than faked: the jobs app is
+   read only because `v-cityhall:take` is gated on standing at a desk, and the camera ships
+   disabled because an upload target is an operator decision, not a default.
 10. **`v-forgery` after `v-police`, which now ships.** A forged document is only interesting
     if somebody can catch it; building the fake before the check means shipping a document
     that always works, which is a bug rather than a feature.
