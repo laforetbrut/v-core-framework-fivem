@@ -288,3 +288,31 @@ AddEventHandler('onResourceStop', function(res)
         MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.GARAGED, plate })
     end
 end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-vehicles', {
+        label = 'Vehicles & keys', category = 'vehicles',
+        settings = {
+            { key = 'saveInterval', label = 'Condition save interval (s)', type = 'number', default = Config.SaveInterval, min = 15, max = 900, step = 1 },
+            { key = 'lockEngine',   label = 'No keys, no engine',         type = 'bool',   default = Config.Keys.lockEngine },
+            { key = 'platePrefix',  label = 'Plate prefix',               type = 'string', default = Config.PlatePrefix, maxLength = 3 },
+        },
+    })
+end
+
+local function applySettings()
+    Config.SaveInterval    = Core.GetSetting('v-vehicles', 'saveInterval', Config.SaveInterval)
+    Config.Keys.lockEngine = Core.GetSetting('v-vehicles', 'lockEngine', Config.Keys.lockEngine)
+    Config.PlatePrefix     = Core.GetSetting('v-vehicles', 'platePrefix', Config.PlatePrefix)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-vehicles' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2500)
+    declareSettings()
+    applySettings()
+end)

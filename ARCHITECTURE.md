@@ -113,6 +113,48 @@ Also outstanding on inventory (from the audit, not yet fixed): moving the direct
 
 ---
 
+## 0b. The module registry — settings & third-party integration
+
+Two problems, one answer. *"Everything must be configurable from the admin panel"* and
+*"someone else's script should plug in without editing the framework"* are the same problem
+once you notice that both are about a module **describing itself**.
+
+`v-core/server/modules.lua` holds a registry. A module declares its **tunables**; v-core
+stores the values (`module_settings`), serves them to the admin panel, and pushes changes
+back. **`v-admin` knows nothing about any module's settings** — it renders whatever it is
+handed, which is exactly what makes a third-party resource a first-class citizen.
+
+```lua
+exports['v-core']:RegisterModule('my-script', {
+    label = 'My Script', category = 'gameplay',
+    settings = {
+        { key = 'payout', label = 'Payout', type = 'number', default = 250, min = 0, max = 10000 },
+    },
+})
+local payout = exports['v-core']:GetSetting('my-script', 'payout')
+AddEventHandler('v-core:server:settingChanged', function(mod, key, value) ... end)
+```
+
+Types: `number` (min/max/step), `bool`, `string` (maxLength), `select` (options), `color`.
+Every submitted value is **coerced and clamped server-side**; one that cannot be coerced is
+rejected rather than stored as something else. Changes fire `v-core:server:settingChanged`
+and are mirrored to every client (`Core.GetSetting` client-side), so nothing polls.
+
+**Auto-detection.** A resource with `v_module 'yes'` in its `fxmanifest.lua` is listed even
+before it registers anything — an operator can see it is installed. All 25 of our own
+modules carry the flag. Full guide: **[INTEGRATION.md](INTEGRATION.md)**.
+
+**Settings vs. content.** A *tunable* (a rate, a threshold, a price multiplier) is a
+setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with an Editor
+subtab — §7. Using a setting for a list, or a domain for a single number, is the mistake
+this split exists to prevent.
+
+Declared so far: `v-vehicles`, `v-garages`, `v-vehicleshop`, `v-fuel`, `v-mechanic`,
+`v-licenses`, `v-cityhall`. **Remaining:** every other module still keeps its tunables in
+`config.lua` — they work, but they are not yet operator-editable.
+
+---
+
 ## 1. Layers
 
 ```
@@ -208,7 +250,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (24 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (25 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -619,8 +661,17 @@ the car's actual condition, and refuses a vehicle that is still out of the garag
 The panel reuses `v-vehicles`' **showroom instance**: selecting a row stands the car up, drag to orbit.
 A car you *cannot* buy still shows, dimmed, with the reason — the missing licence is the information.
 
-**Remaining.** No financing/instalments, no dealer-owned stock economy (stock is a number, not a
-supply chain), and no player-run dealership.
+**Automatic vehicle scan.** An admin runs a scan from the Editor → Vehicle catalogue; the
+**client** enumerates every model it can actually spawn (base game *and* any addon pack
+installed), reads its real class, display name, top speed and seat count, and suggests a
+price from the model's own performance figures. The server keeps only what is missing from
+the catalogue, re-validates every field, and holds the result until the admin reviews and
+imports it — category and price editable per row. Adding a car pack is a two-click job
+instead of hand-writing a config table, and **nothing reaches the catalogue because a
+client said so**.
+
+**Remaining.** No financing/instalments, no dealer-owned stock economy (stock is a number,
+not a supply chain), and no player-run dealership.
 
 ### `v-mechanic` ✅ — per-part wear, odometer, diagnostics, repairs
 **Done.** New module. Replaces "engine health" with a **20-part condition model** (12 for an EV):

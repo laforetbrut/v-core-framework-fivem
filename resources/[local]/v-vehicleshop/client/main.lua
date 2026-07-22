@@ -219,3 +219,80 @@ AddEventHandler('onResourceStop', function(res)
     if testing then endTest() end
     if isOpen then SetNuiFocus(false, false) end
 end)
+
+-- ══════════════════════════════════════════════════════════════════
+--  Automatic vehicle scan (admin)
+-- ══════════════════════════════════════════════════════════════════
+-- Enumerates every vehicle model the CLIENT can actually spawn — base game plus any addon
+-- pack installed on the server — and reports the ones missing from the catalogue, with
+-- their real class, display name and performance figures. That is what makes adding a
+-- car pack a two-click job instead of hand-writing a config table.
+--
+-- It runs client-side because only the client has the model natives; the server decides
+-- what to do with the result and re-validates everything before it lands in the DB.
+
+-- GTA class id -> our shop category. Anything unmapped lands in `utility` so it is
+-- visible and reclassifiable rather than silently dropped.
+local CLASS_CAT = {
+    [0] = 'compacts', [1] = 'sedans', [2] = 'suvs', [3] = 'coupes', [4] = 'muscle',
+    [5] = 'muscle', [6] = 'sports', [7] = 'super', [8] = 'motorcycles', [9] = 'offroad',
+    [10] = 'industrial', [11] = 'utility', [12] = 'vans', [14] = 'boats',
+    [15] = 'air', [16] = 'air', [17] = 'utility', [18] = 'utility', [19] = 'utility',
+    [20] = 'industrial',
+}
+
+--- Suggest a price from the model's own performance. Deliberately rough: it gives an
+--- operator a sane starting number to edit, not a final answer.
+local function suggestPrice(model, class)
+    local top   = GetVehicleModelMaxSpeed(model) or 0.0
+    local accel = GetVehicleModelAcceleration(model) or 0.0
+    local brake = GetVehicleModelMaxBraking(model) or 0.0
+    local score = (top * 2.2) + (accel * 180.0) + (brake * 40.0)
+    local base  = math.floor(score * 900)
+    if class == 7 then base = base * 3                     -- super
+    elseif class == 15 or class == 16 then base = base * 4 -- helicopters / planes
+    end
+    base = math.floor(base / 500) * 500           -- round to something a human would type
+    return math.max(5000, math.min(3000000, base))
+end
+
+local function runScan()
+    CreateThread(function()
+        local found, seen = {}, {}
+        for _, model in ipairs(GetAllVehicleModels() or {}) do
+            local name = tostring(model):lower()
+            if not seen[name] then
+                seen[name] = true
+                local hash = joaat(name)
+                if IsModelInCdimage(hash) and IsModelAVehicle(hash) then
+                    local class = GetVehicleClassFromName(hash)
+                    -- trains, trailers and the like have no business in a showroom
+                    if class ~= 21 and class ~= 13 and CLASS_CAT[class] then
+                        local label = GetLabelText(GetDisplayNameFromVehicleModel(hash))
+                        if not label or label == 'NULL' or label == '' then
+                            label = GetDisplayNameFromVehicleModel(hash)
+                        end
+                        found[#found + 1] = {
+                            model = name,
+                            label = label,
+                            cat = CLASS_CAT[class],
+                            class = class,
+                            price = suggestPrice(hash, class),
+                            top = math.floor((GetVehicleModelMaxSpeed(hash) or 0) * 3.6 + 0.5),
+                            seats = GetVehicleModelNumberOfSeats(hash) or 0,
+                        }
+                    end
+                end
+            end
+            if #found % 120 == 0 then Wait(0) end   -- never block a frame for long
+        end
+        TriggerServerEvent('v-vehicleshop:server:scanResult', found)
+    end)
+end
+
+-- v-admin asks for the scan; the panel that displays the result lives there too.
+AddEventHandler('v-vehicleshop:client:doScan', function() runScan() end)
+RegisterNetEvent('v-vehicleshop:client:scanDone', function(n)
+    Core.Notify(L('shop.scan_done', n), 'success')
+end)
+exports('ScanVehicles', function() runScan() end)

@@ -101,3 +101,29 @@ Core.RegisterCallback('v-cityhall:resign', function(source, resolve)
     Core.Notify(source, LP(source, 'cityhall.resigned'), 'info')
     resolve({ ok = true })
 end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-cityhall', {
+        label = 'City hall', category = 'civic',
+        settings = {
+            { key = 'hireFee',  label = 'Hiring filing fee ($)', type = 'number', default = Config.HireFee, min = 0, max = 100000, step = 1 },
+            { key = 'distance', label = 'Interaction range (m)', type = 'number', default = Config.Distance, min = 1, max = 15 },
+        },
+    })
+end
+
+local function applySettings()
+    Config.HireFee  = Core.GetSetting('v-cityhall', 'hireFee', Config.HireFee)
+    Config.Distance = Core.GetSetting('v-cityhall', 'distance', Config.Distance)
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-cityhall' then applySettings() end
+end)
+
+CreateThread(function()
+    Wait(2500)
+    declareSettings()
+    applySettings()
+end)

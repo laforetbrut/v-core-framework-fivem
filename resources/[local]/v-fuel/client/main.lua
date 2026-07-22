@@ -82,6 +82,16 @@ CreateThread(function()
     end
 end)
 
+-- Admin changed a tunable: the client owns consumption, so it needs the new numbers.
+RegisterNetEvent('v-fuel:client:tunables', function(t)
+    if type(t) ~= 'table' then return end
+    Config.BaseDrain = tonumber(t.baseDrain) or Config.BaseDrain
+    Config.IdleDrain = tonumber(t.idleDrain) or Config.IdleDrain
+    Config.FlowRate  = tonumber(t.flowRate) or Config.FlowRate
+    Config.EV.taperFrom = tonumber(t.taperFrom) or Config.EV.taperFrom
+    if t.regen ~= nil then Config.EV.regen.enabled = t.regen and true or false end
+end)
+
 -- ── Regenerative braking (electric only) ───────────────────────
 -- Slowing an EV puts a little charge back. Small on purpose: it should reward a smooth
 -- driver, not remove the need to charge.

@@ -289,6 +289,8 @@ CreateThread(function()
         exports['v-world']:SeedMechShops(Config.Shops)
     end
     rebuildShops()
+    declareSettings()
+    applySettings()
 end)
 
 AddEventHandler('v-world:server:changed', function(domain)
@@ -306,3 +308,40 @@ exports('GetParts', function(plate)
     return readParts(row, isElectric(row.model))
 end)
 exports('GetShops', function() return Shops end)
+
+-- ── Admin-tunable settings ─────────────────────────────────────
+local function declareSettings()
+    Core.RegisterModule('v-mechanic', {
+        label = 'Mechanic & wear', category = 'vehicles',
+        settings = {
+            { key = 'wearPer100km', label = 'Wear per 100 km',          type = 'number', default = Config.WearPer100km, min = 0, max = 50 },
+            { key = 'degradeBelow', label = 'Degrade below (%)',        type = 'number', default = Config.DegradeBelow, min = 0, max = 100, step = 1 },
+            { key = 'warnBelow',    label = 'Warn below (%)',           type = 'number', default = Config.WarnBelow, min = 0, max = 100, step = 1 },
+            { key = 'kitRestore',   label = 'Repair kit restores to (%)', type = 'number', default = Config.KitRestore, min = 0, max = 100, step = 1 },
+            { key = 'labourMult',   label = 'Labour price multiplier',  type = 'number', default = Config.LabourMult, min = 0.1, max = 5 },
+            { key = 'selfServMult', label = 'Self-service multiplier',  type = 'number', default = Config.SelfServMult, min = 1, max = 5 },
+            { key = 'serviceEvery', label = 'Service interval (km)',    type = 'number', default = Config.Odometer.service, min = 100, max = 100000, step = 1 },
+        },
+    })
+end
+
+local function S(key, fallback) return Core.GetSetting('v-mechanic', key, fallback) end
+
+local function applySettings()
+    Config.WearPer100km     = S('wearPer100km', Config.WearPer100km)
+    Config.DegradeBelow     = S('degradeBelow', Config.DegradeBelow)
+    Config.WarnBelow        = S('warnBelow', Config.WarnBelow)
+    Config.KitRestore       = S('kitRestore', Config.KitRestore)
+    Config.LabourMult       = S('labourMult', Config.LabourMult)
+    Config.SelfServMult     = S('selfServMult', Config.SelfServMult)
+    Config.Odometer.service = S('serviceEvery', Config.Odometer.service)
+    -- the client owns the wear observation, so it needs the same numbers
+    TriggerClientEvent('v-mechanic:client:tunables', -1, {
+        wearPer100km = Config.WearPer100km, degradeBelow = Config.DegradeBelow,
+        warnBelow = Config.WarnBelow, service = Config.Odometer.service,
+    })
+end
+
+AddEventHandler('v-core:server:settingChanged', function(mod)
+    if mod == 'v-mechanic' then applySettings() end
+end)

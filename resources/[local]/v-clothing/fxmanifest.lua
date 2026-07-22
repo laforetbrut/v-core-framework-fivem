@@ -7,6 +7,10 @@ author 'vyrriox'
 description 'v-clothing — clothing store with live preview, auto variations, clothing-as-items & equip/unequip'
 version '0.1.0'
 
+-- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+v_module 'yes'
+v_module_label 'Clothing'
+v_module_category 'gameplay'
 dependencies {
     'v-core',
     'v-ui',

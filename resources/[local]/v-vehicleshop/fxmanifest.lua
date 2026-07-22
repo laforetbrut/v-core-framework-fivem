@@ -7,6 +7,10 @@ author 'vyrriox'
 description 'v-vehicleshop — dealerships: browse, test drive and buy a vehicle (v-core module)'
 version '0.1.0'
 
+-- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+v_module 'yes'
+v_module_label 'Vehicleshop'
+v_module_category 'vehicles'
 dependencies {
     'v-core',
     'v-ui',
