@@ -5,7 +5,9 @@
    Ship an app in one HTML file. No build step, no framework, no bundler:
 
      <link rel="stylesheet" href="https://cfx-nui-v-phone/style.css">
-     <script src="https://cfx-nui-v-phone/sdk.js"></script>
+     <script src="https://cfx-nui-v-phone/sdk.js"><\/script>
+     (the escaped slash above is deliberate: an unescaped closing script tag here
+      would end any <script> tag it was pasted into)
      <script>
        Phone.ready(function (me) {
          Phone.title('Notes');
@@ -17,7 +19,7 @@
          );
          Phone.ui.on('[data-act="new"]', 'click', function () { Phone.toast('Hello'); });
        });
-     </script>
+     <\/script>
 
    Two objects are exported:
 
