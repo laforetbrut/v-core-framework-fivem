@@ -97,6 +97,9 @@ RegisterNUICallback('send',          relay('v-phone:send'))
 RegisterNUICallback('contactSave',   relay('v-phone:contactSave'))
 RegisterNUICallback('contactDelete', relay('v-phone:contactDelete'))
 RegisterNUICallback('groupCreate',   relay('v-phone:groupCreate'))
+RegisterNUICallback('airdropScan',    relay('v-phone:airdropScan'))
+RegisterNUICallback('airdropSend',    relay('v-phone:airdropSend'))
+RegisterNUICallback('airdropRespond', relay('v-phone:airdropRespond'))
 
 --- Share where you are. The coordinates come from the PED, not from the page: a page
 --- that could name a position could claim to be anywhere.
@@ -369,6 +372,15 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Notifications
 -- ══════════════════════════════════════════════════════════════
+RegisterNetEvent('v-phone:client:airdrop', function(offer)
+    if not isOpen then openPhone() end
+    SendNUIMessage({ action = 'airdrop', offer = offer })
+end)
+
+RegisterNetEvent('v-phone:client:airdropResult', function(res)
+    SendNUIMessage({ action = 'airdropResult', result = res })
+end)
+
 RegisterNetEvent('v-phone:client:message', function(msg)
     if isOpen then
         SendNUIMessage({ action = 'message', message = msg })
