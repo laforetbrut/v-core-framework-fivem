@@ -255,6 +255,13 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
 exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
+-- v-anticheat (server)
+exports['v-anticheat']:Expect(src, kind, seconds)  -- declare an action a detector would flag
+exports['v-anticheat']:Flag(src, kind, detail)     -- report something your module caught
+exports['v-anticheat']:IsExempt(src)               -- true for staff at or above the exempt tier
+exports['v-anticheat']:GetFlags(src)               -- flags this session
+-- kinds: teleport | health | explosion | entity | money | weapon
+
 -- v-voice
 exports['v-voice']:GetChannel(src)          -- server: the channel this player is on
 exports['v-voice']:GetChannels()            -- server: every channel definition

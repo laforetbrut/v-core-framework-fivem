@@ -829,6 +829,38 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-anticheat` ✅ - sanity checks on what a client must not decide
+
+Six detectors, all server-side: **impossible movement** (metres per second between two
+samples), **impossible health** (above the engine maximum, or armour over 100),
+**explosions** (a blocked-type list plus a per-minute budget), **client entity creation**
+(every legitimate spawn in this framework already goes through the server, so a client
+creating entities at speed is already unusual), **money** (a change larger than any
+legitimate payout, or one with no reason attached - which means it did not come from a
+module here), and **weapon damage from further away than any weapon reaches**.
+
+**The default action is `log`, and that is the most important line in the module.** An
+anticheat that kicks legitimate players is worse than none: it costs a server its
+population and the operator their trust in the tool. Everything ships noisy-but-harmless so
+an operator can watch their own logs for a week before arming anything. Fourteen settings,
+including the action and a staff tier that is never flagged - noclip and teleports are a
+moderator's job, and flagging them is pure noise.
+
+**`Expect` is the integration that makes it usable.** Six modules legitimately teleport a
+player. A teleport detector that does not know about them flags the framework itself, so a
+module declares its intent - `exports['v-anticheat']:Expect(src, 'teleport', 15)` - and the
+window is deliberately short, because a grace window is a hole and a wide one is a wide
+hole. `v-police` declares jail; `v-spawn` is covered by the load grace; `v-admin` and the
+clothing scanner are staff-exempt.
+
+**Everything lands in the existing audit log** through `Core.Log`, so there is no second
+place to look and the admin panel's Logs tab already shows it.
+
+**Found while wiring it:** the vehicle **test drive was entirely client-side, cooldown
+included** - which means it was not a cooldown. It is a server callback now that re-derives
+the dealer's proximity, checks the model is actually in the catalogue, enforces the wait,
+and tells the anticheat to expect the two teleports and the local vehicle that follow.
+
 ### `v-voice` ✅ - proximity, radio channels and phone audio
 
 FiveM already ships a Mumble voice server, so this module implements no audio. It decides
@@ -1188,7 +1220,7 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 |---|--------|-----------|----------------|
 | 10 | ✅ **`v-drugs`** - the full chain (**shipped**) | `v-gangs`, `v-police`, `v-licenses` | Turn the current recipes into a real system: **plantations** with growth stages, watering and theft by other players; **labs** with quality tiers, failure chance and a **fire/explosion risk** if you rush; **NPC dealing** priced by district, demand decay and heat; **player-to-player** dealing; **addiction & effects** on the buyer (tied to `v-status`); and **police pressure** - a bust chance that scales with heat, dirty money that must go through `v-banking`'s laundering, and evidence that lands in `v-police`. |
 | 11 | **Heists & robberies** | `v-police`, `v-inventory` | Stores, ATMs, jewellery, the Fleeca/Pacific jobs. Server-authoritative timers and loot tables, a **minimum police count** before a job can start, and dirty money as the payout so it feeds the laundering loop. |
-| 12 | **`v-anticheat`** | `v-core` | The counterweight to all of the above: server-side sanity checks on money deltas, health, explosions, spawned entities and impossible movement, every trip logged to the existing audit log. |
+| 12 | ✅ **`v-anticheat`** (**shipped**) | `v-core` | The counterweight to all of the above: server-side sanity checks on money deltas, health, explosions, spawned entities and impossible movement, every trip logged to the existing audit log. |
 
 ### 5.5 Interaction surfaces & the rest
 
@@ -1343,8 +1375,8 @@ the part that needs balancing once players are on the server.
    different data; writing the police module standalone would fork the membership/treasury code.
 4. **`v-drugs` last of the economy work** - it depends on gangs (turf), police (pressure) and the
    laundering path, and it is the module most likely to need balancing once players are on the server.
-5. **`v-anticheat` before the server opens**, not after. It is listed last because it guards
-   everything above, not because it matters least.
+5. ✅ **`v-anticheat` before the server opens**, not after - **done**. It is listed last because
+   it guards everything above, not because it matters least.
 6. **`v-3dsound` before `v-music` and `v-radio`.** It is a primitive that five modules want;
    building any of them first means building it five times.
 7. **`v-motel` with `v-housing`, not after it.** It is a tenancy column, and discovering that

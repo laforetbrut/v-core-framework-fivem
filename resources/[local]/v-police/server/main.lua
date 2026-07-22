@@ -221,6 +221,8 @@ V.Callback('v-police:book', function(src, resolve, data)
         MySQL.query.await([[INSERT INTO police_jail (citizenid, release_at) VALUES (?, DATE_ADD(NOW(), INTERVAL ? MINUTE))
             ON DUPLICATE KEY UPDATE release_at = DATE_ADD(NOW(), INTERVAL ? MINUTE)]],
             { tp.citizenid, jail, jail })
+        -- Tell the anticheat this jump is ours, or the framework flags itself.
+        V.Use('v-anticheat').Expect(target, 'teleport', 15)
         TriggerClientEvent('v-police:client:jail', target, jail, Config.Jail)
     end
 
@@ -246,6 +248,7 @@ AddEventHandler('v-core:server:onPlayerLoaded', function(src)
     if not p then return end
     local left = jailLeft(p.citizenid)
     if left > 0 then
+        V.Use('v-anticheat').Expect(src, 'teleport', 15)
         TriggerClientEvent('v-police:client:jail', src, left, Config.Jail)
     else
         MySQL.query.await('DELETE FROM police_jail WHERE citizenid = ?', { p.citizenid })

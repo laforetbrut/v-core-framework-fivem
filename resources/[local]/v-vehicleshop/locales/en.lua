@@ -48,5 +48,6 @@ local T = {
     ['shop.err_unknown']        = 'Unknown vehicle.',
     ['shop.err_x']              = 'Request refused.',
     ['shop.scan_done']      = 'Scan complete: %s new model(s) found.',
+    ['shop.err_testwait'] = 'You have test driven too recently.',
 }
 for k, v in pairs(T) do Locales.en[k] = v end
