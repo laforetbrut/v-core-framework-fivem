@@ -142,7 +142,7 @@ and are mirrored to every client (`Core.GetSetting` client-side), so nothing pol
 
 **Auto-detection.** A resource with `v_module 'yes'` in its `fxmanifest.lua` is listed even
 before it registers anything — an operator can see it is installed. All 25 of our own
-modules carry the flag. Full guide: **[INTEGRATION.md](INTEGRATION.md)**.
+modules carry the flag. Full guide: **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 **Settings vs. content.** A *tunable* (a rate, a threshold, a price multiplier) is a
 setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with an Editor

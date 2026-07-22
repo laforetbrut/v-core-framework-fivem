@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-admin — in-game admin panel: players, resources, world, economy, logs'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Admin'
 v_module_category 'other'

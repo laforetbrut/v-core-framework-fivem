@@ -346,8 +346,7 @@ end)
 
 -- Own boot thread: `local function` is only visible after its definition, so this block
 -- declares itself rather than being called from a thread higher up the file.
-CreateThread(function()
-    Wait(2600)
+V.Ready(function()
     declareSettings()
     applySettings()
 end)

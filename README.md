@@ -11,7 +11,7 @@ Built and tested on the Enhanced server binary (`cfx-server.exe`), OneSync, Mari
 > | Document | What it is |
 > |---|---|
 > | **[API.md](API.md)** | Every export, callback and event — the reference |
-> | **[INTEGRATION.md](INTEGRATION.md)** | How to plug your own script in |
+> | **[DEVELOPERS.md](DEVELOPERS.md)** | Write a script for v-core: the `V` helper, conventions, gotchas |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | What each module does today, and the roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | What shipped |
 
@@ -42,7 +42,7 @@ in-game** — never by editing Lua on a live server.
   Changes apply **live**, no restart.
 - **Module registry & settings** — every module declares its tunables to `v-core`; the admin panel's
   **Settings** tab renders whatever it is handed, so it never needs changing. A third-party script
-  adds `v_module 'yes'` to its manifest and appears there too — see [INTEGRATION.md](INTEGRATION.md).
+  adds `v_module 'yes'` to its manifest and appears there too — see [DEVELOPERS.md](DEVELOPERS.md).
 - **No player chat commands** — the interaction surface is the target eye, keybinds and NUI, by design.
 - **Bilingual out of the box** — every player-facing string exists in English and French; players pick
   their language on first join.
@@ -150,7 +150,7 @@ Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSyn
 > | Document | Contenu |
 > |---|---|
 > | **[API.md](API.md)** | Tous les exports, callbacks et événements — la référence |
-> | **[INTEGRATION.md](INTEGRATION.md)** | Comment brancher ton propre script |
+> | **[DEVELOPERS.md](DEVELOPERS.md)** | Écrire un script pour v-core : le helper `V`, conventions, pièges |
 > | **[ARCHITECTURE.md](ARCHITECTURE.md)** | Ce que fait chaque module, et la roadmap |
 > | **[CHANGELOG.md](CHANGELOG.md)** | Ce qui est livré |
 
@@ -181,7 +181,7 @@ régler est modifiable en jeu** — jamais en éditant du Lua sur un serveur en 
   ateliers, concessions, catalogue véhicules et types de licence**, adossé à `v-world`. À chaud, sans restart.
 - **Registre de modules & réglages** — chaque module déclare ses réglages à `v-core` ; l'onglet
   **Réglages** du menu admin affiche ce qu'on lui donne, il n'a donc jamais à changer. Un script tiers
-  ajoute `v_module 'yes'` à son manifest et y apparaît aussi — voir [INTEGRATION.md](INTEGRATION.md).
+  ajoute `v_module 'yes'` à son manifest et y apparaît aussi — voir [DEVELOPERS.md](DEVELOPERS.md).
 - **Aucune commande chat joueur** — la surface d'interaction, c'est l'œil de ciblage, les touches et la NUI.
 - **Bilingue nativement** — chaque texte joueur existe en anglais et en français ; le joueur choisit sa
   langue à la première connexion.

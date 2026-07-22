@@ -34,6 +34,11 @@ local declared = {}     -- name -> true (found via fxmanifest, may not have regi
 
 local TYPES = { number = true, bool = true, string = true, select = true, color = true }
 
+-- Registration is order-free: a module declaring itself AFTER the boot pass gets its
+-- stored values loaded on the spot. Nothing has to guess how long v-core takes to come
+-- up, which is exactly what the per-module `Wait(2600)` sleeps were doing.
+local booted = false
+
 --- Is a manifest flag set? FiveM normalises `v_module 'yes'` to `1`, not the string it was
 --- written as, so an equality test against 'yes' silently matched nothing. Accept anything
 --- an author would reasonably write.
@@ -133,7 +138,9 @@ function VCore.RegisterModule(name, info)
         resource = info.resource or name,
         settings = clean,
     }
-    if not Values[name] then loadValues(name) end
+    -- Before the boot pass the table may not exist yet; the pass loads every declared
+    -- module's values itself, so skipping here is safe and never loses a value.
+    if booted and not Values[name] then loadValues(name) end
     VCore.Debug(('module registered: %s (%d setting(s))'):format(name, #clean))
     return true
 end
@@ -302,6 +309,7 @@ CreateThread(function()
     ensureTable()
     -- give the other modules a moment to start and register themselves
     Wait(3000)
+    booted = true
     detect()
     -- warm every declared module's stored values
     for name in pairs(Modules) do

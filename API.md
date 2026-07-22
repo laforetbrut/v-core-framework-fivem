@@ -1,5 +1,12 @@
 # v-core — API reference
 
+> **Writing a new script? Start with [DEVELOPERS.md](DEVELOPERS.md).** One manifest line
+> (`shared_script '@v-core/lib/v.lua'`) gives you `V.Ready`, `V.Module`, `V.Setting`,
+> `V.Use`, `V.Callback` and `V.Notify` — this file is the raw surface underneath.
+>
+> **Vous écrivez un nouveau script ?** Commencez par [DEVELOPERS.md](DEVELOPERS.md) :
+> une ligne de manifest remplace tout le passe-plat décrit ici.
+
 Every export, callback and event the framework exposes. Generated against the source, so
 what is listed here exists.
 
@@ -11,7 +18,7 @@ what is listed here exists.
 | `v-jobs` job + grade | *Is this character on the payroll?* | `exports['v-jobs']:GetJob(src)` |
 | `v-licenses` licence | *Is this character legally allowed to?* | `exports['v-licenses']:Has(src, 'driving')` |
 
-New to the framework? Start with **[INTEGRATION.md](INTEGRATION.md)**.
+New to the framework? Start with **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 ---
 
@@ -63,7 +70,7 @@ exports['v-core']:SetSetting(name, key, value)
 exports['v-core']:GetModules() / IsModule(name)
 ```
 Setting types: `number` (`min`/`max`/`step`), `bool`, `string` (`maxLength`), `select`
-(`options`), `color`. See INTEGRATION.md.
+(`options`), `color`. See DEVELOPERS.md.
 
 ### Client
 ```lua
@@ -313,7 +320,7 @@ exports['v-core']:RegisterModule('mon-script', { label=, category=, settings={..
 local v = exports['v-core']:GetSetting('mon-script', 'cle')
 AddEventHandler('v-core:server:settingChanged', function(mod, key, value) end)
 ```
-Types : `number`, `bool`, `string`, `select`, `color`. Guide : **[INTEGRATION.md](INTEGRATION.md)**.
+Types : `number`, `bool`, `string`, `select`, `color`. Guide : **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 ## Contenu modifiable en jeu
 

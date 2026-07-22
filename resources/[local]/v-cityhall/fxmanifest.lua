@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-cityhall — city hall: take an open job, resign, read your contract (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Cityhall'
 v_module_category 'civic'

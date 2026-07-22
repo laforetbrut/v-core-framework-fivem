@@ -8,6 +8,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **One helper replaces the framework's boilerplate** — `shared_script '@v-core/lib/v.lua'` in your manifest gives you `V` on both sides: `V.Ready` (runs when v-core is actually up), `V.Module` / `V.Setting` / `V.OnSetting`, `V.Use` for optional dependencies, `V.Callback` / `V.Request`, `V.Player`, `V.Notify`. Measured against what it replaced: **28 hand-tuned `Wait(2600)` sleeps racing v-core's boot**, 7 copies of the same lazy core-handle block, and 11 defensive `pcall`s.
+- **`V.Use` says something when a call fails** — a bare `pcall` around `exports['x']:Y()` swallows the error, which is how calling a server export from the client stays invisible for months. `V.Use` names the export, the resource and the side.
+- **[DEVELOPERS.md](DEVELOPERS.md)** — a complete working module in 40 lines, the full `V` API, the naming and permission conventions, and the gotchas this framework actually hit (Lua scoping, `v_module 'yes'` normalising to `1`, `cond and nil or x`, `INSERT IGNORE` on `AUTO_INCREMENT`, CEF's missing `backdrop-filter`). Replaces INTEGRATION.md.
+
 - **Seatbelt and windscreen ejection** — `B` buckles up. Without a belt, a hard enough impact throws the driver through the windscreen with real damage, so speed finally carries a cost. The trigger is deceleration rather than a collision event, which catches every kind of impact with one rule; bikes, boats and aircraft are excluded. The belt resets on every new vehicle — carrying it over is how players end up protected without ever buckling. The HUD shows a blinking **NO BELT** warning, and the threshold, the minimum speed and the damage are all settings.
 
 - **Vehicle cluster in the HUD** — v-fuel tracked the fuel and v-mechanic tracked the wear and the odometer, and the player could see **neither** without opening a menu. The HUD now shows speed, gear, a fuel gauge that turns into a battery icon on an electric vehicle, engine condition and the odometer, all of it while driving only. Speed unit (km/h or mph), the low-fuel threshold and the whole cluster are settings; players can also switch it off in their own HUD panel.
@@ -62,6 +66,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **125 new items + 60 new recipes** — the catalogue grows from 175 to **302 items**: 20 more dishes, 13 drinks, 9 medical supplies, 17 hand tools, 16 industrial materials, 11 tech components, 9 pieces of jewellery, 20 real base-game weapons and 10 misc props (evidence bag, press pass, keycard…). All of them are reachable: 60 new recipes wire the new material tier (steel, titanium, carbon fibre, kevlar), the tool bench, field medicine, the electronics tier (motherboard → CPU → GPU, scanners, jammers) and the expanded kitchen menu — **105 recipes** in total.
 
 ### Ajouts (miroir français)
+
+- **Un seul helper remplace le passe-plat du framework** — `shared_script '@v-core/lib/v.lua'` dans votre manifest vous donne `V` des deux côtés : `V.Ready` (s'exécute quand v-core est réellement prêt), `V.Module` / `V.Setting` / `V.OnSetting`, `V.Use` pour les dépendances optionnelles, `V.Callback` / `V.Request`, `V.Player`, `V.Notify`. Mesuré face à ce qu'il remplace : **28 `Wait(2600)` réglés à la main en course avec le démarrage de v-core**, 7 copies du même bloc de récupération du core, et 11 `pcall` défensifs.
+- **`V.Use` parle quand un appel échoue** — un `pcall` nu autour de `exports['x']:Y()` avale l'erreur, et c'est ainsi qu'appeler un export serveur depuis le client reste invisible pendant des mois. `V.Use` nomme l'export, la ressource et le côté.
+- **[DEVELOPERS.md](DEVELOPERS.md)** — un module complet en 40 lignes, toute l'API `V`, les conventions de nommage et de permissions, et les pièges que ce framework a réellement rencontrés. Remplace INTEGRATION.md.
 
 - **Ceinture de sécurité et éjection par le pare-brise** — `B` attache la ceinture. Sans ceinture, un choc assez violent projette le conducteur à travers le pare-brise avec de vrais dégâts : la vitesse a enfin un coût. Le déclencheur est la décélération et non un événement de collision, ce qui couvre tous les types d'impact avec une seule règle ; motos, bateaux et aéronefs sont exclus. La ceinture se remet à zéro à chaque nouveau véhicule — la reporter est exactement ce qui fait qu'un joueur se retrouve protégé sans jamais l'avoir attachée. Le HUD affiche un avertissement clignotant **PAS DE CEINTURE**, et le seuil, la vitesse minimale et les dégâts sont des réglages.
 
@@ -178,6 +186,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Shop inventory panel + drag-to-buy (v-shops)** — the store now shows **your inventory** beside the catalogue and lets you **drag a catalogue item onto it to buy** (1 unit; the Buy button + stepper remain for quantities). Catalogue and inventory tiles show item images (with the same garment/box fallback as the inventory).
 
 ### Fixed (English first)
+
+- **The boot order was a race resolved by sleeping** — v-core waited 3 s for modules to register while each module waited 2.6 s hoping the registry existed. `RegisterModule` is order-free now: a module that declares itself after the boot pass gets its stored values loaded on the spot, so nothing has to guess.
+- **`v-notify` exposed `show` in lowercase** — the only lowercase export in about sixty, and the one that cost time. It answers to `Show` now, with `show` kept for anything already calling it.
 
 - **`Config.StoreMaxDamage` did nothing** — the comment above it promised a burning wreck could not be parked, and no code read the value: a garage was a free repair shop, since a destroyed car came back out pristine. It is enforced now (engine, body and fuel-tank health, checked server-side), and it is a setting.
 - **A failed garage spawn only ever refunded an impound fee** — the retrieval charge for any other garage stayed taken. The fee is now computed once, outside the impound branch, and refunded whichever garage took it.
@@ -320,6 +331,9 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Panneau inventaire + glisser-pour-acheter (v-shops)** — la boutique affiche maintenant **votre inventaire** à côté du catalogue et permet de **glisser un article dessus pour l'acheter** (1 unité ; le bouton Acheter + le compteur restent pour les quantités). Les tuiles du catalogue et de l'inventaire montrent les images d'items (avec le même repli vêtement/colis que l'inventaire).
 
 ### Correctifs (miroir français)
+
+- **L'ordre de démarrage était une course réglée par des `sleep`** — v-core attendait 3 s que les modules s'enregistrent pendant que chaque module attendait 2,6 s en espérant que le registre existe. `RegisterModule` est désormais insensible à l'ordre : un module qui se déclare après la passe de démarrage voit ses valeurs chargées sur-le-champ, plus rien n'a à deviner.
+- **`v-notify` exposait `show` en minuscules** — le seul export minuscule sur une soixantaine, et celui qui a coûté du temps. Il répond maintenant à `Show`, `show` étant conservé pour l'existant.
 
 - **`Config.StoreMaxDamage` ne faisait rien** — le commentaire au-dessus promettait qu'une épave en feu ne pouvait pas être garée, et aucun code ne lisait la valeur : un garage était un réparateur gratuit, puisqu'une voiture détruite en ressortait intacte. C'est désormais appliqué (état moteur, carrosserie et réservoir, vérifiés côté serveur), et c'est un réglage.
 - **Un spawn de garage raté ne remboursait que les frais de fourrière** — les frais de sortie de tout autre garage restaient prélevés. Les frais sont maintenant calculés une seule fois, hors de la branche fourrière, et remboursés quel que soit le garage.

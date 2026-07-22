@@ -232,9 +232,7 @@ exports('GetPresets', function()
 end)
 
 -- ── Settings ───────────────────────────────────────────────────
-CreateThread(function()
-    while GetResourceState('v-core') ~= 'started' do Wait(100) end
-    Wait(2600)
+V.Ready(function()
 
     local presetKeys = {}
     for k in pairs(Config.Presets) do presetKeys[#presetKeys + 1] = k end

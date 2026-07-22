@@ -6,7 +6,6 @@ CreateThread(function()
     -- This module may be ensured BEFORE v-core (v-notify has to be: Core.Notify needs it),
     -- so the core is grabbed inside the thread, once the resource is actually up.
     while GetResourceState('v-core') ~= 'started' do Wait(100) end
-    Wait(2600)
     local Core = exports['v-core']:GetCore()
     Core.RegisterModule('v-target', {
         label = 'Interaction eye', category = 'gameplay',

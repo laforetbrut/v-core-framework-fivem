@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-gathering — resource nodes (mining / salvage / textile) that yield raw crafting materials (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Gathering'
 v_module_category 'economy'
@@ -15,6 +15,8 @@ dependencies {
     'v-core',
     'v-inventory',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

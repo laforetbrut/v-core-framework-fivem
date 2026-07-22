@@ -13,6 +13,10 @@ local function show(data)
     })
 end
 
+-- `Show` is the framework convention (every other export is PascalCase); `show` stays
+-- for anything already calling it. Being the one lowercase export in ~60 is exactly the
+-- kind of detail that costs an integrator half an hour.
+exports('Show', show)
 exports('show', show)
 
 RegisterNetEvent('v-notify:show', function(data)

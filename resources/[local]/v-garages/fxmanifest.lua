@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-garages — store, retrieve and impound owned vehicles (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Garages'
 v_module_category 'vehicles'
@@ -18,6 +18,8 @@ dependencies {
     'v-world',
     'oxmysql',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-licenses — licences and permits: the single source of truth for "may this character do this" (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Licenses'
 v_module_category 'law'
@@ -16,6 +16,8 @@ dependencies {
     'v-world',
     'oxmysql',
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',

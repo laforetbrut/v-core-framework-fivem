@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-vehicles — owned-vehicle persistence, server-minted plates and the key system (v-core module)'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Vehicles'
 v_module_category 'vehicles'

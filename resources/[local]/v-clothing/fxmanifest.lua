@@ -7,7 +7,7 @@ author 'vyrriox'
 description 'v-clothing — clothing store with live preview, auto variations, clothing-as-items & equip/unequip'
 version '0.1.0'
 
--- Detected by v-core's module registry (admin panel -> Settings). See INTEGRATION.md.
+-- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
 v_module_label 'Clothing'
 v_module_category 'gameplay'
@@ -22,6 +22,8 @@ dependencies {
     -- which already guards on GetResourceState. A hard dependency would stop the whole
     -- store from loading on a server that doesn't run it.
 }
+
+shared_script '@v-core/lib/v.lua'
 
 shared_scripts {
     '@v-core/locale/shared.lua',
