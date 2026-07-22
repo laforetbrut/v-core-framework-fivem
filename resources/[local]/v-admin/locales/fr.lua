@@ -145,6 +145,10 @@ local T = {
     ['adm.ed_spawnz']       = 'Sortie Z',
     ['adm.ed_spawnh']       = 'Orientation sortie',
     ['adm.ed_fee']          = 'Frais de sortie (fourrière)',
+    ['adm.ed_stations']     = 'Stations-service',
+    ['adm.ed_statid']       = 'Id de la station (non modifiable)',
+    ['adm.ed_fueltypes']    = 'Carburants vendus',
+    ['adm.ed_pricemult']    = 'Multiplicateur de prix',
     ['adm.revived']      = 'Réanimé.',
     ['adm.armored']      = 'Armure rechargée.',
 }

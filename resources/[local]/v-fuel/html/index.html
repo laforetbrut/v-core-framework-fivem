@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="v-root">
+  <div id="fuel" class="fuel-overlay hidden">
+    <div class="fuel v-chamfer v-panel">
+      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
+      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
+      <span class="v-tab" id="ftitle">Station</span>
+      <button class="close" id="close" aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+      <div class="sub" data-i18n="fuel.sub">Choose a fuel and a volume</div>
+
+      <div class="veh" id="veh"></div>
+      <div class="types" id="types"></div>
+
+      <div class="amount">
+        <div class="arow">
+          <span class="albl" data-i18n="fuel.litres">Litres</span>
+          <input type="range" id="litres" min="1" max="60" value="20" />
+          <span class="aval"><b id="lval">20</b> L</span>
+        </div>
+        <div class="arow">
+          <button class="mini" id="full" data-i18n="fuel.fulltank">Fill up</button>
+          <span class="spacer"></span>
+          <label class="chk"><input type="radio" name="acct" id="acct-cash" checked /><span data-i18n="fuel.cash">Cash</span></label>
+          <label class="chk"><input type="radio" name="acct" id="acct-bank" /><span data-i18n="fuel.bank">Card</span></label>
+        </div>
+        <div class="total"><span data-i18n="fuel.total">Total</span><b id="total">$0</b></div>
+      </div>
+
+      <div class="acts">
+        <button class="mini" id="can" data-i18n="fuel.fillcan">Fill a jerry can</button>
+        <span class="spacer"></span>
+        <button class="mini accent" id="go" data-i18n="fuel.pump">Start pumping</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- The nozzle gauge lives OUTSIDE the panel: while pumping, the panel is closed and
+       NUI focus is released (the player is standing at the pump, not in a menu), so this
+       has to be able to show on its own. -->
+  <div id="pumpbar" class="pumpbar hidden">
+    <span class="plbl" data-i18n="fuel.pumping">Pumping…</span>
+    <span class="v-progress"><i class="v-progress__fill" id="pfill" style="width:0%"></i></span>
+    <span class="pval" id="pval">0 L</span>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

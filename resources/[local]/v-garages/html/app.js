@@ -4,7 +4,7 @@ const post = (n, b) => fetch(`https://v-garages/${n}`, { method: 'POST', headers
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const fmt = (n) => '$' + Math.floor(Number(n) || 0).toLocaleString('en-US');
 
-let strings = {}, state = {};
+let strings = {}, state = {}, selected = null, dragging = false;
 const t = (k) => strings[k] || k;
 
 function applyStrings() {
@@ -36,7 +36,7 @@ function render() {
 
   rows.forEach((r, i) => {
     const el = document.createElement('div');
-    el.className = 'vrow'; el.style.setProperty('--i', i);
+    el.className = 'vrow' + (selected === r.plate ? ' on' : ''); el.style.setProperty('--i', i);
     el.innerHTML = `
       <span class="vinfo">
         <span class="vname">${esc(r.model)}</span>
@@ -48,6 +48,14 @@ function render() {
         </span>
       </span>
       <button class="mini accent vtake">${esc(t('gar.take'))}</button>`;
+    // Selecting a row opens the showroom instance; the props come from the server row
+    // so the preview is the car as it is actually parked, not a stock model.
+    el.onclick = (e) => {
+      if (e.target.closest('.vtake')) return;
+      if (selected === r.plate) { selected = null; post('preview', {}); }
+      else { selected = r.plate; post('preview', { model: r.model, props: r.props || {} }); }
+      render();
+    };
     el.querySelector('.vtake').onclick = async (e) => {
       const b = e.currentTarget; b.disabled = true;
       const res = await post('take', { plate: r.plate });
@@ -61,6 +69,17 @@ function render() {
   });
 }
 
+// Drag anywhere outside the panel to orbit the car, wheel to zoom.
+const stage = byId('stage');
+stage.addEventListener('mousedown', () => { dragging = true; });
+window.addEventListener('mouseup', () => { dragging = false; });
+window.addEventListener('mousemove', (e) => {
+  if (dragging && selected) post('previewRotate', { dx: e.movementX });
+});
+stage.addEventListener('wheel', (e) => {
+  if (selected) post('previewZoom', { dz: e.deltaY > 0 ? -1 : 1 });
+});
+
 byId('close').onclick = () => post('close');
 document.addEventListener('keyup', (e) => {
   if (e.key === 'Escape' && !byId('gar').classList.contains('hidden')) post('close');
@@ -69,7 +88,7 @@ document.addEventListener('keyup', (e) => {
 window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'open') {
-    strings = d.strings || {}; state = d.data || {};
+    strings = d.strings || {}; state = d.data || {}; selected = null;
     applyStrings(); render();
     byId('gar').classList.remove('hidden');
   } else if (d.action === 'data') {

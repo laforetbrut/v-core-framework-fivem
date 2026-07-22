@@ -29,6 +29,7 @@ the module that owns that data; `v-admin`'s Editor tab is its UI. Five domains a
 | **Clothing stores** | `world_clothing` | `v-clothing` (blips, clerk peds, `atStore`) | ✅ |
 | **Clothing slots** | `clothing_categories` | `v-clothing` (`Categories`, item defs, use handlers) | ✅ |
 | **Garages** | `world_garages` | `v-garages` (blips, markers, store/retrieve) | ✅ |
+| **Fuel stations** | `world_stations` | `v-fuel` (blips, pumps, prices) | ✅ |
 
 Wiring: every editor write goes through the `v-world:save` / `v-world:delete` callbacks (permission-gated
 + audit-logged), which reload the domain and fire the **server-to-server** event
@@ -203,7 +204,7 @@ exports['v-core']:IsAnyMenuOpen()
 
 ## 3. Database
 
-Schema lives in **`database/schema.sql`** (17 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
+Schema lives in **`database/schema.sql`** (19 tables; `world_blips` gains `job`/`grade`/`perm` and `jobs` gains `whitelisted` via idempotent `ALTER`s at boot). MariaDB, accessed through `oxmysql`.
 `craft_recipes` is created idempotently at boot by `v-world`'s `ensureTables()`.
 
 | Table | Owner | Purpose | State |
@@ -547,13 +548,47 @@ courtesy, not an ownership record, which stays `character_vehicles.citizenid`; s
 both players' positions from the server-owned peds. The client-side engine cut is deliberately a
 **soft** gate: the authoritative answer already came from `v-vehicles:hasKeys`.
 
+**Showroom preview instance.** `client/preview.lua` creates the vehicle as a **local, non-networked**
+entity at a point under the map and moves only the camera there — the player's ped never leaves, other
+players see nothing, and the car cannot be entered or crashed into. That is what makes it an instance
+rather than a spawned car. It is dressed with the **stored props from the row**, so the preview is the
+car as it really is, and the camera distance is derived from the model's own dimensions so a bike and
+a bus both frame sensibly. Shared surface — `v-garages` uses it today, the dealership next.
+
 Exports: `GetOwned` / `GetOwnedByCid` / `GetVehicle` / `IsOwner` / `HasKeys` / `GiveKeys` /
 `RemoveKeys` / `SpawnOwned` / `DespawnOwned` / `CreateOwned` / `IsLive` / `SetState` / `SetGarage`;
-client-side `GetProps` / `ApplyProps` / `GetFuel`.
+client-side `GetProps` / `ApplyProps` / `GetFuel` / `SetFuel` / `OpenPreview` / `ClosePreview` /
+`RotatePreview` / `ZoomPreview` / `IsPreviewOpen`.
 
 **Remaining.** No lockpick/hotwire path yet (the config reserves `hotwireTime` for it), no fuel
 stations, no vehicle-damage → repair economy, and a vehicle whose entity vanishes is moved to
 `impound` by the cleanup tick, which is a blunt rule that will want nuance once players test it.
+
+### `v-fuel` ✅ — fuel types, consumption, stations
+**Done.** New module. Owns everything fuel; `v-vehicles` keeps only the stored number.
+**Four fuel types** — regular (91), premium (98), diesel and electric — each with its own price per
+litre/kWh and an efficiency `rate`. What a vehicle accepts is derived from a **model override list**
+first (the GTA EVs, the trucks) then its **class**; premium is accepted wherever regular is (same pump
+family, better octane), everything else is a **wrong-fuel** mistake that is charged, announced and
+**damages the engine** rather than silently ruining the car.
+
+**Consumption** is load-based: an idle floor plus a term driven by real speed against the model's
+estimated top speed, scaled by a per-class multiplier and the fuel's efficiency. A supercar at full
+throttle drains far faster than a compact idling. Tank size is per class (16 L for a bike, 300 L for a
+plane), which is what makes the litre maths and the price honest.
+
+**18 stations** seeded from real GTA V pumps, including **3 electric charging points** (own blip, own
+flow rate). Points live in `world_stations` — position, **which fuels are sold**, and a **price
+multiplier** so a desert pump can cost more than a city one — all editable from the admin panel.
+
+Server-authoritative: the price is re-derived from the server's own station and type tables, the
+litres are **clamped to what the tank could physically hold**, and both the player *and the vehicle*
+must be at the pump (the entity is re-read from its net id and measured). A patched client can ask for
+9999 L; it gets billed for a tankful. The jerry can is an inventory item, and a failed grant refunds
+the charge. fr+en.
+
+**Remaining.** No fuel theft/siphoning, no station ownership or revenue for a player-run business, and
+`v-hud` does not show a fuel gauge yet.
 
 ### `v-garages` ✅ — store, retrieve, impound
 **Done.** New module, roadmap §5.1 step 2. Garage points live in `world_garages` (editable from the
@@ -569,8 +604,9 @@ parking a car you are not near is not possible. The impound fee is refunded if t
 Deleting a garage that still has cars parked in it is refused. EMBER NUI with per-vehicle
 fuel/engine/body bars. fr+en.
 
-**Remaining.** No per-garage capacity, no shared/gang garage listing (it lists *your* cars only), and
-no vehicle preview in the panel.
+**Remaining.** No per-garage capacity, and no shared/gang garage listing (it lists *your* cars only).
+✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
+showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
 ### `v-world` ✅ — admin-editable world content
 
@@ -669,7 +705,8 @@ server — `RULES.md` §3.6.2). Ordered by build order, not by wish.
 | 3 | 🔨 **`v-vehicleshop`** — dealerships (**next**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) — the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
 | 4 | **`v-rentals`** — short-term hire | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row — that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
 
-**Cross-cutting for the whole block:** fuel (a single consumption model both shops and garages read),
+**Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` — one consumption model, four
+fuel types, admin-editable stations),
 a `v-vehicles` export surface (`GetOwned`, `HasKeys`, `GiveKeys`, `SpawnOwned`, `StoreOwned`) so
 `v-police` can impound and `v-jobs` can hand out job vehicles without touching the DB, and **one
 spawn path** — nothing else in the framework is allowed to `CreateVehicle` an owned car.

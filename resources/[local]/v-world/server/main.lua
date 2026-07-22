@@ -14,7 +14,7 @@ local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
-local Garages = {}
+local Garages, Stations = {}, {}
 local ready = false
 
 local function isAdmin(src)
@@ -111,6 +111,19 @@ local function ensureTables()
         PRIMARY KEY (`id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Fuel / charging points. `types` is a comma list of fuel type keys and `mult`
+    -- scales every price at this station, so a desert pump can cost more than a city one.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_stations` (
+        `id` VARCHAR(40) NOT NULL,
+        `label` VARCHAR(80) NOT NULL,
+        `x` FLOAT NOT NULL, `y` FLOAT NOT NULL, `z` FLOAT NOT NULL,
+        `types` VARCHAR(120) NOT NULL DEFAULT 'regular',
+        `mult` FLOAT NOT NULL DEFAULT 1.0,
+        `blip` TINYINT(1) NOT NULL DEFAULT 1,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `craft_recipes` (
         `id` INT NOT NULL AUTO_INCREMENT,
         `station` VARCHAR(40) NOT NULL,
@@ -200,6 +213,14 @@ local function loadGarages()
     end
 end
 
+local function loadStations()
+    Stations = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_stations ORDER BY label') or {}) do
+        r.blip, r.enabled = bool(r.blip), bool(r.enabled)
+        Stations[#Stations + 1] = r
+    end
+end
+
 local function reload(domain)
     if domain == 'blips'   or not domain then loadBlips() end
     if domain == 'shops'   or not domain then loadShops() end
@@ -209,6 +230,7 @@ local function reload(domain)
     if domain == 'clothstores' or not domain then loadClothStores() end
     if domain == 'clothcats'   or not domain then loadClothCats() end
     if domain == 'garages'     or not domain then loadGarages() end
+    if domain == 'stations'    or not domain then loadStations() end
 end
 
 -- ── Blip visibility ────────────────────────────────────────────
@@ -277,6 +299,7 @@ exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
 exports('GetGarages', function() return Garages end)
+exports('GetStations', function() return Stations end)
 
 -- v-crafting: list of { station, output, count, time, inputs = { item = qty } }
 exports('SeedRecipes', function(defaults)
@@ -351,6 +374,20 @@ exports('SeedGarages', function(defaults)
     return true
 end)
 
+-- v-fuel: list of { id, label, x, y, z, types, mult }
+exports('SeedStations', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    if #Stations > 0 then return false end
+    for _, st in ipairs(defaults) do
+        MySQL.insert.await([[INSERT IGNORE INTO world_stations (id, label, x, y, z, types, mult, blip, enabled)
+            VALUES (?,?,?,?,?,?,?,1,1)]],
+            { st.id, st.label or st.id, st.x, st.y, st.z, st.types or 'regular', st.mult or 1.0 })
+    end
+    loadStations()
+    print(('[v-world] seeded %d fuel station(s) from config'):format(#Stations))
+    return true
+end)
+
 exports('SeedJobs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
     if #Jobs > 0 then return false end
@@ -398,6 +435,8 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         local jobs = {}
         for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
         resolve({ rows = Garages, jobs = jobs, types = Config.GarageTypes })
+    elseif domain == 'stations' then
+        resolve({ rows = Stations, types = Config.FuelTypes })
     elseif domain == 'clothcats' then
         resolve({ rows = ClothCats, kinds = { 'comp', 'prop' }, framings = Config.ClothFramings })
     else resolve(false) end
@@ -532,6 +571,33 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
                   bool(row.blip), job, math.max(0, math.floor(num(row.fee))), bool(row.enabled), gid })
         end
 
+    elseif d == 'stations' then
+        local sid = tostring(row.sid or ''):lower():gsub('[^%w_]', ''):sub(1, 40)
+        if sid == '' then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 80)
+        if label == '' then resolve({ error = 'label' }); return end
+        -- keep only known fuel keys, so a typo can't create a pump nobody can use
+        local known, keep = {}, {}
+        for _, k in ipairs(Config.FuelTypes or {}) do known[k] = true end
+        for k in tostring(row.types or ''):gmatch('[^,%s]+') do
+            if known[k] then keep[#keep + 1] = k end
+        end
+        if #keep == 0 then resolve({ error = 'types' }); return end
+        local mult = math.max(0.1, math.min(5.0, tonumber(row.mult) or 1.0))
+        if row.isNew then
+            local exists = MySQL.scalar.await('SELECT 1 FROM world_stations WHERE id = ?', { sid })
+            if exists then resolve({ error = 'exists' }); return end
+            MySQL.insert.await([[INSERT INTO world_stations (id, label, x, y, z, types, mult, blip, enabled)
+                VALUES (?,?,?,?,?,?,?,?,?)]],
+                { sid, label, num(row.x), num(row.y), num(row.z), table.concat(keep, ','), mult,
+                  bool(row.blip == nil or row.blip), bool(row.enabled == nil or row.enabled) })
+        else
+            MySQL.update.await([[UPDATE world_stations SET label=?, x=?, y=?, z=?, types=?, mult=?, blip=?, enabled=?
+                WHERE id=?]],
+                { label, num(row.x), num(row.y), num(row.z), table.concat(keep, ','), mult,
+                  bool(row.blip), bool(row.enabled), sid })
+        end
+
     elseif d == 'clothcats' then
         -- `key` is referenced by every worn-clothing metadata blob: settable on CREATE,
         -- never changed afterwards (that would orphan every garment already owned).
@@ -617,6 +683,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
         local parked = MySQL.scalar.await('SELECT 1 FROM character_vehicles WHERE garage = ? LIMIT 1', { gid })
         if parked then resolve({ error = 'inuse' }); return end
         MySQL.query.await('DELETE FROM world_garages WHERE id = ?', { gid })
+    elseif d == 'stations' then
+        local sid = tostring(id or '')
+        if sid == '' then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_stations WHERE id = ?', { sid })
     elseif d == 'clothcats' then
         local key = tostring(id or '')
         if key == '' then resolve({ error = 'protected' }); return end

@@ -19,7 +19,10 @@ shared_scripts {
     'config.lua',
 }
 
-client_script 'client/main.lua'
+client_scripts {
+    'client/main.lua',
+    'client/preview.lua',   -- showroom instance (shared by v-garages and the dealership)
+}
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',

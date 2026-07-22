@@ -63,6 +63,7 @@ end
 local function close()
     if not isOpen then return end
     isOpen, curGarage = false, nil
+    exports['v-vehicles']:ClosePreview()
     SetNuiFocus(false, false)
     exports['v-core']:MenuClosed()
     SendNUIMessage({ action = 'close' })
@@ -139,6 +140,25 @@ RegisterNUICallback('take', function(data, cb)
 end)
 
 RegisterNUICallback('refresh', function(_, cb) refresh(); cb('ok') end)
+
+-- ── Showroom preview (v-vehicles owns the instance; we only drive it) ──
+RegisterNUICallback('preview', function(data, cb)
+    if not isOpen then cb(false); return end
+    local model = data and data.model
+    if not model then exports['v-vehicles']:ClosePreview(); cb('ok'); return end
+    -- props come from the server row, so the preview shows the car as it really is
+    cb(exports['v-vehicles']:OpenPreview(model, data.props) and 'ok' or false)
+end)
+
+RegisterNUICallback('previewRotate', function(data, cb)
+    exports['v-vehicles']:RotatePreview((data and data.dx) or 0)
+    cb('ok')
+end)
+
+RegisterNUICallback('previewZoom', function(data, cb)
+    exports['v-vehicles']:ZoomPreview((data and data.dz) or 0)
+    cb('ok')
+end)
 
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
