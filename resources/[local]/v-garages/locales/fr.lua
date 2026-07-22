@@ -25,5 +25,7 @@ local T = {
     ['gar.err_noimpound']= 'Impossible de se garer à la fourrière.',
     ['gar.err_spawn']   = 'Le véhicule n\'a pas pu être sorti.',
     ['gar.err_x']       = 'Demande refusée.',
+    ['gar.err_wrecked'] = 'Ce vehicule est trop endommage pour etre gare.',
+    ['gar.err_fee'] = 'Vous ne pouvez pas payer les frais de stationnement.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end

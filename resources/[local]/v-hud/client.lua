@@ -119,6 +119,89 @@ CreateThread(function()
     end
 end)
 
+-- ── Vehicle cluster ───────────────────────────────────────
+-- v-fuel owns the fuel, v-mechanic owns the wear and the odometer. Both are
+-- optional: a server that removed them still gets speed and engine health, which
+-- is why every cross-module read is guarded rather than assumed.
+-- v-hud held no core handle until now; server-side settings need one. Lazy, because
+-- v-hud can be ensured before v-core.
+local Core
+local function core()
+    if Core then return Core end
+    if GetResourceState('v-core') ~= 'started' then return nil end
+    local ok, c = pcall(function() return exports['v-core']:GetCore() end)
+    if ok then Core = c end
+    return Core
+end
+
+local function setting(key, fallback)
+    local c = core()
+    if not c or not c.GetSetting then return fallback end
+    local ok, v = pcall(c.GetSetting, 'v-hud', key, fallback)
+    if ok and v ~= nil then return v end
+    return fallback
+end
+
+local function safeCall(res, fn, ...)
+    if GetResourceState(res) ~= 'started' then return nil end
+    local ok, v = pcall(fn, ...)
+    if ok then return v end
+    return nil
+end
+
+CreateThread(function()
+    local shown, last = false, {}
+    while true do
+        local ped = PlayerPedId()
+        local veh = GetVehiclePedIsIn(ped, false)
+        -- Passengers get the cluster too, but only the driver's seat shows a gear.
+        local inVeh = veh ~= 0 and not IsPedInAnyBoat(ped) and not IsPedInAnyHeli(ped)
+
+        if not inVeh or (settings.elements and settings.elements.vehicle == false)
+           or setting('showVehicle', true) == false then
+            if shown then
+                shown = false; last = {}
+                SendNUIMessage({ action = 'vehicle', show = false })
+            end
+            Wait(500)
+        else
+            shown = true
+            local mph = setting('speedUnit', 'kmh') == 'mph'
+            local speed = math.floor(GetEntitySpeed(veh) * (mph and 2.236936 or 3.6) + 0.5)
+
+            local fuel = safeCall('v-vehicles', function() return exports['v-vehicles']:GetFuel(veh) end)
+            local electric = safeCall('v-fuel', function() return exports['v-fuel']:IsElectric(veh) end)
+
+            local plate = GetVehicleNumberPlateText(veh)
+            local miles = plate and safeCall('v-mechanic', function()
+                return exports['v-mechanic']:GetMileage(plate)
+            end) or nil
+
+            local data = {
+                action   = 'vehicle', show = true,
+                speed    = speed,
+                unit     = mph and 'mph' or 'km/h',
+                gear     = (GetPedInVehicleSeat(veh, -1) == ped) and GetVehicleCurrentGear(veh) or nil,
+                fuel     = fuel and math.floor(fuel + 0.5) or nil,
+                electric = electric == true,
+                engine   = math.floor(math.max(0, GetVehicleEngineHealth(veh)) / 10 + 0.5),
+                lowFuel  = tonumber(setting('lowFuel', 15)) or 15,
+                odo      = miles and math.floor(miles * (mph and 0.621371 or 1) + 0.5) or nil,
+                odoUnit  = mph and 'mi' or 'km',
+            }
+            -- Speed changes constantly; everything else rarely. Only push a frame when
+            -- a value the player can actually see has moved.
+            if data.speed ~= last.speed or data.gear ~= last.gear or data.fuel ~= last.fuel
+               or data.engine ~= last.engine or data.odo ~= last.odo
+               or data.electric ~= last.electric or data.unit ~= last.unit then
+                last = data
+                SendNUIMessage(data)
+            end
+            Wait(200)
+        end
+    end
+end)
+
 -- ── Hide the default GTA HUD pieces we replace ──
 CreateThread(function()
     while true do

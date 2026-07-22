@@ -1,6 +1,6 @@
 -- v-core | server-side callback system
 -- Lets clients request data from the server and get a response, e.g.:
---   Core.TriggerCallback('v-core:getBalance', function(money) ... end)
+--   Core.TriggerCallback('v-core:getPlayerData', function(data) ... end)
 VCore = VCore or {}
 VCore.ServerCallbacks = {}
 

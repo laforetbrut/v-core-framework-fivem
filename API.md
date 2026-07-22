@@ -204,6 +204,8 @@ exports['v-status']:Get(src)          -- { hunger, thirst, stress, bleed, sick }
 exports['v-status']:Add(src, 'hunger', 25)
 exports['v-status']:Set(src, key, value)
 exports['v-status']:SetBleed(src, n) / SetSick(src, n) / Heal(src)
+-- client: exports['v-status']:Get() plus the event below, which is how the HUD follows it
+AddEventHandler('v-status:client:onUpdate', function(s) end)  -- s = the full status table
 
 -- v-clothing (server)
 exports['v-clothing']:GetWorn(src)            -- cat -> { item, drawable, texture }

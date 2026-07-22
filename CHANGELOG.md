@@ -8,6 +8,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **Vehicle cluster in the HUD** — v-fuel tracked the fuel and v-mechanic tracked the wear and the odometer, and the player could see **neither** without opening a menu. The HUD now shows speed, gear, a fuel gauge that turns into a battery icon on an electric vehicle, engine condition and the odometer, all of it while driving only. Speed unit (km/h or mph), the low-fuel threshold and the whole cluster are settings; players can also switch it off in their own HUD panel.
+- **Real economy levers on the bank** — transfer fee (charged on top, so the recipient always receives the exact amount), minimum and maximum transfer, and a per-withdrawal ATM ceiling.
+- **Garage fees** — a flat retrieval fee and a parking fee for public garages, on top of the per-lot impound fee.
+
 - **A different theme per script, managed in one place** — the global theme still drives everything, but **Admin -> Editor -> Look -> Module themes** now lets you override it for any single module: its own colour preset, accent, **panel transparency**, backdrop darkness, roundness, animation speed and font scale. **Every field left blank means "inherit"**, so making the inventory a bit more see-through is one number and nothing else moves. The module list comes from the live registry, so a third-party script that declared itself is themeable too.
 
 - **The entire interface is themeable, from one place** — `v-ui/config.lua` and **Admin -> Settings -> Interface** now own the look of every menu in the game: **6 colour presets** (Ember, Midnight, Crimson, Verdant, Violet, Slate), an accent colour the whole highlight family is derived from, corner roundness, density, **animation speed (0 disables all motion)**, panel opacity, backdrop darkness, font scale, and switches for the corner brackets, the panel top light and the film grain. Change one and **all 16 NUI pages restyle at once** — no module hardcodes a colour any more.
@@ -56,6 +60,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **125 new items + 60 new recipes** — the catalogue grows from 175 to **302 items**: 20 more dishes, 13 drinks, 9 medical supplies, 17 hand tools, 16 industrial materials, 11 tech components, 9 pieces of jewellery, 20 real base-game weapons and 10 misc props (evidence bag, press pass, keycard…). All of them are reachable: 60 new recipes wire the new material tier (steel, titanium, carbon fibre, kevlar), the tool bench, field medicine, the electronics tier (motherboard → CPU → GPU, scanners, jammers) and the expanded kitchen menu — **105 recipes** in total.
 
 ### Ajouts (miroir français)
+
+- **Bloc véhicule dans le HUD** — v-fuel suivait le carburant et v-mechanic l'usure et le kilométrage, et le joueur ne voyait **ni l'un ni l'autre** sans ouvrir un menu. Le HUD affiche désormais la vitesse, le rapport, une jauge de carburant qui devient une batterie sur un véhicule électrique, l'état moteur et le compteur, uniquement au volant. L'unité de vitesse (km/h ou mph), le seuil de carburant bas et le bloc entier sont des réglages ; le joueur peut aussi le désactiver depuis son propre panneau HUD.
+- **Vrais leviers économiques sur la banque** — frais de virement (prélevés en plus, le destinataire reçoit donc toujours le montant exact), virement minimum et maximum, et plafond de retrait par opération au distributeur.
+- **Frais de garage** — frais de sortie et frais de stationnement pour les garages publics, en plus des frais de fourrière propres à chaque lot.
 
 - **Un thème différent par script, géré au même endroit** — le thème global pilote toujours tout, mais **Admin -> Éditeur -> Apparence -> Thèmes par module** permet désormais de le surcharger pour n'importe quel module : son propre preset de couleurs, son accent, la **transparence du panneau**, l'assombrissement du fond, l'arrondi, la vitesse d'animation et l'échelle de police. **Chaque champ laissé vide veut dire « hérité »**, donc rendre l'inventaire un peu plus transparent tient en un seul nombre sans que rien d'autre ne bouge. La liste des modules vient du registre en direct : un script tiers qui s'est déclaré est thémable lui aussi.
 
@@ -166,6 +174,11 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Shop inventory panel + drag-to-buy (v-shops)** — the store now shows **your inventory** beside the catalogue and lets you **drag a catalogue item onto it to buy** (1 unit; the Buy button + stepper remain for quantities). Catalogue and inventory tiles show item images (with the same garment/box fallback as the inventory).
 
 ### Fixed (English first)
+
+- **`Config.StoreMaxDamage` did nothing** — the comment above it promised a burning wreck could not be parked, and no code read the value: a garage was a free repair shop, since a destroyed car came back out pristine. It is enforced now (engine, body and fuel-tank health, checked server-side), and it is a setting.
+- **A failed garage spawn only ever refunded an impound fee** — the retrieval charge for any other garage stayed taken. The fee is now computed once, outside the impound branch, and refunded whichever garage took it.
+- **The bank showed "insufficient funds" for every error** — a transfer rejected for exceeding the limit told the player the exact opposite of what happened. Each server error code now maps to its own message, with the limit substituted in.
+- **Admin heal never cured bleeding or illness** — `exports['v-status']:Heal()` is a server export and was being called from the client inside a `pcall`, so it failed silently. It runs server-side now, for both the target heal and the self-heal.
 
 - **The panel top light was hardcoded orange** — on a violet or green theme every panel kept a warm streak, which was the one detail giving the reskin away. It follows the accent now. `.v-chamfer`'s panel gradient also ended on a fixed dark value instead of the theme background, and `.v-panel` was an empty rule that produced no panel at all when used on its own.
 
@@ -303,6 +316,11 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Panneau inventaire + glisser-pour-acheter (v-shops)** — la boutique affiche maintenant **votre inventaire** à côté du catalogue et permet de **glisser un article dessus pour l'acheter** (1 unité ; le bouton Acheter + le compteur restent pour les quantités). Les tuiles du catalogue et de l'inventaire montrent les images d'items (avec le même repli vêtement/colis que l'inventaire).
 
 ### Correctifs (miroir français)
+
+- **`Config.StoreMaxDamage` ne faisait rien** — le commentaire au-dessus promettait qu'une épave en feu ne pouvait pas être garée, et aucun code ne lisait la valeur : un garage était un réparateur gratuit, puisqu'une voiture détruite en ressortait intacte. C'est désormais appliqué (état moteur, carrosserie et réservoir, vérifiés côté serveur), et c'est un réglage.
+- **Un spawn de garage raté ne remboursait que les frais de fourrière** — les frais de sortie de tout autre garage restaient prélevés. Les frais sont maintenant calculés une seule fois, hors de la branche fourrière, et remboursés quel que soit le garage.
+- **La banque affichait « fonds insuffisants » pour toutes les erreurs** — un virement refusé pour dépassement de plafond disait au joueur exactement l'inverse de ce qui s'était passé. Chaque code d'erreur serveur a maintenant son propre message, avec le plafond inséré dedans.
+- **Le soin admin ne guérissait jamais les saignements ni les maladies** — `exports['v-status']:Heal()` est un export serveur appelé depuis le client dans un `pcall`, il échouait donc en silence. Il s'exécute désormais côté serveur, pour le soin d'un joueur comme pour l'auto-soin.
 
 - **Le filet lumineux des panneaux était orange en dur** — sur un thème violet ou vert, chaque panneau gardait un liseré chaud, le seul détail qui trahissait le changement de couleurs. Il suit désormais l'accent. Le dégradé de `.v-chamfer` finissait aussi sur une valeur sombre fixe au lieu du fond du thème, et `.v-panel` était une règle vide qui ne produisait aucun panneau si on l'utilisait seule.
 

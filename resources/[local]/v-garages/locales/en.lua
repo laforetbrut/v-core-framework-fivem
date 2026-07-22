@@ -25,5 +25,7 @@ local T = {
     ['gar.err_noimpound']= 'You cannot park at the impound.',
     ['gar.err_spawn']   = 'The vehicle could not be brought out.',
     ['gar.err_x']       = 'Request refused.',
+    ['gar.err_wrecked'] = 'This vehicle is too damaged to be parked.',
+    ['gar.err_fee'] = 'You cannot afford the parking fee.',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

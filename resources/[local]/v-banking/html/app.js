@@ -62,7 +62,16 @@ byId('confirm').onclick = async () => {
   else res = await post(currentTab, { amount });
 
   if (!res) { showMsg(t('bank.err_funds'), 'err'); return; }
-  if (res.error) { showMsg(res.error === 'target' ? t('bank.err_target') : t('bank.err_funds'), 'err'); return; }
+  if (res.error) {
+    // Map every server error code to its own string. Falling back to "insufficient
+    // funds" for a limit rejection told the player the exact opposite of the truth.
+    const key = 'bank.err_' + res.error;
+    let msg = t(key);
+    if (msg === key) msg = t('bank.err_funds');
+    if (res.limit != null) msg = msg.replace('%s', Number(res.limit).toLocaleString());
+    showMsg(msg, 'err');
+    return;
+  }
   render(res);
   byId('amount').value = '';
   showMsg((t('bank.ok_' + currentTab) || '').replace('%s', fmt(amount).slice(1)), 'ok');

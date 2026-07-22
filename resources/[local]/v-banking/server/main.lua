@@ -40,6 +40,8 @@ Core.RegisterCallback('v-banking:withdraw', function(source, resolve, amount)
     local p = Core.GetPlayer(source)
     amount = math.floor(tonumber(amount) or 0)
     if not p or amount <= 0 then resolve(false) return end
+    local maxW = math.floor(tonumber(Core.GetSetting('v-banking', 'maxWithdraw', Config.MaxWithdraw)) or 0)
+    if maxW > 0 and amount > maxW then resolve({ error = 'maxwithdraw', limit = maxW }) return end
     if not p.RemoveMoney('bank', amount, 'bank-withdraw') then resolve({ error = 'funds' }) return end
     p.AddMoney('cash', amount, 'bank-withdraw')
     recordTx(p.citizenid, 'withdraw', amount, p.money.bank, nil)
@@ -53,11 +55,22 @@ Core.RegisterCallback('v-banking:transfer', function(source, resolve, data)
     local targetCid = tostring((data and data.target) or ''):upper()
     if not p or amount <= 0 or targetCid == '' or targetCid == p.citizenid then resolve(false) return end
 
+    local minT = math.floor(tonumber(Core.GetSetting('v-banking', 'minTransfer', Config.MinTransfer)) or 1)
+    local maxT = math.floor(tonumber(Core.GetSetting('v-banking', 'maxTransfer', Config.MaxTransfer)) or 0)
+    if amount < minT then resolve({ error = 'mintransfer', limit = minT }) return end
+    if maxT > 0 and amount > maxT then resolve({ error = 'maxtransfer', limit = maxT }) return end
+
+    -- The fee is charged ON TOP, so the recipient always receives exactly `amount` —
+    -- a transfer that silently arrives short is the kind of thing players report as theft.
+    local rate = tonumber(Core.GetSetting('v-banking', 'transferFee', Config.TransferFee)) or 0.0
+    local fee = math.floor(amount * math.max(0.0, math.min(1.0, rate)))
+
     -- Validate recipient exists before touching money.
     local exists = MySQL.scalar.await('SELECT 1 FROM characters WHERE citizenid = ?', { targetCid })
     if not exists then resolve({ error = 'target' }) return end
 
-    if not p.RemoveMoney('bank', amount, 'bank-transfer') then resolve({ error = 'funds' }) return end
+    if not p.RemoveMoney('bank', amount + fee, 'bank-transfer') then resolve({ error = 'funds' }) return end
+    if fee > 0 then recordTx(p.citizenid, 'fee', fee, p.money.bank, nil) end
 
     local target = Core.GetPlayerByCitizenId(targetCid)
     if target then
@@ -70,7 +83,7 @@ Core.RegisterCallback('v-banking:transfer', function(source, resolve, data)
         -- the money. The sender's in-memory RemoveMoney above already keeps the live
         -- session correct; this just flushes that deduction durably now.
         MySQL.transaction.await({
-            { 'UPDATE characters SET bank = bank - ? WHERE citizenid = ?', { amount, p.citizenid } },
+            { 'UPDATE characters SET bank = bank - ? WHERE citizenid = ?', { amount + fee, p.citizenid } },
             { 'UPDATE characters SET bank = bank + ? WHERE citizenid = ?', { amount, targetCid } },
         })
         local newBal = MySQL.scalar.await('SELECT bank FROM characters WHERE citizenid = ?', { targetCid }) or 0
@@ -95,6 +108,10 @@ local function declareSettings()
 
             { key = 'distance',     label = 'ATM range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'historyLimit', label = 'Transactions shown',   type = 'number', default = Config.HistoryLimit, min = 5, max = 200, step = 1 },
+            { key = 'transferFee',  label = 'Transfer fee (0.02 = 2%)', type = 'number', default = Config.TransferFee, min = 0, max = 1, step = 0.005 },
+            { key = 'minTransfer',  label = 'Minimum transfer ($)',  type = 'number', default = Config.MinTransfer, min = 1, max = 100000, step = 1 },
+            { key = 'maxTransfer',  label = 'Maximum transfer ($, 0 = unlimited)', type = 'number', default = Config.MaxTransfer, min = 0, max = 100000000, step = 100 },
+            { key = 'maxWithdraw',  label = 'Max ATM withdrawal ($, 0 = unlimited)', type = 'number', default = Config.MaxWithdraw, min = 0, max = 100000000, step = 100 },
         },
     })
 end

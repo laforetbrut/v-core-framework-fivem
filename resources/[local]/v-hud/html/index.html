@@ -49,6 +49,28 @@
   </div>
 
   <!-- Layout (drag) mode toolbar -->
+  <!-- Vehicle cluster: only ever visible while driving -->
+  <div id="vehicle" class="vehicle hidden" data-group="vehicle">
+    <div class="veh__speed">
+      <span class="veh__num" id="veh-speed">0</span>
+      <span class="veh__unit" id="veh-unit">km/h</span>
+      <span class="veh__gear" id="veh-gear"></span>
+    </div>
+    <div class="veh__gauges">
+      <div class="gauge" id="g-fuel">
+        <span class="gauge__ico" id="veh-fuel-ico">⛽</span>
+        <div class="v-progress"><div class="v-progress__fill" id="veh-fuel-bar"></div></div>
+        <span class="gauge__val" id="veh-fuel-val">--</span>
+      </div>
+      <div class="gauge" id="g-eng">
+        <span class="gauge__ico">⚙</span>
+        <div class="v-progress"><div class="v-progress__fill" id="veh-eng-bar"></div></div>
+        <span class="gauge__val" id="veh-eng-val">--</span>
+      </div>
+    </div>
+    <div class="veh__odo" id="veh-odo"></div>
+  </div>
+
   <div id="layout-bar" class="layout-bar hidden">
     <span class="dot"></span>
     <span data-i18n="set.drag_hint">Drag the elements to reposition them</span>

@@ -86,8 +86,23 @@ function Actions.kick(src, d)
     return true, ('kicked %d (%s)'):format(target, d.reason or '-')
 end
 
+-- Self-heal from the Tools tab: the client restored its own health, but bleeding and
+-- illness live server-side. Permission re-checked here, never assumed from the client.
+RegisterNetEvent('v-admin:server:selfCleanse', function()
+    local src = source
+    if not Core.HasPermission(src, 'admin') then return end
+    if GetResourceState('v-status') == 'started' then
+        pcall(function() exports['v-status']:Heal(src) end)
+    end
+end)
+
 function Actions.heal(src, d)
     local target = tonumber(d.target); if not target or not Core.Players[target] then return false end
+    -- v-status is server-side: clearing bleed and sickness has to happen here. The
+    -- client half only restores health/armour and cleans the ped.
+    if GetResourceState('v-status') == 'started' then
+        pcall(function() exports['v-status']:Heal(target) end)
+    end
     TriggerClientEvent('v-admin:client:heal', target)
     return true, ('healed %d'):format(target)
 end

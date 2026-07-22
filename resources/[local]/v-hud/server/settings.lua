@@ -15,6 +15,10 @@ CreateThread(function()
         { key = 'showMoney',  label = 'Show money',        type = 'bool',   default = true },
         { key = 'showVitals', label = 'Show vitals',       type = 'bool',   default = true },
         { key = 'lowVital',   label = 'Low-vital warning below (%)', type = 'number', default = 25, min = 0, max = 100, step = 1 },
+        { key = 'showVehicle', label = 'Show the vehicle cluster', type = 'bool', default = true },
+        { key = 'speedUnit',  label = 'Speed unit', type = 'select', default = 'kmh',
+          options = { { value = 'kmh', label = 'km/h' }, { value = 'mph', label = 'mph' } } },
+        { key = 'lowFuel',    label = 'Low-fuel warning below (%)', type = 'number', default = 15, min = 0, max = 100, step = 1 },
         },
     })
 end)
