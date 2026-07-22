@@ -647,9 +647,9 @@ input { font: inherit; }
 .shade { position: absolute; inset: 0; z-index: 53; display: none; padding: 62px 14px 0;
   border-radius: 47px; background: rgba(0,0,0,.5); animation: ph-cc .3s var(--spring); }
 .shade.on { display: block; }
-.shadeclock { text-align: center; font-family: var(--ios-num); font-size: 52px;
-  font-weight: 500; letter-spacing: -.03em; }
-.shadedate { text-align: center; font-size: 13px; color: var(--l2); margin-bottom: 20px; }
+.shadeclock { text-align: center; font-family: var(--ios-num); font-size: 40px;
+  font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+.shadedate { text-align: center; font-size: 13px; color: var(--l2); margin-bottom: 14px; }
 .shadelist { display: flex; flex-direction: column; gap: 8px; }
 
 /* ══ Bank card ════════════════════════════════════════════════ */
@@ -1040,7 +1040,9 @@ input { font: inherit; }
 
 /* -- Control centre -- */
 .cc { position: absolute; inset: 0; z-index: 55; display: none; padding: 56px 15px 0;
-  background: rgba(9,9,12,.6); }
+  /* CEF cannot blur, so the panel is nearly opaque rather than see-through - a
+     translucent control centre just makes the home screen behind it fight the text. */
+  background: linear-gradient(180deg, rgba(22,22,28,.985), rgba(8,8,11,.99)); }
 .cc.on { display: block; animation: cc-in .34s var(--spring); }
 @keyframes cc-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .cc .cctop { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -1105,7 +1107,7 @@ input { font: inherit; }
 
 /* -- Notification shade -- */
 .shade { position: absolute; inset: 0; z-index: 53; display: none; padding: 54px 14px 0;
-  background: rgba(9,9,12,.62); overflow-y: auto; }
+  background: linear-gradient(180deg, rgba(22,22,28,.985), rgba(8,8,11,.99)); overflow-y: auto; }
 .shade.on { display: block; animation: cc-in .34s var(--spring); }
 .shadehead { display: flex; align-items: center; justify-content: space-between;
   padding: 6px 6px 12px; }
