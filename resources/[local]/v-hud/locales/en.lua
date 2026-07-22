@@ -34,5 +34,6 @@ local T = {
     ['alert.thirsty_m'] = 'You are thirsty — find something to drink.',
     ['set.map_hint'] = 'Drag the minimap too to place it',
     ['hud.nobelt'] = 'NO BELT',
+    ['hud.voice'] = 'Voice',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

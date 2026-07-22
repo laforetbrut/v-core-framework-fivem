@@ -231,6 +231,10 @@ local T = {
     ['adm.ed_street']       = 'Street price ($)',
     ['adm.ed_heat']         = 'Heat per sale',
     ['adm.ed_nogrow']       = 'cannot be grown',
+    ['adm.ed_radio']        = 'Radio channels',
+    ['adm.ed_chan']         = 'Channel number',
+    ['adm.ed_openchan']     = 'open to anyone with a radio',
+    ['adm.ed_onlygang']     = 'Gang only',
     ['adm.revived']      = 'Revived.',
     ['adm.armored']      = 'Armor refilled.',
 }

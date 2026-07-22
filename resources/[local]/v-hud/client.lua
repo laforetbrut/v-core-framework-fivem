@@ -210,6 +210,29 @@ CreateThread(function()
     end
 end)
 
+-- ── Voice indicator ───────────────────────────────────────
+-- v-voice owns the state; the HUD only renders it. Guarded so a server without the
+-- module simply never shows the widget rather than erroring every tick.
+CreateThread(function()
+    local last = {}
+    while true do
+        local st = safeCall('v-voice', function() return exports['v-voice']:GetState() end)
+        local show = st ~= nil and not (settings.elements and settings.elements.voice == false)
+        if not show then
+            if last.show ~= false then last = { show = false }; SendNUIMessage({ action = 'voice', show = false }) end
+        else
+            local data = { action = 'voice', show = true, label = st.label, talking = st.talking,
+                           radio = st.radio, muted = st.muted, injured = st.injured, channel = st.channel }
+            if data.label ~= last.label or data.talking ~= last.talking or data.radio ~= last.radio
+               or data.muted ~= last.muted or data.injured ~= last.injured or data.channel ~= last.channel then
+                last = data
+                SendNUIMessage(data)
+            end
+        end
+        Wait(300)
+    end
+end)
+
 -- ── Hide the default GTA HUD pieces we replace ──
 CreateThread(function()
     while true do

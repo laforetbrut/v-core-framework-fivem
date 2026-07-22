@@ -829,6 +829,44 @@ fuel/engine/body bars. fr+en.
 ✅ The panel now shows a **live 3D preview**: selecting a row stands the car up in the v-vehicles
 showroom instance, dragging the empty half of the screen orbits it and the wheel zooms.
 
+### `v-voice` ✅ - proximity, radio channels and phone audio
+
+FiveM already ships a Mumble voice server, so this module implements no audio. It decides
+**who hears whom, and how loudly** - the framing that keeps it small.
+
+**Three proximity steps** (whisper / normal / shout) on a key. Both Mumble distances are
+set, not one: input is how far your voice carries, output is how far you hear, and setting
+only one produces the classic "I can hear them but they cannot hear me". The ranges are
+**settings, resolved server-side** - a client that sets its own range has a megaphone.
+
+**Radio channels are the part that must be authoritative.** A client that picks its own
+channel can listen to the police, so joining is a callback, and permission to transmit is
+re-asked on **every keypress** rather than cached - it is the only moment that can know the
+player still holds the radio, is still in the job, and is not cuffed. The gate reuses the
+existing job and gang concepts plus a minimum grade; there is no third permission list.
+Channels live in `world_radio` and are edited in **Admin → Editor → Radio channels**.
+
+**Consequences wired through the rest of the framework:**
+- `v-status`: bleeding past a threshold multiplies the range down, because a wounded player
+  should not be shouting across a street. The HUD says so, since a player who does not know
+  they are quiet reports it as the voice system being broken.
+- `v-police`: a cuffed player cannot key the radio.
+- `v-inventory`: transmitting needs a radio item, so being disarmed of it is a real event.
+- Leaving a job or a gang leaves its channel through `onJobChange`, with no bookkeeping.
+- An admin editing a channel takes anyone no longer eligible off it immediately, rather
+  than the edit doing nothing until they relog.
+- `v-hud` renders a small indicator: proximity step, talking, radio, muted, and the channel.
+
+**The phone gets its own Mumble channel** (`PhoneCallStart` / `PhoneCallEnd`), so a call
+carries across the map and is inaudible to somebody standing next to you. `v-phone` will
+call those two exports and nothing else.
+
+**Staff mute** is keyed on the citizen id rather than the session, so it survives a relog,
+and it needs no access to the voice server.
+
+Nine settings. `server.cfg` gained the three convars without which the built-in voice is
+not positional at all - which would have defeated the whole proximity model.
+
 ### `v-drugs` ✅ - plantations, street dealing, demand and heat
 
 The illegal loop already shipped as a **static** chain: fixed gather nodes, a craft bench
@@ -1156,45 +1194,11 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-voice` | high | Proximity voice, radio channels and phone audio. Nothing else on this list changes roleplay as much: a server without voice is a server where nobody talks. |
 | `v-phone` | high | iFruit phone NUI - a primary interaction surface (the server has no chat). Carries messages, calls, the faction/gang comms, dealer contacts and the licence wallet. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
 | `v-housing` | medium | Property ownership, interiors, house garages and stashes. |
 | `v-pausemenu` | medium | Custom pause menu (hosts settings, incl. HUD). |
 | `v-weather` | low | Weather/time sync + in-game control (currently lives inside v-admin). |
-
-#### `v-voice` - proximity, radio and phone audio
-
-FiveM ships a Mumble voice server; a voice module does not implement audio, it decides
-**who hears whom, and how loudly**. That framing is what keeps it small.
-
-**Proximity in three steps** - whisper, normal, shout - cycled on a key, with the current
-range shown in the HUD. Range is a setting, not a constant, because a server's idea of
-"normal" depends on how big its scenes are.
-
-**Radio channels** are the part that has to be server-authoritative. A client that picks
-its own channel can listen to the police, so joining a channel is a callback the server
-answers by checking `v-factions` rank or `v-police:IsCop` - the same gates the rest of the
-framework already uses, never a new permission list. A radio **item** is required to
-transmit, so being disarmed of the radio is a real event.
-
-**The phone gets its own submix** rather than sharing proximity, so a call is audible when
-the other person is across the map and inaudible to somebody standing next to you.
-
-**Integration that matters:**
-- `v-status`: bleeding or badly hurt narrows the range, because a wounded player should not
-  be shouting across a street.
-- `v-police`: cuffed players cannot use the radio.
-- `v-gangs` / `v-factions`: a faction channel is derived from membership, so leaving the
-  gang leaves the channel with no extra bookkeeping.
-- `v-hud`: a small talking indicator and the current proximity step.
-
-**Admin surface:** the three ranges, whether a radio item is required, which channels exist
-and who may use them (a `v-world` domain, like every other content list), and a mute that a
-staff member can apply without touching the voice server.
-
-**The trap to avoid:** never trust the client for channel membership or for range. Both are
-enforced server-side and mirrored down; a "range" the client sets is a megaphone.
 
 #### `v-housing` - property, interiors and what lives inside them
 
@@ -1244,11 +1248,7 @@ the part that needs balancing once players are on the server.
    laundering path, and it is the module most likely to need balancing once players are on the server.
 5. **`v-anticheat` before the server opens**, not after. It is listed last because it guards
    everything above, not because it matters least.
-6. **`v-voice` can be built at any point, and should be built early.** It depends on nothing in
-   the economy and changes roleplay more than anything else left on the list - a server without
-   voice is a server where nobody talks. The only reason it is not already done is that it was
-   never written down.
-7. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
+6. **`v-housing` after `v-police`, not before.** Property, storage and the house garage only wire
    existing modules to a new key, so they are cheap; **robbery** is the part that gives houses a
    reason to exist on the illegal side, and it needs the police module that now ships. Building
    housing first would mean shipping it twice.

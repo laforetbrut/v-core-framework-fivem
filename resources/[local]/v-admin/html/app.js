@@ -348,6 +348,11 @@ function edRowTitle(r) {
   if (edDomain === 'stations') {
     return `${esc(r.label)} <i class="dim">${esc(r.id)} · ${esc(r.types)} · x${(Number(r.mult) || 1).toFixed(2)} · ${Math.round(r.x)}, ${Math.round(r.y)}</i>`;
   }
+  if (edDomain === 'radio') {
+    const gate = r.job ? '🔒 ' + esc(r.job) : (r.gang ? '🔒 ' + esc(r.gang) : esc(t('adm.ed_openchan')));
+    return `${esc(r.label)} <i class="dim">#${Number(r.id)} · ${gate}` +
+      `${Number(r.min_grade) ? ' · ' + esc(t('adm.ed_mingrade')) + ' ' + r.min_grade : ''}</i>`;
+  }
   if (edDomain === 'drugs') {
     const grow = r.seed_item ? `${r.grow_minutes}m · ${r.yield_min}-${r.yield_max}` : t('adm.ed_nogrow');
     return `${esc(r.label)} <i class="dim">${esc(r.key)} · ${esc(r.product_item)} · ` +
@@ -494,7 +499,8 @@ function renderEdList() {
     row.querySelector('[data-act="edit"]').onclick = () => openEdForm(r);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = async () => {
-      const id = (edDomain === 'drugs') ? r.key
+      const id = (edDomain === 'radio') ? r.id
+        : (edDomain === 'drugs') ? r.key
         : (edDomain === 'charges') ? r.code
         : (edDomain === 'jobs' || edDomain === 'items' || edDomain === 'gangs') ? r.name
         : (edDomain === 'clothcats' || edDomain === 'licenses') ? r.key
@@ -676,6 +682,24 @@ function openEdForm(row) {
       `<div class="edf full"><span>${esc(t('adm.ed_fueltypes'))}</span><div class="ftypes">${boxes}</div></div>` +
       field(t('adm.ed_pricemult'), 'ef-mult', row.mult ?? 1.0, 'number') +
       check(t('adm.ed_blip'), 'ef-blip', row.blip !== 0) + check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
+  } else if (edDomain === 'radio') {
+    const isNew = !row.id;
+    const jobs = (edData.jobs || []).map(j =>
+      `<option value="${esc(j.name)}"${j.name === row.job ? ' selected' : ''}>${esc(j.label || j.name)}</option>`).join('');
+    const gangs = (edData.gangs || []).map(g =>
+      `<option value="${esc(g.name)}"${g.name === row.gang ? ' selected' : ''}>${esc(g.label || g.name)}</option>`).join('');
+    html =
+      `<label class="edf"><span>${esc(t('adm.ed_chan'))}</span>` +
+        `<input id="ef-cid" type="number" value="${esc(row.id ?? '')}" ${isNew ? '' : 'disabled'} /></label>` +
+      field(t('adm.ed_label'), 'ef-label', row.label) +
+      // job and gang are alternatives: a channel gated on both would be reachable by
+      // neither, so the server keeps whichever was set and blanks the other
+      `<label class="edf"><span>${esc(t('adm.ed_onlyjob'))}</span><select id="ef-job">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>${jobs}</select></label>` +
+      `<label class="edf"><span>${esc(t('adm.ed_onlygang'))}</span><select id="ef-gang">` +
+        `<option value="">${esc(t('adm.ed_everyone'))}</option>${gangs}</select></label>` +
+      field(t('adm.ed_mingrade'), 'ef-grade', row.min_grade ?? 0, 'number') +
+      check(t('adm.ed_enabled'), 'ef-en', row.enabled !== 0);
   } else if (edDomain === 'drugs') {
     const isNew = !row.key;
     const items = (edData.items || []);
@@ -993,6 +1017,10 @@ function openEdForm(row) {
                   x: parseFloat(v('ef-x')), y: parseFloat(v('ef-y')), z: parseFloat(v('ef-z')),
                   types: types.join(','), mult: parseFloat(v('ef-mult')) || 1.0,
                   blip: ck('ef-blip'), enabled: ck('ef-en') };
+    } else if (edDomain === 'radio') {
+      payload = { id: parseInt(v('ef-cid'), 10) || 0, label: v('ef-label'),
+                  job: v('ef-job'), gang: v('ef-gang'),
+                  grade: parseInt(v('ef-grade'), 10) || 0, enabled: ck('ef-en') };
     } else if (edDomain === 'drugs') {
       payload = { key: v('ef-dkey'), label: v('ef-label'), seed: v('ef-seed'),
                   product: v('ef-prod'), grow: parseInt(v('ef-grow'), 10) || 60,

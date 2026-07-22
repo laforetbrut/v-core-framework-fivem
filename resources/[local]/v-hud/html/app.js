@@ -44,7 +44,7 @@ const ACCENTS = [
 ];
 
 const DEFAULTS = {
-  elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true, vehicle: true },
+  elements: { health: true, armor: true, hunger: true, thirst: true, stress: true, stamina: true, oxygen: true, money: true, compass: false, minimap: true, vehicle: true, voice: true },
   positions: {}, accent: '#FF6A1A', opacity: 100, scale: 100, dynamic: false, minimapVehicleOnly: false, minimapSize: 100,
 };
 const MM_SIZE_MIN = 60, MM_SIZE_MAX = 200;   // minimap size range (%)
@@ -379,5 +379,31 @@ applySettings();
 
     const odo = el('veh-odo');
     odo.textContent = (d.odo != null && d.odoUnit) ? (d.odo + ' ' + d.odoUnit) : '';
+  });
+})();
+
+// ── Voice indicator ────────────────────────────────────────────────────────
+(function () {
+  const el = id => document.getElementById(id);
+  const box = el('voice');
+  if (!box) return;
+
+  window.addEventListener('message', ev => {
+    const d = ev.data || {};
+    if (d.action !== 'voice') return;
+    if (!d.show) { box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+
+    el('voice-step').textContent = d.label || '';
+    box.classList.toggle('is-talking', d.talking === true);
+    box.classList.toggle('is-radio', d.radio === true);
+    box.classList.toggle('is-muted', d.muted === true);
+    // A narrowed range is worth showing: a player who does not know they are quiet
+    // reports it as the voice system being broken.
+    box.classList.toggle('is-injured', d.injured === true);
+
+    const ch = el('voice-ch');
+    ch.classList.toggle('hidden', !d.channel);
+    if (d.channel) ch.textContent = d.channel;
   });
 })();

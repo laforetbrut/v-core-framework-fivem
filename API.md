@@ -255,6 +255,16 @@ exports['v-notify']:Show({ type =, title =, message =, duration = })
 exports['v-core']:IsModule(name) / GetRawSetting(name, key) / IsOverridden(name, key)
 exports['v-core']:MenuOpened(name) / MenuClosed(name) / IsAnyMenuOpen()
 
+-- v-voice
+exports['v-voice']:GetChannel(src)          -- server: the channel this player is on
+exports['v-voice']:GetChannels()            -- server: every channel definition
+exports['v-voice']:JoinChannel(src, id)     -- server: still gated; the gate is the point
+exports['v-voice']:Mute(cid) / Unmute(cid) / IsMuted(cid)   -- server, survives a relog
+-- client:
+exports['v-voice']:GetState()               -- { step, label, range, channel, radio, talking, muted, injured }
+exports['v-voice']:GetChannel() / GetStepLabel()
+exports['v-voice']:PhoneCallStart() / PhoneCallEnd()   -- what v-phone will call
+
 -- v-drugs (server)
 exports['v-drugs']:GetHeat(cid) / AddHeat(cid, n)   -- 0..100, decays on its own
 exports['v-drugs']:GetPlants()                      -- live plant rows

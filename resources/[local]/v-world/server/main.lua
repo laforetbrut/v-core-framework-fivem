@@ -13,7 +13,7 @@
 local Core = exports['v-core']:GetCore()
 
 local Blips, ShopLocs, Jobs, Items, Recipes = {}, {}, {}, {}, {}
-local Gangs, Turfs, Charges, Drugs = {}, {}, {}, {}
+local Gangs, Turfs, Charges, Drugs, Radio = {}, {}, {}, {}, {}
 local ClothStores, ClothCats = {}, {}
 local Garages, Stations, MechShops = {}, {}, {}
 local LicTypes = {}
@@ -284,6 +284,18 @@ local function ensureTables()
         PRIMARY KEY (`key`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
+    -- Radio channels. The gate is a job or a gang plus a minimum grade, reusing the
+    -- same two concepts the rest of the framework gates on rather than inventing a third.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_radio` (
+        `id` INT UNSIGNED NOT NULL,                  -- the Mumble channel number
+        `label` VARCHAR(60) NOT NULL,
+        `job` VARCHAR(50) DEFAULT NULL,              -- NULL = open to anyone with a radio
+        `gang` VARCHAR(50) DEFAULT NULL,
+        `min_grade` INT NOT NULL DEFAULT 0,
+        `enabled` TINYINT(1) NOT NULL DEFAULT 1,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
     -- How many defaults each domain was last seeded with. See `seedNeeded` below.
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `world_seeded` (
         `domain` VARCHAR(40) NOT NULL,
@@ -381,6 +393,14 @@ local function loadGangs()
         if type(g) == 'string' then g = json.decode(g) or {} end
         r.grades = g or {}
         Gangs[#Gangs + 1] = r
+    end
+end
+
+local function loadRadio()
+    Radio = {}
+    for _, r in ipairs(MySQL.query.await('SELECT * FROM world_radio ORDER BY id') or {}) do
+        r.enabled = bool(r.enabled)
+        Radio[#Radio + 1] = r
     end
 end
 
@@ -519,6 +539,7 @@ local function reload(domain)
     if domain == 'turfs'   or not domain then loadTurfs() end
     if domain == 'charges' or not domain then loadCharges() end
     if domain == 'drugs'   or not domain then loadDrugs() end
+    if domain == 'radio'   or not domain then loadRadio() end
     if domain == 'items'   or not domain then loadItems() end
     if domain == 'recipes' or not domain then loadRecipes() end
     if domain == 'clothstores' or not domain then loadClothStores() end
@@ -605,6 +626,7 @@ exports('GetItems', function() return Items end)
 exports('GetRecipes', function() return Recipes end)
 exports('GetClothStores', function() return ClothStores end)
 exports('GetClothCategories', function() return ClothCats end)
+exports('GetRadio',   function() return Radio end)
 exports('GetDrugs',   function() return Drugs end)
 exports('GetCharges', function() return Charges end)
 exports('GetGangs',   function() return Gangs end)
@@ -806,6 +828,22 @@ exports('SeedVehicleCatalogue', function(defaults)
     return true
 end)
 
+-- v-voice: list of { id, label, job, gang, grade }
+exports('SeedRadio', function(defaults)
+    if not ready or type(defaults) ~= 'table' then return false end
+    local need, want = seedNeeded('radio', defaults)
+    if not need then return false end
+    for _, c in ipairs(defaults) do
+        MySQL.insert.await(
+            'INSERT IGNORE INTO world_radio (id, label, job, gang, min_grade, enabled) VALUES (?,?,?,?,?,1)',
+            { c.id, c.label or ('Channel ' .. tostring(c.id)), c.job, c.gang, c.grade or 0 })
+    end
+    seedDone('radio', want)
+    loadRadio()
+    print(('[v-world] seeded %d radio channel(s) from config'):format(#Radio))
+    return true
+end)
+
 -- v-drugs: list of { key, label, seed, product, grow, water, min, max, price, heat }
 exports('SeedDrugs', function(defaults)
     if not ready or type(defaults) ~= 'table' then return false end
@@ -922,6 +960,11 @@ Core.RegisterCallback('v-world:list', function(source, resolve, domain)
         resolve({ rows = rows })
     elseif domain == 'jobs' then resolve({ rows = Jobs })
     elseif domain == 'gangs' then resolve({ rows = Gangs })
+    elseif domain == 'radio' then
+        local jobs, gangs = {}, {}
+        for _, j in ipairs(Jobs) do jobs[#jobs + 1] = { name = j.name, label = j.label } end
+        for _, g in ipairs(Gangs) do gangs[#gangs + 1] = { name = g.name, label = g.label } end
+        resolve({ rows = Radio, jobs = jobs, gangs = gangs })
     elseif domain == 'drugs' then
         local items = {}
         for _, i in ipairs(Items) do items[#items + 1] = { name = i.name, label = i.label } end
@@ -1056,6 +1099,23 @@ Core.RegisterCallback('v-world:save', function(source, resolve, data)
         if delta > 0 then after = fac.Deposit(name, kind, delta, reason, cid)
         else after = fac.Withdraw(name, kind, -delta, reason, cid) end
         if after == nil then resolve({ error = 'funds' }); return end
+
+    elseif d == 'radio' then
+        local id = math.floor(num(row.id))
+        if id <= 0 then resolve({ error = 'id' }); return end
+        local label = tostring(row.label or ''):sub(1, 60)
+        if label == '' then resolve({ error = 'label' }); return end
+        -- A channel gated on both a job and a gang would be reachable by neither in
+        -- practice; keep whichever the operator set last and blank the other.
+        local job  = tostring(row.job or ''):sub(1, 50);  if job  == '' then job  = nil end
+        local gang = tostring(row.gang or ''):sub(1, 50); if gang == '' then gang = nil end
+        if job and gang then gang = nil end
+        MySQL.query.await([[INSERT INTO world_radio (id, label, job, gang, min_grade, enabled)
+            VALUES (?,?,?,?,?,?)
+            ON DUPLICATE KEY UPDATE label=VALUES(label), job=VALUES(job), gang=VALUES(gang),
+                min_grade=VALUES(min_grade), enabled=VALUES(enabled)]],
+            { id, label, job, gang, math.max(0, math.floor(num(row.grade))),
+              bool(row.enabled == nil or row.enabled) })
 
     elseif d == 'drugs' then
         local key = tostring(row.key or ''):lower():gsub('[^%w_]', ''):sub(1, 30)
@@ -1463,6 +1523,10 @@ Core.RegisterCallback('v-world:delete', function(source, resolve, data)
     local d, id = data.domain, data.id
     if d == 'blips' then MySQL.query.await('DELETE FROM world_blips WHERE id = ?', { num(id) })
     elseif d == 'shops' then MySQL.query.await('DELETE FROM world_shops WHERE id = ?', { num(id) })
+    elseif d == 'radio' then
+        local cid2 = math.floor(num(id))
+        if cid2 <= 0 then resolve({ error = 'protected' }); return end
+        MySQL.query.await('DELETE FROM world_radio WHERE id = ?', { cid2 })
     elseif d == 'drugs' then
         local key = tostring(id or '')
         if key == '' then resolve({ error = 'protected' }); return end

@@ -297,3 +297,28 @@ body.hud-hidden .minimap-frame { opacity:0 !important; pointer-events:none !impo
   animation: veh-blink 1.1s steps(2, end) infinite;
 }
 .veh__belt.hidden { display: none; }
+
+/* ── Voice ───────────────────────────────────────────────────────────────── */
+.voice {
+  position: absolute; left: 2.2vh; bottom: 2.2vh;
+  display: flex; align-items: center; gap: .7vh;
+  padding: .5vh 1vh;
+  background: var(--v-panel); border: 1px solid var(--v-line);
+  border-radius: var(--v-r-md);
+  font-family: var(--v-font-display); font-size: 1.15vh;
+  color: var(--v-text-dim);
+  transition: opacity var(--v-t-base) ease, color var(--v-t-base) ease;
+}
+.voice.hidden { display: none; }
+.voice__ico { font-size: .9vh; color: var(--v-text-faint); transition: color var(--v-t-fast); }
+.voice.is-talking { color: var(--v-text); }
+.voice.is-talking .voice__ico { color: var(--v-success); }
+.voice.is-radio  .voice__ico { color: var(--v-accent); }
+.voice.is-muted  .voice__ico { color: var(--v-danger); }
+.voice.is-injured .voice__step { color: var(--v-warning); }
+.voice__ch {
+  padding: .1vh .5vh; border-radius: var(--v-r-sm);
+  border: 1px solid var(--v-accent-line); color: var(--v-accent);
+  font-variant-numeric: tabular-nums;
+}
+.voice__ch.hidden { display: none; }
