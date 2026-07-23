@@ -1229,6 +1229,188 @@ end)
 -- The player's recent calls, newest first, capped. The number comes back raw; the app
 -- resolves it to a contact name the same way every other screen does.
 -- ══════════════════════════════════════════════════════════════
+-- Mail
+-- ══════════════════════════════════════════════════════════════
+-- An address is chosen once and belongs to the character, like the number. Everything
+-- else is a mailbox row: one per copy of a message, so the sender's Sent, each
+-- recipient's Inbox and a draft are the same mail seen from different sides. Deleting
+-- your copy never touches anybody else's.
+local function mailAddressOf(cid)
+    return MySQL.scalar.await('SELECT address FROM phone_mail_accounts WHERE citizenid = ?', { cid })
+end
+
+local function cidOfAddress(addr)
+    return MySQL.scalar.await('SELECT citizenid FROM phone_mail_accounts WHERE address = ?', { addr })
+end
+
+--- Rows in a folder, newest first, with the mail they point at.
+local function mailbox(addr, folder)
+    return MySQL.query.await([[SELECT b.id AS box_id, b.folder, b.seen, b.saved,
+               m.id AS mail_id, m.from_addr, m.to_addr, m.subject, m.body, m.at, m.reply_to
+        FROM phone_mail_box b JOIN phone_mail m ON m.id = b.mail_id
+        WHERE b.address = ? AND b.folder = ? ORDER BY b.id DESC LIMIT 60]], { addr, folder }) or {}
+end
+
+V.Callback('v-phone:mail', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local op = tostring((data and data.op) or 'me')
+    local mine = mailAddressOf(p.citizenid)
+
+    if op == 'me' then
+        resolve({ ok = true, address = mine, domains = Config.Mail.domains })
+        return
+    end
+
+    -- One address, chosen once. It is the account other people will write to, which is
+    -- exactly why it cannot be edited away afterwards.
+    if op == 'create' then
+        if mine then resolve({ error = 'exists' }) return end
+        local localpart = tostring((data and data.localpart) or ''):lower():gsub('[^%w%._-]', '')
+        if #localpart < Config.Mail.localMin or #localpart > Config.Mail.localMax then
+            resolve({ error = 'address' }) return
+        end
+        local domain = tostring((data and data.domain) or '')
+        local okDomain = false
+        for _, d in ipairs(Config.Mail.domains) do if d == domain then okDomain = true break end end
+        if not okDomain then resolve({ error = 'domain' }) return end
+
+        local addr = localpart .. '@' .. domain
+        if MySQL.scalar.await('SELECT 1 FROM phone_mail_accounts WHERE address = ?', { addr }) then
+            resolve({ error = 'taken' }) return
+        end
+        MySQL.insert.await('INSERT INTO phone_mail_accounts (citizenid, address) VALUES (?,?)',
+            { p.citizenid, addr })
+        resolve({ ok = true, address = addr })
+        return
+    end
+
+    if not mine then resolve({ error = 'noaccount' }) return end
+
+    if op == 'list' then
+        local folder = tostring((data and data.folder) or 'inbox')
+        if folder ~= 'inbox' and folder ~= 'sent' and folder ~= 'draft' then folder = 'inbox' end
+        resolve({ ok = true, mail = mailbox(mine, folder),
+                  unread = tonumber(MySQL.scalar.await(
+                      'SELECT COUNT(*) FROM phone_mail_box WHERE address = ? AND folder = ? AND seen = 0',
+                      { mine, 'inbox' })) or 0 })
+        return
+    end
+
+    -- Everything the player keeps, whatever folder it came from.
+    if op == 'saved' then
+        resolve({ ok = true, mail = MySQL.query.await([[SELECT b.id AS box_id, b.folder, b.seen, b.saved,
+                   m.id AS mail_id, m.from_addr, m.to_addr, m.subject, m.body, m.at, m.reply_to
+            FROM phone_mail_box b JOIN phone_mail m ON m.id = b.mail_id
+            WHERE b.address = ? AND b.saved = 1 ORDER BY b.id DESC LIMIT 60]], { mine }) or {} })
+        return
+    end
+
+    if op == 'seen' then
+        MySQL.update('UPDATE phone_mail_box SET seen = 1 WHERE id = ? AND address = ?',
+            { math.floor(num(data and data.boxId, 0)), mine })
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'save' then
+        MySQL.update('UPDATE phone_mail_box SET saved = ? WHERE id = ? AND address = ?',
+            { (data and data.saved) and 1 or 0, math.floor(num(data and data.boxId, 0)), mine })
+        resolve({ ok = true })
+        return
+    end
+
+    -- Only ever your own copy. The mail row itself stays for whoever else holds it.
+    if op == 'del' then
+        MySQL.update('DELETE FROM phone_mail_box WHERE id = ? AND address = ?',
+            { math.floor(num(data and data.boxId, 0)), mine })
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'send' or op == 'draft' then
+        local subject = tostring((data and data.subject) or ''):sub(1, Config.Mail.maxSubject)
+        local bodyTxt = tostring((data and data.body) or ''):sub(1, Config.Mail.maxBody)
+        local replyTo = math.floor(num(data and data.replyTo, 0))
+
+        -- Recipients arrive as one field; a group mail is simply more than one of them.
+        local raw = tostring((data and data.to) or '')
+        local to, seen = {}, {}
+        for tok in raw:gmatch('[^,;%s]+') do
+            local a = tok:lower()
+            if not seen[a] and #to < Config.Mail.maxTo then seen[a] = true to[#to + 1] = a end
+        end
+
+        -- A draft is yours alone: it needs neither a recipient nor a subject yet.
+        if op == 'draft' then
+            if bodyTxt == '' and subject == '' and #to == 0 then resolve({ error = 'empty' }) return end
+            local prev = math.floor(num(data and data.boxId, 0))
+            if prev > 0 then
+                -- Replacing the draft you were editing rather than stacking a new one.
+                local mid = MySQL.scalar.await(
+                    'SELECT mail_id FROM phone_mail_box WHERE id = ? AND address = ? AND folder = ?',
+                    { prev, mine, 'draft' })
+                if mid then
+                    MySQL.update.await('UPDATE phone_mail SET to_addr = ?, subject = ?, body = ? WHERE id = ?',
+                        { table.concat(to, ', '), subject, bodyTxt, mid })
+                    resolve({ ok = true }) return
+                end
+            end
+            local mid = MySQL.insert.await(
+                'INSERT INTO phone_mail (from_addr, to_addr, subject, body, reply_to) VALUES (?,?,?,?,?)',
+                { mine, table.concat(to, ', '), subject, bodyTxt, replyTo > 0 and replyTo or nil })
+            MySQL.insert.await(
+                'INSERT INTO phone_mail_box (mail_id, address, folder, seen) VALUES (?,?,?,1)',
+                { mid, mine, 'draft' })
+            resolve({ ok = true })
+            return
+        end
+
+        if #to == 0 then resolve({ error = 'noto' }) return end
+        if bodyTxt == '' and subject == '' then resolve({ error = 'empty' }) return end
+
+        -- Every address has to exist. Half-delivering a group mail and saying nothing
+        -- would be worse than refusing it.
+        local targets = {}
+        for _, a in ipairs(to) do
+            local cid = cidOfAddress(a)
+            if not cid then resolve({ error = 'noaddr', address = a }) return end
+            targets[#targets + 1] = { addr = a, cid = cid }
+        end
+
+        local mid = MySQL.insert.await(
+            'INSERT INTO phone_mail (from_addr, to_addr, subject, body, reply_to) VALUES (?,?,?,?,?)',
+            { mine, table.concat(to, ', '), subject, bodyTxt, replyTo > 0 and replyTo or nil })
+
+        MySQL.insert.await('INSERT INTO phone_mail_box (mail_id, address, folder, seen) VALUES (?,?,?,1)',
+            { mid, mine, 'sent' })
+        for _, t in ipairs(targets) do
+            MySQL.insert.await('INSERT INTO phone_mail_box (mail_id, address, folder, seen) VALUES (?,?,?,0)',
+                { mid, t.addr, 'inbox' })
+            local tnum = numberOfCid(t.cid)
+            local online = tnum and Online[tnum]
+            if online then
+                TriggerClientEvent('v-phone:client:banner', online, {
+                    app = 'mail', title = subject ~= '' and subject or L(online, 'ph.mail_new'),
+                    body = mine, hasItem = requireItem(online),
+                })
+            end
+        end
+
+        -- The draft it grew out of has served its purpose.
+        local prev = math.floor(num(data and data.boxId, 0))
+        if prev > 0 then
+            MySQL.update('DELETE FROM phone_mail_box WHERE id = ? AND address = ? AND folder = ?',
+                { prev, mine, 'draft' })
+        end
+        resolve({ ok = true })
+        return
+    end
+
+    resolve({ error = 'x' })
+end)
+
+-- ══════════════════════════════════════════════════════════════
 -- Voicemail
 -- ══════════════════════════════════════════════════════════════
 -- A missed call is an invitation to leave a message. It is written rather than recorded,
@@ -1428,6 +1610,36 @@ CreateThread(function()
         `group_id`  INT UNSIGNED NOT NULL,
         `citizenid` VARCHAR(16) NOT NULL,
         PRIMARY KEY (`group_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_mail_accounts` (
+        `citizenid` VARCHAR(16) NOT NULL,
+        `address`   VARCHAR(64) NOT NULL,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`citizenid`), UNIQUE KEY `address` (`address`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_mail` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `from_addr` VARCHAR(64) NOT NULL,
+        `to_addr`   VARCHAR(400) NOT NULL DEFAULT '',
+        `subject`   VARCHAR(120) NOT NULL DEFAULT '',
+        `body`      TEXT,
+        `reply_to`  INT UNSIGNED NULL DEFAULT NULL,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- One row per copy: the sender's Sent, each recipient's Inbox, and drafts. Deleting
+    -- your copy leaves everyone else's alone, which is what a mailbox means.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_mail_box` (
+        `id`      INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `mail_id` INT UNSIGNED NOT NULL,
+        `address` VARCHAR(64) NOT NULL,
+        `folder`  VARCHAR(8) NOT NULL DEFAULT 'inbox',
+        `seen`    TINYINT(1) NOT NULL DEFAULT 0,
+        `saved`   TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (`id`), KEY `box_idx` (`address`, `folder`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_voicemail` (

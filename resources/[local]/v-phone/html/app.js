@@ -633,6 +633,166 @@ RENDER.phone = () => {
   byId('dial').addEventListener('click', () => { if (dialed) post('call', { number: dialed }); });
 };
 
+// ── Mail ───────────────────────────────────────────────────────
+// A mail client, not a second Messages: an address you own, folders, group recipients,
+// drafts you can come back to, replies that quote who they answer, and a keep flag that
+// works from any folder.
+let mailFolder = 'inbox';
+let mailAcc = null;
+
+RENDER.mail = async () => {
+  setNav(L('app.mail'), null);
+  loading();
+  const me = await post('mail', { op: 'me' });
+  if (!me || me.error) { body(UI.empty(L('ph.err_' + ((me && me.error) || 'off')), 'mail')); return; }
+  if (!me.address) { mailSignup(me.domains || []); return; }
+  mailAcc = me.address;
+  mailList();
+};
+
+// The address is chosen once and is what people write to, which is why it cannot be
+// edited away afterwards.
+function mailSignup(domains) {
+  setNav(L('app.mail'), null);
+  let domain = domains[0] || 'eyefind.info';
+  body(
+    '<div class="accthead">' + UI.appIcon('mail') +
+      '<div class="acctname">' + esc(L('app.mail')) + '</div>' +
+      '<div class="acctsub">' + esc(L('ph.mail_pick_sub')) + '</div></div>' +
+    UI.field('mlocal', L('ph.mail_localpart'), '', 'maxlength="20"') +
+    '<div class="seg scroll" id="mdoms">' + domains.map((d, i) =>
+      '<button class="' + (i === 0 ? 'on' : '') + '" data-d="' + esc(d) + '" type="button">@' + esc(d) + '</button>').join('') + '</div>' +
+    UI.button(L('ph.mail_create'), 'mmake', 'tinted') +
+    '<div class="groupfoot">' + esc(L('ph.mail_pick_hint')) + '</div>'
+  );
+  qrows('mdoms', 'button', (b) => b.addEventListener('click', () => {
+    domain = b.dataset.d;
+    [...byId('mdoms').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x === b));
+  }));
+  byId('mmake').addEventListener('click', async () => {
+    const r = await post('mail', { op: 'create', localpart: byId('mlocal').value.trim(), domain });
+    if (r && r.ok) { mailAcc = r.address; toast(L('ph.mail_made')); mailList(); }
+    else toast(L('ph.err_' + ((r && r.error) || 'x')));
+  });
+}
+
+const MAIL_TABS = [
+  { id: 'inbox', icon: 'mail', label: 'ph.mail_inbox' },
+  { id: 'sent', icon: 'send', label: 'ph.mail_sent' },
+  { id: 'draft', icon: 'note', label: 'ph.mail_drafts' },
+  { id: 'saved', icon: 'star', label: 'ph.mail_saved' },
+];
+
+async function mailList() {
+  setNav(L('app.mail'), null, { icon: 'add', onClick: () => mailCompose({}) });
+  tabbar(MAIL_TABS, mailFolder, (t) => { mailFolder = t; mailList(); });
+  body('<div class="mailaddr">' + esc(mailAcc || '') + '</div><div id="mlist"></div>');
+
+  const r = mailFolder === 'saved'
+    ? await post('mail', { op: 'saved' })
+    : await post('mail', { op: 'list', folder: mailFolder });
+  const host = byId('mlist');
+  if (!host) return;
+  const list = (r && r.mail) || [];
+  if (!list.length) { host.innerHTML = UI.empty(L('ph.mail_empty'), 'mail'); return; }
+
+  host.innerHTML = UI.group(list.map((m) => {
+    // Inbox shows who wrote; everywhere else, who it went to.
+    const who = (m.folder === 'inbox') ? m.from_addr : (m.to_addr || L('ph.mail_noto'));
+    return UI.row({
+      avatar: who, title: who,
+      subtitle: (m.subject || L('ph.mail_nosubject')) + '  -  ' + String(m.at || '').slice(5, 16),
+      badge: (m.folder === 'inbox' && !Number(m.seen)) ? L('ph.vm_new_short') : undefined,
+      value: Number(m.saved) ? '\u2605' : '',
+      chevron: true, data: { b: m.box_id },
+    });
+  }));
+  qrows('mlist', '.row', (el) => el.addEventListener('click', () => {
+    const m = list.find((x) => String(x.box_id) === el.dataset.b);
+    if (m) mailRead(m);
+  }));
+}
+
+function mailRead(m) {
+  // A draft is not something you read; it is something you carry on writing.
+  if (m.folder === 'draft') { mailCompose({ draft: m }); return; }
+  if (m.folder === 'inbox' && !Number(m.seen)) post('mail', { op: 'seen', boxId: m.box_id });
+
+  setNav(m.subject || L('ph.mail_nosubject'), L('app.mail'), {
+    icon: 'star', onClick: async () => {
+      const saved = !Number(m.saved);
+      await post('mail', { op: 'save', boxId: m.box_id, saved });
+      m.saved = saved ? 1 : 0;
+      toast(L(saved ? 'ph.mail_kept' : 'ph.mail_unkept'));
+    },
+  });
+  body(
+    '<div class="mailhead">' +
+      '<div class="mailsubj">' + esc(m.subject || L('ph.mail_nosubject')) + '</div>' +
+      '<div class="mailmeta"><b>' + esc(m.from_addr) + '</b></div>' +
+      '<div class="mailmeta">' + esc(L('ph.mail_to')) + ' ' + esc(m.to_addr || '') + '</div>' +
+      '<div class="mailmeta">' + esc(String(m.at || '').slice(0, 16)) + '</div>' +
+    '</div>' +
+    '<div class="mailbody">' + esc(m.body || '') + '</div>' +
+    UI.button(L('ph.mail_reply'), 'mreply', 'tinted') +
+    ((m.to_addr || '').indexOf(',') !== -1 ? UI.button(L('ph.mail_reply_all'), 'mreplyall', 'plain') : '') +
+    UI.button(L('ph.delete'), 'mdel', 'destructive')
+  );
+  byId('mreply').addEventListener('click', () => mailCompose({ reply: m, all: false }));
+  const ra = byId('mreplyall');
+  if (ra) ra.addEventListener('click', () => mailCompose({ reply: m, all: true }));
+  byId('mdel').addEventListener('click', async () => {
+    await post('mail', { op: 'del', boxId: m.box_id });
+    toast(L('ph.mail_deleted')); mailList();
+  });
+}
+
+// One composer for a new mail, a reply, a reply-all and an unfinished draft.
+function mailCompose(o) {
+  o = o || {};
+  const d = o.draft, r = o.reply;
+  let to = '', subject = '', bodyTxt = '', replyTo = 0, boxId = 0;
+
+  if (d) {
+    to = d.to_addr || ''; subject = d.subject || ''; bodyTxt = d.body || '';
+    replyTo = Number(d.reply_to || 0); boxId = Number(d.box_id || 0);
+  } else if (r) {
+    // Reply goes to the writer; reply-all adds everyone it was addressed to but you.
+    const others = o.all
+      ? (r.to_addr || '').split(',').map((x) => x.trim()).filter((x) => x && x !== mailAcc)
+      : [];
+    to = [r.from_addr].concat(others).filter(Boolean).join(', ');
+    subject = /^re:/i.test(r.subject || '') ? r.subject : ('Re: ' + (r.subject || ''));
+    bodyTxt = '\n\n--- ' + (r.from_addr || '') + ' ---\n' + (r.body || '');
+    replyTo = Number(r.mail_id || 0);
+  }
+
+  setNav(L('ph.mail_new'), L('app.mail'));
+  body(
+    UI.field('mto', L('ph.mail_to_ph'), to, 'maxlength="400"') +
+    UI.field('msubj', L('ph.mail_subject'), subject, 'maxlength="80"') +
+    '<textarea class="mailedit" id="mbody" maxlength="2000" placeholder="' + esc(L('ph.mail_body_ph')) + '">' + esc(bodyTxt) + '</textarea>' +
+    UI.button(L('ph.mail_send'), 'msend', 'tinted') +
+    UI.button(L('ph.mail_savedraft'), 'msave', 'plain') +
+    '<div class="groupfoot">' + esc(L('ph.mail_group_hint')) + '</div>'
+  );
+
+  const payload = (op) => ({ op, to: byId('mto').value, subject: byId('msubj').value,
+    body: byId('mbody').value, replyTo, boxId });
+
+  byId('msend').addEventListener('click', async () => {
+    const res = await post('mail', payload('send'));
+    if (res && res.ok) { toast(L('ph.mail_sent')); mailFolder = 'sent'; mailList(); }
+    else if (res && res.error === 'noaddr') toast(L('ph.err_noaddr') + ' ' + (res.address || ''));
+    else toast(L('ph.err_' + ((res && res.error) || 'x')));
+  });
+  byId('msave').addEventListener('click', async () => {
+    const res = await post('mail', payload('draft'));
+    if (res && res.ok) { toast(L('ph.mail_drafted')); mailFolder = 'draft'; mailList(); }
+    else toast(L('ph.err_' + ((res && res.error) || 'x')));
+  });
+}
+
 // ── Voicemail ──────────────────────────────────────────────────
 // A missed call leaves a written message rather than a recording: nothing here can hold
 // audio, and a note you can actually read beats a fake tape.
@@ -1791,12 +1951,16 @@ RENDER.store = () => {
   storeView = null;
   setNav(L('app.store'), null);
 
-  const all = (available || []).slice().sort((a, b) => a.slot - b.slot);
+  // Deduplicated by id: the registry is a config seed merged with the operator's rows, and
+  // a duplicate there used to surface as the same app listed twice in the store.
+  const byIdSeen = new Set();
+  const all = (available || [])
+    .filter((a) => a && a.id && !byIdSeen.has(a.id) && byIdSeen.add(a.id))
+    .sort((a, b) => (a.slot || 99) - (b.slot || 99));
   if (!all.length) { body(UI.empty(L('ph.store_empty'), 'store')); return; }
 
   // The featured slot goes to something you do NOT have yet: a shop window showing what
   // you already own is a shelf, not a window.
-  const feat = all.find((a) => a.optional && !isInstalled(a.id)) || all[0];
   const cats = storeCats(all);
 
   body(
@@ -1833,7 +1997,13 @@ RENDER.store = () => {
     const list = q ? all.filter((a) => L(a.label).toLowerCase().includes(q)) : shown;
     let html = '';
 
-    if (!q && storeCat === 'all') {
+    // Recomputed on every paint, never captured once: installing the featured app used to
+    // leave it in the window still offering something you now own. If there is nothing
+    // left to get, the window goes away rather than advertising your own apps back at you.
+    const feat = all.find((a) => a.optional && !isInstalled(a.id))
+              || all.find((a) => !a.required && !isInstalled(a.id))
+              || null;
+    if (!q && storeCat === 'all' && feat) {
       html += '<div class="stfeat" data-app="' + esc(feat.id) + '">' +
         '<div class="stkick">' + esc(L('ph.store_featured')) + '</div>' +
         '<div class="strow">' + UI.appIcon(feat.icon) +
@@ -2543,10 +2713,40 @@ function relTime(t) {
 
 // The lock screen shows the most recent handful; the shade shows everything, grouped.
 function paintNotifs() {
-  byId('locknotifs').innerHTML = notifs.slice(0, 4).map((n, i) =>
-    `<div class="lnotif glass" style="--i:${i}"><span class="lic">${UI.appIcon(n.icon)}</span>` +
-    `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
-    `<span class="lb">${esc(n.body || '')}</span></span></div>`).join('');
+  const host = byId('locknotifs');
+  const shown = notifs.slice(0, 4);
+  host.innerHTML =
+    (notifs.length > 1
+      ? `<button class="lockclear" id="lockclear" type="button">${esc(L('ph.clear_all'))}</button>`
+      : '') +
+    shown.map((n, i) =>
+      `<div class="lnotif glass" style="--i:${i}" data-nid="${n.id}">` +
+      `<span class="lic">${UI.appIcon(n.icon)}</span>` +
+      `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
+      `<span class="lb">${esc(n.body || '')}</span></span>` +
+      `<button class="lx" data-x="${n.id}" type="button">${svg('xmark')}</button></div>`).join('');
+
+  // Clear one, or clear the stack. A notification you have read is one you should be able
+  // to get rid of without unlocking the phone first.
+  [...host.querySelectorAll('.lx')].forEach((b) => b.addEventListener('click', (e) => {
+    e.stopPropagation();
+    notifs = notifs.filter((n) => String(n.id) !== b.dataset.x);
+    paintNotifs();
+    if (byId('shade').classList.contains('on')) renderShade();
+  }));
+  const all = byId('lockclear');
+  if (all) all.addEventListener('click', (e) => {
+    e.stopPropagation();
+    notifs = [];
+    paintNotifs();
+    if (byId('shade').classList.contains('on')) renderShade();
+  });
+  // Tapping the card itself still does what the notification is for.
+  [...host.querySelectorAll('.lnotif')].forEach((c) => c.addEventListener('click', (e) => {
+    if (e.target.closest('.lx')) return;
+    const n = notifs.find((x) => String(x.id) === c.dataset.nid);
+    if (n && n.onClick) { unlock(); n.onClick(); }
+  }));
 }
 
 // ══ Calls ══════════════════════════════════════════════════════
