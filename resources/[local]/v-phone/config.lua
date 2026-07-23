@@ -140,12 +140,14 @@ Config.Apps = {
       optional = true, category = 'social' },
     { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 21,
       optional = true, category = 'social' },
-    { id = 'cipher',   label = 'app.cipher',   icon = 'cipher',   owner = 'v-phone',    slot = 22,
-      optional = true, category = 'social', version = '1.0' },
     { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 22,
       required = true, category = 'essentials' },
     { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 23, dock = true,
       required = true, category = 'essentials' },
+    -- Downloaded rather than shipped, so it lands after the built-ins instead of
+    -- pushing the home screen around on the day a server enables it.
+    { id = 'cipher',   label = 'app.cipher',   icon = 'cipher',   owner = 'v-phone',    slot = 24,
+      optional = true, category = 'social', version = '1.0' },
 }
 
 -- Rich FruitStore catalogue. These are presentation/search hints, not duplicated game

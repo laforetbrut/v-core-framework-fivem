@@ -447,7 +447,9 @@ local function prefsOf(p, includeSecrets)
         -- Apps are light by default, as they are on iOS. This flips the six
         -- surface values and nothing else.
         dark      = m.dark == true,
-        ringtone  = tostring(m.ringtone or 'default'),
+        -- The first configured tone, not a name of its own: `default` was not one of
+        -- the tones on offer, so a phone nobody had touched showed a bare locale key.
+        ringtone  = tostring(m.ringtone or (Config.Sounds.ringtones or {})[1] or 'classic'),
         -- Light, dark, or follow the in-game clock. `dark` stays as the resolved value so
         -- an older client that only knows the boolean keeps working.
         darkMode  = (m.darkMode == 'dark' or m.darkMode == 'light' or m.darkMode == 'auto')
@@ -460,7 +462,7 @@ local function prefsOf(p, includeSecrets)
         gridRows = math.max(3, math.min(7, math.floor(tonumber(m.gridRows) or 4))),
         -- Which built-in tone, and the player's own link if they set one. The link wins
         -- when it is there, which is what choosing it means.
-        alertTone = tostring(m.alertTone or 'ping'),
+        alertTone = tostring(m.alertTone or (Config.Sounds.alerts or {})[1] or 'ping'),
         ringUrl   = m.ringUrl and tostring(m.ringUrl) or nil,
         alertUrl  = m.alertUrl and tostring(m.alertUrl) or nil,
         glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
