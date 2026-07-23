@@ -151,15 +151,182 @@ function islandGlance(icon, tint) {
   }, 1500);
 }
 
-function unlock() {
+let pendingUnlockAction = null;
+let authCode = '';
+let authBusy = false;
+let authTicket = 0;
+
+function pinDotsHTML(id, value) {
+  return '<div class="pindots" id="' + esc(id) + '" aria-label="' +
+    esc(L('ph.passcode_progress').replace('{count}', String(value.length))) + '">' +
+    [...Array(6)].map((_, i) => '<i class="' + (i < value.length ? 'on' : '') + '"></i>').join('') +
+    '</div>';
+}
+
+function pinPadHTML() {
+  return '<div class="pinpad">' +
+    ['1','2','3','4','5','6','7','8','9','','0','del'].map((digit) => {
+      if (!digit) return '<span></span>';
+      return '<button type="button" data-pin="' + digit + '" aria-label="' +
+        esc(digit === 'del' ? L('ph.delete_digit') : digit) + '">' +
+        (digit === 'del' ? svg('del') : '<strong>' + digit + '</strong>') + '</button>';
+    }).join('') + '</div>';
+}
+
+function paintPinDots(id, value) {
+  const dots = byId(id);
+  if (!dots) return;
+  [...dots.children].forEach((dot, i) => dot.classList.toggle('on', i < value.length));
+  dots.setAttribute('aria-label', L('ph.passcode_progress').replace('{count}', String(value.length)));
+}
+
+function wirePinPad(host, getValue, setValue, onComplete) {
+  [...host.querySelectorAll('[data-pin]')].forEach((button) =>
+    button.addEventListener('click', () => {
+      if (authBusy) return;
+      let value = String(getValue() || '');
+      if (button.dataset.pin === 'del') value = value.slice(0, -1);
+      else if (value.length < 6) value += button.dataset.pin;
+      setValue(value);
+      if (value.length === 6 && onComplete) onComplete(value);
+    }));
+}
+
+function hideAuth() {
+  authTicket += 1;
+  authBusy = false;
+  authCode = '';
+  pendingUnlockAction = null;
+  const auth = byId('auth');
+  auth.classList.remove('on');
+  auth.setAttribute('aria-hidden', 'true');
+  if (!byId('lock').classList.contains('out')) byId('lockquick').classList.remove('hidden');
+}
+
+function completeUnlock() {
+  const after = pendingUnlockAction;
+  authTicket += 1;
+  authBusy = false;
+  authCode = '';
+  pendingUnlockAction = null;
+  byId('auth').classList.remove('on', 'success');
+  byId('auth').setAttribute('aria-hidden', 'true');
   byId('lock').classList.add('out');
   byId('lockquick').classList.add('hidden');
   byId('home').classList.remove('behind');
   islandGlance('lockopen', '#30D158');
   renderHome();
+  if (typeof after === 'function') setTimeout(after, 260);
+}
+
+function renderAuthCode(message) {
+  authTicket += 1; // invalidate an in-flight Face ID scan when fallback is chosen
+  authCode = '';
+  authBusy = false;
+  const host = byId('authstage');
+  host.innerHTML =
+    '<div class="authcode">' +
+      '<button class="authcancel" id="authcancel" type="button">' + esc(L('ph.cancel')) + '</button>' +
+      '<div class="authlockicon">' + svg('lockshut') + '</div>' +
+      '<h2>' + esc(L('ph.enter_passcode')) + '</h2>' +
+      '<p class="authmessage' + (message ? ' error' : '') + '" id="authmessage">' +
+        esc(message || L('ph.passcode_unlock_hint')) + '</p>' +
+      pinDotsHTML('authdots', authCode) + pinPadHTML() +
+      ((state.prefs || {}).faceId
+        ? '<button class="authswitch" id="authface" type="button">' +
+          svg('faceid') + esc(L('ph.use_faceid')) + '</button>' : '') +
+    '</div>';
+  byId('authcancel').addEventListener('click', hideAuth);
+  const face = byId('authface');
+  if (face) face.addEventListener('click', renderAuthFace);
+  wirePinPad(host, () => authCode, (value) => {
+    authCode = value;
+    paintPinDots('authdots', value);
+    const msg = byId('authmessage');
+    if (msg && msg.classList.contains('error')) {
+      msg.classList.remove('error');
+      msg.textContent = L('ph.passcode_unlock_hint');
+    }
+  }, async (value) => {
+    if (authBusy) return;
+    authBusy = true;
+    host.classList.add('checking');
+    const result = await post('unlock', { passcode: value });
+    host.classList.remove('checking');
+    if (result && result.ok) {
+      byId('auth').classList.add('success');
+      islandGlance('lockopen', '#30D158');
+      setTimeout(completeUnlock, 260);
+      return;
+    }
+    authBusy = false;
+    const text = result && result.error === 'locked'
+      ? L('ph.passcode_locked').replace('{seconds}', String(result.retryAfter || 30))
+      : L('ph.wrong_passcode');
+    host.classList.add('wrong');
+    setTimeout(() => host.classList.remove('wrong'), 460);
+    renderAuthCode(text);
+  });
+}
+
+async function renderAuthFace() {
+  const ticket = ++authTicket;
+  authBusy = true;
+  const host = byId('authstage');
+  host.innerHTML =
+    '<div class="authface">' +
+      '<button class="authcancel" id="authcancel" type="button">' + esc(L('ph.cancel')) + '</button>' +
+      '<div class="facescan scanning">' + svg('faceid') + '<i></i></div>' +
+      '<h2>' + esc(L('ph.faceid')) + '</h2>' +
+      '<p id="facestatus">' + esc(L('ph.faceid_recognising')) + '</p>' +
+      '<button class="authswitch" id="authpass" type="button">' +
+        svg('keypad') + esc(L('ph.use_passcode')) + '</button>' +
+    '</div>';
+  byId('authcancel').addEventListener('click', hideAuth);
+  byId('authpass').addEventListener('click', () => renderAuthCode());
+  const [result] = await Promise.all([
+    post('unlock', { faceId: true }),
+    new Promise((resolve) => setTimeout(resolve, 1150)),
+  ]);
+  if (ticket !== authTicket || !byId('auth').classList.contains('on')) return;
+  authBusy = false;
+  if (result && result.ok) {
+    const scan = host.querySelector('.facescan');
+    scan.classList.remove('scanning');
+    scan.classList.add('recognised');
+    byId('facestatus').textContent = L('ph.faceid_recognised');
+    byId('auth').classList.add('success');
+    islandGlance('faceid', '#30D158');
+    setTimeout(completeUnlock, 430);
+  } else {
+    host.querySelector('.facescan').classList.remove('scanning');
+    host.querySelector('.facescan').classList.add('failed');
+    byId('facestatus').textContent = L('ph.faceid_failed');
+    byId('authpass').innerHTML = svg('keypad') + esc(L('ph.use_passcode'));
+  }
+}
+
+function unlock(after) {
+  if (byId('setup').classList.contains('on')) return;
+  if (byId('lock').classList.contains('out')) {
+    if (typeof after === 'function') after();
+    return;
+  }
+  if (!(state.prefs || {}).securityEnabled) {
+    pendingUnlockAction = after || null;
+    completeUnlock();
+    return;
+  }
+  pendingUnlockAction = after || null;
+  byId('lockquick').classList.add('hidden');
+  byId('auth').classList.add('on');
+  byId('auth').setAttribute('aria-hidden', 'false');
+  if ((state.prefs || {}).faceId) renderAuthFace();
+  else renderAuthCode();
 }
 
 function lockScreen() {
+  hideAuth();
   closeApp(true);
   byId('lock').classList.remove('out');
   byId('lockquick').classList.remove('hidden');
@@ -168,6 +335,7 @@ function lockScreen() {
 }
 
 function goHome() {
+  if (byId('setup').classList.contains('on')) return;
   const systemPanel = activeSystemPanel();
   if (systemPanel) { hideSystemPanel(systemPanel); return; }
   if (byId('emojipanel').classList.contains('on')) { emojiClose(); return; }
@@ -177,6 +345,331 @@ function goHome() {
 }
 
 // ══ Home ═══════════════════════════════════════════════════════
+// First-run setup -------------------------------------------------------
+// A new character receives a real activation flow before the lock screen. The draft is
+// local until the last confirmation; one incomplete wizard can never half-save a phone.
+let setupStep = 0;
+let setupDraft = null;
+let setupSaving = false;
+let setupLastAdvance = 0;
+let setupFaceTicket = 0;
+
+function setupDeviceName(owner) {
+  const first = String(owner || '').trim().split(/\s+/)[0];
+  return first
+    ? L('ph.setup_device_pattern').replace('{name}', first)
+    : L('ph.setup_default_device');
+}
+
+function setupProgress() {
+  if (setupStep <= 0) return '';
+  const max = 7;
+  return '<div class="setupprogress" aria-hidden="true">' +
+    [...Array(max)].map((_, i) => '<i class="' + (i < setupStep ? 'on' : '') + '"></i>').join('') +
+  '</div>';
+}
+
+function setupHeader(title, subtitle) {
+  return '<div class="setupnav">' +
+      (setupStep > 0 ? '<button id="setupback" type="button" aria-label="' + esc(L('ph.back')) + '">' +
+        svg('chevron') + '</button>' : '<span></span>') +
+      setupProgress() + '<span></span>' +
+    '</div>' +
+    '<div class="setuptitle">' + esc(title) + '</div>' +
+    '<div class="setupsubtitle">' + esc(subtitle) + '</div>';
+}
+
+function renderSetup() {
+  const host = byId('setupstage');
+  if (!setupDraft) return;
+  byId('setup').dataset.step = String(setupStep);
+
+  if (setupStep === 0) {
+    host.innerHTML =
+      '<div class="setuphello">' +
+        '<div class="setuphalo"><span>' + svg('fruit') + '</span></div>' +
+        '<div class="setupbonjour">' + esc(L('ph.setup_hello')) + '</div>' +
+        '<div class="setupintro">' + esc(L('ph.setup_intro')) + '</div>' +
+        '<button class="setupprimary" id="setupnext" type="button">' +
+          esc(L('ph.setup_start')) + svg('chevron') + '</button>' +
+      '</div>';
+  } else if (setupStep === 1) {
+    host.innerHTML = setupHeader(L('ph.setup_identity'), L('ph.setup_identity_hint')) +
+      '<div class="setupform">' +
+        '<label><span>' + esc(L('ph.setup_your_name')) + '</span>' +
+          '<input id="setupowner" maxlength="40" autocomplete="off" value="' +
+            esc(setupDraft.ownerName) + '" placeholder="' + esc(L('ph.setup_name_placeholder')) + '"></label>' +
+        '<label><span>' + esc(L('ph.setup_phone_name')) + '</span>' +
+          '<input id="setupname" maxlength="32" autocomplete="off" value="' +
+            esc(setupDraft.deviceName) + '" placeholder="' + esc(L('ph.setup_default_device')) + '"></label>' +
+        '<div class="setuperror hidden" id="setuperror">' + esc(L('ph.setup_name_required')) + '</div>' +
+      '</div>' +
+      '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
+        esc(L('ph.continue')) + '</button>';
+  } else if (setupStep === 2) {
+    const themes = [
+      ['light', 'sun', 'ph.theme_light'],
+      ['dark', 'moon', 'ph.theme_dark'],
+      ['auto', 'sparkles', 'ph.theme_auto'],
+    ];
+    host.innerHTML = setupHeader(L('ph.setup_appearance'), L('ph.setup_appearance_hint')) +
+      '<div class="setupthemes">' + themes.map(([id, icon, label]) =>
+        '<button class="' + (setupDraft.darkMode === id ? 'on' : '') +
+          '" data-setup-theme="' + id + '" type="button">' +
+          '<span class="themedemo ' + id + '">' + svg(icon) + '</span>' +
+          '<strong>' + esc(L(label)) + '</strong><i>' + svg('check') + '</i></button>').join('') +
+      '</div>' +
+      '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
+        esc(L('ph.continue')) + '</button>';
+  } else if (setupStep === 3) {
+    const walls = state.wallpapers || ['aurora'];
+    host.innerHTML = setupHeader(L('ph.setup_personalise'), L('ph.setup_personalise_hint')) +
+      '<div class="setupwalls">' + walls.map((wall) =>
+        '<button class="wall-' + esc(wall) + (setupDraft.wallpaper === wall ? ' on' : '') +
+          '" data-setup-wall="' + esc(wall) + '" type="button"><i>' + svg('check') + '</i>' +
+          '<span>' + esc(L('ph.wall_' + wall)) + '</span></button>').join('') + '</div>' +
+      '<div class="setupglass">' +
+        '<div><span>' + esc(L('ph.glass_clear')) + '</span><strong id="setupglassvalue">' +
+          Math.round(setupDraft.glass) + '%</strong><span>' + esc(L('ph.glass_tinted')) + '</span></div>' +
+        '<input id="setupglass" type="range" min="0" max="100" step="1" value="' +
+          Math.round(setupDraft.glass) + '">' +
+      '</div>' +
+      '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
+        esc(L('ph.continue')) + '</button>';
+  } else if (setupStep === 4 || setupStep === 5) {
+    const confirming = setupStep === 5;
+    const value = confirming ? setupDraft.passcodeConfirm : setupDraft.passcode;
+    host.innerHTML = setupHeader(
+      L(confirming ? 'ph.setup_passcode_confirm' : 'ph.setup_passcode'),
+      L(confirming ? 'ph.setup_passcode_confirm_hint' : 'ph.setup_passcode_hint')
+    ) +
+      '<div class="setuppasscode">' +
+        '<div class="setupshield">' + svg('lockshut') + '</div>' +
+        pinDotsHTML('setupdots', value) +
+        '<div class="setuperror hidden" id="setuperror"></div>' +
+        pinPadHTML() +
+      '</div>' +
+      '<button class="setupprimary setupbottom" id="setupnext" type="button" ' +
+        (value.length === 6 ? '' : 'disabled') + '>' + esc(L('ph.continue')) + '</button>';
+  } else if (setupStep === 6) {
+    host.innerHTML = setupHeader(L('ph.setup_faceid'), L('ph.setup_faceid_hint')) +
+      '<div class="setupface">' +
+        '<div class="facescan' + (setupDraft.faceId ? ' recognised' : '') + '" id="setupfacescan">' +
+          svg('faceid') + '<i></i></div>' +
+        '<strong id="setupfacestatus">' +
+          esc(L(setupDraft.faceId ? 'ph.setup_faceid_ready' : 'ph.setup_faceid_private')) + '</strong>' +
+        '<button class="setupfacebutton" id="setupfacebutton" type="button">' +
+          esc(L(setupDraft.faceId ? 'ph.setup_faceid_redo' : 'ph.setup_faceid_enrol')) + '</button>' +
+      '</div>' +
+      '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
+        esc(L(setupDraft.faceId ? 'ph.continue' : 'ph.setup_code_only')) + '</button>';
+  } else {
+    host.innerHTML =
+      '<div class="setupready">' +
+        '<div class="readycheck">' + svg('check') + '</div>' +
+        '<div class="setuptitle">' + esc(L('ph.setup_ready')) + '</div>' +
+        '<div class="setupsubtitle">' +
+          esc(L('ph.setup_ready_hint').replace('{device}', setupDraft.deviceName)) + '</div>' +
+        '<div class="setupsummary">' +
+          '<span>' + svg('phone') + '</span><div><strong>' + esc(setupDraft.deviceName) +
+          '</strong><small>' + esc(setupDraft.ownerName) + '</small></div></div>' +
+        '<div class="setupsummary security">' +
+          '<span>' + svg(setupDraft.faceId ? 'faceid' : 'lockshut') + '</span><div><strong>' +
+          esc(L(setupDraft.faceId ? 'ph.faceid_and_passcode' : 'ph.passcode_enabled')) +
+          '</strong><small>' + esc(L('ph.security_ready')) + '</small></div></div>' +
+        '<button class="setupprimary" id="setupfinish" type="button">' +
+          esc(L('ph.setup_finish')) + '</button>' +
+      '</div>';
+  }
+
+  const back = byId('setupback');
+  if (back) back.addEventListener('click', () => { setupStep -= 1; renderSetup(); });
+
+  [...host.querySelectorAll('[data-setup-theme]')].forEach((button) =>
+    button.addEventListener('click', () => {
+      setupDraft.darkMode = button.dataset.setupTheme;
+      state.prefs.darkMode = setupDraft.darkMode;
+      if (setupDraft.darkMode !== 'auto') state.prefs.dark = setupDraft.darkMode === 'dark';
+      applyTheme();
+      renderSetup();
+    }));
+
+  [...host.querySelectorAll('[data-setup-wall]')].forEach((button) =>
+    button.addEventListener('click', () => {
+      setupDraft.wallpaper = button.dataset.setupWall;
+      state.prefs.wallpaper = setupDraft.wallpaper;
+      applyWallpaper();
+      renderSetup();
+    }));
+
+  const glass = byId('setupglass');
+  if (glass) glass.addEventListener('input', () => {
+    setupDraft.glass = Number(glass.value);
+    byId('setupglassvalue').textContent = glass.value + '%';
+    applyGlass(setupDraft.glass);
+  });
+
+  if (setupStep === 4 || setupStep === 5) {
+    const confirming = setupStep === 5;
+    wirePinPad(host,
+      () => confirming ? setupDraft.passcodeConfirm : setupDraft.passcode,
+      (value) => {
+        if (confirming) setupDraft.passcodeConfirm = value;
+        else setupDraft.passcode = value;
+        paintPinDots('setupdots', value);
+        const button = byId('setupnext');
+        if (button) button.disabled = value.length !== 6;
+        const error = byId('setuperror');
+        if (error) error.classList.add('hidden');
+      });
+  }
+
+  const faceButton = byId('setupfacebutton');
+  if (faceButton) faceButton.addEventListener('click', () => {
+    const ticket = ++setupFaceTicket;
+    const scan = byId('setupfacescan');
+    setupDraft.faceId = false;
+    scan.classList.remove('recognised', 'failed');
+    scan.classList.add('scanning');
+    faceButton.disabled = true;
+    faceButton.textContent = L('ph.setup_faceid_scanning');
+    byId('setupfacestatus').textContent = L('ph.faceid_recognising');
+    setTimeout(() => {
+      if (ticket !== setupFaceTicket || setupStep !== 6) return;
+      setupDraft.faceId = true;
+      scan.classList.remove('scanning');
+      scan.classList.add('recognised');
+      faceButton.disabled = false;
+      faceButton.textContent = L('ph.setup_faceid_redo');
+      byId('setupfacestatus').textContent = L('ph.setup_faceid_ready');
+      byId('setupnext').textContent = L('ph.continue');
+      islandGlance('faceid', '#30D158');
+    }, 1650);
+  });
+
+  const next = byId('setupnext');
+  if (next) next.addEventListener('click', () => {
+    const now = Date.now();
+    if (now - setupLastAdvance < 320) return;
+    setupLastAdvance = now;
+    if (setupStep === 1) {
+      const owner = byId('setupowner').value.trim();
+      const device = byId('setupname').value.trim();
+      if (!owner || !device) {
+        byId('setuperror').classList.remove('hidden');
+        return;
+      }
+      setupDraft.ownerName = owner;
+      setupDraft.deviceName = device;
+    }
+    if (setupStep === 4 && setupDraft.passcode.length !== 6) return;
+    if (setupStep === 5) {
+      if (setupDraft.passcodeConfirm !== setupDraft.passcode) {
+        setupDraft.passcodeConfirm = '';
+        paintPinDots('setupdots', '');
+        next.disabled = true;
+        const error = byId('setuperror');
+        error.textContent = L('ph.setup_passcode_mismatch');
+        error.classList.remove('hidden');
+        host.querySelector('.setuppasscode').classList.add('wrong');
+        setTimeout(() => host.querySelector('.setuppasscode')?.classList.remove('wrong'), 460);
+        return;
+      }
+    }
+    setupStep = Math.min(7, setupStep + 1);
+    renderSetup();
+  });
+
+  const owner = byId('setupowner');
+  if (owner) owner.addEventListener('input', () => {
+    const name = byId('setupname');
+    if (!name.dataset.edited) name.value = setupDeviceName(owner.value);
+    byId('setuperror').classList.add('hidden');
+  });
+  const device = byId('setupname');
+  if (device) device.addEventListener('input', () => {
+    device.dataset.edited = '1';
+    byId('setuperror').classList.add('hidden');
+  });
+
+  const finish = byId('setupfinish');
+  if (finish) finish.addEventListener('click', finishSetup);
+}
+
+function openSetup(startStep) {
+  const p = state.prefs || {};
+  const ownerName = String(p.ownerName || state.playerName || '').trim();
+  setupDraft = {
+    ownerName,
+    deviceName: String(p.deviceName || setupDeviceName(ownerName)).trim(),
+    darkMode: p.darkMode || 'auto',
+    wallpaper: p.wallpaper || (state.wallpapers || [])[0] || 'aurora',
+    glass: Number.isFinite(Number(p.glass)) ? Number(p.glass) : 28,
+    passcode: '',
+    passcodeConfirm: '',
+    faceId: p.faceId == true,
+  };
+  setupStep = Math.max(0, Math.min(7, Number(startStep) || 0));
+  setupSaving = false;
+  setupLastAdvance = 0;
+  closeApp(true);
+  hideSystemPanels(true);
+  closeSheet(true);
+  byId('lock').classList.add('out');
+  byId('lockquick').classList.add('hidden');
+  byId('home').classList.add('behind');
+  byId('setup').classList.add('on');
+  byId('setup').setAttribute('aria-hidden', 'false');
+  setIslandMode(null);
+  renderSetup();
+}
+
+async function finishSetup() {
+  if (setupSaving || !setupDraft) return;
+  setupSaving = true;
+  const button = byId('setupfinish');
+  if (button) {
+    button.disabled = true;
+    button.textContent = L('ph.setup_saving');
+  }
+  const res = await post('prefs', {
+    setupComplete: true,
+    setupVersion: 2,
+    ownerName: setupDraft.ownerName,
+    deviceName: setupDraft.deviceName,
+    darkMode: setupDraft.darkMode,
+    wallpaper: setupDraft.wallpaper,
+    glass: setupDraft.glass,
+    securityEnabled: true,
+    passcode: setupDraft.passcode,
+    faceId: setupDraft.faceId,
+  });
+  setupSaving = false;
+  if (!res || !res.ok) {
+    if (button) {
+      button.disabled = false;
+      button.textContent = L('ph.setup_retry');
+    }
+    return;
+  }
+
+  state.prefs = res.prefs;
+  applyWallpaper();
+  applyTheme();
+  applyGlass(state.prefs.glass);
+  applyDevice();
+  const setup = byId('setup');
+  setup.classList.add('complete');
+  setTimeout(() => {
+    setup.classList.remove('on', 'complete');
+    setup.setAttribute('aria-hidden', 'true');
+    byId('home').classList.remove('behind');
+    renderHome();
+    islandGlance('check', '#30D158');
+    toast(L('ph.setup_complete'));
+  }, 520);
+}
+
 function unreadTotal() {
   return (state.conversations || []).reduce((n, c) => n + (c.unread || 0), 0);
 }
@@ -1739,6 +2232,8 @@ RENDER.settings = () => {
   const p = state.prefs || {};
   body(
     UI.group([
+      UI.row({ icon: 'phone', tint: '#0A84FF', title: p.deviceName || L('ph.setup_default_device'),
+        subtitle: p.ownerName || '', chevron: true, data: { t: 'device_name' } }),
       UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.my_number'), value: state.number || '',
                data: { copy: state.number || '' } }),
       UI.row({ icon: 'folder', tint: '#5AC8FA', title: L('ph.grid'),
@@ -1798,7 +2293,6 @@ RENDER.settings = () => {
     // About, where a phone puts it: the last thing in Settings.
     UI.group([
       UI.row({ icon: 'phone', tint: '#8E8E93', title: L('ph.about_device'), value: 'iFruit' }),
-      UI.row({ icon: 'settings', tint: '#8E8E93', title: L('ph.about_framework'), value: 'v-core' }),
       UI.row({ icon: 'id', tint: '#8E8E93', title: L('ph.about_dev'), value: 'vyrriox' }),
     ], { header: L('ph.about_title'), footer: L('ph.about_foot') })
   );
@@ -1858,6 +2352,21 @@ RENDER.settings = () => {
       if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
     } else if (r.dataset.copy) {
       copyText(r.dataset.copy);
+    } else if (r.dataset.t === 'device_name') {
+      sheet(L('ph.setup_phone_name'),
+        UI.field('settingsowner', L('ph.setup_your_name'), p.ownerName || '', 'maxlength="40"') +
+        UI.field('settingsdevice', L('ph.setup_phone_name'), p.deviceName || '', 'maxlength="32"') +
+        UI.button(L('ph.save'), 'settingsdevicesave', 'tinted'),
+        () => byId('settingsdevicesave').addEventListener('click', async () => {
+          const ownerName = byId('settingsowner').value.trim();
+          const deviceName = byId('settingsdevice').value.trim();
+          if (!ownerName || !deviceName) { toast(L('ph.setup_name_required')); return; }
+          const epoch = sheetEpoch;
+          const res = await post('prefs', { ownerName, deviceName });
+          if (!closeSheet(false, epoch)) return;
+          if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
+        }));
+      return;
     } else if (r.dataset.t === 'grid') {
       // The layouts a phone actually offers: fewer, larger icons or more, smaller ones.
       const opts = [[4, 4], [4, 5], [4, 6], [5, 5], [5, 6], [6, 6], [3, 4]];
@@ -2436,6 +2945,7 @@ function closeOverlays() {
 }
 
 function resetTransientUI() {
+  hideAuth();
   hideSystemPanels(true);
   byId('switcher').classList.remove('on');
   shadeManage = false;
@@ -2462,6 +2972,10 @@ function resetTransientUI() {
 }
 
 byId('screen').addEventListener('pointerdown', (e) => {
+  if (byId('setup').classList.contains('on')) {
+    g = null;
+    return;
+  }
   const p = screenPoint(e);
   const systemPanel = activeSystemPanel();
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
@@ -2667,7 +3181,6 @@ function prepareShade() {
   shadeManage = false;
   renderShade();
   byId('shadeclose').setAttribute('aria-label', L('ph.close'));
-  byId('shadehome').setAttribute('aria-label', L('ph.close'));
 }
 
 function openShade() {
@@ -2721,7 +3234,7 @@ function renderShade() {
     if (e.target.closest('.nx')) return;
     if (shadeManage) return;
     const n = notifs.find((x) => String(x.id) === c.dataset.nid);
-    byId('shade').classList.remove('on');
+    hideSystemPanel('shade');
     if (n && n.onClick) n.onClick();
   }));
   qrows('shadelist', '.nx', (x) => x.addEventListener('click', (e) => {
@@ -2740,9 +3253,9 @@ function prepareCC() {
   renderCC();
   const p = state._power || {};
   const battery = Number.isFinite(Number(p.battery)) ? Math.round(Number(p.battery)) + '%' : '';
-  byId('ccdevice').textContent = [state.number || '', battery].filter(Boolean).join('  ·  ');
+  const deviceName = String((state.prefs || {}).deviceName || state.number || '').trim();
+  byId('ccdevice').textContent = [deviceName, battery].filter(Boolean).join(' · ');
   byId('ccclose').setAttribute('aria-label', L('ph.close'));
-  byId('cchome').setAttribute('aria-label', L('ph.close'));
   primeNowPlaying().then(() => {
     if (byId('cc').classList.contains('on')) renderCC();
   });
@@ -2758,10 +3271,19 @@ function openCC() {
 
 byId('shmanage').addEventListener('click', () => { shadeManage = !shadeManage; renderShade(); });
 byId('shclear').addEventListener('click', () => { notifs = []; paintNotifs(); renderShade(); });
-['shadeclose', 'shadehome'].forEach((id) =>
-  byId(id).addEventListener('click', () => hideSystemPanel('shade')));
-['ccclose', 'cchome'].forEach((id) =>
-  byId(id).addEventListener('click', () => hideSystemPanel('cc')));
+[
+  ['shadeclose', 'shade'],
+  ['ccclose', 'cc'],
+].forEach(([buttonId, panelId]) => {
+  const button = byId(buttonId);
+  // These controls sit in the top gesture zone. Stop the screen recogniser before it
+  // can claim their pointer, so a close press is always delivered as a close press.
+  button.addEventListener('pointerdown', (e) => e.stopPropagation());
+  button.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideSystemPanel(panelId);
+  });
+});
 
 // ══ Side buttons ═══════════════════════════════════════════════
 // Real controls, not decoration. Volume moves the volume of whatever v-music says this
@@ -2809,9 +3331,12 @@ function wireSideButtons() {
     const id = (state.prefs || {}).actionApp;
     const a = id && (state.apps || []).find((x) => x.id === id);
     if (!a) { hud('settings', L('ph.action_unset')); return; }
-    if (!byId('lock').classList.contains('out')) unlock();
-    closeOverlays();
-    enterApp(a, null);
+    const openActionApp = () => {
+      closeOverlays();
+      enterApp(a, null);
+    };
+    if (!byId('lock').classList.contains('out')) unlock(openActionApp);
+    else openActionApp();
   });
 }
 
@@ -3158,12 +3683,16 @@ RENDER.camera = async () => {
   // Immersive: no title bar, no padding, the black fills the screen edge to edge.
   byId('navbar').classList.add('hidden');
   byId('app').classList.add('camfull');
+  byId('screen').classList.add('appblack');
 
   body(
     '<div class="camui">' +
       '<div class="camtop">' +
-        '<button class="camchip back" id="camback" type="button">' + svg('chevron') + '</button>' +
-        '<button class="camchip ' + (landscape ? 'on' : '') + '" id="camland" type="button">' + svg('landscape') + '</button>' +
+        '<button class="camchip back" id="camback" type="button" aria-label="' + esc(L('ph.back')) + '">' +
+          svg('chevron') + '</button>' +
+        '<button class="camchip ' + (landscape ? 'on' : '') +
+          '" id="camland" type="button" aria-label="' + esc(L('ph.landscape')) + '">' +
+          svg('landscape') + '</button>' +
       '</div>' +
       '<div class="camview">' +
         '<span class="cammark tl"></span><span class="cammark tr"></span>' +
@@ -3175,8 +3704,10 @@ RENDER.camera = async () => {
       '<div class="camctl">' +
         (last ? '<button class="camroll" id="camroll" type="button" style="' + photoStyle(last) + '"></button>'
               : '<span class="camroll empty"></span>') +
-        '<button class="camshutter" id="shoot" type="button"><span></span></button>' +
-        '<button class="camflip" id="camland2" type="button">' + svg('landscape') + '</button>' +
+        '<button class="camshutter" id="shoot" type="button" aria-label="' +
+          esc(L('ph.shooting')) + '"><span></span></button>' +
+        '<button class="camflip" id="camland2" type="button" aria-label="' +
+          esc(L('ph.landscape')) + '">' + svg('landscape') + '</button>' +
       '</div>' +
     '</div>'
   );
@@ -3994,14 +4525,18 @@ function closeSheet(force, expectedEpoch) {
     return true;
   }
   sheetReturn = null;
-  byId('sheet').dataset.variant = '';
+  const sheetHost = byId('sheet');
+  if (sheetHost.contains(document.activeElement) && document.activeElement.blur) {
+    document.activeElement.blur();
+  }
+  sheetHost.dataset.variant = '';
   clearTimeout(promptExpiryTimer);
   promptExpiryTimer = null;
   sheetDrag = null;
-  byId('sheet').classList.remove('dragging');
-  byId('sheet').style.removeProperty('transform');
-  byId('sheet').style.removeProperty('opacity');
-  byId('sheet').classList.remove('on');
+  sheetHost.classList.remove('dragging');
+  sheetHost.style.removeProperty('transform');
+  sheetHost.style.removeProperty('opacity');
+  sheetHost.classList.remove('on');
   byId('scrim').classList.remove('on');
   activePrompt = false;
   if (force) promptQueue.length = 0;
@@ -4138,7 +4673,7 @@ function paintNotifs() {
   [...host.querySelectorAll('.lnotif')].forEach((c) => c.addEventListener('click', (e) => {
     if (e.target.closest('.lx')) return;
     const n = notifs.find((x) => String(x.id) === c.dataset.nid);
-    if (n && n.onClick) { unlock(); n.onClick(); }
+    if (n && n.onClick) unlock(n.onClick);
   }));
 }
 
@@ -4452,6 +4987,9 @@ byId('homebar').addEventListener('click', goHome);
 // because a sixth page of icons is where apps go to be forgotten.
 byId('spill').addEventListener('click', () => {
   sheet(L('ph.search'),
+    '<div class="spothead"><strong>' + esc(L('ph.search')) + '</strong>' +
+      '<button id="spotclose" type="button" aria-label="' + esc(L('ph.close')) + '">' +
+        svg('xmark') + '</button></div>' +
     '<div class="spotsearch">' + svg('search') +
       '<input id="appq" placeholder="' + esc(L('ph.search_apps')) +
         '" autocomplete="off" aria-label="' + esc(L('ph.search_apps')) + '" />' +
@@ -4488,6 +5026,7 @@ byId('spill').addEventListener('click', () => {
         draw('');
         byId('appq').focus();
       });
+      byId('spotclose').addEventListener('click', () => closeSheet());
       requestAnimationFrame(() => byId('appq').focus());
     }, 'spotlight');
 });
@@ -4510,14 +5049,16 @@ byId('qcam').addEventListener('click', () => {
     toast(L('ph.camera_off'));
     return;
   }
-  if (!byId('lock').classList.contains('out')) unlock();
-  enterApp(camera, byId('qcam'));
+  const openCamera = () => enterApp(camera, byId('qcam'));
+  if (!byId('lock').classList.contains('out')) unlock(openCamera);
+  else openCamera();
 });
 byId('qtorch').addEventListener('click', toggleTorch);
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    const hadTransient = anyOverlayOpen() || byId('folderview').classList.contains('on') ||
+    const hadTransient = anyOverlayOpen() || byId('auth').classList.contains('on') ||
+      byId('folderview').classList.contains('on') ||
       byId('emojipanel').classList.contains('on') || editing || !!arr;
     resetTransientUI();
     if (hadTransient) return;
@@ -4583,11 +5124,23 @@ window.addEventListener('message', (e) => {
     tick();
     paintNotifs();
     const sp = byId('spilltxt'); if (sp) sp.textContent = L('ph.search');
+    hideAuth();
     byId('lock').classList.remove('out');
     byId('lockquick').classList.remove('hidden');
     byId('home').classList.add('behind');
     closeApp(true);
     renderCall();
+    if (!(state.prefs || {}).setupComplete) {
+      openSetup(0);
+    } else if (Number((state.prefs || {}).setupVersion || 0) < 2
+        && !(state.prefs || {}).securityEnabled) {
+      // Existing characters see only the new security portion once. Their identity,
+      // appearance and layout are preserved.
+      openSetup(4);
+    } else {
+      byId('setup').classList.remove('on', 'complete');
+      byId('setup').setAttribute('aria-hidden', 'true');
+    }
   } else if (d.action === 'close') {
     torchCommit += 1;
     torchPending = false;

@@ -371,13 +371,33 @@ local function cleanLayout(value)
     return { items = items }
 end
 
-local function prefsOf(p)
+local function passcodeDigest(p, code)
+    return tostring(MySQL.scalar.await('SELECT LOWER(SHA2(?, 256))', {
+        ('v-phone|%s|iFruit|%s'):format(tostring(p.citizenid or ''), tostring(code or ''))
+    }) or '')
+end
+
+local function prefsOf(p, includeSecrets)
     local m = p.GetMetadata('phone')
     if type(m) ~= 'table' then m = {} end
     -- `glass` is iOS 27's transparency slider: 0 is ultra clear, 100 is fully tinted.
     -- It is a real stored preference driving a CSS variable, not a decorative control.
     local glass = tonumber(m.glass)
-    return {
+    local deviceName = tostring(m.deviceName or 'iFruit'):gsub('[%c]', ''):sub(1, 32)
+    -- Migrate names saved by the early setup draft, before the phone received its
+    -- in-universe iFruit identity. Truly custom names remain unchanged.
+    deviceName = deviceName:gsub('[iI][pP][hH][oO][nN][eE]', 'iFruit')
+    local storedPasscode = tostring(m.passcodeHash or '')
+    local securityEnabled = m.securityEnabled == true and storedPasscode ~= ''
+    local prefs = {
+        -- Activation belongs to the character, not the browser cache. Reinstalling or
+        -- reconnecting therefore does not make an already configured phone forget itself.
+        setupComplete = m.setupComplete == true,
+        setupVersion = math.max(0, math.min(10, math.floor(tonumber(m.setupVersion) or 0))),
+        ownerName = tostring(m.ownerName or ''):gsub('[%c]', ''):sub(1, 40),
+        deviceName = deviceName,
+        securityEnabled = securityEnabled,
+        faceId = securityEnabled and m.faceId == true,
         wallpaper = wallpaperId(m.wallpaper) or Config.DefaultWallpaper,
         dnd       = m.dnd == true,
         -- Control centre toggles. Each one is real: airplane and cellular drive the
@@ -428,6 +448,8 @@ local function prefsOf(p)
         -- The home screen: the player's own order, and any folders they made.
         layout    = cleanLayout(m.layout),
     }
+    if includeSecrets then prefs.passcodeHash = storedPasscode end
+    return prefs
 end
 
 --- Two lists, because they answer two different questions. `available` is what the
@@ -897,6 +919,7 @@ V.Callback('v-phone:open', function(src, resolve)
     local available, installed = appsFrom(src, p)
     resolve({
         ok       = true,
+        playerName = tostring(p.name or ''):sub(1, 40),
         number   = number,
         battery  = batteryOf(src),
         charging = Charging[src] or false,
@@ -1067,9 +1090,35 @@ end)
 V.Callback('v-phone:prefs', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    local prefs = prefsOf(p)
+    local prefs = prefsOf(p, true)
     local networkWasOn = not prefs.airplane and prefs.cellular ~= false
     if data then
+        if data.setupComplete ~= nil then prefs.setupComplete = data.setupComplete == true end
+        if data.setupVersion ~= nil then
+            prefs.setupVersion = math.max(0, math.min(10, math.floor(num(data.setupVersion, 0))))
+        end
+        if data.ownerName ~= nil then
+            prefs.ownerName = tostring(data.ownerName):gsub('[%c]', ''):sub(1, 40)
+        end
+        if data.deviceName ~= nil then
+            local name = tostring(data.deviceName):gsub('[%c]', ''):sub(1, 32)
+            name = name:gsub('[iI][pP][hH][oO][nN][eE]', 'iFruit')
+            prefs.deviceName = (name:gsub('%s', '') ~= '') and name or 'iFruit'
+        end
+        if data.passcode ~= nil then
+            local code = tostring(data.passcode)
+            if not code:match('^%d%d%d%d%d%d$') then resolve({ error = 'passcode' }) return end
+            -- The clear six digits exist only for this callback. Metadata receives a
+            -- character-salted SHA-256 digest, never the code the player entered.
+            prefs.passcodeHash = passcodeDigest(p, code)
+            prefs.securityEnabled = prefs.passcodeHash ~= ''
+        end
+        if data.securityEnabled ~= nil and data.securityEnabled == true then
+            prefs.securityEnabled = tostring(prefs.passcodeHash or '') ~= ''
+        end
+        if data.faceId ~= nil then
+            prefs.faceId = prefs.securityEnabled and data.faceId == true
+        end
         if data.wallpaper then
             local selected = wallpaperId(data.wallpaper)
             if not selected then resolve({ error = 'x' }) return end
@@ -1140,7 +1189,56 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         local id = CallOf[src]
         if id then endCall(id, 'nosignal') end
     end
-    resolve({ ok = true, prefs = prefs })
+    local publicPrefs = {}
+    for key, value in pairs(prefs) do
+        if key ~= 'passcodeHash' then publicPrefs[key] = value end
+    end
+    resolve({ ok = true, prefs = publicPrefs })
+end)
+
+local UnlockAttempts = {}
+
+V.Callback('v-phone:unlock', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local prefs = prefsOf(p, true)
+    if not prefs.securityEnabled then resolve({ ok = true }) return end
+
+    local now = os.time()
+    local guard = UnlockAttempts[src] or { failures = 0, blockedUntil = 0 }
+    if guard.blockedUntil > now then
+        resolve({ error = 'locked', retryAfter = guard.blockedUntil - now })
+        return
+    end
+
+    -- Face ID represents the character already authenticated by the FiveM session.
+    -- The passcode remains the fallback and is compared only on the server.
+    if data and data.faceId == true and prefs.faceId == true then
+        UnlockAttempts[src] = nil
+        resolve({ ok = true, method = 'faceId' })
+        return
+    end
+
+    local code = tostring((data and data.passcode) or '')
+    local valid = code:match('^%d%d%d%d%d%d$')
+        and passcodeDigest(p, code) == tostring(prefs.passcodeHash or '')
+    if valid then
+        UnlockAttempts[src] = nil
+        resolve({ ok = true, method = 'passcode' })
+        return
+    end
+
+    guard.failures = guard.failures + 1
+    if guard.failures >= 5 then
+        guard.failures = 0
+        guard.blockedUntil = now + 30
+    end
+    UnlockAttempts[src] = guard
+    resolve({
+        error = guard.blockedUntil > now and 'locked' or 'badcode',
+        retryAfter = math.max(0, guard.blockedUntil - now),
+        attemptsRemaining = math.max(0, 5 - guard.failures),
+    })
 end)
 
 V.Callback('v-phone:lookup', function(src, resolve, data)
@@ -1417,7 +1515,10 @@ V.Callback('v-phone:airdropScan', function(src, resolve)
             if tp and phoneReachable(tid) and btOn(tp) then
                 local c = coordsOf(tid)
                 if c and #(c0 - c) <= airRange() then
-                    out[#out + 1] = { id = tid, name = tp.name or 'iPhone' }
+                    out[#out + 1] = {
+                        id = tid,
+                        name = prefsOf(tp).deviceName or tp.name or 'iFruit',
+                    }
                 end
             end
         end
@@ -1483,7 +1584,7 @@ V.Callback('v-phone:airdropSend', function(src, resolve, data)
         or (payload.name ~= '' and (payload.name .. ' - ' .. payload.number) or payload.number)
     TriggerClientEvent('v-phone:client:airdrop', to,
         {
-            offerId = offerId, from = me.name or 'iPhone', kind = kind, preview = preview,
+            offerId = offerId, from = me.name or 'iFruit', kind = kind, preview = preview,
             ttlMs = math.floor(airOfferTtl() * 1000),
         })
     resolve({ ok = true })
@@ -2065,6 +2166,7 @@ AddEventHandler('playerDropped', function()
     Battery[src], Signal[src], Charging[src], Open[src] = nil, nil, nil, nil
     MessageLastSend[src], MessageBusy[src] = nil, nil
     AirLastSend[src] = nil
+    UnlockAttempts[src] = nil
     for offerId, offer in pairs(AirOffers) do
         if offer.from == src or offer.to == src then AirOffers[offerId] = nil end
     end
