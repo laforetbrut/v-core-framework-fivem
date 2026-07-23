@@ -128,7 +128,7 @@ function renderHome() {
       if (a) enterApp(a, t);
     });
   });
-  byId('pages').style.transition = 'transform .34s cubic-bezier(.32,.72,0,1)';
+
 
   // Arrange mode survives a re-render: a drop stays in the jiggle until Done.
   byId('home').classList.toggle('arrange', editing);
@@ -142,6 +142,12 @@ function renderHome() {
 // single app on page two, which reads as "the rest did not load"; so on overflow the
 // pages are BALANCED - nine and eight both look like pages, sixteen and one does not.
 let arrPerPage = 16;
+
+// The track is what slides; the pager around it is a fixed window that clips.
+function slideTrack() {
+  const t = byId('pages').querySelector('.ptrack');
+  if (t) t.style.transform = 'translateX(' + (-page * 100) + '%)';
+}
 function paintPages(items) {
   const CAP = 16;
   const pageCount = Math.max(1, Math.ceil(items.length / CAP));
@@ -150,19 +156,19 @@ function paintPages(items) {
   for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
   if (!pages.length) pages.push([]);
 
-  byId('pages').innerHTML = pages.map((pg) =>
+  byId('pages').innerHTML = '<div class="ptrack">' + pages.map((pg) =>
     '<div class="page">' + pg.map((it, i) => {
       if (it.t === 'gap') return '<div class="tile gap"></div>';
       return it.t === 'folder' ? folderTile(it, i)
                                : tileHTML(appById(it.id) || { id: it.id, icon: 'dot', label: it.id }, i);
-    }).join('') + '</div>').join('');
+    }).join('') + '</div>').join('') + '</div>';
   // data-idx is the position in `items`, counting only real tiles, so a drop can read it.
   let k = -1;
   [...byId('pages').querySelectorAll('.tile')].forEach((t) => {
     if (t.classList.contains('gap')) return;
     k += 1; t.dataset.idx = k;
   });
-  byId('pages').style.transform = `translateX(${-page * 100}%)`;
+  slideTrack();
   byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
 
   [...byId('pages').querySelectorAll('.tile:not(.gap)')].forEach((t) => {
@@ -424,9 +430,9 @@ function initArrange() {
 function flipPage(dir) {
   // Clamped to the pages that exist, so flipping past the end cannot slide the grid off
   // the screen and leave nothing showing.
-  const n = byId('pages').children.length;
+  const n = byId('pages').querySelectorAll('.page').length;
   page = Math.max(0, Math.min(n - 1, page + dir));
-  byId('pages').style.transform = `translateX(${-page * 100}%)`;
+  slideTrack();
   byId('dots').innerHTML = [...Array(n)].map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
 }
 
@@ -1188,6 +1194,12 @@ RENDER.settings = () => {
       UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.vibrate'), toggle: p.vibrate !== false, data: { t: 'vibrate' } }),
       UI.row({ icon: 'speaker', tint: '#FF9500', title: L('ph.ringer'),
         value: Math.round((p.ringVolume ?? 0.7) * 100) + '%', chevron: true, data: { t: 'ringer' } }),
+      UI.row({ icon: 'music', tint: '#FF2D55', title: L('ph.ringtone'),
+        value: p.ringUrl ? L('ph.tone_custom') : L('ph.tone_' + (p.ringtone || 'classic')),
+        chevron: true, data: { t: 'ringtone' } }),
+      UI.row({ icon: 'bell', tint: '#FF9F0A', title: L('ph.alerttone'),
+        value: p.alertUrl ? L('ph.tone_custom') : L('ph.tone_' + (p.alertTone || 'ping')),
+        chevron: true, data: { t: 'alerttone' } }),
     ]) +
     (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
     (state.customWallpaper === false ? '' :
@@ -1309,6 +1321,46 @@ RENDER.settings = () => {
     } else if (r.dataset.t === 'vibrate') {
       const res2 = await post('prefs', { vibrate: !((state.prefs || {}).vibrate !== false) });
       if (res2 && res2.ok) { state.prefs = res2.prefs; RENDER.settings(); }
+      return;
+    } else if (r.dataset.t === 'ringtone' || r.dataset.t === 'alerttone') {
+      const isRing = r.dataset.t === 'ringtone';
+      const sc = (state.sounds || {});
+      const list = (isRing ? sc.ringtones : sc.alerts) || (isRing ? ['classic'] : ['ping']);
+      const curTone = isRing ? (p.ringtone || 'classic') : (p.alertTone || 'ping');
+      const curUrl = (isRing ? p.ringUrl : p.alertUrl) || '';
+      sheet(L(isRing ? 'ph.ringtone' : 'ph.alerttone'),
+        UI.group(list.map((t) => UI.row({
+          icon: 'music', title: L('ph.tone_' + t),
+          value: (!curUrl && curTone === t) ? '\u2713' : '', data: { tone: t },
+        }))) +
+        (sc.allowCustom === false ? '' :
+          '<div class="grouphead">' + esc(L('ph.tone_link')) + '</div>' +
+          UI.field('toneurl', L('ph.tone_link_ph'), curUrl, 'maxlength="400"') +
+          UI.button(L('ph.tone_use'), 'toneset', 'tinted') +
+          (curUrl ? UI.button(L('ph.tone_clear'), 'tonedel', 'plain') : '') +
+          '<div class="groupfoot">' + esc(L('ph.tone_hint')) + '</div>'),
+        () => {
+          // Tapping a tone previews it, then saves - you hear what you picked.
+          [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+            const tone = el.dataset.tone;
+            playTone(tone, null, (state.prefs || {}).ringVolume, false);
+            const res = await post('prefs', isRing ? { ringtone: tone, ringUrl: '' } : { alertTone: tone, alertUrl: '' });
+            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings(); }
+          }));
+          const setBtn = byId('toneset');
+          if (setBtn) setBtn.addEventListener('click', async () => {
+            const url = byId('toneurl').value.trim();
+            const res = await post('prefs', isRing ? { ringUrl: url } : { alertUrl: url });
+            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings();
+              playTone(null, url, (state.prefs || {}).ringVolume, false); toast(L('ph.tone_saved')); }
+            else toast(L('ph.err_' + ((res && res.error) || 'x')));
+          });
+          const delBtn = byId('tonedel');
+          if (delBtn) delBtn.addEventListener('click', async () => {
+            const res = await post('prefs', isRing ? { ringUrl: '' } : { alertUrl: '' });
+            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings(); }
+          });
+        });
       return;
     } else if (r.dataset.t === 'ringer') {
       sheet(L('ph.ringer'),
@@ -2567,6 +2619,89 @@ async function hushMain() {
 };
 
 
+// ══ Sound ══════════════════════════════════════════════════════
+// Tones are made here rather than shipped: the built-ins are a few oscillator notes, so
+// the resource carries no audio files and nothing is fetched at all unless a player has
+// pointed a tone at their own MP3. That link is host-gated on the server.
+let AC = null;
+function audio() {
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = false; } }
+  if (AC && AC.state === 'suspended') AC.resume();
+  return AC || null;
+}
+
+// One note. `t` is an offset in seconds so a tone can be written as a little score.
+function note(freq, t, dur, gain, type) {
+  const ac = audio(); if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain();
+  o.type = type || 'sine';
+  o.frequency.value = freq;
+  const at = ac.currentTime + t;
+  g.gain.setValueAtTime(0, at);
+  g.gain.linearRampToValueAtTime(gain, at + 0.012);
+  g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+  o.connect(g); g.connect(ac.destination);
+  o.start(at); o.stop(at + dur + 0.02);
+}
+
+// Each built-in is a short score: [frequency, start, length].
+const TONES = {
+  classic: [[880, 0, .16], [1175, .18, .16], [880, .36, .16], [1175, .54, .26]],
+  chime:   [[1319, 0, .5], [1568, .12, .5], [2093, .24, .7]],
+  pulse:   [[440, 0, .1], [440, .14, .1], [440, .28, .1], [660, .42, .3]],
+  radar:   [[523, 0, .22], [659, .22, .22], [784, .44, .22], [1047, .66, .4]],
+  ping:    [[1568, 0, .18], [2093, .07, .22]],
+  pop:     [[880, 0, .09], [1320, .05, .12]],
+  tick:    [[1200, 0, .05]],
+};
+
+let ringEl = null;      // the <audio> for a custom link, so it can be stopped
+let ringTimer = null;
+
+function stopTone() {
+  if (ringEl) { try { ringEl.pause(); } catch (e) {} ringEl = null; }
+  clearInterval(ringTimer); ringTimer = null;
+}
+
+// Play one pass of a tone: a custom URL if there is one, otherwise the synthesised score.
+function playTone(name, url, vol, loop) {
+  const p = state.prefs || {};
+  const v = vol == null ? (p.ringVolume ?? 0.7) : vol;
+  if (v <= 0 || name === 'none') return;
+
+  if (url) {
+    try {
+      const el = new Audio(url);
+      el.volume = Math.max(0, Math.min(1, v));
+      el.loop = !!loop;
+      el.play().catch(() => {});
+      if (loop) ringEl = el;
+      return;
+    } catch (e) { /* fall through to the built-in */ }
+  }
+  const score = TONES[name] || TONES.classic;
+  score.forEach(([f, t, d]) => note(f, t, d, 0.12 * v, 'sine'));
+}
+
+// A call rings until it is answered or gives up.
+function playRingtone() {
+  const p = state.prefs || {};
+  stopTone();
+  const name = p.ringtone || 'classic', url = p.ringUrl || null;
+  playTone(name, url, p.ringVolume, true);
+  if (!url) {
+    playTone(name, null, p.ringVolume, false);
+    ringTimer = setInterval(() => playTone(name, null, p.ringVolume, false), 1600);
+  }
+}
+function stopRingtone() { stopTone(); }
+
+// Everything that is not a call: a message, a mail, a notification.
+function playAlert() {
+  const p = state.prefs || {};
+  playTone(p.alertTone || 'ping', p.alertUrl || null, p.ringVolume, false);
+}
+
 // ══ Buzz and peek ══════════════════════════════════════════════
 // The handset shakes for a notification, and - when it is in a pocket rather than in the
 // hand - the top of it rises into view carrying that notification, then slides back. The
@@ -2683,6 +2818,7 @@ function banner(b) {
               at: Date.now(), onClick: b.onClick || null };
   notifs.unshift(n);
   notifs = notifs.slice(0, 40);
+  playAlert();
   paintNotifs();
   if (byId('shade').classList.contains('on')) renderShade();
   islandNotify(n);
@@ -2766,6 +2902,8 @@ function fmtDuration(s) {
 function renderCall() {
   const ui = byId('callui');
   const island = byId('island');
+  // The page owns the ringing: it is the only side that can play a player's own MP3.
+  if (call && call.state === 'in') playRingtone(); else stopRingtone();
   if (!call) {
     ui.classList.remove('on');
     island.classList.remove('live');
@@ -3002,6 +3140,12 @@ byId('navback').addEventListener('click', () => {
     RENDER.store();
     return;
   }
+  // Back inside Mail steps to the folder list. Falling through to closeApp here is what
+  // made tapping "Mail" quit the app instead of leaving the message.
+  if (openApp && openApp.id === 'mail' && mailAcc) {
+    mailList();
+    return;
+  }
   if (openApp && openApp.id === 'messages' && (thread || threadGroup)) {
     if (threadGroup) {
       // Back from a group steps to the list, exactly as it does from a DM. Falling
@@ -3053,6 +3197,7 @@ window.addEventListener('message', (e) => {
     S = d.strings || {};
     state = d;
     available = d.available || d.apps || [];
+    state.sounds = d.sounds || state.sounds || {};
     call = d.call || null;
     dialed = ''; thread = null; openApp = null; page = 0;
     byId('device').classList.remove('hidden');

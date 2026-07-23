@@ -323,6 +323,11 @@ local function prefsOf(p)
                     and m.darkMode or (m.dark == true and 'dark' or 'light'),
         vibrate   = (m.vibrate == nil) and true or (m.vibrate == true),
         ringVolume = math.max(0, math.min(1, tonumber(m.ringVolume) or 0.7)),
+        -- Which built-in tone, and the player's own link if they set one. The link wins
+        -- when it is there, which is what choosing it means.
+        alertTone = tostring(m.alertTone or 'ping'),
+        ringUrl   = m.ringUrl and tostring(m.ringUrl) or nil,
+        alertUrl  = m.alertUrl and tostring(m.alertUrl) or nil,
         glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
         -- What the player REMOVED, not what they installed. Storing the removals
         -- means a new app an operator adds later is there without every existing
@@ -770,6 +775,7 @@ V.Callback('v-phone:open', function(src, resolve)
             JOIN phone_group_members m ON m.group_id = g.id
             WHERE m.citizenid = ? ORDER BY g.id DESC]], { p.citizenid }) or {},
         wallpapers = Config.Wallpapers,
+        sounds = Config.Sounds,
         -- The operator's automatic-dark policy, so the page can resolve 'auto' itself
         -- against the in-game clock rather than asking on every tick.
         theme = {
@@ -905,6 +911,24 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
     if data then
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
+        if data.alertTone then prefs.alertTone = tostring(data.alertTone) end
+        -- A tone link is a URL a client will fetch, so it goes through the same host gate
+        -- as a wallpaper. An empty string clears it back to the built-in.
+        for _, k in ipairs({ 'ringUrl', 'alertUrl' }) do
+            if data[k] ~= nil then
+                local url = tostring(data[k]):sub(1, 400)
+                if url ~= '' then
+                    if not (Config.Sounds and Config.Sounds.allowCustom) then resolve({ error = 'off' }) return end
+                    local host = url:match('^https?://([^/]+)')
+                    local ok = false
+                    for _, h in ipairs(Config.Sounds.hosts or {}) do
+                        if host and (host == h or host:sub(-(#h + 1)) == '.' .. h) then ok = true break end
+                    end
+                    if not ok then resolve({ error = 'badhost' }) return end
+                end
+                prefs[k] = (url ~= '') and url or nil
+            end
+        end
         if data.darkMode ~= nil then
             local m = tostring(data.darkMode)
             prefs.darkMode = (m == 'dark' or m == 'light' or m == 'auto') and m or 'light'
