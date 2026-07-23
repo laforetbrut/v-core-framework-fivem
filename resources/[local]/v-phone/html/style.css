@@ -1389,3 +1389,17 @@ input { font: inherit; }
 .pages[style*="--gcols: 6"] .page { gap: 14px 8px; padding: 12px 12px 0; }
 .pages[style*="--gcols: 3"] .tile .ic { width: 68px; height: 68px; border-radius: 15px; }
 .pages[style*="--gcols: 3"] .page { gap: 24px 18px; padding: 14px 30px 0; }
+
+/* ── Jobs: the employment card ─────────────────────────────────── */
+.jobcard { border-radius: 20px; padding: 18px 16px; margin-bottom: 16px; color: #fff;
+  background: linear-gradient(135deg, #6E6BFF 0%, #4B48D6 55%, #3A37B0 100%);
+  box-shadow: 0 10px 26px rgba(0,0,0,.28); }
+.jobname { font-size: 21px; font-weight: 700; letter-spacing: -.02em; }
+.jobgrade { font-size: 13.5px; color: rgba(255,255,255,.82); margin-top: 2px; }
+.jobpay { font-family: var(--ios-num); font-size: 26px; font-weight: 600; margin-top: 12px; }
+.jobpay span { font-family: var(--ios-font); font-size: 12px; font-weight: 500;
+  color: rgba(255,255,255,.7); }
+.jobbar { height: 8px; border-radius: 99px; background: var(--app-fill); overflow: hidden;
+  margin: 4px 2px 14px; }
+.jobbar i { display: block; height: 100%; border-radius: 99px;
+  background: linear-gradient(90deg, #6E6BFF, #34C759); transition: width .4s var(--spring); }
