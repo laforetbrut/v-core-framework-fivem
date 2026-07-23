@@ -172,6 +172,24 @@ Config.Mail = {
     localMax   = 20,
 }
 
+-- ── Sounds ─────────────────────────────────────────────────────
+-- Ringtones and alerts are played by the page, not by the game, so a player can point one
+-- at their own MP3. The built-ins are synthesised in the browser - no audio ships with the
+-- resource, and nothing is fetched unless somebody chose a link.
+--
+-- A custom tone is a URL a client will fetch, so the hosts are an operator decision, the
+-- same rule as wallpapers and avatars.
+Config.Sounds = {
+    ringtones = { 'classic', 'chime', 'pulse', 'radar', 'none' },
+    alerts    = { 'ping', 'pop', 'tick', 'none' },
+    allowCustom = true,
+    hosts = {
+        'cdn.discordapp.com', 'media.discordapp.net',
+        'raw.githubusercontent.com', 'github.com',
+        'files.catbox.moe', 'i.imgur.com',
+    },
+}
+
 -- ── AirDrop ────────────────────────────────────────────────────
 -- Send a contact, your number or a photo to a nearby phone. Both ends must have
 -- Bluetooth on in the control centre, and be within range - the same two conditions the

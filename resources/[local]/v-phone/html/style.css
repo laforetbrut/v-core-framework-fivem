@@ -285,7 +285,12 @@ input { font: inherit; }
   transition: opacity .32s var(--spring), transform .32s var(--spring); }
 .home.behind { opacity: 0; transform: scale(1.14); pointer-events: none; }
 
-.pages { flex: 1; min-height: 0; display: flex; overflow: hidden; }
+/* The pager is a viewport with a track inside it. Translating the viewport itself moved
+   nothing - the box and its contents shifted together - so page two never arrived and its
+   apps looked deleted. The track moves; the viewport clips. */
+.pages { flex: 1; min-height: 0; overflow: hidden; }
+.ptrack { display: flex; height: 100%; will-change: transform;
+  transition: transform .34s cubic-bezier(.32,.72,0,1); }
 .page { flex: 0 0 100%; padding: 12px 22px 0;
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px 14px;
   align-content: start; }
