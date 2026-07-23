@@ -114,6 +114,12 @@
 
         <!-- Notification shade: swipe down from the top left. -->
         <section class="shade" id="shade" aria-label="Notifications">
+          <div class="paneltop">
+            <span class="panelgrab" aria-hidden="true"></span>
+            <button class="panelclose" id="shadeclose" type="button" aria-label="Close notifications">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>
+            </button>
+          </div>
           <div class="shadeclock" id="shadeclock"></div>
           <div class="shadedate" id="shadedate"></div>
           <div class="shadehead" id="shadehead">
@@ -124,6 +130,7 @@
             </span>
           </div>
           <div class="shadelist" id="shadelist"></div>
+          <button class="panelhome" id="shadehome" type="button" aria-label="Close notifications"></button>
         </section>
 
         <!-- An opened folder -->
@@ -134,6 +141,14 @@
 
         <!-- Control centre -->
         <section class="cc" id="cc" aria-label="Control centre">
+          <div class="paneltop ccstatus">
+            <span class="panelgrab" aria-hidden="true"></span>
+            <span class="ccclock" id="ccclock">00:00</span>
+            <span class="ccdevice" id="ccdevice"></span>
+            <button class="panelclose" id="ccclose" type="button" aria-label="Close control centre">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>
+            </button>
+          </div>
           <div class="cctop">
             <div class="ccmod ccconn" id="ccconn"></div>
             <div class="ccmod ccnow" id="ccnow"></div>
@@ -143,10 +158,12 @@
             <div class="ccslab" id="ccvol"></div>
             <div class="cctoggles" id="cctoggles"></div>
           </div>
+          <button class="panelhome" id="cchome" type="button" aria-label="Close control centre"></button>
         </section>
 
         <div class="scrim" id="scrim"></div>
         <div class="sheet glass-solid" id="sheet" role="dialog" aria-modal="true"></div>
+        <div class="emoji-scrim" id="emojiscrim"></div>
         <div class="emojipanel" id="emojipanel"></div>
         <div class="banner glass-solid" id="banner" role="status" aria-live="polite"></div>
         <div class="toast glass-solid" id="toast" role="status" aria-live="polite"></div>

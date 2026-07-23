@@ -1127,6 +1127,7 @@ function pickPhoto(onPick) {
     const restore = host.classList.contains('on') ? document.createDocumentFragment() : null;
     if (restore) while (host.firstChild) restore.appendChild(host.firstChild);
     const restoreComposer = restore ? () => {
+      sheetEpoch += 1;
       sheetReturn = null;
       emojiClose();
       host.replaceChildren(restore);
@@ -1160,9 +1161,10 @@ function forwardSms(m) {
     () => {
       const go = async (number) => {
         if (!number) return;
+        const epoch = sheetEpoch;
         const r = await post('send', { number, body: m.body || '', kind: m.kind || 'text',
                                        attachment: m.attachment || '' });
-        closeSheet();
+        if (!closeSheet(false, epoch)) return;
         toast(r && r.ok ? L('ph.forwarded') : L('ph.err_' + ((r && r.error) || 'x')));
       };
       byId('fwdgo').addEventListener('click', () => go(byId('fwdnum').value.trim()));
@@ -1212,8 +1214,9 @@ function voicemailSheet(v) {
       const c = byId('vmcall');
       if (c) c.addEventListener('click', () => { closeSheet(); post('call', { number: v.number }); });
       byId('vmdel').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         await post('voicemail', { op: 'del', id: v.id });
-        closeSheet(); renderVoicemail();
+        if (closeSheet(false, epoch)) renderVoicemail();
       });
     });
 }
@@ -1376,8 +1379,9 @@ function paintThread(messages) {
       UI.button(L('ph.attach_loc'), 'atloc', 'plain'),
       () => {
         const sendMedia = async (payload) => {
+          const epoch = sheetEpoch;
           const res = await post('send', Object.assign(payload, target()));
-          closeSheet();
+          if (!closeSheet(false, epoch)) return;
           if (res && res.ok) {
             el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, body: res.body, kind: res.kind, attachment: res.attachment }));
             wireLocButtons();
@@ -1395,8 +1399,9 @@ function paintThread(messages) {
           if (u) sendMedia({ kind: 'image', attachment: u, body: '' });
         });
         byId('atloc').addEventListener('click', async () => {
+          const epoch = sheetEpoch;
           const res = await post('sendloc', target());
-          closeSheet();
+          if (!closeSheet(false, epoch)) return;
           if (res && res.ok) {
             el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, kind: 'location', attachment: res.attachment || '0;0', body: '' }));
             wireLocButtons();
@@ -1436,8 +1441,10 @@ function newGroupSheet() {
     UI.button(L('ph.group_make'), 'ggo'),
     () => byId('ggo').addEventListener('click', async () => {
       const numbers = [...byId('sheet').querySelectorAll('input:checked')].map((i) => i.value);
-      const r = await post('groupCreate', { name: byId('gname').value.trim(), numbers });
-      closeSheet();
+      const name = byId('gname').value.trim();
+      const epoch = sheetEpoch;
+      const r = await post('groupCreate', { name, numbers });
+      if (!closeSheet(false, epoch)) return;
       if (r && r.ok) { await refresh(); RENDER.messages(); openGroup(r.id, r.name); }
       else toast(L('ph.err_' + ((r && r.error) || 'x')));
     }));
@@ -1493,20 +1500,24 @@ function contactSheet(c) {
     () => {
       byId('cpick').addEventListener('click', () => pickPhoto((url) => { byId('cphoto').value = url; }));
       byId('csave').addEventListener('click', async () => {
-        const res = await post('contactSave', { id: c.id, name: byId('cname').value, number: byId('cnum').value,
+        const epoch = sheetEpoch;
+        const payload = { id: c.id, name: byId('cname').value, number: byId('cnum').value,
           photo: byId('cphoto').value.trim(), email: byId('cmail').value.trim(),
           address: byId('caddr').value.trim(), birthday: byId('cbday').value.trim(),
-          note: byId('cnote').value.trim() });
-        if (res && res.ok) { closeSheet(); await refresh(); RENDER.contacts(); }
-        else toast(L('ph.err_' + ((res && res.error) || 'x')));
+          note: byId('cnote').value.trim() };
+        const res = await post('contactSave', payload);
+        if (res && res.ok) {
+          if (closeSheet(false, epoch)) { await refresh(); RENDER.contacts(); }
+        } else toast(L('ph.err_' + ((res && res.error) || 'x')));
       });
       if (isNew) return;
       byId('ccall').addEventListener('click', () => { closeSheet(); post('call', { number: c.number }); });
       byId('cshare').addEventListener('click', () => airdropShare('contact', { name: c.name, number: c.number }));
       byId('cmsg').addEventListener('click', () => { closeSheet(); openThread(c.number); });
       byId('cdel').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         await post('contactDelete', { id: c.id });
-        closeSheet(); await refresh(); RENDER.contacts();
+        if (closeSheet(false, epoch)) { await refresh(); RENDER.contacts(); }
       });
     });
 }
@@ -1782,8 +1793,9 @@ RENDER.settings = () => {
           data: { gc: String(c), gr: String(rw) },
         }))) + '<div class="groupfoot">' + esc(L('ph.grid_hint')) + '</div>',
         () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const epoch = sheetEpoch;
           const res = await post('prefs', { gridCols: Number(el.dataset.gc), gridRows: Number(el.dataset.gr) });
-          closeSheet();
+          if (!closeSheet(false, epoch)) return;
           if (res && res.ok) { state.prefs = res.prefs; renderHome(); RENDER.settings(); }
         })));
       return;
@@ -1796,8 +1808,9 @@ RENDER.settings = () => {
           title: L(lbl), value: (state.prefs || {}).darkMode === k ? '\u2713' : '', data: { m: k },
         }))) + (t.auto ? '<div class="groupfoot">' + esc(L('ph.theme_auto_hint')) + '</div>' : ''),
         () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const epoch = sheetEpoch;
           const res2 = await post('prefs', { darkMode: el.dataset.m });
-          closeSheet();
+          if (!closeSheet(false, epoch)) return;
           if (res2 && res2.ok) { state.prefs = res2.prefs; applyTheme(); RENDER.settings(); }
         })));
       return;
@@ -1826,22 +1839,29 @@ RENDER.settings = () => {
           // Tapping a tone previews it, then saves - you hear what you picked.
           [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
             const tone = el.dataset.tone;
+            const epoch = sheetEpoch;
             playTone(tone, null, (state.prefs || {}).ringVolume, false);
             const res = await post('prefs', isRing ? { ringtone: tone, ringUrl: '' } : { alertTone: tone, alertUrl: '' });
-            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings(); }
+            if (res && res.ok && closeSheet(false, epoch)) { state.prefs = res.prefs; RENDER.settings(); }
           }));
           const setBtn = byId('toneset');
           if (setBtn) setBtn.addEventListener('click', async () => {
             const url = byId('toneurl').value.trim();
+            const epoch = sheetEpoch;
             const res = await post('prefs', isRing ? { ringUrl: url } : { alertUrl: url });
-            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings();
-              playTone(null, url, (state.prefs || {}).ringVolume, false); toast(L('ph.tone_saved')); }
-            else toast(L('ph.err_' + ((res && res.error) || 'x')));
+            if (res && res.ok) {
+              if (closeSheet(false, epoch)) {
+                state.prefs = res.prefs;
+                playTone(null, url, (state.prefs || {}).ringVolume, false);
+                toast(L('ph.tone_saved'));
+              }
+            } else toast(L('ph.err_' + ((res && res.error) || 'x')));
           });
           const delBtn = byId('tonedel');
           if (delBtn) delBtn.addEventListener('click', async () => {
+            const epoch = sheetEpoch;
             const res = await post('prefs', isRing ? { ringUrl: '' } : { alertUrl: '' });
-            if (res && res.ok) { state.prefs = res.prefs; closeSheet(); RENDER.settings(); }
+            if (res && res.ok && closeSheet(false, epoch)) { state.prefs = res.prefs; RENDER.settings(); }
           });
         });
       return;
@@ -1852,8 +1872,9 @@ RENDER.settings = () => {
           value: Math.abs(((state.prefs || {}).ringVolume ?? 0.7) - v) < 0.01 ? '\u2713' : '', data: { v: String(v) },
         }))),
         () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const epoch = sheetEpoch;
           const res2 = await post('prefs', { ringVolume: Number(el.dataset.v) });
-          closeSheet();
+          if (!closeSheet(false, epoch)) return;
           if (res2 && res2.ok) { state.prefs = res2.prefs; RENDER.settings(); }
         })));
       return;
@@ -2100,11 +2121,14 @@ function musicAdd(existing, index) {
     () => byId('mtsave').addEventListener('click', async () => {
       const url = byId('murl').value.trim();
       if (!url) { toast(L('ph.track_nourl')); return; }
+      const title = byId('mtitle').value.trim() || url;
+      const epoch = sheetEpoch;
       const lib = await musicLibrary();
-      const t = { title: byId('mtitle').value.trim() || url, url };
+      if (epoch !== sheetEpoch) return;
+      const t = { title, url };
       if (index != null) lib[index] = t; else lib.unshift(t);
       await musicSaveLibrary(lib);
-      closeSheet(); RENDER.music();
+      if (closeSheet(false, epoch)) RENDER.music();
     }));
 }
 
@@ -2118,31 +2142,36 @@ function musicTrack(t, i) {
     () => {
       // Headphones: a private source only this player's client will play.
       byId('mear').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         const r = await post('music', { action: 'play', kind: 'headphones', url: t.url, title: t.title });
-        closeSheet();
+        if (!closeSheet(false, epoch)) return;
         toast(r && r.ok ? L('ph.playing_ear') : L('ph.err_' + ((r && r.error) || 'x')));
       });
       byId('mplay').addEventListener('click', async () => {
         // kind 'phone' is a short-range source that follows the player: a phone on
         // speaker, not a boombox.
+        const epoch = sheetEpoch;
         const r = await post('music', { action: 'play', kind: 'phone', url: t.url, title: t.title });
-        closeSheet();
+        if (!closeSheet(false, epoch)) return;
         toast(r && r.ok ? L('ph.playing') : L('ph.err_' + ((r && r.error) || 'x')));
       });
       byId('medit').addEventListener('click', () => { closeSheet(); musicAdd(t, i); });
       byId('mdelt').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         const lib = await musicLibrary();
+        if (epoch !== sheetEpoch) return;
         lib.splice(i, 1);
         await musicSaveLibrary(lib);
-        closeSheet(); RENDER.music();
+        if (closeSheet(false, epoch)) RENDER.music();
       });
     });
 }
 
 function musicSheet(m) {
   const act = async (action) => {
+    const epoch = sheetEpoch;
     const res = await post('music', { id: m.id, action });
-    closeSheet();
+    if (!closeSheet(false, epoch)) return;
     if (!res || res.error) toast(L('ph.err_' + ((res && res.error) || 'x')));
     else RENDER.music();
   };
@@ -2846,8 +2875,10 @@ RENDER.reminders = async () => {
       () => byId('rsave').addEventListener('click', async () => {
         const v = byId('rtext').value.trim();
         if (!v) return;
+        const epoch = sheetEpoch;
         reminders.unshift({ t: v, done: false });
-        await saveReminders(); closeSheet(); RENDER.reminders();
+        await saveReminders();
+        if (closeSheet(false, epoch)) RENDER.reminders();
       }));
   } });
   await loadReminders();
@@ -2986,25 +3017,30 @@ function photoSheet(shots, i, albums) {
           (list.length ? UI.group(list.map((a) => UI.row({ icon: 'folder', title: a, data: { alb: a } }))) : ''),
           () => {
             byId('albgo').addEventListener('click', async () => {
-              await post('photos', { op: 'edit', index: i + 1, album: byId('albname').value.trim() });
-              closeSheet(); RENDER.gallery();
+              const album = byId('albname').value.trim();
+              const epoch = sheetEpoch;
+              await post('photos', { op: 'edit', index: i + 1, album });
+              if (closeSheet(false, epoch)) RENDER.gallery();
             });
             [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+              const epoch = sheetEpoch;
               await post('photos', { op: 'edit', index: i + 1, album: el.dataset.alb });
-              closeSheet(); RENDER.gallery();
+              if (closeSheet(false, epoch)) RENDER.gallery();
             }));
           });
       });
       byId('sshare').addEventListener('click', () => airdropShare('photo', { url }));
       byId('swall').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         const r = await post('prefs', { wallpaperUrl: url });
-        closeSheet();
+        if (!closeSheet(false, epoch)) return;
         if (r && r.ok) { state.prefs = r.prefs; applyWallpaper(); toast(L('ph.wall_set')); }
         else toast(L('ph.err_' + ((r && r.error) || 'x')));
       });
       byId('sdel').addEventListener('click', async () => {
+        const epoch = sheetEpoch;
         await post('photos', { op: 'del', index: i + 1 });
-        closeSheet();
+        if (!closeSheet(false, epoch)) return;
         toast(L('ph.photo_deleted'));
         if (openApp && openApp.id === 'gallery') RENDER.gallery(); else RENDER.camera();
       });
@@ -3302,13 +3338,17 @@ RENDER.bleeter = () => needAccount('bleeter', async () => {
         byId('bemoji').addEventListener('click', () => emojiOpen('btext'));
         // A post can carry a photo straight off the phone rather than a pasted link.
         byId('bpick').addEventListener('click', () => pickPhoto(async (url) => {
-          const r = await post('social', { op: 'post', kind: 'photo', body: byId('btext').value, image: url });
-          closeSheet();
+          const bodyText = byId('btext').value;
+          const epoch = sheetEpoch;
+          const r = await post('social', { op: 'post', kind: 'photo', body: bodyText, image: url });
+          if (!closeSheet(false, epoch)) return;
           if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
         }));
         byId('bgo').addEventListener('click', async () => {
-          const r = await post('social', { op: 'post', kind: 'text', body: byId('btext').value });
-          emojiClose(); closeSheet();
+          const bodyText = byId('btext').value;
+          const epoch = sheetEpoch;
+          const r = await post('social', { op: 'post', kind: 'text', body: bodyText });
+          if (!closeSheet(false, epoch)) return;
           if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
         });
       });
@@ -3332,9 +3372,11 @@ RENDER.snap = () => needAccount('snap', async () => {
         byId('semoji').addEventListener('click', () => emojiOpen('scap'));
         [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
           el.addEventListener('click', async () => {
+            const bodyText = byId('scap').value;
+            const epoch = sheetEpoch;
             const r = await post('social', { op: 'post', kind: 'photo',
-              image: photoRow(shots[Number(el.dataset.i)]).url, body: byId('scap').value });
-            emojiClose(); closeSheet();
+              image: photoRow(shots[Number(el.dataset.i)]).url, body: bodyText });
+            if (!closeSheet(false, epoch)) return;
             if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
           }));
       });
@@ -3615,6 +3657,7 @@ function emojiClose() { byId('emojipanel').classList.remove('on'); emojiTarget =
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 let sheetReturn = null;
+let sheetEpoch = 0;
 const promptQueue = [];
 let activePrompt = false;
 let promptExpiryTimer = null;
@@ -3651,19 +3694,22 @@ function enqueuePrompt(show, ttlMs) {
 }
 
 function sheet(title, html, after) {
+  sheetEpoch += 1;
   sheetReturn = null;
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
   byId('sheet').classList.add('on');
   byId('scrim').classList.add('on');
   if (after) after();
 }
-function closeSheet(force) {
+function closeSheet(force, expectedEpoch) {
+  if (expectedEpoch != null && expectedEpoch !== sheetEpoch) return false;
+  sheetEpoch += 1;
   if (typeof emojiClose === 'function') emojiClose();
   if (!force && sheetReturn) {
     const restore = sheetReturn;
     sheetReturn = null;
     restore();
-    return;
+    return true;
   }
   sheetReturn = null;
   clearTimeout(promptExpiryTimer);
@@ -3673,6 +3719,7 @@ function closeSheet(force) {
   activePrompt = false;
   if (force) promptQueue.length = 0;
   else setTimeout(pumpPrompts, 0);
+  return true;
 }
 byId('scrim').addEventListener('click', () => closeSheet());
 
