@@ -120,7 +120,7 @@ V.Module({
           hint = 'The camera writes to a gallery. Uploading anywhere is an operator decision, so it has no default destination and stays off until one is set.' },
 
         { key = 'cameraUpload', label = 'Camera upload target (URL)', type = 'string', default = '',
-          hint = 'Where a photo is posted. Empty means the photo never leaves the server, which is the safe state.' },
+          hint = 'Where a photo is posted. Empty means the photo never leaves the server. Add the returned CDN host to Wallpaper image hosts so saved photos can be shared or used as wallpaper.' },
     },
 })
 
@@ -514,7 +514,6 @@ end
 --- Nothing leaves the phone without a signal. Checked here rather than in the client so
 --- that standing in a tunnel actually means something.
 local function hasBars(src)
-    if not V.SettingBool('battery', true) and (Signal[src] == nil) then return true end
     local p = Core and Core.GetPlayer(src)
     if not p then return false end
     local prefs = prefsOf(p)
