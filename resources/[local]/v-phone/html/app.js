@@ -192,8 +192,8 @@ function wirePinPad(host, getValue, setValue, onComplete) {
     button.addEventListener('click', () => {
       if (authBusy) return;
       let value = String(getValue() || '');
-      if (button.dataset.pin === 'del') value = value.slice(0, -1);
-      else if (value.length < 6) value += button.dataset.pin;
+      if (button.dataset.pin === 'del') { value = value.slice(0, -1); ui('keyback'); }
+      else if (value.length < 6) { value += button.dataset.pin; ui('key'); }
       setValue(value);
       if (value.length === 6 && onComplete) onComplete(value);
     }));
@@ -222,6 +222,7 @@ function completeUnlock() {
   byId('lockquick').classList.add('hidden');
   byId('home').classList.remove('behind');
   islandGlance('lockopen', '#30D158');
+  ui('unlock');
   renderHome();
   if (typeof after === 'function') setTimeout(after, 260);
 }
@@ -271,6 +272,7 @@ function renderAuthCode(message) {
       ? L('ph.passcode_locked').replace('{seconds}', String(result.retryAfter || 30))
       : L('ph.wrong_passcode');
     host.classList.add('wrong');
+    ui('error');
     setTimeout(() => host.classList.remove('wrong'), 460);
     renderAuthCode(text);
   });
@@ -304,6 +306,7 @@ async function renderAuthFace() {
     byId('facestatus').textContent = L('ph.faceid_recognised');
     byId('auth').classList.add('success');
     islandGlance('faceid', '#30D158');
+    ui('faceid');
     setTimeout(completeUnlock, 430);
   } else {
     host.querySelector('.facescan').classList.remove('scanning');
@@ -339,6 +342,7 @@ function lockScreen() {
   byId('lockquick').classList.remove('hidden');
   byId('home').classList.add('behind');
   islandGlance('lockshut', '#fff');
+  ui('lock');
 }
 
 function goHome() {
@@ -1158,6 +1162,7 @@ function enterApp(a, tile) {
   }
   app.classList.remove('closing');
   app.classList.add('on');
+  ui('appopen');
   byId('screen').classList.add('app-open');
   setNav(L(a.label), null);
   byId('appfoot').innerHTML = '';
@@ -1235,6 +1240,7 @@ function closeApp(instant) {
   }
   app.classList.remove('on');
   app.classList.add('closing');
+  ui('appclose');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
   openApp = null; thread = null; threadGroup = null; clearSocialAccounts();
 }
@@ -1775,7 +1781,7 @@ function mailCompose(o) {
 
   byId('msend').addEventListener('click', async () => {
     const res = await post('mail', payload('send'));
-    if (res && res.ok) { toast(L('ph.mail_sent')); mailFolder = 'sent'; mailList(); }
+    if (res && res.ok) { ui('sent'); toast(L('ph.mail_sent')); mailFolder = 'sent'; mailList(); }
     else if (res && res.error === 'noaddr') toast(L('ph.err_noaddr') + ' ' + (res.address || ''));
     else toast(L('ph.err_' + ((res && res.error) || 'x')));
   });
@@ -2123,8 +2129,10 @@ function paintThread(messages) {
     const res = await post('send', Object.assign({ body: text }, target()));
     if (res && res.ok) {
       el.insertAdjacentHTML('beforeend', bubbleHtml({ mine: true, body: res.body, kind: res.kind, attachment: res.attachment }));
+      ui('sent');
       byId('appbody').scrollTop = byId('appbody').scrollHeight;
     } else {
+      ui('error');
       toast(L('ph.err_' + ((res && res.error) || 'x')));
     }
   };
@@ -4262,6 +4270,7 @@ async function storeInstall(id, install) {
   if (added.length || kept.length !== before.length) await saveLayout(kept.concat(added));
 
   renderHome();
+  ui(install ? 'success' : 'toggleoff');
   toast(L(install ? 'ph.store_added' : 'ph.store_removed'));
   return true;
 }
@@ -5791,6 +5800,44 @@ function playAlert() {
   playTone(p.alertTone || 'ping', p.alertUrl || null, p.ringVolume, false);
 }
 
+// ── Interface sounds ───────────────────────────────────────────
+// The small ones: the lock, a key, a switch, a sent message. They are not
+// notifications, so Do Not Disturb leaves them alone - the same way iOS keeps the lock
+// sound and the keyboard clicks under the ringer, not under the moon. Turning the
+// volume down to nothing is what silences them.
+//
+// Each entry is a score of [frequency, start, length], like the ringtones, and every
+// one is deliberately under a fifth of a second: a sound you notice twice is a sound
+// you end up hating.
+const UI_TONES = {
+  unlock:   [[1046, 0, .09], [1568, .05, .14]],
+  lock:     [[784, 0, .07], [523, .05, .13]],
+  key:      [[2200, 0, .022]],
+  keyback:  [[1400, 0, .03]],
+  toggleon: [[1318, 0, .05], [1760, .04, .08]],
+  toggleoff:[[1046, 0, .05], [784, .04, .09]],
+  appopen:  [[1174, 0, .05], [1568, .04, .09]],
+  appclose: [[1174, 0, .05], [880, .04, .08]],
+  sheet:    [[1046, 0, .06]],
+  sent:     [[1568, 0, .06], [2349, .05, .12]],
+  received: [[2093, 0, .06], [1568, .06, .12]],
+  shutter:  [[2400, 0, .02], [1200, .03, .05]],
+  success:  [[1318, 0, .08], [1760, .07, .1], [2637, .15, .18]],
+  error:    [[311, 0, .11], [233, .1, .18]],
+  faceid:   [[1760, 0, .07], [2349, .06, .09], [2793, .13, .16]],
+};
+
+// UI feedback sits well below a ringtone: it accompanies an action the player just
+// took, so it only has to be heard, not answered.
+function ui(name) {
+  const score = UI_TONES[name];
+  if (!score) return;
+  const v = (state.prefs || {}).ringVolume;
+  const vol = v == null ? 0.7 : v;
+  if (vol <= 0) return;
+  score.forEach(([f, t, d]) => note(f, t, d, 0.045 * vol, 'sine'));
+}
+
 function syncDndAudio() {
   if ((state.prefs || {}).dnd) {
     stopRingtone();
@@ -6013,6 +6060,7 @@ function sheet(title, html, after, variant) {
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
   byId('sheet').classList.add('on');
   byId('scrim').classList.add('on');
+  ui('sheet');
   if (after) after();
 }
 function closeSheet(force, expectedEpoch) {
@@ -6276,6 +6324,8 @@ async function toggleCC(key) {
   const r = await post('prefs', { [key]: !current });
   if (r && r.ok) {
     state.prefs = r.prefs;
+    // After the write, not before: the switch clicks when it has actually moved.
+    ui(current ? 'toggleoff' : 'toggleon');
     if (key === 'dnd') syncDndAudio();
     applyPower(state._power || {});
     applyStatusFlags();
@@ -7011,6 +7061,7 @@ window.addEventListener('message', (e) => {
     device.classList.remove('capturing');
     void device.offsetWidth;
     device.classList.add('capturing');
+    ui('shutter');
     clearTimeout(shutterTimer);
     shutterTimer = setTimeout(() => {
       device.classList.remove('capturing');
