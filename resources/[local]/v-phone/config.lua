@@ -134,11 +134,11 @@ Config.Apps = {
       -- Job apps get their own aisle: it is only in the store at all for the people
       -- who hold the job, so it has no business sitting under Work next to Jobs.
       job = 'police', category = 'duty' },
-    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 19,
+    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-phone', slot = 19,
       optional = true, category = 'social' },
-    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 20,
+    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-phone', slot = 20,
       optional = true, category = 'social' },
-    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 21,
+    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-phone', slot = 21,
       optional = true, category = 'social' },
     { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 22,
       required = true, category = 'essentials' },
@@ -263,6 +263,62 @@ end
 -- What the store groups by. The order here is the order of the sections.
 Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'duty',
                       'entertainment', 'health', 'essentials' }
+
+-- ── Social ─────────────────────────────────────────────────────
+-- Bleeter, Snapmatic and Hush. They used to live in a separate resource because they need
+-- something the rest of the phone avoids - data SHARED between players - but a phone that
+-- cannot show its own social apps without a second resource running is not a phone, it is
+-- half of one. The model lives here now, and the apps are views of it.
+--
+-- The brands are Rockstar's own: Bleeter and Snapmatic ship in the game.
+Config.Social = {
+    enabled = true,
+
+    handleMin = 3,
+    handleMax = 20,
+
+    -- ── What a player may write ────────────────────────────────
+    postMax    = 280,       -- a bleet
+    captionMax = 160,       -- a Snapmatic caption or a story line
+    commentMax = 280,
+    dmMax      = 500,
+    bioMax     = 160,
+    feedSize   = 50,        -- newest N per feed
+
+    -- ── How long any of it lives ───────────────────────────────
+    -- Every one of these is in DAYS and 0 means "for ever". They are swept once at boot
+    -- and then once an hour, so a server left running for weeks trims itself instead of
+    -- growing a table nobody looks at. Each kind expires on its own clock, because a
+    -- throwaway story and a conversation are not the same thing.
+    retention = {
+        posts    = 60,      -- bleets and Snapmatic photos
+        comments = 60,      -- 0 follows the post they belong to, which is deleted with it
+        stories  = 1,       -- a day, the way a story is supposed to work
+        messages = 30,      -- direct messages between two handles
+        likes    = 0,       -- kept while the post is
+    },
+
+    -- Stories are the one thing measured in hours rather than days, because a day is the
+    -- whole of their life. `retention.stories` is the sweep; this is what a viewer sees.
+    storyHours = 24,
+
+    -- ── Hush ───────────────────────────────────────────────────
+    hush = {
+        enabled = true,
+        dailyLikes = 30,    -- a ceiling, so liking everybody is not a strategy
+        -- How long a pass is remembered before that profile can come round again. 0 means
+        -- never show them twice.
+        passDays = 7,
+    },
+
+    -- Avatars, Snapmatic shots and Hush photos are URLs other clients will fetch, so the
+    -- hosts are an operator decision - the same rule, and the same list, as wallpapers.
+    imageHosts = {
+        'i.imgur.com', 'imgur.com',
+        'cdn.discordapp.com', 'media.discordapp.net',
+        'i.ibb.co', 'raw.githubusercontent.com',
+    },
+}
 
 -- ── Look ───────────────────────────────────────────────────────
 -- The chrome is the phone's; the accent, panel and radius come from v-ui, so a server that

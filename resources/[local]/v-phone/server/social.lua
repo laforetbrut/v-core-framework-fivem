@@ -1,6 +1,14 @@
--- v-social | server
+-- v-phone | server/social.lua
 --
--- The one place player-shared social data lives. Three rules shape everything here:
+-- **Bleeter, Snapmatic and Hush.** The one place player-SHARED data lives: handles,
+-- posts, likes, follows, comments, stories, direct messages and matches.
+--
+-- This was a separate resource. It is not any more, and that is the point: a phone that
+-- cannot show its own social apps unless a second resource happens to be running is half
+-- a phone. Everything it needs is here, and every limit and expiry it applies comes from
+-- `Config.Social` in the phone's own config file.
+--
+-- Three rules shape all of it:
 --
 --  1. **The author is always the server's idea of who called**, never a field in the
 --     payload. A client that could name the author of a post could bleet as the mayor.
@@ -10,13 +18,17 @@
 --     that answers a client resolves ids to handles before it resolves at all.
 --
 --  3. **A Hush match is the only place identity crosses over**, and it is the point:
---     both sides liked, so both sides get the other's NAME and NUMBER - through v-phone,
---     which owns numbers - and nothing else.
+--     both sides liked, so both sides get the other's NAME and NUMBER - and nothing else.
 
+-- The phone already answers to `phone`; it answers to `social` as well now, so a module
+-- that wants a handle or wants to post asks for the service rather than for a resource.
 V.Provide('social')
 
-local Core
+local SOC = Config.Social
 
+-- A separate file is a separate chunk, so the phone's own locals do not reach in here.
+-- These three are the ones this file needs, and they are the same three.
+local Core
 local function num(v, d) return tonumber(v) or d or 0 end
 
 local function L(src, k)
@@ -25,35 +37,23 @@ local function L(src, k)
     return (Locales[lang] or Locales.fr or {})[k] or k
 end
 
--- ══════════════════════════════════════════════════════════════
--- Settings
--- ══════════════════════════════════════════════════════════════
-V.Module({
-    label = 'Social', category = 'gameplay',
-    settings = {
-        { key = 'enabled', label = 'Social apps enabled', type = 'bool', default = true,
-          hint = 'Off hides Bleeter, Snapmatic and Hush from every phone. Accounts and posts are kept.' },
+--- The social apps as a whole. Off hides all three and answers every call with `off`.
+local function socOn()
+    return Config.Social.enabled ~= false and V.SettingBool('social', true)
+end
 
-        { key = 'maxLength', label = 'Bleet length limit', type = 'number',
-          default = Config.Posts.maxLength, min = 40, max = 1000, step = 10 },
+--- How many posts a feed carries. A setting rather than a constant because it is the one
+--- number an operator tunes when a busy server starts feeling slow.
+local function socFeedSize()
+    return math.max(10, math.min(200, math.floor(tonumber(V.Setting('socialFeedSize', SOC.feedSize)) or SOC.feedSize)))
+end
 
-        { key = 'retentionDays', label = 'Keep posts for (days)', type = 'number',
-          default = Config.Posts.retentionDays, min = 0, max = 365, step = 1,
-          hint = 'Pruned once at boot. 0 keeps everything for ever, which is a feed nobody trims.' },
-
-        { key = 'hush', label = 'Hush (dating) enabled', type = 'bool', default = true },
-
-        { key = 'dailyLikes', label = 'Hush likes per day', type = 'number',
-          default = Config.Hush.dailyLikes, min = 1, max = 500, step = 1,
-          hint = 'A ceiling, so liking absolutely everybody is not a strategy.' },
-
-        { key = 'imageHosts', label = 'Image hosts', type = 'string',
-          default = table.concat(Config.ImageHosts, ', '),
-          hint = 'Comma separated. Avatars and photos are URLs other clients will fetch, so this is an operator decision - the same rule as phone wallpapers.' },
-    },
-})
-
-local function S(key, fallback) return V.Setting(key, fallback) end
+--- Days before a kind of row is swept. 0 means never.
+local function socKeep(kind)
+    local days = tonumber(V.Setting('socialRetention' .. kind:sub(1, 1):upper() .. kind:sub(2),
+                                    SOC.retention[kind]))
+    return math.max(0, math.floor(days or 0))
+end
 
 --- Same shape as the phone's wallpaper gate, for the same reason. Rejected rather than
 --- rewritten: silently fixing somebody's link is worse than telling them it is refused.
@@ -63,13 +63,13 @@ local function imageAllowed(url)
     local host = url:match('^https?://([^/]+)')
     if not host then return false end
     host = host:lower():gsub(':%d+$', '')
-    local hosts = S('imageHosts', Config.ImageHosts)
+    local hosts = V.Setting('socialImageHosts', SOC.imageHosts)
     if type(hosts) == 'string' then
         local out = {}
         for h in hosts:gmatch('[^,%s]+') do out[#out + 1] = h end
         hosts = out
     end
-    for _, allowed in ipairs(hosts or Config.ImageHosts) do
+    for _, allowed in ipairs(hosts or SOC.imageHosts) do
         if host == allowed or host:sub(-(#allowed + 1)) == '.' .. allowed then return true end
     end
     return false
@@ -156,8 +156,8 @@ end
 
 -- exists: an account is on file. authed: this session has logged into it. The app draws
 -- a sign-up wizard, a login screen, or the feed from exactly these two bits.
-V.Callback('v-social:me', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:me', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = tostring((data and data.app) or 'bleeter')
@@ -171,7 +171,7 @@ end)
 -- Step one of sign-up: text a code to the phone's own number. The number is not the
 -- client's to choose - it is whatever v-phone says this player's line is, so an account
 -- cannot be verified against someone else's phone.
-V.Callback('v-social:requestCode', function(src, resolve, data)
+V.Callback('v-phone:soc:requestCode', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = tostring((data and data.app) or '')
@@ -187,7 +187,7 @@ V.Callback('v-social:requestCode', function(src, resolve, data)
 end)
 
 -- Step two: the code they were texted. A five-minute window, one guess-free check.
-V.Callback('v-social:verifyCode', function(src, resolve, data)
+V.Callback('v-phone:soc:verifyCode', function(src, resolve, data)
     local app = tostring((data and data.app) or '')
     local code = tostring((data and data.code) or ''):gsub('%s', '')
     local pend = Pending[src] and Pending[src][app]
@@ -200,7 +200,7 @@ end)
 
 -- Step three: pick a username, a display name and a password. Only allowed once the code
 -- for this app has been verified this session.
-V.Callback('v-social:register', function(src, resolve, data)
+V.Callback('v-phone:soc:register', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = tostring((data and data.app) or '')
@@ -208,8 +208,8 @@ V.Callback('v-social:register', function(src, resolve, data)
     local pend = Pending[src] and Pending[src][app]
     if not (pend and pend.verified) then resolve({ error = 'unverified' }) return end
 
-    local handle = tostring((data and data.handle) or ''):gsub('[^%w_]', ''):sub(1, Config.HandleMax)
-    if #handle < Config.HandleMin then resolve({ error = 'handle' }) return end
+    local handle = tostring((data and data.handle) or ''):gsub('[^%w_]', ''):sub(1, SOC.handleMax)
+    if #handle < SOC.handleMin then resolve({ error = 'handle' }) return end
     local displayname = tostring((data and data.displayname) or ''):sub(1, 40)
     if displayname == '' then resolve({ error = 'displayname' }) return end
     local pw = tostring((data and data.password) or '')
@@ -235,7 +235,7 @@ V.Callback('v-social:register', function(src, resolve, data)
 end)
 
 -- Returning to a registered account on a fresh session: the password unlocks it.
-V.Callback('v-social:login', function(src, resolve, data)
+V.Callback('v-phone:soc:login', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = tostring((data and data.app) or '')
@@ -250,13 +250,13 @@ V.Callback('v-social:login', function(src, resolve, data)
     resolve({ ok = true, account = publicAccount(a) })
 end)
 
-V.Callback('v-social:logout', function(src, resolve, data)
+V.Callback('v-phone:soc:logout', function(src, resolve, data)
     local app = tostring((data and data.app) or '')
     if Authed[src] then Authed[src][app] = nil end
     resolve({ ok = true })
 end)
 
-V.Callback('v-social:setup', function(src, resolve, data)
+V.Callback('v-phone:soc:setup', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
 
@@ -332,8 +332,8 @@ end
 -- ══════════════════════════════════════════════════════════════
 -- One table, two kinds. Bleeter shows 'text', Snapmatic shows 'photo': the same feed with
 -- different content types and different chrome, which is all those two apps ever were.
-V.Callback('v-social:feed', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:feed', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local kind = (data and data.kind == 'photo') and 'photo' or 'text'
@@ -353,7 +353,7 @@ V.Callback('v-social:feed', function(src, resolve, data)
         args[#args + 1] = p.citizenid
         args[#args + 1] = p.citizenid
     end
-    args[#args + 1] = Config.Posts.feedSize
+    args[#args + 1] = socFeedSize()
 
     local rows = MySQL.query.await(([[
         SELECT %s
@@ -366,13 +366,13 @@ V.Callback('v-social:feed', function(src, resolve, data)
     resolve({ ok = true, posts = cleanPosts(rows) })
 end)
 
-V.Callback('v-social:post', function(src, resolve, data)
+V.Callback('v-phone:soc:post', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local kind = (data and data.kind == 'photo') and 'photo' or 'text'
     if not accountOf(p.citizenid, appOfKind(kind)) then resolve({ error = 'noaccount' }) return end
     local body = tostring((data and data.body) or '')
-        :sub(1, math.floor(num(S('maxLength', Config.Posts.maxLength), 280)))
+        :sub(1, math.floor(num(V.Setting('socialMaxLength', SOC.postMax), 280)))
     local image = tostring((data and data.image) or ''):sub(1, 300)
 
     if kind == 'photo' then
@@ -392,7 +392,7 @@ V.Callback('v-social:post', function(src, resolve, data)
     resolve({ ok = true, id = id })
 end)
 
-V.Callback('v-social:like', function(src, resolve, data)
+V.Callback('v-phone:soc:like', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
@@ -418,7 +418,7 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Hush
 -- ══════════════════════════════════════════════════════════════
-local function hushOn() return V.SettingBool('enabled', true) and V.SettingBool('hush', true) end
+local function hushOn() return socOn() and V.SettingBool('socialHush', SOC.hush.enabled) end
 
 --- A date of birth becomes an age and nothing else: the card shows how old somebody is,
 --- never the day they were born.
@@ -427,7 +427,7 @@ local function ageFrom(dob)
     return year and math.max(18, 2026 - tonumber(year)) or nil
 end
 
-V.Callback('v-social:hushMe', function(src, resolve)
+V.Callback('v-phone:soc:hushMe', function(src, resolve)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -436,11 +436,11 @@ V.Callback('v-social:hushMe', function(src, resolve)
     resolve({ ok = true, profile = row and { bio = row.bio, photo = row.photo, active = num(row.active, 0) == 1 } or nil })
 end)
 
-V.Callback('v-social:hushSetup', function(src, resolve, data)
+V.Callback('v-phone:soc:hushSetup', function(src, resolve, data)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    local bio = tostring((data and data.bio) or ''):sub(1, Config.Hush.bioMax)
+    local bio = tostring((data and data.bio) or ''):sub(1, SOC.bioMax)
     local photo = tostring((data and data.photo) or ''):sub(1, 300)
     if photo ~= '' and not imageAllowed(photo) then resolve({ error = 'badhost' }) return end
     local active = (data and data.active == false) and 0 or 1
@@ -456,20 +456,26 @@ end)
 --- `ref` the client hands straight back - it is never displayed, and the visible fields
 --- are the first name and an age derived from the date of birth, which is how a dating
 --- profile introduces somebody.
-V.Callback('v-social:hushNext', function(src, resolve)
+V.Callback('v-phone:soc:hushNext', function(src, resolve)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
 
-    local row = MySQL.single.await([[
+    -- A pass comes round again after `Config.Social.hush.passDays`, because a deck you
+    -- can empty for ever is a deck that ends. A LIKE never does: that one is a decision.
+    local passDays = math.max(0, math.floor(num(SOC.hush.passDays, 7)))
+    local row = MySQL.single.await(([[
         SELECT h.citizenid, h.bio, h.photo, c.firstname, c.dob
         FROM hush_profiles h
         JOIN characters c ON c.citizenid = h.citizenid
         WHERE h.active = 1 AND h.citizenid <> ?
           AND NOT EXISTS (SELECT 1 FROM hush_likes l
-                          WHERE l.from_cid = ? AND l.to_cid = h.citizenid)
+                          WHERE l.from_cid = ? AND l.to_cid = h.citizenid
+                            AND (l.liked = 1%s))
         ORDER BY RAND() LIMIT 1
-    ]], { p.citizenid, p.citizenid })
+    ]]):format(passDays > 0
+        and (' OR l.at > DATE_SUB(NOW(), INTERVAL %d DAY)'):format(passDays)
+        or ' OR 1 = 1'), { p.citizenid, p.citizenid })
     if not row then resolve({ ok = true, profile = nil }) return end
 
     resolve({ ok = true, profile = {
@@ -478,7 +484,7 @@ V.Callback('v-social:hushNext', function(src, resolve)
     } })
 end)
 
-V.Callback('v-social:hushChoice', function(src, resolve, data)
+V.Callback('v-phone:soc:hushChoice', function(src, resolve, data)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -486,9 +492,11 @@ V.Callback('v-social:hushChoice', function(src, resolve, data)
     if target == '' or target == p.citizenid then resolve(false) return end
 
     local liked = data and data.like == true
-    -- A pass is recorded too, or the same face comes back every time the app opens.
-    MySQL.insert.await(
-        'INSERT IGNORE INTO hush_likes (from_cid, to_cid, liked) VALUES (?,?,?)',
+    -- A pass is recorded too, or the same face comes back every time the app opens. It
+    -- is an UPDATE rather than an IGNORE because a pass expires: seeing somebody again
+    -- has to restart their clock, otherwise the second pass never sticks.
+    MySQL.insert.await([[INSERT INTO hush_likes (from_cid, to_cid, liked) VALUES (?,?,?)
+        ON DUPLICATE KEY UPDATE liked = VALUES(liked), at = CURRENT_TIMESTAMP]],
         { p.citizenid, target, liked and 1 or 0 })
 
     if not liked then resolve({ ok = true, match = false }) return end
@@ -497,7 +505,7 @@ V.Callback('v-social:hushChoice', function(src, resolve, data)
     local today = num(MySQL.scalar.await([[SELECT COUNT(*) FROM hush_likes
         WHERE from_cid = ? AND liked = 1 AND at > DATE_SUB(NOW(), INTERVAL 1 DAY)]],
         { p.citizenid }), 0)
-    if today > math.floor(num(S('dailyLikes', Config.Hush.dailyLikes), 30)) then
+    if today > math.floor(num(V.Setting('socialDailyLikes', SOC.hush.dailyLikes), 30)) then
         MySQL.query.await('DELETE FROM hush_likes WHERE from_cid = ? AND to_cid = ?', { p.citizenid, target })
         resolve({ error = 'limit' }) return
     end
@@ -525,7 +533,7 @@ end)
 
 --- Everyone who liked you back. A dating app whose matches you can only ever see once,
 --- in a banner that fades, is a dating app that loses your matches.
-V.Callback('v-social:hushMatches', function(src, resolve)
+V.Callback('v-phone:soc:hushMatches', function(src, resolve)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -566,8 +574,8 @@ end)
 -- and dropped on the way out, so a client can follow, message or open a profile without
 -- ever learning who is behind it.
 
-V.Callback('v-social:profile', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:profile', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -595,7 +603,7 @@ V.Callback('v-social:profile', function(src, resolve, data)
         ORDER BY s.id DESC LIMIT ?
     ]]):format(POST_COLUMNS), {
         p.citizenid, p.citizenid, p.citizenid, p.citizenid,
-        app, cid, kind, Config.Posts.feedSize,
+        app, cid, kind, socFeedSize(),
     }) or {}
 
     resolve({
@@ -617,8 +625,8 @@ V.Callback('v-social:profile', function(src, resolve, data)
     })
 end)
 
-V.Callback('v-social:search', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:search', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -658,7 +666,7 @@ V.Callback('v-social:search', function(src, resolve, data)
     resolve({ ok = true, accounts = rows })
 end)
 
-V.Callback('v-social:follow', function(src, resolve, data)
+V.Callback('v-phone:soc:follow', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -687,7 +695,7 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Comments and reposts
 -- ══════════════════════════════════════════════════════════════
-V.Callback('v-social:comments', function(src, resolve, data)
+V.Callback('v-phone:soc:comments', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
@@ -708,7 +716,7 @@ V.Callback('v-social:comments', function(src, resolve, data)
     resolve({ ok = true, comments = rows })
 end)
 
-V.Callback('v-social:comment', function(src, resolve, data)
+V.Callback('v-phone:soc:comment', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -726,7 +734,7 @@ V.Callback('v-social:comment', function(src, resolve, data)
         'SELECT COUNT(*) FROM social_comments WHERE post_id = ?', { id }), 0) })
 end)
 
-V.Callback('v-social:uncomment', function(src, resolve, data)
+V.Callback('v-phone:soc:uncomment', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
@@ -736,7 +744,7 @@ V.Callback('v-social:uncomment', function(src, resolve, data)
     resolve({ ok = true })
 end)
 
-V.Callback('v-social:repost', function(src, resolve, data)
+V.Callback('v-phone:soc:repost', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -759,7 +767,7 @@ V.Callback('v-social:repost', function(src, resolve, data)
     })
 end)
 
-V.Callback('v-social:delete', function(src, resolve, data)
+V.Callback('v-phone:soc:delete', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
@@ -782,8 +790,8 @@ end)
 -- rules - it disappears, and being seen is part of its state - not to keep two feeds.
 local STORY_HOURS = 24
 
-V.Callback('v-social:stories', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:stories', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -827,8 +835,8 @@ V.Callback('v-social:stories', function(src, resolve, data)
     resolve({ ok = true, stories = order })
 end)
 
-V.Callback('v-social:story', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:story', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -842,7 +850,7 @@ V.Callback('v-social:story', function(src, resolve, data)
     resolve({ ok = true })
 end)
 
-V.Callback('v-social:storySeen', function(src, resolve, data)
+V.Callback('v-phone:soc:storySeen', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
@@ -857,8 +865,8 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Separate from the phone's SMS on purpose: these are between two HANDLES, and neither
 -- side learns the other's number by writing one.
-V.Callback('v-social:dmList', function(src, resolve, data)
-    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+V.Callback('v-phone:soc:dmList', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -888,7 +896,7 @@ V.Callback('v-social:dmList', function(src, resolve, data)
     resolve({ ok = true, threads = rows })
 end)
 
-V.Callback('v-social:dmThread', function(src, resolve, data)
+V.Callback('v-phone:soc:dmThread', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -913,7 +921,7 @@ V.Callback('v-social:dmThread', function(src, resolve, data)
     })
 end)
 
-V.Callback('v-social:dmSend', function(src, resolve, data)
+V.Callback('v-phone:soc:dmSend', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local app = appOf(data)
@@ -946,14 +954,14 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Exports for other modules
 -- ══════════════════════════════════════════════════════════════
-exports('GetHandle', function(cid, app)
+exports('SocialHandle', function(cid, app)
     local a = accountOf(tostring(cid or ''), APPS[tostring(app or '')] and app or 'bleeter')
     return a and a.handle or nil
 end)
 
 --- Post as the system/an event, for modules that want to put something on Bleeter (a
 --- news module, a race result). `handle` must be an account that exists.
-exports('PostAs', function(cid, kind, body, image)
+exports('SocialPostAs', function(cid, kind, body, image)
     cid = tostring(cid or '')
     if not accountOf(cid, appOfKind(kind == 'photo' and 'photo' or 'text')) then return false end
     return MySQL.insert.await(
@@ -965,9 +973,48 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- Lifecycle
 -- ══════════════════════════════════════════════════════════════
-CreateThread(function()
-    while GetResourceState('v-core') ~= 'started' do Wait(100) end
-    Core = exports['v-core']:GetCore()
+-- ══════════════════════════════════════════════════════════════
+-- Expiry
+-- ══════════════════════════════════════════════════════════════
+-- Every kind of row has its own clock, set in `Config.Social.retention` and overridable
+-- per server in the admin panel. A throwaway story and a conversation are not the same
+-- thing, so they are not swept on the same schedule - and 0 anywhere means "keep it".
+local SWEEPS = {
+    { kind = 'stories',  table = 'social_stories', label = 'story',   hours = true },
+    { kind = 'posts',    table = 'social_posts',   label = 'post' },
+    { kind = 'comments', table = 'social_comments', label = 'comment' },
+    { kind = 'messages', table = 'social_dm',      label = 'message' },
+}
+
+function socialSweep(loud)
+    for _, s in ipairs(SWEEPS) do
+        local days = socKeep(s.kind)
+        if days > 0 then
+            -- Stories are measured in hours because a day is the whole of their life:
+            -- rounding one to "yesterday" would keep it on screen for twice as long.
+            local n = s.hours
+                and MySQL.update.await(('DELETE FROM %s WHERE at < DATE_SUB(NOW(), INTERVAL ? HOUR)'):format(s.table),
+                                       { math.max(1, math.floor(days * 24)) })
+                or MySQL.update.await(('DELETE FROM %s WHERE at < DATE_SUB(NOW(), INTERVAL ? DAY)'):format(s.table),
+                                      { days })
+            if loud and n and n > 0 then
+                print(('[v-phone] social: pruned %d %s(s) older than %d day(s)'):format(n, s.label, days))
+            end
+        end
+    end
+
+    -- Rows that only exist to point at something else. A like on a post that has been
+    -- swept is not a like, it is a dangling key.
+    MySQL.query.await('DELETE FROM social_likes WHERE post_id NOT IN (SELECT id FROM social_posts)')
+    MySQL.query.await('DELETE FROM social_reposts WHERE post_id NOT IN (SELECT id FROM social_posts)')
+    MySQL.query.await('DELETE FROM social_comments WHERE post_id NOT IN (SELECT id FROM social_posts)')
+    MySQL.query.await('DELETE FROM social_story_seen WHERE story_id NOT IN (SELECT id FROM social_stories)')
+end
+
+--- Called by the phone once v-core is up and `Core` is known, because the phone is the
+--- resource now and there is only one boot to wait for.
+function SocialBoot(core)
+    Core = core
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_accounts` (
         `citizenid` VARCHAR(16) NOT NULL,
@@ -1097,15 +1144,15 @@ CreateThread(function()
         KEY `inbox_idx` (`app`, `to_cid`, `seen`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    -- A story is meant to expire. Sweeping at boot keeps the table from growing for ever
-    -- on a server that has been up for months.
-    MySQL.query.await('DELETE FROM social_stories WHERE at < DATE_SUB(NOW(), INTERVAL 48 HOUR)')
+    socialSweep(true)
 
-    -- Retention, once at boot, same policy as phone messages.
-    local days = math.floor(num(S('retentionDays', Config.Posts.retentionDays), 60))
-    if days > 0 then
-        local n = MySQL.update.await(
-            'DELETE FROM social_posts WHERE at < DATE_SUB(NOW(), INTERVAL ? DAY)', { days })
-        if n and n > 0 then print(('[v-social] pruned %d post(s) older than %d days'):format(n, days)) end
-    end
-end)
+    -- Once at boot is not enough for a server that stays up for weeks: a story is meant
+    -- to be gone tomorrow, not gone at the next restart. The sweep runs hourly, which is
+    -- often enough for a day-long expiry and cheap enough to ignore.
+    CreateThread(function()
+        while true do
+            Wait(60 * 60 * 1000)
+            socialSweep(false)
+        end
+    end)
+end

@@ -597,10 +597,11 @@ local SOCIAL_OPS = {
 }
 
 RegisterNUICallback('social', function(data, cb)
-    if GetResourceState('v-social') ~= 'started' then cb({ error = 'off' }) return end
     local op = tostring((data and data.op) or '')
     if not SOCIAL_OPS[op] then cb({ error = 'forbidden' }) return end
-    V.Request('v-social:' .. op, function(res) cb(res or { error = 'x' }) end, data)
+    -- The social layer is part of the phone now, so this is the phone's own server. No
+    -- second resource to check for, and nothing to be off but the setting itself.
+    V.Request('v-phone:soc:' .. op, function(res) cb(res or { error = 'x' }) end, data)
 end)
 
 --- What the widgets show. Both are the GAME's: the weather the server is actually

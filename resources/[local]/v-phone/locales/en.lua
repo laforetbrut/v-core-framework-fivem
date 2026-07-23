@@ -872,5 +872,8 @@ local T = {
     ['ph.hush_nobio'] = 'No bio yet',
     ['ph.hush_active'] = 'Show me to others',
     ['ph.hush_active_hint'] = 'Turned off, your profile leaves the deck. Your matches stay.',
+    -- Social, server side: what the phone writes on a player's behalf
+    ['soc.match_line'] = 'We matched on Hush!',
+    ['soc.dm_photo'] = 'Photo',
 }
 for k, v in pairs(T) do Locales.en[k] = v end

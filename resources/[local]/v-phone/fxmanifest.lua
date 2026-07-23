@@ -40,6 +40,9 @@ client_scripts {
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/main.lua',
+    -- Bleeter, Snapmatic and Hush. Player-shared data, which the rest of the phone
+    -- avoids, so it keeps its own file - but not its own resource.
+    'server/social.lua',
     'apps/*/server.lua',      -- optional, per app folder
 }
 
