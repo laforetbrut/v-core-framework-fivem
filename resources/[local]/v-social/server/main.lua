@@ -282,6 +282,52 @@ V.Callback('v-social:setup', function(src, resolve, data)
 end)
 
 -- ══════════════════════════════════════════════════════════════
+-- Shared reading helpers
+-- ══════════════════════════════════════════════════════════════
+local function cidOfHandle(app, handle)
+    handle = tostring(handle or ''):gsub('^@', ''):sub(1, 20)
+    if handle == '' then return nil end
+    return MySQL.scalar.await(
+        'SELECT citizenid FROM social_accounts WHERE app = ? AND handle = ?', { app, handle })
+end
+
+local function appOf(data)
+    local app = tostring((data and data.app) or 'bleeter')
+    return APPS[app] and app or 'bleeter'
+end
+
+--- The columns every feed draws. One query per count would be one query per post; these
+--- are subselects, so a feed stays a single round trip however long it is. The four
+--- placeholders are the caller's own citizen id, in order.
+local POST_COLUMNS = [[
+    s.id, s.kind, s.body, s.image, s.at,
+    a.handle, a.displayname, a.avatar, a.verified,
+    (SELECT COUNT(*) FROM social_likes l WHERE l.post_id = s.id) AS likes,
+    (SELECT COUNT(*) FROM social_comments c WHERE c.post_id = s.id) AS comments,
+    (SELECT COUNT(*) FROM social_reposts r WHERE r.post_id = s.id) AS reposts,
+    EXISTS(SELECT 1 FROM social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
+    EXISTS(SELECT 1 FROM social_reposts r2 WHERE r2.post_id = s.id AND r2.citizenid = ?) AS reposted,
+    EXISTS(SELECT 1 FROM social_follows f WHERE f.app = a.app AND f.from_cid = ? AND f.to_cid = s.citizenid) AS following,
+    (s.citizenid = ?) AS mine
+]]
+
+--- MySQL answers booleans as 0/1 and counts as strings. The page should receive the
+--- types it is going to render, not the types the driver happened to return.
+local function cleanPosts(rows)
+    for _, r in ipairs(rows or {}) do
+        r.likes = num(r.likes, 0)
+        r.comments = num(r.comments, 0)
+        r.reposts = num(r.reposts, 0)
+        r.liked = num(r.liked, 0) == 1
+        r.reposted = num(r.reposted, 0) == 1
+        r.following = num(r.following, 0) == 1
+        r.verified = num(r.verified, 0) == 1
+        r.mine = num(r.mine, 0) == 1
+    end
+    return rows or {}
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- The feed
 -- ══════════════════════════════════════════════════════════════
 -- One table, two kinds. Bleeter shows 'text', Snapmatic shows 'photo': the same feed with
@@ -292,24 +338,32 @@ V.Callback('v-social:feed', function(src, resolve, data)
     if not p then resolve(false) return end
     local kind = (data and data.kind == 'photo') and 'photo' or 'text'
 
-    local rows = MySQL.query.await([[
-        SELECT s.id, s.kind, s.body, s.image, s.at,
-               a.handle, a.displayname, a.avatar,
-               (SELECT COUNT(*) FROM social_likes l WHERE l.post_id = s.id) AS likes,
-               EXISTS(SELECT 1 FROM social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
-               (s.citizenid = ?) AS mine
+    local app = appOfKind(kind)
+    -- Two feeds, one query: everything, or only the accounts you follow plus your own.
+    -- A "following" tab that quietly showed strangers would not be worth having.
+    local following = (data and data.scope) == 'following'
+    local where = following
+        and [[ AND (s.citizenid = ? OR EXISTS(
+                 SELECT 1 FROM social_follows f WHERE f.app = a.app
+                   AND f.from_cid = ? AND f.to_cid = s.citizenid))]]
+        or ''
+
+    local args = { p.citizenid, p.citizenid, p.citizenid, p.citizenid, app, kind }
+    if following then
+        args[#args + 1] = p.citizenid
+        args[#args + 1] = p.citizenid
+    end
+    args[#args + 1] = Config.Posts.feedSize
+
+    local rows = MySQL.query.await(([[
+        SELECT %s
         FROM social_posts s
         JOIN social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
-        WHERE s.kind = ?
+        WHERE s.kind = ?%s
         ORDER BY s.id DESC LIMIT ?
-    ]], { p.citizenid, p.citizenid, appOfKind(kind), kind, Config.Posts.feedSize }) or {}
+    ]]):format(POST_COLUMNS, where), args) or {}
 
-    for _, r in ipairs(rows) do
-        r.likes = num(r.likes, 0)
-        r.liked = num(r.liked, 0) == 1
-        r.mine = num(r.mine, 0) == 1
-    end
-    resolve({ ok = true, posts = rows })
+    resolve({ ok = true, posts = cleanPosts(rows) })
 end)
 
 V.Callback('v-social:post', function(src, resolve, data)
@@ -366,6 +420,13 @@ end)
 -- ══════════════════════════════════════════════════════════════
 local function hushOn() return V.SettingBool('enabled', true) and V.SettingBool('hush', true) end
 
+--- A date of birth becomes an age and nothing else: the card shows how old somebody is,
+--- never the day they were born.
+local function ageFrom(dob)
+    local year = tostring(dob or ''):match('^(%d%d%d%d)')
+    return year and math.max(18, 2026 - tonumber(year)) or nil
+end
+
 V.Callback('v-social:hushMe', function(src, resolve)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
@@ -411,10 +472,8 @@ V.Callback('v-social:hushNext', function(src, resolve)
     ]], { p.citizenid, p.citizenid })
     if not row then resolve({ ok = true, profile = nil }) return end
 
-    local year = tostring(row.dob or ''):match('^(%d%d%d%d)')
-    local age = year and math.max(18, 2026 - tonumber(year)) or nil
     resolve({ ok = true, profile = {
-        ref = row.citizenid, name = row.firstname, age = age,
+        ref = row.citizenid, name = row.firstname, age = ageFrom(row.dob),
         bio = row.bio, photo = row.photo,
     } })
 end)
@@ -462,6 +521,426 @@ V.Callback('v-social:hushChoice', function(src, resolve, data)
     end
     Core.Log('social', ('hush match %s <-> %s'):format(p.citizenid, target), nil, p.citizenid)
     resolve({ ok = true, match = true, name = them and them.firstname or '?', number = theirNumber })
+end)
+
+--- Everyone who liked you back. A dating app whose matches you can only ever see once,
+--- in a banner that fades, is a dating app that loses your matches.
+V.Callback('v-social:hushMatches', function(src, resolve)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local rows = MySQL.query.await([[
+        SELECT mine.to_cid AS cid, mine.at,
+               c.firstname, c.dob, h.bio, h.photo
+        FROM hush_likes mine
+        JOIN hush_likes theirs
+          ON theirs.from_cid = mine.to_cid AND theirs.to_cid = mine.from_cid AND theirs.liked = 1
+        LEFT JOIN characters c ON c.citizenid = mine.to_cid
+        LEFT JOIN hush_profiles h ON h.citizenid = mine.to_cid
+        WHERE mine.from_cid = ? AND mine.liked = 1
+        ORDER BY mine.at DESC LIMIT 50
+    ]], { p.citizenid }) or {}
+
+    local phone = GetResourceState('v-phone') == 'started' and V.Use('v-phone') or nil
+    local out = {}
+    for _, r in ipairs(rows) do
+        -- A match already exchanged numbers, so the number is theirs to have. Nothing
+        -- else about the citizen behind it travels.
+        out[#out + 1] = {
+            name = r.firstname or '?',
+            age = ageFrom(r.dob),
+            bio = r.bio or '',
+            photo = r.photo or '',
+            at = r.at,
+            number = phone and phone.GetNumber(r.cid) or nil,
+        }
+    end
+    resolve({ ok = true, matches = out })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- People: profiles, search, following
+-- ══════════════════════════════════════════════════════════════
+-- Everything below addresses people by HANDLE. A citizen id is resolved on the way in
+-- and dropped on the way out, so a client can follow, message or open a profile without
+-- ever learning who is behind it.
+
+V.Callback('v-social:profile', function(src, resolve, data)
+    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local kind = app == 'snap' and 'photo' or 'text'
+
+    -- No handle means "me". A profile you cannot reach from your own account is a
+    -- profile you can only see by guessing a name.
+    local handle = tostring((data and data.handle) or '')
+    local cid = handle ~= '' and cidOfHandle(app, handle) or p.citizenid
+    if not cid then resolve({ error = 'nouser' }) return end
+
+    local a = accountOf(cid, app)
+    if not a then resolve({ error = 'nouser' }) return end
+
+    local counts = MySQL.single.await([[
+        SELECT (SELECT COUNT(*) FROM social_posts s WHERE s.citizenid = ? AND s.kind = ?) AS posts,
+               (SELECT COUNT(*) FROM social_follows f WHERE f.app = ? AND f.to_cid = ?) AS followers,
+               (SELECT COUNT(*) FROM social_follows f2 WHERE f2.app = ? AND f2.from_cid = ?) AS following
+    ]], { cid, kind, app, cid, app, cid }) or {}
+
+    local posts = MySQL.query.await(([[
+        SELECT %s FROM social_posts s
+        JOIN social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        WHERE s.citizenid = ? AND s.kind = ?
+        ORDER BY s.id DESC LIMIT ?
+    ]]):format(POST_COLUMNS), {
+        p.citizenid, p.citizenid, p.citizenid, p.citizenid,
+        app, cid, kind, Config.Posts.feedSize,
+    }) or {}
+
+    resolve({
+        ok = true,
+        me = cid == p.citizenid,
+        account = {
+            handle = a.handle, displayname = a.displayname, avatar = a.avatar,
+            bio = a.bio, verified = num(a.verified, 0) == 1,
+        },
+        counts = {
+            posts = num(counts.posts, 0),
+            followers = num(counts.followers, 0),
+            following = num(counts.following, 0),
+        },
+        followed = cid ~= p.citizenid and MySQL.scalar.await(
+            'SELECT 1 FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+            { app, p.citizenid, cid }) ~= nil or false,
+        posts = cleanPosts(posts),
+    })
+end)
+
+V.Callback('v-social:search', function(src, resolve, data)
+    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local q = tostring((data and data.q) or ''):gsub('^@', ''):sub(1, 20)
+
+    -- An empty search is not an error, it is the suggestion list: the accounts with the
+    -- most followers, which is what a directory with nothing typed into it should show.
+    local rows
+    if q:gsub('%s', '') == '' then
+        rows = MySQL.query.await([[
+            SELECT a.handle, a.displayname, a.avatar, a.bio, a.verified,
+                   (SELECT COUNT(*) FROM social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
+                   EXISTS(SELECT 1 FROM social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
+                   (a.citizenid = ?) AS me
+            FROM social_accounts a WHERE a.app = ?
+            ORDER BY followers DESC, a.handle ASC LIMIT 30
+        ]], { p.citizenid, p.citizenid, app }) or {}
+    else
+        local like = '%' .. q .. '%'
+        rows = MySQL.query.await([[
+            SELECT a.handle, a.displayname, a.avatar, a.bio, a.verified,
+                   (SELECT COUNT(*) FROM social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
+                   EXISTS(SELECT 1 FROM social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
+                   (a.citizenid = ?) AS me
+            FROM social_accounts a
+            WHERE a.app = ? AND (a.handle LIKE ? OR a.displayname LIKE ?)
+            ORDER BY (a.handle = ?) DESC, followers DESC LIMIT 30
+        ]], { p.citizenid, p.citizenid, app, like, like, q }) or {}
+    end
+
+    for _, r in ipairs(rows) do
+        r.followers = num(r.followers, 0)
+        r.followed = num(r.followed, 0) == 1
+        r.verified = num(r.verified, 0) == 1
+        r.me = num(r.me, 0) == 1
+    end
+    resolve({ ok = true, accounts = rows })
+end)
+
+V.Callback('v-social:follow', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local cid = cidOfHandle(app, data and data.handle)
+    if not cid then resolve({ error = 'nouser' }) return end
+    -- Following yourself is not a feature, it is a bug report waiting to happen.
+    if cid == p.citizenid then resolve({ error = 'self' }) return end
+
+    local exists = MySQL.scalar.await(
+        'SELECT 1 FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+        { app, p.citizenid, cid })
+    if exists then
+        MySQL.query.await('DELETE FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+            { app, p.citizenid, cid })
+    else
+        MySQL.insert.await('INSERT IGNORE INTO social_follows (app, from_cid, to_cid) VALUES (?,?,?)',
+            { app, p.citizenid, cid })
+    end
+    resolve({
+        ok = true, followed = not exists,
+        followers = num(MySQL.scalar.await(
+            'SELECT COUNT(*) FROM social_follows WHERE app = ? AND to_cid = ?', { app, cid }), 0),
+    })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Comments and reposts
+-- ══════════════════════════════════════════════════════════════
+V.Callback('v-social:comments', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+    local app = appOf(data)
+
+    local rows = MySQL.query.await([[
+        SELECT c.id, c.body, c.at, a.handle, a.displayname, a.avatar, a.verified,
+               (c.citizenid = ?) AS mine
+        FROM social_comments c
+        JOIN social_accounts a ON a.citizenid = c.citizenid AND a.app = ?
+        WHERE c.post_id = ? ORDER BY c.id ASC LIMIT 200
+    ]], { p.citizenid, app, id }) or {}
+    for _, r in ipairs(rows) do
+        r.mine = num(r.mine, 0) == 1
+        r.verified = num(r.verified, 0) == 1
+    end
+    resolve({ ok = true, comments = rows })
+end)
+
+V.Callback('v-social:comment', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local id = math.floor(num(data and data.id, 0))
+    local body = tostring((data and data.body) or ''):sub(1, 280)
+    if id <= 0 or body:gsub('%s', '') == '' then resolve({ error = 'empty' }) return end
+    if not MySQL.scalar.await('SELECT 1 FROM social_posts WHERE id = ?', { id }) then
+        resolve({ error = 'gone' }) return
+    end
+
+    MySQL.insert.await('INSERT INTO social_comments (post_id, citizenid, body) VALUES (?,?,?)',
+        { id, p.citizenid, body })
+    resolve({ ok = true, comments = num(MySQL.scalar.await(
+        'SELECT COUNT(*) FROM social_comments WHERE post_id = ?', { id }), 0) })
+end)
+
+V.Callback('v-social:uncomment', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+    -- Your own comment only. The author check is the WHERE clause, not a branch.
+    MySQL.query.await('DELETE FROM social_comments WHERE id = ? AND citizenid = ?', { id, p.citizenid })
+    resolve({ ok = true })
+end)
+
+V.Callback('v-social:repost', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+
+    local exists = MySQL.scalar.await(
+        'SELECT 1 FROM social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+    if exists then
+        MySQL.query.await('DELETE FROM social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+    else
+        MySQL.insert.await('INSERT IGNORE INTO social_reposts (post_id, citizenid) VALUES (?,?)',
+            { id, p.citizenid })
+    end
+    resolve({
+        ok = true, reposted = not exists,
+        reposts = num(MySQL.scalar.await(
+            'SELECT COUNT(*) FROM social_reposts WHERE post_id = ?', { id }), 0),
+    })
+end)
+
+V.Callback('v-social:delete', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+    local n = MySQL.update.await('DELETE FROM social_posts WHERE id = ? AND citizenid = ?',
+        { id, p.citizenid })
+    if not n or n == 0 then resolve({ error = 'notyours' }) return end
+    -- The post is gone, so its likes, comments and reposts are noise. Clear them rather
+    -- than leaving rows pointing at nothing.
+    MySQL.query.await('DELETE FROM social_likes WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM social_comments WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM social_reposts WHERE post_id = ?', { id })
+    resolve({ ok = true })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Stories
+-- ══════════════════════════════════════════════════════════════
+-- A story is a post with an expiry. It is a separate table because it has different
+-- rules - it disappears, and being seen is part of its state - not to keep two feeds.
+local STORY_HOURS = 24
+
+V.Callback('v-social:stories', function(src, resolve, data)
+    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+
+    local rows = MySQL.query.await([[
+        SELECT t.id, t.citizenid, t.image, t.body, t.at,
+               a.handle, a.displayname, a.avatar,
+               EXISTS(SELECT 1 FROM social_story_seen v WHERE v.story_id = t.id AND v.citizenid = ?) AS seen,
+               (t.citizenid = ?) AS mine
+        FROM social_stories t
+        JOIN social_accounts a ON a.citizenid = t.citizenid AND a.app = t.app
+        WHERE t.app = ? AND t.at > DATE_SUB(NOW(), INTERVAL ? HOUR)
+          AND (t.citizenid = ? OR EXISTS(
+                SELECT 1 FROM social_follows f
+                WHERE f.app = t.app AND f.from_cid = ? AND f.to_cid = t.citizenid))
+        ORDER BY t.id ASC
+    ]], { p.citizenid, p.citizenid, app, STORY_HOURS, p.citizenid, p.citizenid }) or {}
+
+    -- Grouped by author, in the order the ring is drawn: yourself first, then anyone
+    -- with something unseen, then the rest.
+    local byAuthor, order = {}, {}
+    for _, r in ipairs(rows) do
+        local key = r.handle
+        if not byAuthor[key] then
+            byAuthor[key] = {
+                handle = r.handle, displayname = r.displayname, avatar = r.avatar,
+                mine = num(r.mine, 0) == 1, unseen = false, items = {},
+            }
+            order[#order + 1] = byAuthor[key]
+        end
+        local group = byAuthor[key]
+        local seen = num(r.seen, 0) == 1
+        if not seen then group.unseen = true end
+        group.items[#group.items + 1] = { id = r.id, image = r.image, body = r.body, at = r.at, seen = seen }
+    end
+    table.sort(order, function(x, y)
+        if x.mine ~= y.mine then return x.mine end
+        if x.unseen ~= y.unseen then return x.unseen end
+        return (x.handle or '') < (y.handle or '')
+    end)
+    resolve({ ok = true, stories = order })
+end)
+
+V.Callback('v-social:story', function(src, resolve, data)
+    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local image = tostring((data and data.image) or ''):sub(1, 300)
+    if image == '' then resolve({ error = 'noimage' }) return end
+    if not imageAllowed(image) then resolve({ error = 'badhost' }) return end
+
+    MySQL.insert.await('INSERT INTO social_stories (app, citizenid, image, body) VALUES (?,?,?,?)',
+        { app, p.citizenid, image, tostring((data and data.body) or ''):sub(1, 160) })
+    resolve({ ok = true })
+end)
+
+V.Callback('v-social:storySeen', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+    MySQL.insert.await('INSERT IGNORE INTO social_story_seen (story_id, citizenid) VALUES (?,?)',
+        { id, p.citizenid })
+    resolve({ ok = true })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Direct messages
+-- ══════════════════════════════════════════════════════════════
+-- Separate from the phone's SMS on purpose: these are between two HANDLES, and neither
+-- side learns the other's number by writing one.
+V.Callback('v-social:dmList', function(src, resolve, data)
+    if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+
+    local rows = MySQL.query.await([[
+        SELECT a.handle, a.displayname, a.avatar,
+               m.body, m.image, m.at, (m.from_cid = ?) AS mine,
+               (SELECT COUNT(*) FROM social_dm u
+                 WHERE u.app = m.app AND u.to_cid = ? AND u.seen = 0
+                   AND u.from_cid = IF(m.from_cid = ?, m.to_cid, m.from_cid)) AS unread
+        FROM social_dm m
+        JOIN social_accounts a
+          ON a.app = m.app AND a.citizenid = IF(m.from_cid = ?, m.to_cid, m.from_cid)
+        WHERE m.app = ? AND (m.from_cid = ? OR m.to_cid = ?)
+          AND m.id = (
+            SELECT MAX(m2.id) FROM social_dm m2
+            WHERE m2.app = m.app
+              AND ((m2.from_cid = m.from_cid AND m2.to_cid = m.to_cid)
+                OR (m2.from_cid = m.to_cid AND m2.to_cid = m.from_cid)))
+        ORDER BY m.id DESC LIMIT 50
+    ]], { p.citizenid, p.citizenid, p.citizenid, p.citizenid, app, p.citizenid, p.citizenid }) or {}
+
+    for _, r in ipairs(rows) do
+        r.mine = num(r.mine, 0) == 1
+        r.unread = num(r.unread, 0)
+    end
+    resolve({ ok = true, threads = rows })
+end)
+
+V.Callback('v-social:dmThread', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local cid = cidOfHandle(app, data and data.handle)
+    if not cid then resolve({ error = 'nouser' }) return end
+
+    local rows = MySQL.query.await([[
+        SELECT id, body, image, at, (from_cid = ?) AS mine FROM social_dm
+        WHERE app = ? AND ((from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?))
+        ORDER BY id ASC LIMIT 200
+    ]], { p.citizenid, app, p.citizenid, cid, cid, p.citizenid }) or {}
+    for _, r in ipairs(rows) do r.mine = num(r.mine, 0) == 1 end
+
+    -- Opening the thread is reading it.
+    MySQL.query.await('UPDATE social_dm SET seen = 1 WHERE app = ? AND from_cid = ? AND to_cid = ?',
+        { app, cid, p.citizenid })
+
+    local a = accountOf(cid, app)
+    resolve({
+        ok = true, messages = rows,
+        account = a and { handle = a.handle, displayname = a.displayname, avatar = a.avatar } or nil,
+    })
+end)
+
+V.Callback('v-social:dmSend', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local cid = cidOfHandle(app, data and data.handle)
+    if not cid then resolve({ error = 'nouser' }) return end
+    if cid == p.citizenid then resolve({ error = 'self' }) return end
+
+    local body = tostring((data and data.body) or ''):sub(1, 500)
+    local image = tostring((data and data.image) or ''):sub(1, 300)
+    if image ~= '' and not imageAllowed(image) then resolve({ error = 'badhost' }) return end
+    if body:gsub('%s', '') == '' and image == '' then resolve({ error = 'empty' }) return end
+
+    MySQL.insert.await('INSERT INTO social_dm (app, from_cid, to_cid, body, image) VALUES (?,?,?,?,?)',
+        { app, p.citizenid, cid, body, image })
+
+    -- A message they cannot see until they happen to open the app is a message that does
+    -- not arrive. Tell the phone, which knows how to put it on their screen.
+    local me = accountOf(p.citizenid, app)
+    local target = Core.GetPlayerByCitizenId and Core.GetPlayerByCitizenId(cid)
+    if target and target.source and GetResourceState('v-phone') == 'started' then
+        pcall(function()
+            exports['v-phone']:Notify(target.source, app, '@' .. (me and me.handle or '?'),
+                body ~= '' and body or (Locales.fr or {})['soc.dm_photo'] or 'Photo')
+        end)
+    end
+    resolve({ ok = true })
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -564,6 +1043,63 @@ CreateThread(function()
         `at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`from_cid`, `to_cid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_follows` (
+        `app`      VARCHAR(12) NOT NULL DEFAULT 'bleeter',
+        `from_cid` VARCHAR(16) NOT NULL,
+        `to_cid`   VARCHAR(16) NOT NULL,
+        `at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`app`, `from_cid`, `to_cid`), KEY `to_idx` (`app`, `to_cid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_comments` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `post_id`   INT UNSIGNED NOT NULL,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `body`      VARCHAR(280) NOT NULL DEFAULT '',
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `post_idx` (`post_id`, `id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_reposts` (
+        `post_id`   INT UNSIGNED NOT NULL,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`post_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_stories` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `app`       VARCHAR(12) NOT NULL DEFAULT 'snap',
+        `citizenid` VARCHAR(16) NOT NULL,
+        `image`     VARCHAR(300) NOT NULL DEFAULT '',
+        `body`      VARCHAR(160) NOT NULL DEFAULT '',
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `live_idx` (`app`, `at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_story_seen` (
+        `story_id`  INT UNSIGNED NOT NULL,
+        `citizenid` VARCHAR(16) NOT NULL,
+        PRIMARY KEY (`story_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_dm` (
+        `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `app`      VARCHAR(12) NOT NULL DEFAULT 'bleeter',
+        `from_cid` VARCHAR(16) NOT NULL,
+        `to_cid`   VARCHAR(16) NOT NULL,
+        `body`     VARCHAR(500) NOT NULL DEFAULT '',
+        `image`    VARCHAR(300) NOT NULL DEFAULT '',
+        `seen`     TINYINT(1) NOT NULL DEFAULT 0,
+        `at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `pair_idx` (`app`, `from_cid`, `to_cid`, `id`),
+        KEY `inbox_idx` (`app`, `to_cid`, `seen`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- A story is meant to expire. Sweeping at boot keeps the table from growing for ever
+    -- on a server that has been up for months.
+    MySQL.query.await('DELETE FROM social_stories WHERE at < DATE_SUB(NOW(), INTERVAL 48 HOUR)')
 
     -- Retention, once at boot, same policy as phone messages.
     local days = math.floor(num(S('retentionDays', Config.Posts.retentionDays), 60))

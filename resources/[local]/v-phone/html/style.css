@@ -7898,3 +7898,527 @@ body.inframe.dark .uisearch {
     animation: none !important;
   }
 }
+
+/* ══ The social layer ═════════════════════════════════════════
+   Three apps over one set of parts. A post, a profile, a tab bar and a card deck are
+   written once and tinted per app, so Bleeter, Snapmatic and Hush stay recognisably
+   the same phone rather than three visitors from three design systems. */
+
+/* ── The tab bar ─────────────────────────────────────────────
+   It sits in the app footer, which is already clear of the home indicator. */
+.soctabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 7px 6px 2px;
+  border-radius: 20px 20px 0 0;
+  background:
+    radial-gradient(120% 100% at 30% -30%, rgba(255, 255, 255, .10), transparent 60%),
+    var(--app-card);
+  box-shadow: inset 0 .5px 0 var(--app-sep);
+}
+
+.soctab {
+  position: relative;
+  display: flex;
+  width: 46px;
+  height: 38px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  color: var(--app-label2);
+  transition: color var(--ph-fast) ease, transform var(--ph-fast) var(--ph-spring);
+}
+
+.soctab svg { width: 23px; height: 23px; }
+.soctab.on { color: var(--app-tint); }
+.soctab:active { transform: scale(.9); }
+
+.socdot {
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ff3b30;
+}
+
+/* ── Timeline switch ─────────────────────────────────────────── */
+.socscope {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.socscope button {
+  flex: 1;
+  padding: 8px;
+  border-radius: 11px;
+  color: var(--app-label2);
+  font-size: 13.5px;
+  font-weight: 640;
+  background: var(--app-fill);
+  transition: color var(--ph-fast) ease, background var(--ph-fast) ease;
+}
+
+.socscope button.on { color: #fff; background: var(--app-tint); }
+
+/* ── A post ──────────────────────────────────────────────────── */
+.post .phead {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+}
+
+.pverif {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  margin-left: 3px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  vertical-align: -2px;
+  background: #0a84ff;
+}
+
+.pverif svg { width: 9px; height: 9px; }
+
+.pfoot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 9px;
+}
+
+.pspacer { flex: 1; }
+
+.pact {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--app-label2);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  transition: color var(--ph-fast) ease, transform var(--ph-fast) var(--ph-spring);
+}
+
+.pact svg { width: 17px; height: 17px; }
+.pact:active { transform: scale(.88); }
+.pact.plike.on { color: #ff375f; }
+.pact.plike.on svg { fill: currentColor; }
+.pact.prepost.on { color: #30d158; }
+.pact.pdel:active { color: #ff453a; }
+
+/* Snapmatic leads with the photo, so its image goes edge to edge inside the card. */
+.post.snapstyle .pimg {
+  width: calc(100% + 30px);
+  margin: 9px -15px 0;
+  border-radius: 0;
+}
+
+/* ── Comments ────────────────────────────────────────────────── */
+.sheet[data-variant="comments"] { max-height: 78%; }
+
+.comlist {
+  max-height: 46vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.comlist::-webkit-scrollbar { width: 0; }
+
+.com {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 2px;
+}
+
+.comav,
+.socav,
+.storyav {
+  display: flex;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  background: var(--app-fill);
+  background-position: center;
+  background-size: cover;
+}
+
+.combody { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.comwho { color: var(--app-label2); font-size: 12px; font-weight: 640; }
+.comt { margin-left: 7px; font-weight: 400; opacity: .7; }
+.comtext { color: var(--app-label); font-size: 14.5px; line-height: 1.35; }
+.comdel { margin-left: auto; color: var(--app-label2); }
+.comdel svg { width: 15px; height: 15px; }
+
+.comform {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.comform input {
+  min-width: 0;
+  flex: 1;
+  padding: 11px 13px;
+  border-radius: 17px;
+  color: var(--app-label);
+  font-size: 15px;
+  background: var(--app-fill);
+}
+
+.comform button {
+  display: flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: var(--app-tint);
+  background: var(--app-fill);
+}
+
+.comform button svg { width: 18px; height: 18px; }
+.dmform { margin: 0; padding: 6px 4px 2px; }
+
+/* ── Search and people rows ──────────────────────────────────── */
+.socsearch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 13px;
+  border-radius: 15px;
+  color: var(--app-label2);
+  background: var(--app-fill);
+}
+
+.socsearch svg { width: 17px; height: 17px; flex: 0 0 auto; }
+
+.socsearch input {
+  min-width: 0;
+  flex: 1;
+  color: var(--app-label);
+  font-size: 15.5px;
+  background: none;
+}
+
+.socfollow {
+  margin-left: auto;
+  padding: 6px 13px;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 12.5px;
+  font-weight: 660;
+  white-space: nowrap;
+  background: var(--app-tint);
+}
+
+.socfollow.on { color: var(--app-label); background: var(--app-fill); }
+
+.socunread {
+  min-width: 21px;
+  margin-left: auto;
+  padding: 2px 6px;
+  border-radius: 11px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 680;
+  text-align: center;
+  background: #ff3b30;
+}
+
+/* ── A profile ───────────────────────────────────────────────── */
+.socprof {
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 6px 0 16px;
+  text-align: center;
+}
+
+.socbigav {
+  display: flex;
+  width: 88px;
+  height: 88px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 34px;
+  font-weight: 700;
+  background: var(--app-fill);
+  background-position: center;
+  background-size: cover;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, .28);
+}
+
+.socbigav svg { width: 40px; height: 40px; }
+.socname { margin-top: 11px; font-size: 20px; font-weight: 700; }
+.sochandle { color: var(--app-label2); font-size: 14px; }
+.socbio { margin-top: 7px; padding: 0 18px; font-size: 14.5px; line-height: 1.35; }
+
+.soccounts {
+  display: flex;
+  gap: 26px;
+  margin-top: 14px;
+  color: var(--app-label2);
+  font-size: 12px;
+}
+
+.soccounts span { display: flex; flex-direction: column; gap: 1px; }
+.soccounts b { color: var(--app-label); font-size: 17px; font-variant-numeric: tabular-nums; }
+
+.socprofacts { display: flex; gap: 8px; margin-top: 15px; }
+
+.socbig,
+.socedit {
+  min-width: 118px;
+  margin-top: 15px;
+  padding: 9px 20px;
+  border-radius: 14px;
+  color: #fff;
+  font-size: 14.5px;
+  font-weight: 650;
+  background: var(--app-tint);
+}
+
+.socprofacts .socbig { margin-top: 0; }
+.socbig.on,
+.socbig.plain,
+.socedit { color: var(--app-label); background: var(--app-fill); }
+
+.socgrid {
+  display: grid;
+  gap: 3px;
+  grid-template-columns: repeat(3, 1fr);
+  margin: 0 -15px;
+}
+
+.socthumb {
+  aspect-ratio: 1;
+  background-color: var(--app-fill);
+  background-position: center;
+  background-size: cover;
+  transition: opacity var(--ph-fast) ease;
+}
+
+.socthumb:active { opacity: .72; }
+.socone .post { padding: 0; }
+
+/* ── Stories ─────────────────────────────────────────────────── */
+.storybar {
+  display: flex;
+  gap: 13px;
+  margin: 0 -15px 14px;
+  padding: 2px 15px 12px;
+  overflow-x: auto;
+  box-shadow: inset 0 -.5px 0 var(--app-sep);
+  scrollbar-width: none;
+}
+
+.storybar::-webkit-scrollbar { height: 0; }
+
+.storyone,
+.storyadd {
+  display: flex;
+  width: 64px;
+  flex: 0 0 auto;
+  align-items: center;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.storyring {
+  display: flex;
+  width: 60px;
+  height: 60px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  padding: 2.5px;
+  background: var(--app-fill);
+}
+
+/* The unseen ring is the whole point of a story bar: it says which ones are new. */
+.storyring.unseen {
+  background: linear-gradient(135deg, #f9ce34 0%, #ee2a7b 52%, #6228d7 100%);
+}
+
+.storyring.add { color: var(--app-tint); border: 1.5px dashed var(--app-sep); }
+.storyring.add svg { width: 22px; height: 22px; }
+.storyring .storyav { width: 100%; height: 100%; box-shadow: 0 0 0 2.5px var(--app-bg); }
+
+.storyname {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--app-label2);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The viewer borrows the folder overlay, which is already a full-screen layer. */
+.folderview.storymode { padding: 0; background: #000; }
+
+.storyview { position: relative; width: 100%; height: 100%; }
+
+.storybars {
+  position: absolute;
+  z-index: 3;
+  top: 54px;
+  right: 12px;
+  left: 12px;
+  display: flex;
+  gap: 4px;
+}
+
+.storybars i {
+  height: 2.5px;
+  flex: 1;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, .28);
+}
+
+.storybars i.done,
+.storybars i.now { background: #fff; }
+
+.storyhead {
+  position: absolute;
+  z-index: 3;
+  top: 66px;
+  right: 12px;
+  left: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 13.5px;
+  font-weight: 640;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, .6);
+}
+
+.storyhead .storyav { width: 30px; height: 30px; }
+.storyt { color: rgba(255, 255, 255, .7); font-weight: 400; }
+.storyclose { margin-left: auto; color: #fff; }
+.storyclose svg { width: 19px; height: 19px; }
+
+.storyphoto {
+  width: 100%;
+  height: 100%;
+  background-position: center;
+  background-size: cover;
+}
+
+.storycap {
+  position: absolute;
+  right: 18px;
+  bottom: 74px;
+  left: 18px;
+  color: #fff;
+  font-size: 15px;
+  text-align: center;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, .7);
+}
+
+/* ── Hush: the deck ──────────────────────────────────────────── */
+.hushdeck { position: relative; padding-top: 4px; }
+
+.hushcard {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  touch-action: pan-y;
+  background: var(--app-card);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, .32);
+  transition: transform .3s var(--ph-spring), opacity .24s ease;
+}
+
+.hushcard.dragging { transition: none; }
+.hushcard.flyright { transform: translateX(140%) rotate(18deg); opacity: 0; }
+.hushcard.flyleft { transform: translateX(-140%) rotate(-18deg); opacity: 0; }
+
+.hushcard .hphoto {
+  position: relative;
+  display: flex;
+  height: 62vh;
+  max-height: 430px;
+  align-items: flex-end;
+  background-color: #1c1c22;
+  background-position: center;
+  background-size: cover;
+}
+
+/* The photo has to carry white text over whatever somebody linked, so the card ends
+   in a gradient rather than trusting the image to be dark at the bottom. */
+.hushcard .hmeta {
+  width: 100%;
+  padding: 46px 18px 18px;
+  color: #fff;
+  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .78));
+}
+
+.hushcard .hname { color: #fff; font-size: 25px; font-weight: 700; letter-spacing: -.02em; }
+
+/* The colour is stated, not inherited: the older rule painted the bio in the app's dark
+   label colour, which on this gradient was grey text on near-black. */
+.hushcard .hbio {
+  margin-top: 4px;
+  padding: 0;
+  color: rgba(255, 255, 255, .92);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+/* The stamps a real swipe app slaps on the card as it tilts. */
+.hstamp {
+  position: absolute;
+  top: 22px;
+  padding: 5px 13px;
+  border-radius: 9px;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: .06em;
+  opacity: 0;
+  text-transform: uppercase;
+  transition: opacity .12s ease;
+}
+
+.hstamp.yes { left: 18px; color: #30d158; border: 3px solid #30d158; transform: rotate(-14deg); }
+.hstamp.no { right: 18px; color: #ff453a; border: 3px solid #ff453a; transform: rotate(14deg); }
+.hushcard.wantyes .hstamp.yes { opacity: 1; }
+.hushcard.wantno .hstamp.no { opacity: 1; }
+
+.hushrow { display: flex; justify-content: center; gap: 26px; margin-top: 18px; }
+
+.hushbtn {
+  display: flex;
+  width: 62px;
+  height: 62px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--app-card);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .26);
+  transition: transform var(--ph-fast) var(--ph-spring);
+}
+
+.hushbtn svg { width: 27px; height: 27px; }
+.hushbtn:active { transform: scale(.88); }
+.hushbtn.no { color: #ff453a; }
+.hushbtn.yes { color: #30d158; }

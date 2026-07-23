@@ -5560,159 +5560,767 @@ function socialSignup(app, then) {
   render();
 }
 
-function postCard(pst) {
-  const av = pst.avatar
-    ? '<span class="pav" style="' + inlineBackground(pst.avatar) + '"></span>'
-    : '<span class="pav">' + esc(String(pst.handle || '?').slice(0, 1).toUpperCase()) + '</span>';
-  return '<div class="post" data-id="' + pst.id + '">' +
-    '<div class="phead">' + av +
-      '<span class="pnames">' +
-        (pst.displayname ? '<span class="pdn">' + esc(pst.displayname) + '</span>' : '') +
-        '<span class="ph">@' + esc(pst.handle) + '</span></span>' +
-      '<span class="pt">' + esc(String(pst.at || '').slice(5, 16)) + '</span></div>' +
-    (pst.body ? '<div class="pbody">' + esc(pst.body) + '</div>' : '') +
-    (pst.image ? '<img class="pimg" src="' + esc(pst.image) + '" />' : '') +
-    '<div class="pfoot"><button class="plike ' + (pst.liked ? 'on' : '') + '" type="button">' +
-      svg('heart') + '<span>' + (pst.likes || 0) + '</span></button></div></div>';
+// ══ The social layer ═══════════════════════════════════════════
+// Three apps over one module. Bleeter is the timeline, Snapmatic is the grid, Hush is
+// the deck of cards - but a post, a profile, a follow and a direct message are the same
+// things underneath, so they are written once here and dressed differently per app.
+//
+// Every screen addresses people by HANDLE. The server resolves handles to citizens and
+// never sends one back, so nothing on this page can learn who is behind an account.
+
+// Which screen each app is on, and which timeline. Kept per app so leaving Bleeter on
+// its profile and coming back does not dump you at the top of somebody else's feed.
+const SOC = {
+  tab: { bleeter: 'feed', snap: 'feed', hush: 'swipe' },
+  scope: { bleeter: 'all', snap: 'all' },
+  handle: { bleeter: '', snap: '' },   // whose profile is open, empty for your own
+};
+
+const socialKind = (appId) => (appId === 'snap' ? 'photo' : 'text');
+
+function socAvatar(row, cls) {
+  const url = row && row.avatar;
+  const letter = esc(String((row && row.handle) || '?').slice(0, 1).toUpperCase());
+  return url
+    ? '<span class="' + (cls || 'pav') + '" style="' + inlineBackground(url) + '"></span>'
+    : '<span class="' + (cls || 'pav') + '">' + letter + '</span>';
 }
 
-function wireLikes() {
+const socVerified = (row) => (row && row.verified)
+  ? '<span class="pverif" aria-hidden="true">' + svg('check') + '</span>' : '';
+
+// "il y a 3 min" beats a timestamp nobody reads. The server sends SQL datetimes in
+// server time, so this compares the two as text-free numbers rather than parsing a zone.
+function socWhen(at) {
+  const t = Date.parse(String(at || '').replace(' ', 'T'));
+  if (!t) return esc(String(at || '').slice(5, 16));
+  const mins = Math.max(0, Math.round((Date.now() - t) / 60000));
+  if (mins < 1) return L('ph.soc_now');
+  if (mins < 60) return mins + ' ' + L('ph.soc_min');
+  if (mins < 1440) return Math.floor(mins / 60) + ' ' + L('ph.soc_hour');
+  return Math.floor(mins / 1440) + ' ' + L('ph.soc_day');
+}
+
+// ── A post ─────────────────────────────────────────────────────
+// One card, two dresses. Bleeter puts the text first and the actions in a row under it;
+// Snapmatic puts the photo first and the caption under the actions, the way each of
+// those two apps has always read.
+function postCard(pst, appId) {
+  const photoFirst = appId === 'snap';
+  const head =
+    '<button class="phead" data-who="' + esc(pst.handle) + '" type="button">' +
+      socAvatar(pst) +
+      '<span class="pnames">' +
+        (pst.displayname ? '<span class="pdn">' + esc(pst.displayname) + socVerified(pst) + '</span>' : '') +
+        '<span class="ph">@' + esc(pst.handle) + '</span></span>' +
+      '<span class="pt">' + esc(socWhen(pst.at)) + '</span></button>';
+
+  const image = pst.image ? '<img class="pimg" src="' + esc(pst.image) + '" alt="" />' : '';
+  const text = pst.body ? '<div class="pbody">' + esc(pst.body) + '</div>' : '';
+
+  const actions =
+    '<div class="pfoot">' +
+      '<button class="pact plike' + (pst.liked ? ' on' : '') + '" type="button" aria-label="' +
+        esc(L('ph.like')) + '">' + svg('heart') + '<span>' + (pst.likes || 0) + '</span></button>' +
+      '<button class="pact pcomment" type="button" aria-label="' +
+        esc(L('ph.soc_comments')) + '">' + svg('messages') + '<span>' + (pst.comments || 0) + '</span></button>' +
+      '<button class="pact prepost' + (pst.reposted ? ' on' : '') + '" type="button" aria-label="' +
+        esc(L('ph.soc_repost')) + '">' + svg('repost') + '<span>' + (pst.reposts || 0) + '</span></button>' +
+      '<span class="pspacer"></span>' +
+      (pst.mine
+        ? '<button class="pact pdel" type="button" aria-label="' + esc(L('ph.delete')) + '">' + svg('trash') + '</button>'
+        : '') +
+    '</div>';
+
+  return '<article class="post' + (photoFirst ? ' snapstyle' : '') + '" data-id="' + pst.id + '">' +
+    head + (photoFirst ? image + actions + text : text + image + actions) + '</article>';
+}
+
+// Every card in a list answers the same way, so the wiring is written once. `reload` is
+// what a destructive action calls once the server has agreed.
+function wirePosts(appId, reload) {
   rows('.post .plike', (b) => b.addEventListener('click', async () => {
     const id = Number(b.closest('.post').dataset.id);
-    const r = await post('social', { op: 'like', id });
+    const r = await post('social', { op: 'like', id, app: appId });
     if (r && r.ok) {
       b.classList.toggle('on', r.liked);
       b.querySelector('span').textContent = r.likes;
+      if (r.liked) ui('toggleon');
     }
+  }));
+  rows('.post .prepost', (b) => b.addEventListener('click', async () => {
+    const id = Number(b.closest('.post').dataset.id);
+    const r = await post('social', { op: 'repost', id, app: appId });
+    if (r && r.ok) {
+      b.classList.toggle('on', r.reposted);
+      b.querySelector('span').textContent = r.reposts;
+      ui(r.reposted ? 'toggleon' : 'toggleoff');
+    } else toast(L('ph.err_' + ((r && r.error) || 'x')));
+  }));
+  rows('.post .pcomment', (b) => b.addEventListener('click', () =>
+    commentSheet(appId, Number(b.closest('.post').dataset.id), b.querySelector('span'))));
+  rows('.post .phead', (b) => b.addEventListener('click', () =>
+    socialProfile(appId, b.dataset.who)));
+  rows('.post .pdel', (b) => b.addEventListener('click', () => {
+    const card = b.closest('.post');
+    confirmSheet(L('ph.soc_delete_post'), L('ph.delete'), async () => {
+      const r = await post('social', { op: 'delete', id: Number(card.dataset.id) });
+      if (r && r.ok) { card.remove(); toast(L('ph.soc_deleted')); if (reload) reload(); }
+      else toast(L('ph.err_' + ((r && r.error) || 'x')));
+    });
   }));
 }
 
-async function socialFeed(kind, emptyKey) {
-  const appId = kind === 'photo' ? 'snap' : 'bleeter';
-  if (!openApp || openApp.id !== appId) return;
-  beginView();
-  loading();
-  const r = await post('social', { op: 'feed', kind });
-  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'bleet')); return; }
-  const list = r.posts || [];
-  body(list.length ? list.map(postCard).join('') : UI.empty(L(emptyKey), kind === 'photo' ? 'snap' : 'bleet'));
-  wireLikes();
+// A small yes/no, because deleting a post from a feed you are scrolling should take one
+// deliberate extra tap rather than none.
+function confirmSheet(question, confirmLabel, onConfirm) {
+  sheet(question,
+    UI.button(confirmLabel, 'socyes', 'neg') + UI.button(L('ph.cancel'), 'socno', 'plain'),
+    () => {
+      const epoch = sheetEpoch;
+      byId('socyes').addEventListener('click', () => {
+        if (!closeSheet(false, epoch)) return;
+        onConfirm();
+      });
+      byId('socno').addEventListener('click', () => closeSheet(false, epoch));
+    });
 }
 
-// -- Bleeter ----------------------------------------------------
-RENDER.bleeter = () => needAccount('bleeter', async () => {
-  setNav(L('app.bleeter'), null, { icon: 'add', onClick: () => {
-    sheet(L('ph.bleet_new'),
-      UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') +
-        UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') +
-        UI.button(L('ph.pick_photo'), 'bpick', 'plain') + UI.button(L('ph.bleet_send'), 'bgo'),
-      () => {
-        byId('bemoji').addEventListener('click', () => emojiOpen('btext'));
-        // A post can carry a photo straight off the phone rather than a pasted link.
-        byId('bpick').addEventListener('click', () => pickPhoto(async (url) => {
-          const bodyText = byId('btext').value;
-          const epoch = sheetEpoch;
-          const r = await post('social', { op: 'post', kind: 'photo', body: bodyText, image: url });
-          if (!closeSheet(false, epoch)) return;
-          if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-        }));
-        byId('bgo').addEventListener('click', async () => {
-          const bodyText = byId('btext').value;
-          const epoch = sheetEpoch;
-          const r = await post('social', { op: 'post', kind: 'text', body: bodyText });
-          if (!closeSheet(false, epoch)) return;
-          if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-        });
-      });
-  } });
-  await socialFeed('text', 'ph.bleet_none');
-});
+// ── Comments ───────────────────────────────────────────────────
+function commentSheet(appId, id, counter) {
+  sheet(L('ph.soc_comments'),
+    '<div class="comlist" id="comlist">' + UI.empty(L('ph.loading')) + '</div>' +
+    '<div class="comform">' +
+      '<input id="comtext" maxlength="280" placeholder="' + esc(L('ph.soc_comment_ph')) + '" />' +
+      '<button id="comemoji" type="button" aria-label="' + esc(L('ph.emoji')) + '">😊</button>' +
+      '<button id="comgo" type="button" aria-label="' + esc(L('ph.send')) + '">' + svg('send') + '</button>' +
+    '</div>',
+    () => {
+      const epoch = sheetEpoch;
+      const draw = async () => {
+        const r = await post('social', { op: 'comments', id, app: appId });
+        if (epoch !== sheetEpoch) return;
+        const list = (r && r.comments) || [];
+        byId('comlist').innerHTML = list.length ? list.map((c) =>
+          '<div class="com" data-id="' + c.id + '">' + socAvatar(c, 'comav') +
+            '<div class="combody"><span class="comwho">@' + esc(c.handle) + socVerified(c) +
+              '<span class="comt">' + esc(socWhen(c.at)) + '</span></span>' +
+            '<span class="comtext">' + esc(c.body) + '</span></div>' +
+            (c.mine ? '<button class="comdel" type="button" aria-label="' +
+              esc(L('ph.delete')) + '">' + svg('del') + '</button>' : '') +
+          '</div>').join('') : UI.empty(L('ph.soc_no_comments'));
+        [...byId('comlist').querySelectorAll('.comdel')].forEach((b) =>
+          b.addEventListener('click', async () => {
+            await post('social', { op: 'uncomment', id: Number(b.closest('.com').dataset.id) });
+            if (counter) counter.textContent = String(Math.max(0, Number(counter.textContent) - 1));
+            draw();
+          }));
+      };
+      const send = async () => {
+        const value = byId('comtext').value.trim();
+        if (!value) return;
+        const r = await post('social', { op: 'comment', id, body: value, app: appId });
+        if (epoch !== sheetEpoch) return;
+        if (!r || !r.ok) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
+        byId('comtext').value = '';
+        if (counter) counter.textContent = String(r.comments);
+        ui('sent');
+        draw();
+      };
+      byId('comgo').addEventListener('click', send);
+      byId('comemoji').addEventListener('click', () => emojiOpen('comtext'));
+      byId('comtext').addEventListener('keydown', (e) => { if (e.key === 'Enter') send(); });
+      draw();
+    }, 'comments');
+}
 
-// -- Snapmatic --------------------------------------------------
+// ── The tab bar ────────────────────────────────────────────────
+// It lives in the app's footer, which is already pinned above the home indicator.
+function socialTabs(appId, tabs) {
+  foot('<nav class="soctabs">' + tabs.map((t) =>
+    '<button class="soctab' + (SOC.tab[appId] === t.id ? ' on' : '') + '" data-tab="' + t.id +
+      '" type="button" aria-label="' + esc(t.label) + '" aria-pressed="' +
+      (SOC.tab[appId] === t.id ? 'true' : 'false') + '">' + svg(t.icon) +
+      (t.badge ? '<i class="socdot"></i>' : '') + '</button>').join('') + '</nav>');
+  qrows('appfoot', '.soctab', (b) => b.addEventListener('click', () => {
+    if (SOC.tab[appId] === b.dataset.tab) return;
+    SOC.tab[appId] = b.dataset.tab;
+    SOC.handle[appId] = '';
+    ui('sheet');
+    socialRender(appId);
+  }));
+}
+
+// ── The feed ───────────────────────────────────────────────────
+async function socialFeed(appId) {
+  const epoch = viewEpoch;
+  const kind = socialKind(appId);
+  loading();
+  const scope = SOC.scope[appId] || 'all';
+  const r = await post('social', { op: 'feed', kind, scope, app: appId });
+  if (!socialActive(appId, epoch)) return;
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), APP_ICON[appId])); return; }
+
+  const list = r.posts || [];
+  const switcher =
+    '<div class="socscope">' +
+      '<button data-scope="all" class="' + (scope === 'all' ? 'on' : '') + '" type="button">' +
+        esc(L('ph.soc_for_you')) + '</button>' +
+      '<button data-scope="following" class="' + (scope === 'following' ? 'on' : '') + '" type="button">' +
+        esc(L('ph.soc_following')) + '</button>' +
+    '</div>';
+
+  // Snapmatic opens on the ring of stories; Bleeter has no stories, it has a timeline.
+  const stories = appId === 'snap' ? '<div class="storybar" id="storybar"></div>' : '';
+  body(switcher + stories + (list.length
+    ? list.map((p) => postCard(p, appId)).join('')
+    : UI.empty(L(scope === 'following' ? 'ph.soc_follow_none' : (appId === 'snap' ? 'ph.snap_none' : 'ph.bleet_none')),
+               APP_ICON[appId])));
+
+  rows('.socscope button', (b) => b.addEventListener('click', () => {
+    SOC.scope[appId] = b.dataset.scope;
+    socialRender(appId);
+  }));
+  wirePosts(appId, () => socialRender(appId));
+  if (appId === 'snap') drawStories(appId);
+}
+
+// ── Stories ────────────────────────────────────────────────────
+// A ring per author, yourself first. They expire after a day on the server, so nothing
+// here has to decide what is still worth showing.
+async function drawStories(appId) {
+  const epoch = viewEpoch;
+  const r = await post('social', { op: 'stories', app: appId });
+  if (!socialActive(appId, epoch)) return;
+  const host = byId('storybar');
+  if (!host) return;
+  const groups = (r && r.stories) || [];
+
+  host.innerHTML =
+    '<button class="storyadd" id="storyadd" type="button">' +
+      '<span class="storyring add">' + svg('add') + '</span>' +
+      '<span class="storyname">' + esc(L('ph.soc_your_story')) + '</span></button>' +
+    groups.map((g, i) =>
+      '<button class="storyone" data-i="' + i + '" type="button">' +
+        '<span class="storyring' + (g.unseen ? ' unseen' : '') + '">' +
+          socAvatar(g, 'storyav') + '</span>' +
+        '<span class="storyname">' + esc(g.mine ? L('ph.soc_you') : g.handle) + '</span></button>').join('');
+
+  byId('storyadd').addEventListener('click', () => pickPhoto(async (url) => {
+    const r2 = await post('social', { op: 'story', image: url, app: appId });
+    if (r2 && r2.ok) { ui('success'); toast(L('ph.soc_story_posted')); drawStories(appId); }
+    else toast(L('ph.err_' + ((r2 && r2.error) || 'x')));
+  }));
+  [...host.querySelectorAll('.storyone')].forEach((b) =>
+    b.addEventListener('click', () => storyViewer(appId, groups[Number(b.dataset.i)])));
+}
+
+// Full-bleed, one photo at a time, tap to advance - the only way a story has ever been
+// read. Marking as seen is fire and forget: it is a read receipt, not a transaction.
+function storyViewer(appId, group) {
+  if (!group || !group.items || !group.items.length) return;
+  let index = 0;
+  const host = byId('folderview');
+  const paint = () => {
+    const item = group.items[index];
+    host.innerHTML =
+      '<div class="storyview">' +
+        '<div class="storybars">' + group.items.map((_, i) =>
+          '<i class="' + (i < index ? 'done' : (i === index ? 'now' : '')) + '"></i>').join('') + '</div>' +
+        '<div class="storyhead">' + socAvatar(group, 'storyav') +
+          '<span>@' + esc(group.handle) + '</span>' +
+          '<span class="storyt">' + esc(socWhen(item.at)) + '</span>' +
+          '<button class="storyclose" type="button" aria-label="' + esc(L('ph.close')) + '">' +
+            svg('xmark') + '</button></div>' +
+        '<div class="storyphoto" style="' + inlineBackground(item.image) + '"></div>' +
+        (item.body ? '<div class="storycap">' + esc(item.body) + '</div>' : '') +
+      '</div>';
+    post('social', { op: 'storySeen', id: item.id });
+    host.querySelector('.storyclose').addEventListener('click', (e) => { e.stopPropagation(); close(); });
+    host.querySelector('.storyphoto').addEventListener('click', () => {
+      index += 1;
+      if (index >= group.items.length) close(); else paint();
+    });
+  };
+  const close = () => {
+    host.classList.remove('on', 'storymode');
+    host.innerHTML = '';
+  };
+  host.classList.add('on', 'storymode');
+  paint();
+}
+
+// ── Search ─────────────────────────────────────────────────────
+async function socialSearch(appId, query) {
+  const epoch = viewEpoch;
+  const r = await post('social', { op: 'search', q: query || '', app: appId });
+  if (!socialActive(appId, epoch)) return;
+  const host = byId('socresults');
+  if (!host) return;
+  const list = (r && r.accounts) || [];
+  host.innerHTML = list.length ? UI.group(list.map((a) =>
+    '<button class="row lead socfind" data-who="' + esc(a.handle) + '" type="button">' +
+      socAvatar(a, 'socav') +
+      '<span class="rowtext"><span class="rowtitle">' +
+        esc(a.displayname || a.handle) + socVerified(a) + '</span>' +
+      '<span class="rowsub">@' + esc(a.handle) + ' · ' + a.followers + ' ' +
+        esc(L('ph.soc_followers')) + '</span></span>' +
+      (a.me ? '' : '<span class="socfollow' + (a.followed ? ' on' : '') + '" data-follow="' +
+        esc(a.handle) + '">' + esc(L(a.followed ? 'ph.soc_unfollow' : 'ph.soc_follow')) + '</span>') +
+    '</button>').join('')) : UI.empty(L('ph.soc_no_user'));
+
+  [...host.querySelectorAll('.socfind')].forEach((b) => b.addEventListener('click', (e) => {
+    // The follow pill lives inside the row, so it has to claim the tap for itself.
+    const pill = e.target.closest('[data-follow]');
+    if (pill) { e.stopPropagation(); socialFollow(appId, pill.dataset.follow, pill); return; }
+    socialProfile(appId, b.dataset.who);
+  }));
+}
+
+function socialSearchView(appId) {
+  body(
+    '<div class="socsearch">' + svg('search') +
+      '<input id="socq" autocomplete="off" placeholder="' + esc(L('ph.soc_search_ph')) + '" /></div>' +
+    '<div id="socresults">' + UI.empty(L('ph.loading')) + '</div>'
+  );
+  let timer = null;
+  byId('socq').addEventListener('input', () => {
+    clearTimeout(timer);
+    // A keystroke is not a query. Wait for the typing to stop rather than asking the
+    // server once per letter.
+    timer = setTimeout(() => socialSearch(appId, byId('socq').value.trim()), 220);
+  });
+  socialSearch(appId, '');
+}
+
+async function socialFollow(appId, handle, pill) {
+  const r = await post('social', { op: 'follow', handle, app: appId });
+  if (!r || !r.ok) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return null; }
+  ui(r.followed ? 'toggleon' : 'toggleoff');
+  if (pill) {
+    pill.classList.toggle('on', r.followed);
+    pill.textContent = L(r.followed ? 'ph.soc_unfollow' : 'ph.soc_follow');
+  }
+  return r;
+}
+
+// ── A profile ──────────────────────────────────────────────────
+async function socialProfile(appId, handle) {
+  const epoch = beginView();
+  SOC.tab[appId] = 'me';
+  SOC.handle[appId] = handle || '';
+  loading();
+  const r = await post('social', { op: 'profile', handle: handle || '', app: appId });
+  if (!socialActive(appId, viewEpoch)) return;
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), APP_ICON[appId])); return; }
+
+  const a = r.account, c = r.counts || {};
+  const grid = appId === 'snap';
+  const posts = r.posts || [];
+
+  body(
+    '<div class="socprof">' + socAvatar(a, 'socbigav') +
+      '<div class="socname">' + esc(a.displayname || a.handle) + socVerified(a) + '</div>' +
+      '<div class="sochandle">@' + esc(a.handle) + '</div>' +
+      (a.bio ? '<div class="socbio">' + esc(a.bio) + '</div>' : '') +
+      '<div class="soccounts">' +
+        '<span><b>' + (c.posts || 0) + '</b>' + esc(L('ph.soc_posts')) + '</span>' +
+        '<span><b>' + (c.followers || 0) + '</b>' + esc(L('ph.soc_followers')) + '</span>' +
+        '<span><b>' + (c.following || 0) + '</b>' + esc(L('ph.soc_following_count')) + '</span>' +
+      '</div>' +
+      (r.me ? '<button class="socedit" id="socedit" type="button">' + esc(L('ph.soc_edit')) + '</button>'
+            : '<div class="socprofacts">' +
+                '<button class="socbig' + (r.followed ? ' on' : '') + '" id="socfollow" type="button">' +
+                  esc(L(r.followed ? 'ph.soc_unfollow' : 'ph.soc_follow')) + '</button>' +
+                '<button class="socbig plain" id="socdm" type="button">' +
+                  esc(L('ph.soc_message')) + '</button></div>') +
+    '</div>' +
+    (posts.length
+      ? (grid ? '<div class="socgrid">' + posts.map((p) =>
+            '<button class="socthumb" data-id="' + p.id + '" style="' +
+              inlineBackground(p.image) + '" type="button"></button>').join('') + '</div>'
+          : posts.map((p) => postCard(p, appId)).join(''))
+      : UI.empty(L('ph.soc_no_posts'), APP_ICON[appId]))
+  );
+  pushAnim();
+
+  if (r.me) byId('socedit').addEventListener('click', () => socialEdit(appId, a));
+  else {
+    byId('socfollow').addEventListener('click', () => socialFollow(appId, a.handle, byId('socfollow')));
+    byId('socdm').addEventListener('click', () => socialDmThread(appId, a.handle));
+  }
+  if (grid) rows('.socthumb', (b) => b.addEventListener('click', () => {
+    const one = posts.find((p) => String(p.id) === b.dataset.id);
+    if (!one) return;
+    sheet(L('app.snap'), '<div class="socone">' + postCard(one, appId) + '</div>', () => {
+      wirePosts(appId, () => socialRender(appId));
+    });
+  }));
+  else wirePosts(appId, () => socialProfile(appId, handle));
+}
+
+function socialEdit(appId, account) {
+  sheet(L('ph.soc_edit'),
+    UI.field('socdn', L('ph.soc_displayname'), account.displayname || '', 'maxlength="40"') +
+    UI.field('socav', L('ph.soc_avatar'), account.avatar || '', 'maxlength="300"') +
+    UI.field('socbio', L('ph.soc_bio'), account.bio || '', 'maxlength="160"') +
+    UI.button(L('ph.save'), 'socsave'),
+    () => {
+      const epoch = sheetEpoch;
+      byId('socsave').addEventListener('click', async () => {
+        const r = await post('social', { op: 'setup', app: appId,
+          displayname: byId('socdn').value, avatar: byId('socav').value, bio: byId('socbio').value });
+        if (!r || !r.ok) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
+        if (!closeSheet(false, epoch)) return;
+        socialAcc[appId] = r.account;
+        ui('success');
+        socialProfile(appId, '');
+      });
+    });
+}
+
+// ── Direct messages ────────────────────────────────────────────
+async function socialDmList(appId) {
+  const epoch = viewEpoch;
+  loading();
+  const r = await post('social', { op: 'dmList', app: appId });
+  if (!socialActive(appId, epoch)) return;
+  const threads = (r && r.threads) || [];
+  body(threads.length ? UI.group(threads.map((t) =>
+    '<button class="row lead socdmrow" data-who="' + esc(t.handle) + '" type="button">' +
+      socAvatar(t, 'socav') +
+      '<span class="rowtext"><span class="rowtitle">' + esc(t.displayname || t.handle) + '</span>' +
+      '<span class="rowsub">' + esc((t.mine ? L('ph.you') + ' ' : '') + (t.body || L('ph.photo'))) + '</span></span>' +
+      (t.unread ? '<span class="socunread">' + t.unread + '</span>' : '') +
+    '</button>').join('')) : UI.empty(L('ph.soc_no_dm'), 'messages'));
+  rows('.socdmrow', (b) => b.addEventListener('click', () => socialDmThread(appId, b.dataset.who)));
+}
+
+async function socialDmThread(appId, handle) {
+  const epoch = beginView();
+  loading();
+  const r = await post('social', { op: 'dmThread', handle, app: appId });
+  if (!socialActive(appId, viewEpoch)) return;
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'messages')); return; }
+
+  // Back goes to the thread list, not out of the app: this is a screen deeper, and the
+  // navigation bar should say so.
+  setNav('@' + handle, L('app.' + appId), null, () => { SOC.tab[appId] = 'dm'; socialRender(appId); });
+  const bubbles = (r.messages || []).map((m) =>
+    '<div class="bub ' + (m.mine ? 'me' : 'them') + '">' +
+      (m.image ? '<img class="bubimg" src="' + esc(m.image) + '" alt="" />' : '') +
+      (m.body ? '<span>' + esc(m.body) + '</span>' : '') + '</div>').join('');
+  body('<div class="bubs" id="socbubs">' + (bubbles || UI.empty(L('ph.soc_dm_start'))) + '</div>');
+  foot(
+    '<div class="comform dmform">' +
+      '<input id="dmtext" maxlength="500" placeholder="' + esc(L('ph.message')) + '" />' +
+      '<button id="dmemoji" type="button" aria-label="' + esc(L('ph.emoji')) + '">😊</button>' +
+      '<button id="dmphoto" type="button" aria-label="' + esc(L('ph.pick_photo')) + '">' + svg('images') + '</button>' +
+      '<button id="dmgo" type="button" aria-label="' + esc(L('ph.send')) + '">' + svg('send') + '</button>' +
+    '</div>');
+  byId('appbody').scrollTop = byId('appbody').scrollHeight;
+
+  const send = async (payload) => {
+    const r2 = await post('social', Object.assign({ op: 'dmSend', handle, app: appId }, payload));
+    if (!r2 || !r2.ok) { toast(L('ph.err_' + ((r2 && r2.error) || 'x'))); return; }
+    ui('sent');
+    socialDmThread(appId, handle);
+  };
+  byId('dmgo').addEventListener('click', () => {
+    const value = byId('dmtext').value.trim();
+    if (value) send({ body: value });
+  });
+  byId('dmtext').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    const value = byId('dmtext').value.trim();
+    if (value) send({ body: value });
+  });
+  byId('dmemoji').addEventListener('click', () => emojiOpen('dmtext'));
+  byId('dmphoto').addEventListener('click', () => pickPhoto((url) => send({ image: url })));
+}
+
+// ── The router ─────────────────────────────────────────────────
+// One entry point per app: it draws the tab bar, then whichever screen the tab names.
+function socialRender(appId) {
+  if (!openApp || openApp.id !== appId) return;
+  beginView();
+  foot('');
+  const tabs = appId === 'hush'
+    ? [{ id: 'swipe', icon: 'hush', label: L('app.hush') },
+       { id: 'matches', icon: 'heart', label: L('ph.hush_matches') },
+       { id: 'me', icon: 'contacts', label: L('ph.soc_profile') }]
+    : [{ id: 'feed', icon: 'home', label: L('ph.soc_feed') },
+       { id: 'search', icon: 'search', label: L('ph.soc_search') },
+       { id: 'dm', icon: 'messages', label: L('ph.soc_dm') },
+       { id: 'me', icon: 'contacts', label: L('ph.soc_profile') }];
+
+  const composer = appId === 'bleeter' ? bleetCompose : (appId === 'snap' ? snapCompose : null);
+  const wantsAdd = composer && SOC.tab[appId] === 'feed';
+  setNav(L('app.' + appId), null, wantsAdd ? { icon: 'add', onClick: composer } : null);
+  socialTabs(appId, tabs);
+
+  const tab = SOC.tab[appId];
+  if (appId === 'hush') {
+    if (tab === 'matches') return hushMatches();
+    if (tab === 'me') return hushProfile();
+    return hushSwipe();
+  }
+  if (tab === 'search') return socialSearchView(appId);
+  if (tab === 'dm') return socialDmList(appId);
+  if (tab === 'me') return socialProfile(appId, SOC.handle[appId]);
+  return socialFeed(appId);
+}
+
+// -- Composers --------------------------------------------------
+function bleetCompose() {
+  sheet(L('ph.bleet_new'),
+    UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') +
+      UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') +
+      UI.button(L('ph.pick_photo'), 'bpick', 'plain') + UI.button(L('ph.bleet_send'), 'bgo'),
+    () => {
+      byId('bemoji').addEventListener('click', () => emojiOpen('btext'));
+      // A post can carry a photo straight off the phone rather than a pasted link.
+      byId('bpick').addEventListener('click', () => pickPhoto(async (url) => {
+        const bodyText = byId('btext').value;
+        const epoch = sheetEpoch;
+        const r = await post('social', { op: 'post', kind: 'photo', body: bodyText, image: url });
+        if (!closeSheet(false, epoch)) return;
+        if (r && r.ok) { ui('sent'); socialRender('bleeter'); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      }));
+      byId('bgo').addEventListener('click', async () => {
+        const bodyText = byId('btext').value;
+        const epoch = sheetEpoch;
+        const r = await post('social', { op: 'post', kind: 'text', body: bodyText });
+        if (!closeSheet(false, epoch)) return;
+        if (r && r.ok) { ui('sent'); socialRender('bleeter'); }
+        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+      });
+    });
+}
+
 // Posting starts from the gallery, because that is where photos already are: the camera
 // shoots, Snapmatic shows.
-RENDER.snap = () => needAccount('snap', async () => {
-  setNav(L('app.snap'), null, { icon: 'add', onClick: () => {
-    const shots = state.photos || [];
-    if (!shots.length) { toast(L('ph.snap_noshots')); return; }
-    sheet(L('ph.snap_new'),
-      '<div class="shots" style="margin-bottom:10px">' + shots.map((v, i) =>
-        '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>' +
-      UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"') +
-        UI.button('😊 ' + L('ph.emoji'), 'semoji', 'plain'),
-      () => {
-        byId('semoji').addEventListener('click', () => emojiOpen('scap'));
-        [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
-          el.addEventListener('click', async () => {
-            const bodyText = byId('scap').value;
-            const epoch = sheetEpoch;
-            const r = await post('social', { op: 'post', kind: 'photo',
-              image: photoRow(shots[Number(el.dataset.i)]).url, body: bodyText });
-            if (!closeSheet(false, epoch)) return;
-            if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-          }));
-      });
-  } });
-  await socialFeed('photo', 'ph.snap_none');
-});
+function snapCompose() {
+  const shots = state.photos || [];
+  if (!shots.length) { toast(L('ph.snap_noshots')); return; }
+  sheet(L('ph.snap_new'),
+    '<div class="shots" style="margin-bottom:10px">' + shots.map((v, i) =>
+      '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>' +
+    UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"') +
+      UI.button('😊 ' + L('ph.emoji'), 'semoji', 'plain'),
+    () => {
+      byId('semoji').addEventListener('click', () => emojiOpen('scap'));
+      [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
+        el.addEventListener('click', async () => {
+          const bodyText = byId('scap').value;
+          const epoch = sheetEpoch;
+          const r = await post('social', { op: 'post', kind: 'photo',
+            image: photoRow(shots[Number(el.dataset.i)]).url, body: bodyText });
+          if (!closeSheet(false, epoch)) return;
+          if (r && r.ok) { ui('sent'); socialRender('snap'); }
+          else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        }));
+    });
+}
+
+RENDER.bleeter = () => needAccount('bleeter', () => socialRender('bleeter'));
+RENDER.snap = () => needAccount('snap', () => socialRender('snap'));
+RENDER.hush = () => needAccount('hush', () => socialRender('hush'));
 
 // -- Hush -------------------------------------------------------
-RENDER.hush = () => needAccount('hush', hushMain);
-async function hushMain() {
-  if (!openApp || openApp.id !== 'hush') return;
-  beginView();
-  setNav(L('app.hush'), null);
+// The deck. One card at a time, thrown left or right - by the buttons, or by dragging
+// it, which is the gesture the whole genre is built on.
+async function hushSwipe() {
+  const epoch = viewEpoch;
   loading();
   const me = await post('social', { op: 'hushMe' });
+  if (!socialActive('hush', epoch)) return;
   if (!me || me.error) { body(UI.empty(L('ph.err_' + ((me && me.error) || 'off')), 'hush')); return; }
-
-  if (!me.profile) {
-    // Hush has its own profile, because who you are to a date is not who you are to the
-    // whole network. The photo defaults to the account avatar.
-    body(
-      UI.field('hbio', L('ph.hush_bio'), '', 'maxlength="160"') +
-      UI.field('hphoto', L('ph.hush_photo'), '', 'maxlength="300"') +
-      UI.button(L('ph.hush_join'), 'hgo') +
-      '<div class="groupfoot">' + esc(L('ph.hush_hint')) + '</div>'
-    );
-    byId('hgo').addEventListener('click', async () => {
-      const r = await post('social', { op: 'hushSetup', bio: byId('hbio').value, photo: byId('hphoto').value });
-      if (r && r.ok) RENDER.hush(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
-    });
-    return;
-  }
+  if (!me.profile) { hushOnboard(); return; }
 
   const r = await post('social', { op: 'hushNext' });
+  if (!socialActive('hush', epoch)) return;
   if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'hush')); return; }
   const pf = r.profile;
   if (!pf) { body(UI.empty(L('ph.hush_empty'), 'hush')); return; }
 
   body(
-    '<div class="hushcard">' +
-      '<div class="hphoto"' + (pf.photo ? ' style="' + inlineBackground(pf.photo) + '"' : '') + '>' +
-        '<div class="hname">' + esc(pf.name || '?') + (pf.age ? ', ' + pf.age : '') + '</div></div>' +
-      (pf.bio ? '<div class="hbio">' + esc(pf.bio) + '</div>' : '') +
+    '<div class="hushdeck">' +
+      '<div class="hushcard" id="hcard">' +
+        '<div class="hphoto"' + (pf.photo ? ' style="' + inlineBackground(pf.photo) + '"' : '') + '>' +
+          '<span class="hstamp yes">' + esc(L('ph.like')) + '</span>' +
+          '<span class="hstamp no">' + esc(L('ph.pass')) + '</span>' +
+          '<div class="hmeta">' +
+            '<div class="hname">' + esc(pf.name || '?') + (pf.age ? ', ' + pf.age : '') + '</div>' +
+            (pf.bio ? '<div class="hbio">' + esc(pf.bio) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+      '</div>' +
     '</div>' +
     '<div class="hushrow">' +
       '<button class="hushbtn no" id="hno" type="button" aria-label="' +
-        esc(L('ph.pass')) + '">' + svg('del') + '</button>' +
+        esc(L('ph.pass')) + '">' + svg('xmark') + '</button>' +
       '<button class="hushbtn yes" id="hyes" type="button" aria-label="' +
         esc(L('ph.like')) + '">' + svg('heart') + '</button>' +
     '</div>'
   );
   pushAnim();
+
   const choose = async (like) => {
+    const card = byId('hcard');
+    if (card) {
+      card.classList.add(like ? 'flyright' : 'flyleft');
+      ui(like ? 'toggleon' : 'toggleoff');
+    }
     const c = await post('social', { op: 'hushChoice', ref: pf.ref, like });
     if (c && c.error) { toast(L('ph.err_' + ((c && c.error) || 'x'))); return; }
     if (c && c.match) {
+      ui('success');
       banner({ app: 'hush', icon: 'hush', title: L('ph.hush_match'),
                body: (c.name || '?') + (c.number ? '  ' + c.number : '') });
     }
-    RENDER.hush();
+    setTimeout(() => { if (socialActive('hush', epoch)) hushSwipe(); }, 240);
   };
   byId('hno').addEventListener('click', () => choose(false));
   byId('hyes').addEventListener('click', () => choose(true));
-};
+  wireHushDrag(byId('hcard'), choose);
+}
+
+// Drag the card and it follows the finger, tilting as it goes; let go past the
+// threshold and it is a choice. Anything short of that springs back, so a hesitant
+// swipe is never counted as an answer.
+function wireHushDrag(card, choose) {
+  if (!card) return;
+  let start = null;
+  const THRESHOLD = 88;
+
+  card.addEventListener('pointerdown', (e) => {
+    start = { x: e.clientX, id: e.pointerId };
+    card.classList.add('dragging');
+    if (card.setPointerCapture) { try { card.setPointerCapture(e.pointerId); } catch {} }
+  });
+  card.addEventListener('pointermove', (e) => {
+    if (!start || start.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    card.style.transform = 'translateX(' + dx + 'px) rotate(' + (dx / 22) + 'deg)';
+    card.classList.toggle('wantyes', dx > 30);
+    card.classList.toggle('wantno', dx < -30);
+  });
+  const release = (e) => {
+    if (!start || start.id !== e.pointerId) return;
+    const dx = e.clientX - start.x;
+    start = null;
+    card.classList.remove('dragging', 'wantyes', 'wantno');
+    card.style.removeProperty('transform');
+    if (Math.abs(dx) > THRESHOLD) choose(dx > 0);
+  };
+  card.addEventListener('pointerup', release);
+  card.addEventListener('pointercancel', () => {
+    start = null;
+    card.classList.remove('dragging', 'wantyes', 'wantno');
+    card.style.removeProperty('transform');
+  });
+}
+
+// Hush has its own profile, because who you are to a date is not who you are to the
+// whole network.
+function hushOnboard() {
+  body(
+    UI.field('hbio', L('ph.hush_bio'), '', 'maxlength="160"') +
+    UI.field('hphoto', L('ph.hush_photo'), '', 'maxlength="300"') +
+    UI.button(L('ph.pick_photo'), 'hpick', 'plain') +
+    UI.button(L('ph.hush_join'), 'hgo') +
+    '<div class="groupfoot">' + esc(L('ph.hush_hint')) + '</div>'
+  );
+  byId('hpick').addEventListener('click', () => pickPhoto((url) => { byId('hphoto').value = url; }));
+  byId('hgo').addEventListener('click', async () => {
+    const r = await post('social', { op: 'hushSetup',
+      bio: byId('hbio').value, photo: byId('hphoto').value, active: true });
+    if (r && r.ok) { ui('success'); socialRender('hush'); }
+    else toast(L('ph.err_' + ((r && r.error) || 'x')));
+  });
+}
+
+async function hushMatches() {
+  const epoch = viewEpoch;
+  loading();
+  const r = await post('social', { op: 'hushMatches' });
+  if (!socialActive('hush', epoch)) return;
+  if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'hush')); return; }
+  const list = r.matches || [];
+  body(list.length ? UI.group(list.map((m, i) =>
+    '<button class="row lead hushmatch" data-i="' + i + '" type="button">' +
+      (m.photo ? '<span class="socav" style="' + inlineBackground(m.photo) + '"></span>'
+               : '<span class="socav">' + esc(String(m.name || '?').slice(0, 1)) + '</span>') +
+      '<span class="rowtext"><span class="rowtitle">' +
+        esc(m.name || '?') + (m.age ? ', ' + m.age : '') + '</span>' +
+      '<span class="rowsub">' + esc(m.bio || m.number || '') + '</span></span>' +
+      svg('chevron') +
+    '</button>').join('')) : UI.empty(L('ph.hush_no_matches'), 'hush'));
+
+  // A match is somebody you already swapped numbers with, so the useful thing to do
+  // with one is call or write to them.
+  rows('.hushmatch', (b) => b.addEventListener('click', () => {
+    const m = list[Number(b.dataset.i)];
+    if (!m || !m.number) { toast(L('ph.hush_no_number')); return; }
+    sheet(m.name || '?',
+      UI.row({ icon: 'phone', title: L('ph.call'), value: m.number, data: { act: 'call' } }) +
+      UI.row({ icon: 'messages', title: L('ph.message'), data: { act: 'sms' } }),
+      () => {
+        const epoch2 = sheetEpoch;
+        [...byId('sheet').querySelectorAll('[data-act]')].forEach((el) =>
+          el.addEventListener('click', () => {
+            if (!closeSheet(false, epoch2)) return;
+            if (el.dataset.act === 'call') { post('call', { number: m.number }); return; }
+            const messages = (state.apps || []).find((a) => a.id === 'messages');
+            if (!messages) return;
+            enterApp(messages, null);
+            openThread(m.number);
+          }));
+      });
+  }));
+}
+
+async function hushProfile() {
+  const epoch = viewEpoch;
+  loading();
+  const me = await post('social', { op: 'hushMe' });
+  if (!socialActive('hush', epoch)) return;
+  if (!me || me.error) { body(UI.empty(L('ph.err_' + ((me && me.error) || 'off')), 'hush')); return; }
+  const pf = me.profile || { bio: '', photo: '', active: true };
+
+  body(
+    '<div class="socprof">' +
+      (pf.photo ? '<span class="socbigav" style="' + inlineBackground(pf.photo) + '"></span>'
+                : '<span class="socbigav">' + svg('hush') + '</span>') +
+      '<div class="socbio">' + esc(pf.bio || L('ph.hush_nobio')) + '</div>' +
+    '</div>' +
+    UI.field('hbio', L('ph.hush_bio'), pf.bio || '', 'maxlength="160"') +
+    UI.field('hphoto', L('ph.hush_photo'), pf.photo || '', 'maxlength="300"') +
+    UI.button(L('ph.pick_photo'), 'hpick', 'plain') +
+    UI.group(UI.row({ icon: 'hush', title: L('ph.hush_active'),
+                      toggle: pf.active !== false, data: { t: 'active' } })) +
+    '<div class="groupfoot">' + esc(L('ph.hush_active_hint')) + '</div>' +
+    UI.button(L('ph.save'), 'hsave')
+  );
+
+  let active = pf.active !== false;
+  byId('hpick').addEventListener('click', () => pickPhoto((url) => { byId('hphoto').value = url; }));
+  // The kit's switch is a styled span, not a checkbox, so the row owns the state.
+  rows('.row[data-t="active"]', (el) => el.addEventListener('click', () => {
+    active = !active;
+    const knob = el.querySelector('.sw');
+    if (knob) knob.classList.toggle('on', active);
+    ui(active ? 'toggleon' : 'toggleoff');
+  }));
+  byId('hsave').addEventListener('click', async () => {
+    const r = await post('social', { op: 'hushSetup',
+      bio: byId('hbio').value, photo: byId('hphoto').value, active });
+    if (r && r.ok) { ui('success'); toast(L('ph.saved')); }
+    else toast(L('ph.err_' + ((r && r.error) || 'x')));
+  });
+}
 
 
 // ══ Sound ══════════════════════════════════════════════════════

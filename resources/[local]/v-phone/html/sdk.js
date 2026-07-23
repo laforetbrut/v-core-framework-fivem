@@ -122,6 +122,9 @@
     timer: 'M9 2h6M12 5v2M12 12l3-2M12 6a7 7 0 1 0 7 7 7 7 0 0 0-7-7Z',
     mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
     reply: 'M9 5L3 11l6 6M3 11h10a8 8 0 0 1 8 8',
+    // Two arrows chasing each other: a post sent round again.
+    repost: 'M4 9V8a3 3 0 0 1 3-3h10l-3-3M20 15v1a3 3 0 0 1-3 3H7l3 3M17 5l3 3M7 19l-3-3',
+    home: 'M4 11.2 12 4l8 7.2M6.5 10v9.2h4.2V15h2.6v4.2h4.2V10',
     star2: 'M12 3l2.7 5.9 6.3.7-4.7 4.3 1.3 6.3L12 17l-5.6 3.2 1.3-6.3L3 9.6l6.3-.7z',
   };
   const FILLED = { phone: 1, messages: 1, hangup: 1, answer: 1, send: 1, star: 1 };
