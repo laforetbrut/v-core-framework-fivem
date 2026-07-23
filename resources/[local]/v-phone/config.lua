@@ -65,6 +65,11 @@ Config.Apps = {
     -- `optional` is NOT installed to begin with - it has to be downloaded, which is the
     -- only honest way to make a store mean something.
     -- `category` is what the store sorts by.
+    -- The order below IS the home screen on a phone nobody has rearranged yet, and it is
+    -- grouped the way a real one ships: the four you reach for without thinking in the
+    -- dock, then communication and travel, capture and media, life and work, the small
+    -- tools, anything a job unlocks, the downloads, and the store and settings last.
+    -- A player who rearranges their apps overrides this; it is only ever the default.
     { id = 'phone',    label = 'app.phone',    icon = 'phone',    owner = 'v-phone',    slot = 1, dock = true,
       required = true, category = 'essentials' },
     { id = 'messages', label = 'app.messages', icon = 'messages', owner = 'v-phone',    slot = 2, dock = true,
@@ -73,39 +78,36 @@ Config.Apps = {
       required = true, category = 'essentials' },
     { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4, dock = true,
       category = 'finance' },
-    { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 5,
-      category = 'travel' },
-    { id = 'wallet',   label = 'app.wallet',   icon = 'wallet',   owner = 'v-licenses', slot = 6,
-      category = 'finance' },
-    { id = 'jobs',     label = 'app.jobs',     icon = 'jobs',     owner = 'v-cityhall', slot = 7,
+    { id = 'mail',     label = 'app.mail',     icon = 'mail',     owner = 'v-phone',    slot = 5,
       category = 'work' },
-    { id = 'maps',     label = 'app.maps',     icon = 'map',      owner = 'v-world',    slot = 8,
+    { id = 'maps',     label = 'app.maps',     icon = 'map',      owner = 'v-world',    slot = 6,
       category = 'travel' },
+    { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 7,
+      category = 'utilities' },
+    { id = 'gallery',  label = 'app.gallery',  icon = 'images',   owner = 'v-phone',    slot = 8,
+      category = 'utilities' },
     { id = 'music',    label = 'app.music',    icon = 'music',    owner = 'v-music',    slot = 9,
       category = 'entertainment' },
-    { id = 'property', label = 'app.property', icon = 'house',    owner = 'v-housing',  slot = 10,
+    { id = 'garage',   label = 'app.garage',   icon = 'garage',   owner = 'v-vehicles', slot = 10,
+      category = 'travel' },
+    { id = 'property', label = 'app.property', icon = 'house',    owner = 'v-housing',  slot = 11,
       category = 'utilities' },
     -- Police only by default. The operator can open it up, or gate something else the
     -- same way, from Editor -> Phone apps.
-    { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 11,
+    { id = 'wallet',   label = 'app.wallet',   icon = 'wallet',   owner = 'v-licenses', slot = 12,
+      category = 'finance' },
+    { id = 'jobs',     label = 'app.jobs',     icon = 'jobs',     owner = 'v-cityhall', slot = 13,
+      category = 'work' },
+    { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 14,
+      category = 'health' },
+    { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 15,
+      category = 'utilities' },
+    { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 16,
+      category = 'utilities' },
+    { id = 'mdt',      label = 'app.mdt',      icon = 'shield',   owner = 'v-police',   slot = 17,
       -- Job apps get their own aisle: it is only in the store at all for the people
       -- who hold the job, so it has no business sitting under Work next to Jobs.
       job = 'police', category = 'duty' },
-    { id = 'calc',     label = 'app.calc',     icon = 'calc',     owner = 'v-phone',    slot = 12,
-      category = 'utilities' },
-    { id = 'health',   label = 'app.health',   icon = 'heart',    owner = 'v-status',   slot = 13,
-      category = 'health' },
-    { id = 'reminders', label = 'app.reminders', icon = 'check',  owner = 'v-phone',    slot = 14,
-      category = 'utilities' },
-    { id = 'camera',   label = 'app.camera',   icon = 'camera',   owner = 'v-phone',    slot = 15,
-      category = 'utilities' },
-    -- Camera shoots, Gallery keeps: the same photo store, two apps, as on a real phone.
-    { id = 'gallery',  label = 'app.gallery',  icon = 'images',   owner = 'v-phone',    slot = 16,
-      category = 'utilities' },
-    { id = 'mail',     label = 'app.mail',     icon = 'mail',     owner = 'v-phone',    slot = 17,
-      category = 'work' },
-    -- The social apps ship as downloads. A network you joined is worth more than one you
-    -- woke up already signed into.
     { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 18,
       optional = true, category = 'social' },
     { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 19,
