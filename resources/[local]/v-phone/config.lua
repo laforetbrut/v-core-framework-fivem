@@ -102,17 +102,19 @@ Config.Apps = {
     -- Camera shoots, Gallery keeps: the same photo store, two apps, as on a real phone.
     { id = 'gallery',  label = 'app.gallery',  icon = 'images',   owner = 'v-phone',    slot = 16,
       category = 'utilities' },
+    { id = 'mail',     label = 'app.mail',     icon = 'mail',     owner = 'v-phone',    slot = 17,
+      category = 'work' },
     -- The social apps ship as downloads. A network you joined is worth more than one you
     -- woke up already signed into.
-    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 17,
+    { id = 'bleeter',  label = 'app.bleeter',  icon = 'bleet',    owner = 'v-social',   slot = 18,
       optional = true, category = 'social' },
-    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 18,
+    { id = 'snap',     label = 'app.snap',     icon = 'snap',     owner = 'v-social',   slot = 19,
       optional = true, category = 'social' },
-    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 19,
+    { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 20,
       optional = true, category = 'social' },
-    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 20,
+    { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 21,
       required = true, category = 'essentials' },
-    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 21,
+    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 22,
       required = true, category = 'essentials' },
 }
 
@@ -150,6 +152,23 @@ Config.WallpaperFit = 'cover'
 -- on the other side; neither is worth making them live without.
 Config.DeviceSize = 1.0        -- 0.75 .. 1.15
 Config.DeviceSide = 'right'    -- right | left
+
+-- ── Mail ───────────────────────────────────────────────────────
+-- Addresses are chosen once and belong to the character. The domains are the game's own
+-- companies, because inventing a webmail brand would break the world every other module
+-- is set in.
+Config.Mail = {
+    -- The domains offered when a player creates their address. Add, remove or reorder
+    -- freely: the first one is simply what the picker starts on, and the server accepts an
+    -- address only if its domain is in this list. Existing addresses are never touched by a
+    -- change here, so removing a domain stops new sign-ups on it without breaking anyone.
+    domains  = { 'ls.com', 'eyefind.info', 'lifeinvader.com', 'bilkinton.com' },
+    maxSubject = 80,
+    maxBody    = 2000,
+    maxTo      = 10,       -- a group mail, not a mailing list
+    localMin   = 3,
+    localMax   = 20,
+}
 
 -- ── AirDrop ────────────────────────────────────────────────────
 -- Send a contact, your number or a photo to a nearby phone. Both ends must have

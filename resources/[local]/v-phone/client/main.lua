@@ -252,6 +252,7 @@ RegisterNUICallback('prefs', function(data, cb)
     end, data)
 end)
 RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
+RegisterNUICallback('mail',          relay('v-phone:mail'))
 RegisterNUICallback('lookup',        relay('v-phone:lookup'))
 
 RegisterNUICallback('close', function(_, cb) closePhone(); cb('ok') end)
@@ -513,12 +514,25 @@ RegisterNetEvent('v-phone:client:power', function(p)
     power = p or power
     SendNUIMessage({ action = 'power', power = power })
 
-    -- Warn once on the way past each threshold, not every tick past it.
-    local low, crit = 20, 5
+    -- Warn once on the way past each threshold, not every tick past it. It arrives as a
+    -- real phone notification - so it buzzes, lands in the notification centre, and peeks
+    -- the handset out of a pocket - rather than as a message in the corner of the screen.
+    local low, crit = 15, 5
+    local function batteryWarn(key)
+        local b = { app = 'settings', icon = 'settings',
+                    title = L('ph.battery_title'):format(math.floor(power.battery or 0)),
+                    body = L(key), hasItem = true }
+        if isOpen then
+            SendNUIMessage({ action = 'banner', banner = b })
+            buzz(false)
+        else
+            peek('banner', b)
+        end
+    end
     if power.battery <= crit and wasLow > crit then
-        V.Notify(L('ph.battery_critical'), 'error')
+        batteryWarn('ph.battery_critical')
     elseif power.battery <= low and wasLow > low then
-        V.Notify(L('ph.battery_low'), 'warning')
+        batteryWarn('ph.battery_low')
     end
     if power.battery <= 0 and wasLow > 0 then
         closePhone()
