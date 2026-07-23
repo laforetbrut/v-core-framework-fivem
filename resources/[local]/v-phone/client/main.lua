@@ -584,9 +584,16 @@ RegisterNUICallback('photos', relay('v-phone:photo'))
 --- the client decides which callbacks that can ever mean - the same shape as the SDK.
 local SOCIAL_OPS = {
     me = true, setup = true, feed = true, post = true, like = true,
-    hushMe = true, hushSetup = true, hushNext = true, hushChoice = true,
+    hushMe = true, hushSetup = true, hushNext = true, hushChoice = true, hushMatches = true,
     -- The account system: SMS verification, sign-up, login, logout.
     requestCode = true, verifyCode = true, register = true, login = true, logout = true,
+    -- People: a profile, the directory, following.
+    profile = true, search = true, follow = true,
+    -- What a post can carry beyond a like.
+    comments = true, comment = true, uncomment = true, repost = true, delete = true,
+    -- Stories, and the direct messages between two handles.
+    stories = true, story = true, storySeen = true,
+    dmList = true, dmThread = true, dmSend = true,
 }
 
 RegisterNUICallback('social', function(data, cb)
