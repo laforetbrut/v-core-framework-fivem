@@ -31,6 +31,15 @@ local function positionOf(s)
         local ent = NetToVeh(s.netid)
         if ent and ent ~= 0 and DoesEntityExist(ent) then return GetEntityCoords(ent), ent end
     end
+    -- A phone walks around with the person holding it.
+    if s.player then
+        local pl = GetPlayerFromServerId(s.player)
+        if pl and pl ~= -1 then
+            local ped = GetPlayerPed(pl)
+            if ped and ped ~= 0 and DoesEntityExist(ped) then return GetEntityCoords(ped), ped end
+        end
+        return vector3(0.0, 0.0, 0.0), nil
+    end
     return vector3(num(s.x), num(s.y), num(s.z)), nil
 end
 

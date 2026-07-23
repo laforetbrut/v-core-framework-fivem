@@ -639,6 +639,40 @@ RENDER.phone = () => {
   byId('dial').addEventListener('click', () => { if (dialed) post('call', { number: dialed }); });
 };
 
+// ── Health record ──────────────────────────────────────────────
+// The half of a Health app the game cannot work out for itself: blood type, allergies,
+// what you are on, who to call. It rides on the character, so it survives the handset.
+function healthRecord() {
+  setNav(L('app.health'), L('app.health'));
+  loading();
+  post('health', { op: 'get' }).then((d) => {
+    const r = (d && d.record) || {};
+    body(
+      UI.bigNumber(L('ph.steps'), String(r.steps || 0), L('ph.steps_today')) +
+      UI.field('hblood', L('ph.blood'), r.blood || '', 'maxlength="6"') +
+      UI.field('hallerg', L('ph.allergies'), r.allergies || '', 'maxlength="300"') +
+      UI.field('hcond', L('ph.conditions'), r.conditions || '', 'maxlength="300"') +
+      UI.field('hmeds', L('ph.meds'), r.meds || '', 'maxlength="300"') +
+      UI.field('hice', L('ph.ice'), r.ice || '', 'maxlength="60"') +
+      UI.group([UI.row({ icon: 'heart', tint: '#FF2D55', title: L('ph.donor'),
+        toggle: r.donor === true, data: { t: 'donor' } })]) +
+      UI.button(L('ph.save'), 'hsave', 'tinted') +
+      '<div class="groupfoot">' + esc(L('ph.health_hint')) + '</div>'
+    );
+    let donor = r.donor === true;
+    rows('.row', (el) => el.addEventListener('click', () => {
+      donor = !donor;
+      el.querySelector('.sw').classList.toggle('on', donor);
+    }));
+    byId('hsave').addEventListener('click', async () => {
+      const res = await post('health', { op: 'set', blood: byId('hblood').value,
+        allergies: byId('hallerg').value, conditions: byId('hcond').value,
+        meds: byId('hmeds').value, ice: byId('hice').value, donor });
+      toast(res && res.ok ? L('ph.saved') : L('ph.err_x'));
+    });
+  });
+}
+
 // ── Notes ──────────────────────────────────────────────────────
 // Part of the phone rather than a sample resource: notes are the one thing people expect
 // to survive everything else, so they live with the phone's own data.
@@ -885,6 +919,31 @@ function pickPhoto(onPick) {
   });
 }
 
+// Forwarding a message: the same text, sent on to somebody else. Picked from contacts,
+// or typed, because the person you want may not be in the book.
+function forwardSms(m) {
+  const all = state.contacts || [];
+  sheet(L('ph.forward'),
+    '<div class="mailbody">' + esc(m.body || L('ph.attach')) + '</div>' +
+    UI.field('fwdnum', L('ph.number'), '', 'maxlength="20"') +
+    UI.button(L('ph.send'), 'fwdgo', 'tinted') +
+    (all.length ? UI.group(all.map((c) => UI.row({
+      avatar: c.name, title: c.name, subtitle: c.number, data: { n: c.number },
+    })), { header: L('app.contacts') }) : ''),
+    () => {
+      const go = async (number) => {
+        if (!number) return;
+        const r = await post('send', { number, body: m.body || '', kind: m.kind || 'text',
+                                       attachment: m.attachment || '' });
+        closeSheet();
+        toast(r && r.ok ? L('ph.forwarded') : L('ph.err_' + ((r && r.error) || 'x')));
+      };
+      byId('fwdgo').addEventListener('click', () => go(byId('fwdnum').value.trim()));
+      [...byId('sheet').querySelectorAll('.row')].forEach((el) =>
+        el.addEventListener('click', () => go(el.dataset.n)));
+    });
+}
+
 // ── Voicemail ──────────────────────────────────────────────────
 // A missed call leaves a written message rather than a recording: nothing here can hold
 // audio, and a note you can actually read beats a fake tape.
@@ -1025,6 +1084,14 @@ function wireLocButtons() {
 function paintThread(messages) {
   body(`<div class="thread" id="thread">${messages.map(bubbleHtml).join('')}</div>`);
   wireLocButtons();
+  // A message you can act on: forwarding is the one thing people always want from one.
+  [...byId('thread').querySelectorAll('.bub')].forEach((b, i) => {
+    b.addEventListener('click', (e) => {
+      if (e.target.closest('button') || e.target.closest('.locbtn')) return;
+      const m = messages[i];
+      if (m) forwardSms(m);
+    });
+  });
   foot(`<div class="compose">` +
     `<button class="attach" id="attach" type="button">+</button>` +
     `<button class="emoji" id="msgemoji" type="button">😊</button>` +
@@ -1166,16 +1233,29 @@ RENDER.contacts = () => {
 function contactSheet(c) {
   const isNew = !c.id;
   sheet(isNew ? L('ph.new_contact') : c.name,
+    // The card, not just a name and a number: a face, a way to write, where they are,
+    // when it is their birthday, and whatever you needed to remember about them.
+    (c.photo ? '<div class="cardphoto" style="background-image:url(' + esc(c.photo) + ')"></div>' : '') +
     UI.field('cname', L('ph.name'), c.name, 'maxlength="40"') +
     UI.field('cnum', L('ph.number'), c.number, 'maxlength="20"') +
+    UI.field('cphoto', L('ph.c_photo'), c.photo || '', 'maxlength="400"') +
+    UI.field('cmail', L('ph.c_email'), c.email || '', 'maxlength="64"') +
+    UI.field('caddr', L('ph.c_address'), c.address || '', 'maxlength="120"') +
+    UI.field('cbday', L('ph.c_birthday'), c.birthday || '', 'maxlength="20"') +
+    UI.field('cnote', L('ph.c_note'), c.note || '', 'maxlength="300"') +
+    UI.button(L('ph.pick_photo'), 'cpick', 'plain') +
     UI.button(L('ph.save'), 'csave') +
     (isNew ? '' : UI.button(L('ph.call'), 'ccall', 'tinted')) +
     (isNew ? '' : UI.button(L('ph.message'), 'cmsg', 'plain')) +
     (isNew ? '' : UI.button(L('ph.airdrop_share'), 'cshare', 'plain')) +
     (isNew ? '' : UI.button(L('ph.delete'), 'cdel', 'destructive')),
     () => {
+      byId('cpick').addEventListener('click', () => pickPhoto((url) => { byId('cphoto').value = url; }));
       byId('csave').addEventListener('click', async () => {
-        const res = await post('contactSave', { id: c.id, name: byId('cname').value, number: byId('cnum').value });
+        const res = await post('contactSave', { id: c.id, name: byId('cname').value, number: byId('cnum').value,
+          photo: byId('cphoto').value.trim(), email: byId('cmail').value.trim(),
+          address: byId('caddr').value.trim(), birthday: byId('cbday').value.trim(),
+          note: byId('cnote').value.trim() });
         if (res && res.ok) { closeSheet(); await refresh(); RENDER.contacts(); }
         else toast(L('ph.err_' + ((res && res.error) || 'x')));
       });
@@ -1628,7 +1708,40 @@ RENDER.maps = async () => {
 // -- Music ------------------------------------------------------
 // v-music owns every source and decides who may touch which one; this lists what it
 // answered and sends the same actions its own UI does.
+// A library of your own, kept on the phone, plus whatever is already playing around you.
+// A track is a link - YouTube or any host the operator allows - and playing it on the
+// phone speaker puts a short-range source at your feet, so the people you are standing
+// with hear it and nobody across the street does.
+let musicTab = 'library';
+
+async function musicLibrary() {
+  const r = await post('sdkStorage', { app: 'music', op: 'get', key: 'library' });
+  let lib = [];
+  try { lib = JSON.parse((r && r.value) || '[]'); } catch (e) { lib = []; }
+  return Array.isArray(lib) ? lib : [];
+}
+async function musicSaveLibrary(lib) {
+  return post('sdkStorage', { app: 'music', op: 'set', key: 'library', value: JSON.stringify(lib.slice(0, 60)) });
+}
+
 RENDER.music = async () => {
+  setNav(L('app.music'), null, { icon: 'add', onClick: () => musicAdd() });
+  tabbar([
+    { id: 'library', icon: 'music', label: 'ph.library' },
+    { id: 'around', icon: 'speaker', label: 'ph.playing_around' },
+  ], musicTab, (t) => { musicTab = t; RENDER.music(); });
+
+  if (musicTab === 'library') {
+    const lib = await musicLibrary();
+    if (!lib.length) { body(UI.empty(L('ph.library_empty'), 'music')); return; }
+    body(UI.group(lib.map((t, i) => UI.row({
+      icon: 'music', tint: '#FA2D48', title: t.title || L('ph.untitled'),
+      subtitle: t.url, chevron: true, data: { i },
+    })), { header: L('ph.library'), footer: L('ph.library_hint') }));
+    rows('.row[data-i]', (el) => el.addEventListener('click', () => musicTrack(lib[Number(el.dataset.i)], Number(el.dataset.i))));
+    return;
+  }
+
   loading();
   const d = await post('app', { app: 'music' });
   if (!d || d.error || d.enabled === false) { body(UI.empty(L('ph.err_off'), 'music')); return; }
@@ -1642,6 +1755,47 @@ RENDER.music = async () => {
   })), { header: L('ph.music_sources') }));
   rows('.row[data-i]', (r) => r.addEventListener('click', () => musicSheet(list[Number(r.dataset.i)])));
 };
+
+function musicAdd(existing, index) {
+  sheet(L(existing ? 'ph.track_edit' : 'ph.track_add'),
+    UI.field('mtitle', L('ph.track_title'), (existing && existing.title) || '', 'maxlength="80"') +
+    UI.field('murl', L('ph.track_url'), (existing && existing.url) || '', 'maxlength="400"') +
+    UI.button(L('ph.save'), 'mtsave', 'tinted') +
+    '<div class="groupfoot">' + esc(L('ph.track_hint')) + '</div>',
+    () => byId('mtsave').addEventListener('click', async () => {
+      const url = byId('murl').value.trim();
+      if (!url) { toast(L('ph.track_nourl')); return; }
+      const lib = await musicLibrary();
+      const t = { title: byId('mtitle').value.trim() || url, url };
+      if (index != null) lib[index] = t; else lib.unshift(t);
+      await musicSaveLibrary(lib);
+      closeSheet(); RENDER.music();
+    }));
+}
+
+function musicTrack(t, i) {
+  sheet(t.title || L('ph.untitled'),
+    '<div class="mailmeta">' + esc(t.url) + '</div>' +
+    UI.button(L('ph.play_speaker'), 'mplay', 'tinted') +
+    UI.button(L('ph.track_edit'), 'medit', 'plain') +
+    UI.button(L('ph.delete'), 'mdelt', 'destructive'),
+    () => {
+      byId('mplay').addEventListener('click', async () => {
+        // kind 'phone' is a short-range source that follows the player: a phone on
+        // speaker, not a boombox.
+        const r = await post('music', { action: 'play', kind: 'phone', url: t.url, title: t.title });
+        closeSheet();
+        toast(r && r.ok ? L('ph.playing') : L('ph.err_' + ((r && r.error) || 'x')));
+      });
+      byId('medit').addEventListener('click', () => { closeSheet(); musicAdd(t, i); });
+      byId('mdelt').addEventListener('click', async () => {
+        const lib = await musicLibrary();
+        lib.splice(i, 1);
+        await musicSaveLibrary(lib);
+        closeSheet(); RENDER.music();
+      });
+    });
+}
 
 function musicSheet(m) {
   const act = async (action) => {
@@ -2200,7 +2354,14 @@ function ringHtml(label, value, max, colour) {
     '<div class="lab">' + esc(label) + '</div></div>';
 }
 
+let healthTab = 'today';
+
 RENDER.health = async () => {
+  tabbar([
+    { id: 'today', icon: 'heart', label: 'ph.today' },
+    { id: 'record', icon: 'id', label: 'ph.record' },
+  ], healthTab, (t) => { healthTab = t; RENDER.health(); });
+  if (healthTab === 'record') { healthRecord(); return; }
   loading();
   const d = await post('health');
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'heart')); return; }
@@ -3091,8 +3252,15 @@ function renderCall() {
     [...byId('callpad').querySelectorAll('.cpad')].forEach((p) => p.addEventListener('click', () => {
       // Local comfort toggles only: the audio itself belongs to v-voice, and a phone
       // that pretended to mute a Mumble channel would be lying about being heard.
-      if (p.dataset.a === 'mute') callMuted = !callMuted;
-      else if (p.dataset.a === 'speaker') callSpeaker = !callSpeaker;
+      if (p.dataset.a === 'mute') { callMuted = !callMuted; }
+      else if (p.dataset.a === 'speaker') {
+        // A real speaker: the server works out who is close enough to hear it.
+        callSpeaker = !callSpeaker;
+        post('speaker', { on: callSpeaker }).then((r) => {
+          if (!r || r.error) { callSpeaker = false; toast(L('ph.err_' + ((r && r.error) || 'x'))); renderCall(); }
+          else toast(L(callSpeaker ? 'ph.speaker_on' : 'ph.speaker_off'));
+        });
+      }
       else return;
       renderCall();
     }));

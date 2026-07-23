@@ -30,6 +30,11 @@ Config.Vehicle = {
 
 Config.Jukebox = { range = 28.0 }
 
+-- A phone on speaker. Deliberately the shortest range of anything that plays music: it is
+-- a phone in someone's hand, not a boombox, so it should carry to the people you are
+-- standing with and no further.
+Config.Phone = { range = 6.0 }
+
 Config.DefaultVolume = 0.6
 Config.MaxRange      = 80.0     -- ceiling on any source, whatever it asks for
 

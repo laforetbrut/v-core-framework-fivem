@@ -162,6 +162,14 @@ V.Callback('v-music:play', function(src, resolve, data)
         s.netid = NetworkGetNetworkIdFromEntity(veh)
         s.range = num(Config.Vehicle.range, 22.0)
 
+    elseif kind == 'phone' then
+        -- The player's own phone on speaker. It follows them rather than sitting at a
+        -- fixed point, so the source carries the owner and the client resolves the ped.
+        id = 'phone:' .. p.citizenid
+        s = Sources[id] or { id = id, kind = 'phone', cid = p.citizenid }
+        s.player = src
+        s.range = num(Config.Phone and Config.Phone.range, 6.0)
+
     elseif kind == 'jukebox' then
         if not V.SettingBool('jukebox', true) then resolve({ error = 'off' }) return end
         local j = Jukeboxes[tostring(data.id or '')]

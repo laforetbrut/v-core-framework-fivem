@@ -1369,3 +1369,10 @@ input { font: inherit; }
 .lnotif .lx svg { width: 12px; height: 12px; }
 .lnotif .lx:active { transform: scale(.9); }
 .lnotif .lbody { padding-right: 22px; }
+
+/* A contact photo at the top of the card. */
+.cardphoto { width: 92px; height: 92px; border-radius: 50%; margin: 2px auto 14px;
+  background-size: cover; background-position: center;
+  box-shadow: 0 6px 18px rgba(0,0,0,.28), inset 0 0 0 .5px rgba(255,255,255,.2); }
+/* A message bubble you can act on. */
+.thread .bub { cursor: pointer; }
