@@ -294,9 +294,9 @@ exports['v-core']:GetRegistry()                -- modules, services, hooks, even
 exports['v-core']:NoteEvent(event, 'emit'|'handle')
 exports['v-core']:NoteCommand(name, perm, help)
 
--- v-social (server) - the shared social layer
-exports['v-social']:GetHandle(cid)
-exports['v-social']:PostAs(cid, kind, body, image)   -- for modules that post (news, races)
+-- v-phone (server) - the social layer: Bleeter, Snapmatic and Hush live in the phone
+exports['v-phone']:SocialHandle(cid, app)             -- app: bleeter | snap | hush
+exports['v-phone']:SocialPostAs(cid, kind, body, image)  -- for modules that post (news, races)
 
 -- v-phone (server) - numbers, contacts, messages, calls, and the app registry
 exports['v-phone']:GetNumber(cid) / FindByNumber(number) / IsOnline(number)

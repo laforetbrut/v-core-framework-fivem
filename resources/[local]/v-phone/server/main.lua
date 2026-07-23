@@ -124,6 +124,46 @@ V.Module({
 
         { key = 'cameraUpload', label = 'Camera upload target (URL)', type = 'string', default = '',
           hint = 'Where a photo is posted. Empty means the photo never leaves the server. Add the returned CDN host to Wallpaper image hosts so saved photos can be shared or used as wallpaper.' },
+
+        -- ── The social apps ────────────────────────────────────
+        -- Bleeter, Snapmatic and Hush live in the phone rather than in a resource of
+        -- their own, so their knobs live in the phone's settings too.
+        { key = 'social', label = 'Social apps enabled', type = 'bool', default = Config.Social.enabled,
+          hint = 'Off hides Bleeter, Snapmatic and Hush from every phone. Accounts and posts are kept.' },
+
+        { key = 'socialMaxLength', label = 'Bleet length limit', type = 'number',
+          default = Config.Social.postMax, min = 40, max = 1000, step = 10 },
+
+        { key = 'socialFeedSize', label = 'Posts per feed', type = 'number',
+          default = Config.Social.feedSize, min = 10, max = 200, step = 5,
+          hint = 'How far back a feed reads. The one number to lower when a busy server starts feeling slow.' },
+
+        { key = 'socialRetentionPosts', label = 'Keep posts for (days)', type = 'number',
+          default = Config.Social.retention.posts, min = 0, max = 365, step = 1,
+          hint = 'Swept at boot and then hourly. 0 keeps them for ever.' },
+
+        { key = 'socialRetentionComments', label = 'Keep comments for (days)', type = 'number',
+          default = Config.Social.retention.comments, min = 0, max = 365, step = 1,
+          hint = 'A comment is also removed with the post it belongs to, whatever this says.' },
+
+        { key = 'socialRetentionStories', label = 'Keep stories for (days)', type = 'number',
+          default = Config.Social.retention.stories, min = 0, max = 30, step = 1,
+          hint = 'One day is what a story is for. Longer turns it into a second feed.' },
+
+        { key = 'socialRetentionMessages', label = 'Keep social messages for (days)', type = 'number',
+          default = Config.Social.retention.messages, min = 0, max = 365, step = 1,
+          hint = 'Direct messages inside Bleeter and Snapmatic. Phone SMS has its own limit above.' },
+
+        { key = 'socialHush', label = 'Hush (dating) enabled', type = 'bool',
+          default = Config.Social.hush.enabled },
+
+        { key = 'socialDailyLikes', label = 'Hush likes per day', type = 'number',
+          default = Config.Social.hush.dailyLikes, min = 1, max = 500, step = 1,
+          hint = 'A ceiling, so liking absolutely everybody is not a strategy.' },
+
+        { key = 'socialImageHosts', label = 'Social image hosts', type = 'string',
+          default = table.concat(Config.Social.imageHosts, ', '),
+          hint = 'Comma separated. Avatars and photos are URLs other clients will fetch, so this is an operator decision - the same rule as wallpapers.' },
     },
 })
 
@@ -2971,4 +3011,9 @@ CreateThread(function()
     end
     MySQL.update.await([[DELETE FROM phone_cipher_messages
         WHERE expires_at IS NOT NULL AND expires_at <= NOW()]])
+
+    -- The social apps are part of this resource now, so they wait for the same boot
+    -- rather than for one of their own. `Core` is passed rather than fetched again: a
+    -- second GetCore would be a second answer to a question already asked.
+    if SocialBoot then SocialBoot(Core) end
 end)

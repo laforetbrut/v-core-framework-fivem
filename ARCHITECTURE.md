@@ -1212,12 +1212,19 @@ Ten settings. The conversation list is three plain queries rather than one with 
 functions: MariaDB only grew those in 10.2, and working on the operator's database matters
 more than a clever statement.
 
-### `v-social` - the shared layer, and why the social apps waited for it
+### The social layer inside the phone - and why it moved back in
 
 The social apps were refused twice, and the reason was always the same: they need data
 **shared between players** - handles, posts, likes, matches - and the phone is a shell
-that owns nothing shared. This module is that missing owner. The apps went from
-impossible to thin views the day it existed.
+that owns nothing shared. A separate module was that missing owner, and the apps went
+from impossible to thin views the day it existed.
+
+**It lives in `v-phone/server/social.lua` now.** The separation was honest but it cost
+the wrong thing: a phone that cannot show its own social apps unless a second resource
+happens to be running is half a phone, and the framework's first promise is that the
+phone works. The file boundary that made the design clear is kept - shared data is still
+in a file of its own, with its own tables and its own rules - but it is one resource, one
+boot, one set of settings, and one thing an operator has to install.
 
 **The brands are Rockstar's own.** Bleeter and Snapmatic ship in the game; inventing a
 parallel Twitter would break the world every other module is set in. Hush is the dating

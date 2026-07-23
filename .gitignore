@@ -62,3 +62,6 @@ artifacts.legacy-bak/
 local-database/
 crashes/
 svadhesive/
+
+# Generated phone preview (rebuilt from source on demand)
+resources/[local]/v-phone/preview/
