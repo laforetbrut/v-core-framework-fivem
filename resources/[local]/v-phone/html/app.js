@@ -143,6 +143,45 @@ function renderHome() {
 // pages are BALANCED - nine and eight both look like pages, sixteen and one does not.
 let arrPerPage = 16;
 
+function fitGrid(cols, rows) {
+  const pg = byId('pages');
+  const page = pg.querySelector('.page');
+  if (!page) return;
+  const cs = getComputedStyle(page);
+  const h = page.clientHeight - parseFloat(cs.paddingTop || 0) - parseFloat(cs.paddingBottom || 0);
+  const w = page.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+  if (h <= 0 || w <= 0) return;
+
+  const apply = (size) => {
+    pg.style.setProperty('--isz', size + 'px');
+    pg.style.setProperty('--iradius', Math.round(size * 0.225) + 'px');
+    pg.style.setProperty('--ilabel', (size >= 52 ? 11.5 : size >= 42 ? 10.5 : 9.5) + 'px');
+    // The spacing has to give way with the icon, or a tight grid stays too tall to fit
+    // however small the icons get.
+    pg.style.setProperty('--tgap', (size >= 50 ? 6 : size >= 38 ? 4 : 2) + 'px');
+    pg.style.setProperty('--rgap', (size >= 50 ? 8 : size >= 38 ? 5 : 3) + 'px');
+  };
+
+  // Start from an estimate, then check it against the real thing. Arithmetic about
+  // padding, gaps and label height is exactly the sort of guess that ends up one row
+  // short, so the estimate is only a starting point: what settles it is measuring.
+  const cellH = h / rows, cellW = w / cols;
+  let size = Math.max(22, Math.min(60, Math.floor(Math.min(cellH - 24, cellW - 8))));
+  apply(size);
+
+  // Whether it overflows is a question about the page, not about the last tile: in a grid
+  // that exactly fills its rows the last row's bottom IS the page's bottom, and comparing
+  // those two was a tie the loop could never win - it shrank the icons to the floor.
+  for (let i = 0; i < 14 && size > 22; i++) {
+    // A row that genuinely does not fit is tens of pixels tall. A handful of pixels is
+    // chrome - a badge sitting proud of its icon - and shrinking for that collapsed the
+    // icons to nothing on grids that were actually fine.
+    if (page.scrollHeight <= page.clientHeight + 18) break;
+    size -= 3;
+    apply(size);
+  }
+}
+
 // The track is what slides; the pager around it is a fixed window that clips.
 function slideTrack() {
   const t = byId('pages').querySelector('.ptrack');
@@ -158,6 +197,7 @@ function paintPages(items) {
   const gCols = Math.max(3, Math.min(6, Number(gp.gridCols) || 4));
   const gRows = Math.max(3, Math.min(7, Number(gp.gridRows) || 4));
   byId('pages').style.setProperty('--gcols', String(gCols));
+  byId('pages').style.setProperty('--grows', String(gRows));
   arrPerPage = gCols * gRows;
   const pages = [];
   for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
@@ -177,6 +217,11 @@ function paintPages(items) {
   });
   slideTrack();
   byId('dots').innerHTML = pages.map((_, i) => `<i class="${i === page ? 'on' : ''}"></i>`).join('');
+
+  // The grid only "works" if it fits. Rows share the page height, so the icon has to be
+  // sized from what a cell actually gets - otherwise six rows of 60px icons simply spill
+  // past the bottom of the screen and the last rows look like they were never drawn.
+  fitGrid(gCols, gRows);
 
   [...byId('pages').querySelectorAll('.tile:not(.gap)')].forEach((t) => {
     t.addEventListener('click', () => {

@@ -293,8 +293,11 @@ input { font: inherit; }
   transition: transform .34s cubic-bezier(.32,.72,0,1); }
 .page { flex: 0 0 100%; padding: 12px 22px 0;
   /* The player picks the grid in Settings; the column count drives everything else. */
-  display: grid; grid-template-columns: repeat(var(--gcols, 4), 1fr); gap: 20px 14px;
-  align-content: start; }
+  display: grid; grid-template-columns: repeat(var(--gcols, 4), 1fr);
+  /* Rows share the page rather than stacking past the bottom of it, which is what made
+     the taller grids look broken: the last rows were drawn off-screen. */
+  grid-template-rows: repeat(var(--grows, 4), minmax(0, 1fr));
+  gap: var(--rgap, 6px) 8px; align-content: stretch; }
 .pages { scroll-behavior: smooth; }
 
 .tile { display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -1378,18 +1381,6 @@ input { font: inherit; }
 /* A message bubble you can act on. */
 .thread .bub { cursor: pointer; }
 
-/* A denser grid means smaller icons, the way it does on a real phone. */
-.pages[style*="--gcols: 5"] .tile .ic { width: 52px; height: 52px; border-radius: 12px; }
-.pages[style*="--gcols: 5"] .tile .ic svg { width: 29px; height: 29px; }
-.pages[style*="--gcols: 5"] .tile .nm { font-size: 10.5px; }
-.pages[style*="--gcols: 5"] .page { gap: 16px 10px; padding: 12px 16px 0; }
-.pages[style*="--gcols: 6"] .tile .ic { width: 44px; height: 44px; border-radius: 10px; }
-.pages[style*="--gcols: 6"] .tile .ic svg { width: 25px; height: 25px; }
-.pages[style*="--gcols: 6"] .tile .nm { font-size: 9.5px; }
-.pages[style*="--gcols: 6"] .page { gap: 14px 8px; padding: 12px 12px 0; }
-.pages[style*="--gcols: 3"] .tile .ic { width: 68px; height: 68px; border-radius: 15px; }
-.pages[style*="--gcols: 3"] .page { gap: 24px 18px; padding: 14px 30px 0; }
-
 /* ── Jobs: the employment card ─────────────────────────────────── */
 .jobcard { border-radius: 20px; padding: 18px 16px; margin-bottom: 16px; color: #fff;
   background: linear-gradient(135deg, #6E6BFF 0%, #4B48D6 55%, #3A37B0 100%);
@@ -1403,3 +1394,22 @@ input { font: inherit; }
   margin: 4px 2px 14px; }
 .jobbar i { display: block; height: 100%; border-radius: 99px;
   background: linear-gradient(90deg, #6E6BFF, #34C759); transition: width .4s var(--spring); }
+
+/* The icon size is computed from the cell a chosen grid actually gives it. */
+.pages .tile .ic { width: var(--isz, 60px); height: var(--isz, 60px);
+  border-radius: var(--iradius, 13.5px); }
+.pages .tile .ic svg { width: 56%; height: 56%; }
+.pages .tile .nm { font-size: var(--ilabel, 11.5px); }
+.pages .tile .folder { width: var(--isz, 60px); height: var(--isz, 60px);
+  border-radius: var(--iradius, 13.5px); }
+
+/* The label sits closer to its icon as the grid tightens. */
+.pages .tile { gap: var(--tgap, 6px); }
+.pages .tile .nm { line-height: 1.15; }
+
+/* A tile must fit the row it was given. Without this the label wrapped to a second line,
+   the tile grew past its cell, and the page reported an overflow no icon size could fix -
+   which is why the four-row grids looked broken however small the icons went. */
+.pages .tile { min-height: 0; }
+.pages .tile .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%; }
