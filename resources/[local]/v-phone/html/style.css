@@ -55,10 +55,10 @@ input { font: inherit; }
      a stored per-character preference, set on .screen from JS, and every alpha in
      the material derives from it -- so the slider genuinely restyles the phone
      rather than fading one overlay. */
-  --gk: .55;
-  --tint-a: calc(.05 + var(--gk) * .60);      /* the diffusing layer */
-  --sheen-a: calc(.10 + var(--gk) * .12);     /* brighter speculars than iOS 26 */
-  --rim-a: calc(.20 + var(--gk) * .22);
+  --gk: .42;
+  --tint-a: .293;      /* JS resolves the live slider to CEF-safe numeric channels */
+  --sheen-a: .162;
+  --rim-a: .296;
 
   --rim: rgba(255, 255, 255, .28);
   --rim-soft: rgba(255, 255, 255, .14);
@@ -180,7 +180,7 @@ input { font: inherit; }
 
 .glass-solid {
   background:
-    linear-gradient(155deg, rgba(255,255,255,calc(var(--sheen-a) * .8)) 0%, rgba(255,255,255,0) 30%),
+    linear-gradient(155deg, rgba(255,255,255,var(--sheen-a)) 0%, rgba(255,255,255,0) 30%),
     linear-gradient(180deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,.02) 38%, rgba(255,255,255,0) 68%),
     linear-gradient(180deg, rgba(48,48,52,.93), rgba(24,24,28,.96));
   box-shadow: inset 0 0 0 .5px rgba(255,255,255,var(--rim-a)),
@@ -261,7 +261,7 @@ input { font: inherit; }
 .lnotif { display: flex; align-items: flex-start; gap: 10px; padding: 11px 13px;
   border-radius: 20px; background: var(--mat);
   animation: ph-in .3s var(--spring) backwards;
-  animation-delay: calc(var(--i,0) * 50ms); }
+  animation-delay: 0ms; }
 .lnotif .lic { flex: 0 0 auto; }
 .lnotif .lic .ic { width: 34px; height: 34px; border-radius: 8.5px; }
 .lnotif .lbody { display: block; flex: 1; min-width: 0; }
@@ -513,7 +513,7 @@ input { font: inherit; }
 .callstate { margin-top: 6px; font-size: 16px; color: var(--l2); }
 .calltimer { margin-top: 6px; font-family: var(--ios-num); font-size: 16px; color: var(--l2); }
 .callpad { position: absolute; bottom: 118px; left: 0; right: 0;
-  display: grid; grid-template-columns: repeat(3, 68px); gap: 20px 30px;
+  display: grid; grid-template-columns: 68px; gap: 20px 30px;
   justify-content: center; }
 .cpad { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .cpad span { width: 68px; height: 68px; border-radius: 50%; display: flex; align-items: center;
@@ -1438,4 +1438,2049 @@ input { font: inherit; }
   0%   { transform: scale(.4); opacity: 0; }
   60%  { transform: scale(1.12); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
+}
+
+/* ===============================================================
+   Clear Glass 27 — final visual system
+
+   This section intentionally comes last. It consolidates the visual
+   language without changing the public markup contract used by app.js,
+   sdk.js or third-party applications.
+
+   FiveM/CEF-safe material:
+   - no sampled background effects;
+   - no external textures;
+   - highlights are composed from gradients, rims and inner shadows;
+   - app content stays opaque enough to read while system chrome is clear.
+   =============================================================== */
+
+:root {
+  /* Safe fallbacks when v-ui is starting late or is not installed. */
+  --ph-accent: var(--v-accent, #0a84ff);
+  --ph-accent-300: var(--v-accent-300, #64d2ff);
+  --ph-accent-400: var(--v-accent-400, #0a84ff);
+  --ph-accent-600: var(--v-accent-600, #0066cc);
+  --ph-accent-line: var(--v-accent-line, rgba(10, 132, 255, .58));
+  --ph-accent-grad: var(--v-grad-accent, linear-gradient(145deg, #64d2ff, #0a84ff 56%, #0066cc));
+  --ph-overlay-z: var(--z-overlay, 1000);
+  --ph-display: var(--v-font-display, var(--ios-font));
+
+  /* Optical origin. Individual materials can move the light without new rules. */
+  --glass-x: 24%;
+  --glass-y: -10%;
+  --gk: .42;
+  --tint-a: .293;
+  --sheen-a: .162;
+  --rim-a: .296;
+
+  --glass-clear-base: rgba(20, 21, 27, .34);
+  --glass-regular-base: rgba(24, 25, 31, .68);
+  --glass-solid-base: rgba(24, 25, 30, .94);
+  --glass-light-clear: rgba(248, 248, 252, .76);
+  --glass-light-regular: rgba(248, 248, 252, .90);
+  --glass-light-solid: rgba(248, 248, 252, .975);
+  --glass-dark-clear: rgba(30, 30, 36, .70);
+  --glass-dark-regular: rgba(28, 28, 34, .88);
+  --glass-dark-solid: rgba(22, 22, 27, .975);
+  --glass-edge-light: rgba(255, 255, 255, .24);
+  --glass-edge-dark: rgba(0, 0, 0, .42);
+  --glass-shadow-clear: 0 12px 34px rgba(0, 0, 0, .30);
+  --glass-shadow-regular: 0 16px 42px rgba(0, 0, 0, .38);
+  --glass-shadow-solid: 0 20px 54px rgba(0, 0, 0, .46);
+
+  --ph-r-sm: 12px;
+  --ph-r-md: 18px;
+  --ph-r-lg: 24px;
+  --ph-r-xl: 30px;
+  --ph-touch: 44px;
+  --ph-fast: 140ms;
+  --ph-med: 280ms;
+  --ph-slow: 440ms;
+  --ph-ease: cubic-bezier(.2, .82, .2, 1);
+  --ph-spring: cubic-bezier(.22, .9, .18, 1);
+
+  /* Resolve the old optional font variable without invalidating the stack. */
+  --ios-num: 'SF Pro Display', 'Segoe UI Variable Display',
+             var(--v-font-num, 'Segoe UI Variable'), var(--ios-font);
+}
+
+/* Core material recipes. JS resolves --gk into the numeric alpha channels above. */
+.glass-clear {
+  background:
+    radial-gradient(140% 110% at var(--glass-x, 24%) var(--glass-y, -10%),
+      rgba(255, 255, 255, var(--sheen-a, .18)) 0%,
+      rgba(255, 255, 255, .045) 34%,
+      rgba(255, 255, 255, 0) 62%),
+    linear-gradient(145deg,
+      rgba(255, 255, 255, .09),
+      rgba(255, 255, 255, .018) 48%,
+      rgba(0, 0, 0, .10)),
+    linear-gradient(180deg,
+      rgba(32, 33, 40, var(--tint-a, .36)),
+      var(--glass-clear-base));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    inset 0 -1px 0 rgba(0, 0, 0, .24),
+    0 0 0 .5px var(--glass-edge-dark),
+    var(--glass-shadow-clear);
+}
+
+.glass,
+.glass-regular {
+  background:
+    radial-gradient(145% 115% at var(--glass-x, 24%) var(--glass-y, -10%),
+      rgba(255, 255, 255, var(--sheen-a, .18)) 0%,
+      rgba(255, 255, 255, .05) 32%,
+      rgba(255, 255, 255, 0) 62%),
+    linear-gradient(145deg,
+      rgba(255, 255, 255, .10),
+      rgba(255, 255, 255, .018) 48%,
+      rgba(0, 0, 0, .15)),
+    linear-gradient(180deg,
+      rgba(42, 43, 51, var(--tint-a, .42)),
+      var(--glass-regular-base));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .31)),
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    inset 0 -18px 28px -26px rgba(0, 0, 0, .72),
+    0 0 0 .5px var(--glass-edge-dark),
+    var(--glass-shadow-regular);
+}
+
+.glass-solid {
+  background:
+    radial-gradient(145% 115% at var(--glass-x, 24%) var(--glass-y, -10%),
+      rgba(255, 255, 255, var(--sheen-a, .18)) 0%,
+      rgba(255, 255, 255, .04) 28%,
+      rgba(255, 255, 255, 0) 58%),
+    linear-gradient(145deg,
+      rgba(255, 255, 255, .085),
+      rgba(255, 255, 255, .012) 48%,
+      rgba(0, 0, 0, .18)),
+    linear-gradient(180deg,
+      rgba(44, 45, 52, var(--tint-a, .42)),
+      var(--glass-solid-base));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .31)),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    inset 0 -1px 0 rgba(0, 0, 0, .36),
+    0 0 0 .5px rgba(0, 0, 0, .52),
+    var(--glass-shadow-solid);
+}
+
+/* Device and wallpaper ---------------------------------------------------- */
+.device {
+  z-index: var(--ph-overlay-z);
+  filter: drop-shadow(0 24px 46px rgba(0, 0, 0, .34));
+}
+
+.device.capturing {
+  opacity: 0 !important;
+  pointer-events: none !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+.bezel {
+  border-radius: 57px;
+  background:
+    linear-gradient(102deg,
+      #161719 0%, #77787c 7%, #2a2b2e 17%, #0d0e10 48%,
+      #4e5054 78%, #151618 94%, #050506 100%);
+  box-shadow:
+    0 46px 96px rgba(0, 0, 0, .62),
+    0 10px 24px rgba(0, 0, 0, .56),
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    inset 1px 0 0 rgba(255, 255, 255, .14),
+    inset -1px 0 0 rgba(255, 255, 255, .08),
+    inset 0 -1px 0 rgba(0, 0, 0, .82);
+}
+
+.bezel::before {
+  background:
+    radial-gradient(100% 34% at 50% 0%, rgba(255, 255, 255, .08), transparent 55%),
+    #030304;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .06),
+    0 0 0 1px rgba(0, 0, 0, .88);
+}
+
+.btn-side {
+  background: linear-gradient(180deg, #929397 0%, #44464a 16%, #17181a 82%, #090a0b 100%);
+  box-shadow: inset 1px 0 0 rgba(255, 255, 255, .22), 0 1px 2px rgba(0, 0, 0, .72);
+}
+
+.screen {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .08),
+    inset 0 0 0 1.5px rgba(0, 0, 0, .9);
+  isolation: isolate;
+}
+
+.wallpaper {
+  filter: saturate(1.08) contrast(1.035);
+  transition:
+    filter var(--ph-slow) var(--ph-spring),
+    transform var(--ph-slow) var(--ph-spring),
+    opacity var(--ph-med) ease;
+}
+
+.wallpaper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg,
+      rgba(0, 0, 0, .34) 0%,
+      rgba(0, 0, 0, .06) 20%,
+      rgba(0, 0, 0, 0) 48%,
+      rgba(0, 0, 0, .08) 70%,
+      rgba(0, 0, 0, .38) 100%),
+    radial-gradient(110% 70% at 18% 0%, rgba(255, 255, 255, .10), transparent 52%);
+}
+
+.wall-aurora {
+  --wall:
+    radial-gradient(82% 62% at 12% 4%, rgba(77, 166, 255, .88) 0%, rgba(77, 166, 255, .22) 39%, transparent 67%),
+    radial-gradient(86% 72% at 94% 22%, rgba(218, 72, 255, .64) 0%, rgba(138, 66, 214, .25) 42%, transparent 70%),
+    radial-gradient(86% 68% at 58% 104%, rgba(255, 62, 142, .54) 0%, rgba(104, 43, 128, .24) 42%, transparent 71%),
+    linear-gradient(158deg, #061326 0%, #10123a 43%, #260f3c 72%, #100819 100%);
+}
+
+.wall-lagoon {
+  --wall:
+    radial-gradient(90% 66% at 6% 5%, rgba(72, 228, 242, .78) 0%, rgba(28, 152, 190, .28) 40%, transparent 69%),
+    radial-gradient(86% 76% at 98% 30%, rgba(42, 126, 255, .62) 0%, rgba(30, 71, 165, .23) 43%, transparent 72%),
+    radial-gradient(100% 72% at 48% 112%, rgba(17, 191, 195, .36) 0%, rgba(8, 72, 102, .20) 46%, transparent 73%),
+    linear-gradient(160deg, #041823 0%, #072c46 42%, #07142f 73%, #030914 100%);
+}
+
+.wallpaper.wall-aurora,
+.wallpaper.wall-lagoon {
+  background-color: #050914;
+  background-position: center;
+  background-size: cover;
+}
+
+.wallpaper.wall-aurora::after,
+.wallpaper.wall-lagoon::after {
+  background:
+    linear-gradient(180deg,
+      rgba(0, 0, 0, .28) 0%,
+      rgba(0, 0, 0, .035) 22%,
+      rgba(0, 0, 0, 0) 48%,
+      rgba(0, 0, 0, .07) 70%,
+      rgba(0, 0, 0, .39) 100%),
+    radial-gradient(115% 76% at 16% -6%, rgba(255, 255, 255, .13), transparent 53%);
+}
+
+.screen.app-open .wallpaper {
+  filter: saturate(1.04) brightness(.72);
+  transform: scale(1.035);
+}
+
+/* Status, lock screen and Dynamic Island ------------------------------- */
+.status {
+  padding-left: 22px;
+  padding-right: 21px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .46);
+  transition: color var(--ph-med) ease, opacity var(--ph-med) ease;
+}
+
+.battery {
+  box-shadow:
+    inset 0 0 0 1px var(--sb-dim, rgba(255, 255, 255, .46)),
+    0 1px 2px rgba(0, 0, 0, .18);
+}
+
+.island {
+  top: 12px;
+  height: 37px;
+  background:
+    radial-gradient(80% 150% at 25% -25%, rgba(255, 255, 255, .07), transparent 42%),
+    linear-gradient(180deg, #070709, #000 64%);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .085),
+    inset 0 -1px 0 rgba(255, 255, 255, .025),
+    0 2px 5px rgba(0, 0, 0, .44);
+  transition:
+    width var(--ph-slow) var(--ph-spring),
+    height var(--ph-slow) var(--ph-spring),
+    margin-left var(--ph-slow) var(--ph-spring),
+    border-radius var(--ph-slow) var(--ph-spring),
+    box-shadow var(--ph-med) ease;
+}
+
+.island.notif {
+  width: 304px;
+  height: 74px;
+  margin-left: -152px;
+  border-radius: 29px;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .10),
+    inset 0 1px 0 rgba(255, 255, 255, .06),
+    0 14px 34px rgba(0, 0, 0, .48);
+}
+
+.island.live {
+  height: 86px;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .10),
+    0 16px 38px rgba(0, 0, 0, .5);
+}
+
+.island .inic .ic,
+.island .idot {
+  background: var(--ph-accent-grad);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .32),
+    0 4px 12px rgba(0, 0, 0, .4);
+}
+
+.island .int1,
+.island .it1 {
+  letter-spacing: -.01em;
+}
+
+.lock {
+  padding-top: 80px;
+  background:
+    radial-gradient(120% 48% at 50% 0%, rgba(255, 255, 255, .075), transparent 58%),
+    linear-gradient(180deg, rgba(0, 0, 0, .03), transparent 42%, rgba(0, 0, 0, .12));
+}
+
+.lockdate {
+  font-weight: 650;
+  text-shadow: 0 2px 9px rgba(0, 0, 0, .42);
+}
+
+.lockclock {
+  font-size: 84px;
+  font-weight: 520;
+  letter-spacing: -.045em;
+  text-shadow: 0 4px 18px rgba(0, 0, 0, .28);
+}
+
+.lockmeta {
+  color: rgba(255, 255, 255, .70);
+  text-shadow: 0 1px 5px rgba(0, 0, 0, .46);
+}
+
+.locknotifs {
+  gap: 9px;
+}
+
+.lnotif {
+  --glass-x: 18%;
+  --glass-y: -22%;
+  border-radius: 21px;
+  background:
+    radial-gradient(130% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)),
+      rgba(255, 255, 255, .025) 43%,
+      transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, .055), transparent 46%),
+    var(--glass-light-regular);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .30),
+    0 0 0 .5px rgba(0, 0, 0, .18),
+    0 11px 28px rgba(0, 0, 0, .27);
+}
+
+.screen.dark .lnotif {
+  background:
+    radial-gradient(130% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)),
+      rgba(255, 255, 255, .025) 43%,
+      transparent 66%),
+    linear-gradient(145deg, rgba(255, 255, 255, .055), transparent 46%),
+    var(--glass-dark-regular);
+}
+
+.lnotif .lx,
+.lockclear {
+  min-width: 28px;
+  min-height: 28px;
+  background:
+    radial-gradient(circle at 30% 10%, rgba(255, 255, 255, .18), transparent 55%),
+    rgba(80, 80, 88, .76);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .18);
+}
+
+.qbtn {
+  --glass-x: 28%;
+  --glass-y: -18%;
+  width: 52px;
+  height: 52px;
+  background:
+    radial-gradient(120% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)),
+      transparent 58%),
+    linear-gradient(180deg, rgba(38, 39, 46, var(--tint-a, .42)), rgba(18, 19, 23, .66));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .3)),
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 0 0 .5px rgba(0, 0, 0, .36),
+    0 10px 24px rgba(0, 0, 0, .34);
+}
+
+.qbtn.on {
+  color: #07120b;
+  background:
+    radial-gradient(120% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, .72),
+      transparent 58%),
+    linear-gradient(180deg, rgba(236, 255, 241, .98), rgba(194, 255, 211, .90));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .88),
+    inset 0 1px 0 rgba(255, 255, 255, .82),
+    0 0 0 .5px rgba(0, 0, 0, .25),
+    0 0 26px rgba(48, 209, 88, .28),
+    0 10px 24px rgba(0, 0, 0, .34);
+}
+
+/* Home, widgets, app icons and dock ------------------------------------- */
+.home {
+  transition:
+    opacity var(--ph-med) var(--ph-spring),
+    transform var(--ph-slow) var(--ph-spring);
+}
+
+.widgets {
+  gap: 12px;
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+.widget {
+  --glass-x: 22%;
+  --glass-y: -18%;
+  min-height: 110px;
+  border-radius: 22px;
+  padding: 15px;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .25),
+    inset 0 1px 0 rgba(255, 255, 255, .24),
+    0 13px 30px rgba(0, 0, 0, .30);
+  transition: transform var(--ph-fast) var(--ph-spring), box-shadow var(--ph-fast) ease;
+}
+
+.widget:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .28),
+    0 16px 34px rgba(0, 0, 0, .34);
+}
+
+.widget.weather {
+  background:
+    radial-gradient(110% 95% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 56%),
+    radial-gradient(90% 100% at 100% 100%, rgba(52, 199, 89, .20), transparent 60%),
+    linear-gradient(155deg, #56b5ff, #1673dc 58%, #174fae);
+}
+
+.widget.cal {
+  background:
+    radial-gradient(120% 100% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 56%),
+    linear-gradient(160deg, rgba(255, 255, 255, .12), transparent 46%),
+    var(--glass-light-regular);
+}
+
+.screen.dark .widget.cal {
+  background:
+    radial-gradient(120% 100% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 56%),
+    linear-gradient(160deg, rgba(255, 255, 255, .06), transparent 46%),
+    var(--glass-dark-regular);
+}
+
+.tile {
+  transition: transform var(--ph-fast) var(--ph-spring), opacity var(--ph-fast) ease;
+}
+
+.tile .ic {
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .24),
+    inset 0 1px 0 rgba(255, 255, 255, .34),
+    0 7px 17px rgba(0, 0, 0, .38);
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    filter var(--ph-fast) ease,
+    box-shadow var(--ph-fast) ease;
+}
+
+.tile .ic::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(110% 80% at 20% -10%, rgba(255, 255, 255, .30), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 255, .08), transparent 42%, rgba(0, 0, 0, .08));
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .14);
+}
+
+.tile .ic > svg,
+.tile .ic > span {
+  position: relative;
+  z-index: 1;
+}
+
+.tile:hover .ic {
+  filter: brightness(1.045) saturate(1.05);
+  transform: translateY(-1px) scale(1.018);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .38),
+    0 10px 21px rgba(0, 0, 0, .42);
+}
+
+.tile:active .ic {
+  transform: scale(.89);
+  filter: brightness(.94);
+}
+
+.tile .nm {
+  font-weight: 520;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, .78), 0 0 9px rgba(0, 0, 0, .34);
+}
+
+.tile .badge {
+  border: .5px solid rgba(255, 255, 255, .28);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .22), 0 5px 12px rgba(0, 0, 0, .32);
+}
+
+.tile .folder {
+  --glass-x: 20%;
+  --glass-y: -15%;
+  background:
+    radial-gradient(130% 100% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .09), rgba(255, 255, 255, .015) 50%),
+    linear-gradient(180deg, rgba(42, 43, 50, var(--tint-a, .42)), rgba(20, 21, 26, .66));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 7px 17px rgba(0, 0, 0, .36);
+}
+
+.dock {
+  --glass-x: 21%;
+  --glass-y: -26%;
+  margin: 0 11px 11px;
+  padding: 11px 10px;
+  border-radius: 33px;
+  background:
+    radial-gradient(150% 120% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)),
+      rgba(255, 255, 255, .035) 42%,
+      transparent 67%),
+    linear-gradient(145deg, rgba(255, 255, 255, .09), transparent 48%, rgba(0, 0, 0, .11)),
+    linear-gradient(180deg, rgba(42, 43, 50, var(--tint-a, .42)), rgba(20, 21, 26, .60));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .31)),
+    inset 0 1px 0 rgba(255, 255, 255, .26),
+    inset 0 -1px 0 rgba(0, 0, 0, .25),
+    0 0 0 .5px rgba(0, 0, 0, .32),
+    0 17px 38px rgba(0, 0, 0, .34);
+}
+
+.searchpill {
+  --glass-x: 24%;
+  --glass-y: -35%;
+  min-height: 34px;
+  background:
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 60%),
+    linear-gradient(180deg, rgba(50, 51, 58, var(--tint-a, .42)), rgba(22, 23, 28, .58));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 0 0 .5px rgba(0, 0, 0, .30),
+    0 8px 20px rgba(0, 0, 0, .30);
+}
+
+.dots i {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+
+/* App shell and semantic accents --------------------------------------- */
+.app {
+  --app-accent: var(--app-tint, #007aff);
+  --app-accent-soft: rgba(10, 132, 255, .14);
+  background:
+    radial-gradient(110% 46% at 12% 0%, rgba(255, 255, 255, .34), transparent 55%),
+    var(--app-bg);
+}
+
+.screen.dark .app {
+  background:
+    radial-gradient(110% 46% at 12% 0%, rgba(255, 255, 255, .035), transparent 55%),
+    var(--app-bg);
+}
+
+.app[data-app="phone"],
+.app[data-app="messages"] {
+  --app-tint: #248a3d;
+  --app-accent: #34c759;
+  --app-accent-soft: rgba(52, 199, 89, .15);
+}
+
+.app[data-app="mail"],
+.app[data-app="maps"],
+.app[data-app="store"] {
+  --app-tint: #007aff;
+  --app-accent: #0a84ff;
+  --app-accent-soft: rgba(10, 132, 255, .15);
+}
+
+.app[data-app="notes"] {
+  --app-tint: #9a6700;
+  --app-accent: #ffcc00;
+  --app-accent-soft: rgba(255, 204, 0, .18);
+}
+
+.app[data-app="bank"],
+.app[data-app="garage"],
+.app[data-app="property"] {
+  --app-tint: #168a61;
+  --app-accent: #30d158;
+  --app-accent-soft: rgba(48, 209, 88, .14);
+}
+
+.app[data-app="wallet"],
+.app[data-app="jobs"],
+.app[data-app="mdt"] {
+  --app-tint: #5856d6;
+  --app-accent: #5e5ce6;
+  --app-accent-soft: rgba(94, 92, 230, .15);
+}
+
+.app[data-app="music"],
+.app[data-app="health"],
+.app[data-app="hush"] {
+  --app-tint: #d60f4c;
+  --app-accent: #ff2d55;
+  --app-accent-soft: rgba(255, 45, 85, .15);
+}
+
+.app[data-app="reminders"] {
+  --app-tint: #c66a00;
+  --app-accent: #ff9500;
+  --app-accent-soft: rgba(255, 149, 0, .16);
+}
+
+.app[data-app="bleeter"] {
+  --app-tint: #168bd2;
+  --app-accent: #1d9bf0;
+  --app-accent-soft: rgba(29, 155, 240, .15);
+}
+
+.app[data-app="snap"] {
+  --app-tint: #8f7400;
+  --app-accent: #ffcc00;
+  --app-accent-soft: rgba(255, 204, 0, .18);
+}
+
+.app[data-app="camera"],
+.app[data-app="gallery"],
+.app[data-app="calc"],
+.app[data-app="settings"] {
+  --app-tint: #5b5b63;
+  --app-accent: #8e8e93;
+  --app-accent-soft: rgba(142, 142, 147, .17);
+}
+
+.app.on {
+  animation: ph27-app-in var(--ph-slow) var(--ph-spring);
+}
+
+.app.closing {
+  animation: ph27-app-out var(--ph-med) var(--ph-spring) both;
+}
+
+@keyframes ph27-app-in {
+  0% { opacity: 0; transform: scale(.20); border-radius: 88px; }
+  62% { opacity: 1; }
+  100% { opacity: 1; transform: none; border-radius: 47px; }
+}
+
+@keyframes ph27-app-out {
+  from { opacity: 1; transform: none; border-radius: 47px; }
+  to { opacity: 0; transform: scale(.84) translateY(14px); border-radius: 58px; }
+}
+
+.navbar {
+  padding-left: 18px;
+  padding-right: 18px;
+  background:
+    radial-gradient(120% 100% at 18% -40%, rgba(255, 255, 255, .34), transparent 55%),
+    linear-gradient(180deg, rgba(248, 248, 252, .91), rgba(248, 248, 252, .79));
+  box-shadow: inset 0 -1px 0 rgba(60, 60, 67, .09);
+  transition:
+    background var(--ph-med) ease,
+    box-shadow var(--ph-med) ease;
+}
+
+.screen.dark .navbar {
+  background:
+    radial-gradient(120% 100% at 18% -40%, rgba(255, 255, 255, .07), transparent 55%),
+    linear-gradient(180deg, rgba(23, 23, 28, .93), rgba(23, 23, 28, .82));
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .065);
+}
+
+.navbar.collapsed {
+  background:
+    radial-gradient(120% 100% at 18% -40%, rgba(255, 255, 255, .38), transparent 56%),
+    var(--glass-light-regular);
+  box-shadow:
+    inset 0 -1px 0 rgba(60, 60, 67, .13),
+    0 9px 24px rgba(0, 0, 0, .08);
+}
+
+.screen.dark .navbar.collapsed {
+  background:
+    radial-gradient(120% 100% at 18% -40%, rgba(255, 255, 255, .08), transparent 56%),
+    var(--glass-dark-regular);
+  box-shadow:
+    inset 0 -1px 0 rgba(255, 255, 255, .08),
+    0 10px 25px rgba(0, 0, 0, .30);
+}
+
+.navrow {
+  min-height: 38px;
+}
+
+.navback,
+.navact {
+  min-height: var(--ph-touch);
+  border-radius: 18px;
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    background var(--ph-fast) ease,
+    opacity var(--ph-fast) ease;
+}
+
+.navback {
+  padding: 0 8px 0 3px;
+  color: var(--app-tint);
+}
+
+.navback:hover,
+.navact:hover {
+  background: var(--app-fill);
+}
+
+.navback:active,
+.navact:active {
+  transform: scale(.94);
+}
+
+.navact.round {
+  width: var(--ph-touch);
+  height: var(--ph-touch);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, .34), transparent 56%),
+    var(--app-accent-soft);
+  box-shadow: inset 0 0 0 .5px var(--app-sep);
+}
+
+.navtitle {
+  font-size: 35px;
+  font-weight: 740;
+  letter-spacing: -.035em;
+}
+
+.navtitle-sm {
+  font-weight: 650;
+}
+
+.appbody {
+  padding-left: 15px;
+  padding-right: 15px;
+  scroll-behavior: smooth;
+}
+
+.appbody.pushin > * {
+  animation: ph27-push var(--ph-med) var(--ph-spring);
+}
+
+@keyframes ph27-push {
+  from { opacity: 0; transform: translateX(34px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Public SDK hero: optical chrome around app-specific, readable content. */
+.apphero {
+  --glass-x: 17%;
+  --glass-y: -24%;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  min-height: 146px;
+  margin: 2px 0 20px;
+  padding: 18px;
+  border-radius: 24px;
+  color: var(--app-label);
+  background:
+    radial-gradient(105% 115% at 102% 108%, var(--app-accent-soft), transparent 65%),
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .46), rgba(255, 255, 255, .08) 43%, transparent 68%),
+    var(--glass-light-solid);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .35),
+    inset 0 -1px 0 rgba(60, 60, 67, .06),
+    0 0 0 .5px rgba(60, 60, 67, .10),
+    0 15px 34px rgba(24, 24, 32, .12);
+}
+
+.screen.dark .apphero {
+  background:
+    radial-gradient(105% 115% at 102% 108%, var(--app-accent-soft), transparent 65%),
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .055), transparent 48%),
+    var(--glass-dark-solid);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .27)),
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    0 0 0 .5px rgba(0, 0, 0, .34),
+    0 17px 38px rgba(0, 0, 0, .30);
+}
+
+.apphero::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -54px;
+  bottom: -76px;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--app-accent-soft) 0%, transparent 70%);
+}
+
+.apphero .herohead {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.apphero .heroicon {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  border-radius: 17px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    radial-gradient(circle at 26% 8%, rgba(255, 255, 255, .30), transparent 58%),
+    var(--app-accent);
+  color: #fff;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .24),
+    inset 0 1px 0 rgba(255, 255, 255, .25),
+    0 9px 21px rgba(0, 0, 0, .20);
+}
+
+.apphero .heroicon > .ic {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  box-shadow: none;
+}
+
+.apphero .heroicon svg,
+.apphero .heroicon > .ic svg {
+  width: 28px;
+  height: 28px;
+}
+
+.apphero .herocopy {
+  flex: 1;
+  min-width: 0;
+}
+
+.apphero .heroeyebrow {
+  margin-bottom: 3px;
+  color: var(--app-tint);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: .10em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.apphero .herotitle {
+  color: var(--app-label);
+  font-size: 22px;
+  font-weight: 740;
+  letter-spacing: -.025em;
+  line-height: 1.12;
+}
+
+.apphero .herovalue {
+  margin-top: 15px;
+  color: var(--app-label);
+  font-family: var(--ios-num);
+  font-size: 34px;
+  font-weight: 650;
+  letter-spacing: -.035em;
+  line-height: 1;
+}
+
+.apphero .herosub {
+  margin-top: 5px;
+  color: var(--app-label2);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+/* Native app content stays readable rather than becoming transparent. */
+.group {
+  border-radius: 16px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .62), rgba(255, 255, 255, .12) 36%, transparent 62%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .085),
+    0 6px 18px rgba(28, 28, 36, .055);
+}
+
+.screen.dark .group {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .045), transparent 45%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .055),
+    0 8px 22px rgba(0, 0, 0, .20);
+}
+
+.grouphead {
+  padding-left: 14px;
+  padding-bottom: 6px;
+  font-size: 12.5px;
+  font-weight: 560;
+  letter-spacing: .015em;
+  text-transform: uppercase;
+}
+
+.groupfoot {
+  color: var(--app-label2);
+}
+
+.row {
+  min-height: 50px;
+  padding: 11px 14px;
+  transition:
+    background-color var(--ph-fast) ease,
+    transform var(--ph-fast) var(--ph-spring);
+}
+
+.row:hover {
+  background-color: rgba(118, 118, 128, .075);
+}
+
+.screen.dark .row:hover {
+  background-color: rgba(118, 118, 128, .14);
+}
+
+.row:active {
+  transform: scale(.992);
+  background-color: var(--app-fill);
+}
+
+.row .ricon {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .34), transparent 58%),
+    var(--app-tint);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .24),
+    0 3px 8px rgba(0, 0, 0, .18);
+}
+
+.row .rav {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .18),
+    0 3px 9px rgba(0, 0, 0, .18);
+}
+
+.row .rt {
+  font-weight: 510;
+}
+
+.row .rchev {
+  opacity: .84;
+}
+
+.field,
+.mailedit {
+  min-height: var(--ph-touch);
+  border-radius: 14px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .42), transparent 40%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .13),
+    0 4px 12px rgba(0, 0, 0, .035);
+  transition:
+    box-shadow var(--ph-fast) ease,
+    background var(--ph-fast) ease;
+}
+
+.screen.dark .field,
+.screen.dark .mailedit {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .035), transparent 42%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .07),
+    0 5px 14px rgba(0, 0, 0, .18);
+}
+
+.field:focus,
+.mailedit:focus {
+  box-shadow:
+    inset 0 0 0 1.5px var(--ph-accent-line),
+    0 0 0 3px rgba(10, 132, 255, .10),
+    0 7px 18px rgba(0, 0, 0, .08);
+}
+
+.bigbtn {
+  min-height: 48px;
+  border-radius: 15px;
+  background:
+    radial-gradient(110% 100% at 20% -30%, rgba(255, 255, 255, .28), transparent 56%),
+    var(--app-tint);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .22),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 8px 18px rgba(0, 0, 0, .13);
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    filter var(--ph-fast) ease,
+    box-shadow var(--ph-fast) ease;
+}
+
+.bigbtn:hover {
+  filter: brightness(1.035);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .25),
+    inset 0 1px 0 rgba(255, 255, 255, .25),
+    0 11px 23px rgba(0, 0, 0, .16);
+}
+
+.bigbtn:active {
+  transform: scale(.975);
+  filter: brightness(.95);
+}
+
+.bigbtn.tinted {
+  color: var(--app-tint);
+  background:
+    radial-gradient(110% 100% at 20% -30%, rgba(255, 255, 255, .25), transparent 56%),
+    var(--app-accent-soft);
+  box-shadow: inset 0 0 0 .5px rgba(10, 132, 255, .12);
+}
+
+.bigbtn.plain {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .18), transparent 44%),
+    var(--app-fill);
+  box-shadow: inset 0 0 0 .5px var(--app-sep);
+}
+
+.bigbtn.destructive {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .14), transparent 44%),
+    rgba(255, 59, 48, .14);
+  color: #ff453a;
+  box-shadow: inset 0 0 0 .5px rgba(255, 69, 58, .16);
+}
+
+.sw {
+  box-shadow: inset 0 0 0 .5px rgba(60, 60, 67, .10);
+}
+
+.sw.on {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, .16), transparent 52%),
+    var(--ios-green);
+}
+
+.seg {
+  min-height: 38px;
+  padding: 3px;
+  border-radius: 12px;
+  background:
+    linear-gradient(180deg, rgba(118, 118, 128, .13), rgba(118, 118, 128, .09)),
+    var(--app-fill);
+  box-shadow: inset 0 0 0 .5px rgba(60, 60, 67, .08);
+}
+
+.seg button {
+  min-height: 32px;
+  border-radius: 9px;
+  transition:
+    background var(--ph-fast) ease,
+    box-shadow var(--ph-fast) ease,
+    transform var(--ph-fast) var(--ph-spring);
+}
+
+.seg button.on {
+  background:
+    linear-gradient(160deg, rgba(255, 255, 255, .48), transparent 48%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .08),
+    0 2px 6px rgba(0, 0, 0, .14);
+}
+
+.seg button:active {
+  transform: scale(.97);
+}
+
+.search {
+  min-height: var(--ph-touch);
+  border-radius: 13px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .25), transparent 44%),
+    var(--app-fill);
+  box-shadow: inset 0 0 0 .5px rgba(60, 60, 67, .075);
+}
+
+/* Floating app chrome. */
+.tabbar,
+.compose {
+  --glass-x: 20%;
+  --glass-y: -45%;
+  margin: 0 8px 8px;
+  border: 0;
+  border-radius: 24px 24px 37px 37px;
+  background:
+    radial-gradient(150% 120% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .32), transparent 42%),
+    var(--glass-light-regular);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .32),
+    0 0 0 .5px rgba(60, 60, 67, .12),
+    0 12px 28px rgba(0, 0, 0, .13);
+}
+
+.screen.dark .tabbar,
+.screen.dark .compose {
+  background:
+    radial-gradient(150% 120% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .055), transparent 42%),
+    var(--glass-dark-regular);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .28)),
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 0 0 .5px rgba(0, 0, 0, .45),
+    0 14px 30px rgba(0, 0, 0, .34);
+}
+
+.tabbar {
+  padding: 7px 5px 18px;
+}
+
+.tabbar button {
+  min-height: 48px;
+  border-radius: 15px;
+  transition:
+    color var(--ph-fast) ease,
+    background var(--ph-fast) ease,
+    transform var(--ph-fast) var(--ph-spring);
+}
+
+.tabbar button:hover {
+  background: var(--app-fill);
+}
+
+.tabbar button:active {
+  transform: scale(.94);
+}
+
+.tabbar button.on {
+  color: var(--app-tint);
+  background:
+    radial-gradient(circle at 50% 12%, var(--app-accent-soft), transparent 68%);
+}
+
+.compose {
+  padding: 8px 10px 21px;
+  align-items: center;
+}
+
+.compose .field {
+  background: var(--app-card);
+  box-shadow: inset 0 0 0 .5px var(--app-sep);
+}
+
+.compose .attach,
+.compose .emoji,
+.compose .sendbtn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .10),
+    0 3px 8px rgba(0, 0, 0, .08);
+}
+
+.compose .sendbtn {
+  background:
+    radial-gradient(circle at 28% 12%, rgba(255, 255, 255, .28), transparent 58%),
+    var(--app-tint);
+}
+
+.bub {
+  box-shadow: 0 3px 9px rgba(0, 0, 0, .065);
+}
+
+.bub.me {
+  background:
+    radial-gradient(120% 100% at 18% -35%, rgba(255, 255, 255, .22), transparent 58%),
+    var(--app-tint);
+}
+
+.bubtime {
+  color: var(--app-label3);
+}
+
+/* Sheets, toast, HUD and emoji ------------------------------------------ */
+.scrim {
+  background:
+    radial-gradient(90% 70% at 50% 100%, rgba(0, 0, 0, .18), transparent 72%),
+    rgba(0, 0, 0, .43);
+  animation: ph27-scrim-in var(--ph-med) ease;
+}
+
+@keyframes ph27-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.sheet {
+  --glass-x: 19%;
+  --glass-y: -24%;
+  border-radius: 29px 29px 47px 47px;
+  padding: 10px 18px 31px;
+  background:
+    radial-gradient(150% 115% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .26), transparent 42%),
+    var(--glass-light-solid);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .36),
+    0 0 0 .5px rgba(60, 60, 67, .15),
+    0 -12px 50px rgba(0, 0, 0, .22);
+}
+
+.screen.dark .sheet {
+  background:
+    radial-gradient(150% 115% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .055), transparent 42%),
+    var(--glass-dark-solid);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .28)),
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    0 0 0 .5px rgba(0, 0, 0, .48),
+    0 -14px 54px rgba(0, 0, 0, .46);
+}
+
+.sheet.on {
+  animation: ph27-sheet-in var(--ph-slow) var(--ph-spring);
+}
+
+@keyframes ph27-sheet-in {
+  from { opacity: .35; transform: translateY(102%) scale(.98); }
+  to { opacity: 1; transform: none; }
+}
+
+.sheet .grab {
+  background: var(--app-label3);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .14);
+}
+
+.sheet .sh {
+  font-size: 21px;
+  font-weight: 740;
+}
+
+.toast,
+.hud {
+  --glass-x: 22%;
+  --glass-y: -40%;
+  min-height: var(--ph-touch);
+  background:
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(155deg, rgba(255, 255, 255, .08), transparent 46%),
+    var(--glass-solid-base);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .30)),
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 0 0 .5px rgba(0, 0, 0, .52),
+    0 14px 34px rgba(0, 0, 0, .42);
+}
+
+.toast.on,
+.hud.on {
+  animation: ph27-toast-in var(--ph-med) var(--ph-spring);
+}
+
+@keyframes ph27-toast-in {
+  from { opacity: 0; transform: translate(-50%, 10px) scale(.92); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+}
+
+.emojipanel {
+  --glass-x: 18%;
+  --glass-y: -25%;
+  border-radius: 28px 28px 0 0;
+  background:
+    radial-gradient(150% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 57%),
+    linear-gradient(155deg, rgba(255, 255, 255, .07), transparent 44%),
+    var(--glass-dark-solid);
+  box-shadow:
+    inset 0 .5px 0 rgba(255, 255, 255, var(--rim-a, .28)),
+    0 -15px 45px rgba(0, 0, 0, .55);
+}
+
+/* Control Center -------------------------------------------------------- */
+.cc {
+  padding-top: 58px;
+  background:
+    radial-gradient(95% 65% at 18% 0%, rgba(74, 94, 134, .30), transparent 64%),
+    radial-gradient(85% 65% at 100% 100%, rgba(72, 44, 92, .24), transparent 67%),
+    linear-gradient(180deg, rgba(18, 19, 25, .965), rgba(7, 8, 12, .985));
+}
+
+.cc.on {
+  animation: ph27-panel-in var(--ph-slow) var(--ph-spring);
+}
+
+@keyframes ph27-panel-in {
+  from { opacity: 0; transform: translateY(-18px) scale(.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.cc .ccmod {
+  --glass-x: 18%;
+  --glass-y: -24%;
+  border-radius: 29px;
+  background:
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .07), transparent 46%, rgba(0, 0, 0, .10)),
+    linear-gradient(180deg, rgba(69, 70, 80, var(--tint-a, .42)), rgba(37, 38, 46, .77));
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .28)),
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 0 0 .5px rgba(0, 0, 0, .28),
+    0 13px 30px rgba(0, 0, 0, .34);
+}
+
+.ccbtn,
+.cctoggles .ccpill {
+  background:
+    radial-gradient(circle at 28% 10%, rgba(255, 255, 255, .16), transparent 58%),
+    rgba(102, 103, 115, .58);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 5px 13px rgba(0, 0, 0, .22);
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    background var(--ph-med) ease,
+    color var(--ph-med) ease,
+    box-shadow var(--ph-med) ease;
+}
+
+.ccbtn:hover,
+.cctoggles .ccpill:hover {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .20),
+    inset 0 1px 0 rgba(255, 255, 255, .18),
+    0 7px 16px rgba(0, 0, 0, .26);
+}
+
+.ccbtn.on,
+.cctoggles .ccpill.on {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .28),
+    inset 0 1px 0 rgba(255, 255, 255, .27),
+    0 8px 18px rgba(0, 0, 0, .28);
+}
+
+.ccslab {
+  --glass-x: 25%;
+  --glass-y: -16%;
+  background:
+    radial-gradient(130% 90% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, .12), transparent 58%),
+    rgba(85, 86, 97, .56);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 10px 24px rgba(0, 0, 0, .26);
+}
+
+.ccslab .fill {
+  background:
+    radial-gradient(100% 70% at 22% 0%, rgba(255, 255, 255, .80), transparent 62%),
+    linear-gradient(180deg, #fff, #e8e8ed);
+  box-shadow: inset 0 1px 0 #fff, 0 -5px 14px rgba(255, 255, 255, .12);
+}
+
+.ccnow .nowart {
+  background:
+    radial-gradient(circle at 25% 8%, rgba(255, 255, 255, .28), transparent 58%),
+    var(--ph-accent-grad);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .22),
+    0 5px 12px rgba(0, 0, 0, .24);
+}
+
+/* Notification shade --------------------------------------------------- */
+.shade {
+  padding-top: 56px;
+  background:
+    radial-gradient(100% 62% at 18% 0%, rgba(69, 87, 123, .27), transparent 64%),
+    radial-gradient(90% 58% at 100% 100%, rgba(78, 45, 92, .21), transparent 66%),
+    linear-gradient(180deg, rgba(18, 19, 25, .97), rgba(7, 8, 12, .988));
+}
+
+.shade.on {
+  animation: ph27-panel-in var(--ph-slow) var(--ph-spring);
+}
+
+.shade::before {
+  background: rgba(255, 255, 255, .38);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, .24);
+}
+
+.shadeclock {
+  font-size: 42px;
+  text-shadow: 0 3px 14px rgba(0, 0, 0, .30);
+}
+
+.shbtn,
+.ngrouphead .gmute {
+  min-height: 32px;
+  background:
+    radial-gradient(120% 100% at 24% -30%, rgba(255, 255, 255, .16), transparent 58%),
+    rgba(100, 101, 112, .46);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    0 5px 12px rgba(0, 0, 0, .22);
+}
+
+.ncard {
+  --glass-x: 18%;
+  --glass-y: -22%;
+  border-radius: 21px;
+  background:
+    radial-gradient(140% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .05), transparent 46%),
+    rgba(45, 46, 54, .90);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .27)),
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 0 0 .5px rgba(0, 0, 0, .25),
+    0 10px 26px rgba(0, 0, 0, .32);
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    background var(--ph-fast) ease;
+}
+
+.ncard:hover {
+  transform: translateY(-1px);
+  background:
+    radial-gradient(140% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .065), transparent 46%),
+    rgba(50, 51, 60, .92);
+}
+
+.ncard:active {
+  transform: scale(.988);
+}
+
+/* App switcher and folders --------------------------------------------- */
+.switcher {
+  background:
+    radial-gradient(100% 68% at 20% 0%, rgba(71, 89, 126, .25), transparent 65%),
+    radial-gradient(90% 60% at 100% 100%, rgba(81, 48, 97, .20), transparent 68%),
+    rgba(8, 9, 13, .965);
+}
+
+.switcher.on {
+  animation: ph27-switcher-in var(--ph-slow) var(--ph-spring);
+}
+
+@keyframes ph27-switcher-in {
+  from { opacity: 0; transform: scale(1.08) translateY(18px); }
+  to { opacity: 1; transform: none; }
+}
+
+.card {
+  --glass-x: 18%;
+  --glass-y: -20%;
+  border-radius: 28px;
+  background:
+    radial-gradient(145% 110% at var(--glass-x) var(--glass-y),
+      rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .065), transparent 46%),
+    rgba(39, 40, 48, .88);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .28)),
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    0 0 0 .5px rgba(0, 0, 0, .34),
+    0 20px 46px rgba(0, 0, 0, .42);
+}
+
+.card .cbody {
+  background:
+    radial-gradient(100% 70% at 20% 0%, rgba(255, 255, 255, .08), transparent 64%),
+    linear-gradient(165deg, rgba(255, 255, 255, .06), rgba(255, 255, 255, .015)),
+    rgba(8, 9, 13, .30);
+  box-shadow: inset 0 0 0 .5px rgba(255, 255, 255, .055);
+}
+
+.card .cpreview {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  padding: 22px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  color: #fff;
+  background:
+    radial-gradient(105% 78% at 12% 0%, rgba(255, 255, 255, .12), transparent 64%),
+    radial-gradient(90% 82% at 100% 100%, rgba(10, 132, 255, .13), transparent 68%);
+}
+
+.card .cpreview::after {
+  content: '';
+  position: absolute;
+  left: 18px;
+  right: 18px;
+  bottom: 24px;
+  height: 96px;
+  border-radius: 14px;
+  opacity: .72;
+  background:
+    linear-gradient(180deg,
+      rgba(255, 255, 255, .11) 0 10px,
+      transparent 10px 22px,
+      rgba(255, 255, 255, .075) 22px 32px,
+      transparent 32px 44px,
+      rgba(255, 255, 255, .055) 44px 54px,
+      transparent 54px 66px,
+      rgba(255, 255, 255, .04) 66px 76px,
+      transparent 76px 100%);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .065),
+    inset 0 1px 0 rgba(255, 255, 255, .055);
+}
+
+.card .cpreview > .ic,
+.card .cpreview .previewicon {
+  position: relative;
+  z-index: 1;
+  width: 58px;
+  height: 58px;
+  flex: 0 0 auto;
+  border-radius: 16px;
+  margin-bottom: 13px;
+  background:
+    radial-gradient(circle at 27% 8%, rgba(255, 255, 255, .28), transparent 58%),
+    var(--ph-accent-grad);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .22),
+    0 9px 21px rgba(0, 0, 0, .28);
+}
+
+.card .cpreview > .ic svg,
+.card .cpreview .previewicon svg {
+  width: 28px;
+  height: 28px;
+}
+
+.card .cpreview > b,
+.card .cpreview .previewname {
+  position: relative;
+  z-index: 1;
+  max-width: 100%;
+  color: #fff;
+  font-size: 17px;
+  font-weight: 680;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folderview {
+  background:
+    radial-gradient(100% 62% at 20% 0%, rgba(76, 91, 124, .28), transparent 64%),
+    radial-gradient(90% 62% at 100% 100%, rgba(76, 45, 90, .22), transparent 68%),
+    rgba(9, 10, 14, .975);
+}
+
+.folderapps {
+  padding: 20px 14px;
+  border-radius: 30px;
+  background:
+    radial-gradient(145% 110% at 18% -18%, rgba(255, 255, 255, var(--sheen-a, .18)), transparent 58%),
+    linear-gradient(150deg, rgba(255, 255, 255, .06), transparent 46%),
+    rgba(49, 50, 58, .74);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .27)),
+    inset 0 1px 0 rgba(255, 255, 255, .13),
+    0 18px 42px rgba(0, 0, 0, .38);
+}
+
+/* Store, social, health and utility cards ------------------------------- */
+.bankcard,
+.jobcard,
+.stfeat,
+.hushcard,
+.post,
+.ring {
+  overflow: hidden;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .16),
+    inset 0 1px 0 rgba(255, 255, 255, .14),
+    0 13px 31px rgba(0, 0, 0, .20);
+}
+
+.bankcard {
+  border-radius: 21px;
+  background:
+    radial-gradient(90% 100% at 12% 0%, rgba(255, 255, 255, .24), transparent 58%),
+    radial-gradient(90% 110% at 100% 100%, rgba(10, 132, 255, .26), transparent 62%),
+    linear-gradient(145deg, #256ba8, #173e68 52%, #0b2238);
+}
+
+.jobcard {
+  background:
+    radial-gradient(100% 110% at 12% -10%, rgba(255, 255, 255, .25), transparent 57%),
+    radial-gradient(90% 100% at 100% 100%, rgba(52, 199, 89, .22), transparent 62%),
+    linear-gradient(140deg, #7572ff, #504dd7 54%, #33309b);
+}
+
+.stfeat {
+  border-radius: 21px;
+  background:
+    radial-gradient(100% 100% at 12% -12%, rgba(255, 255, 255, .30), transparent 58%),
+    radial-gradient(85% 95% at 100% 100%, rgba(255, 45, 85, .48), transparent 62%),
+    linear-gradient(135deg, #149bea, #5755d9 58%, #b82278);
+}
+
+.strowitem {
+  min-height: 70px;
+  border-radius: 14px;
+  transition:
+    background var(--ph-fast) ease,
+    transform var(--ph-fast) var(--ph-spring);
+}
+
+.strowitem:hover {
+  background: var(--app-fill);
+}
+
+.strowitem:active {
+  transform: scale(.99);
+}
+
+.stget,
+.storebtn {
+  min-height: 32px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .18), transparent 48%),
+    var(--app-fill);
+  box-shadow: inset 0 0 0 .5px var(--app-sep);
+}
+
+.stget:not(.have) {
+  color: #fff;
+  background:
+    radial-gradient(110% 100% at 22% -30%, rgba(255, 255, 255, .26), transparent 58%),
+    var(--app-tint);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .20),
+    0 5px 12px rgba(0, 0, 0, .12);
+}
+
+.post {
+  border-radius: 17px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .40), transparent 40%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .085),
+    0 7px 19px rgba(0, 0, 0, .065);
+}
+
+.screen.dark .post {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .04), transparent 42%),
+    var(--app-card);
+}
+
+.post .pimg {
+  border-radius: 13px;
+  box-shadow: inset 0 0 0 .5px rgba(0, 0, 0, .10);
+}
+
+.post .plike {
+  min-height: 30px;
+  box-shadow: inset 0 0 0 .5px rgba(60, 60, 67, .075);
+}
+
+.hushcard {
+  border-radius: 23px;
+}
+
+.hushbtn {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .40), transparent 58%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px var(--app-sep),
+    0 10px 22px rgba(0, 0, 0, .16);
+}
+
+.rings {
+  gap: 12px;
+}
+
+.ring {
+  border-radius: 19px;
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .42), transparent 42%),
+    var(--app-card);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .08),
+    0 8px 20px rgba(0, 0, 0, .06);
+}
+
+.screen.dark .ring {
+  background:
+    linear-gradient(155deg, rgba(255, 255, 255, .04), transparent 42%),
+    var(--app-card);
+}
+
+.ring .dial {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .12));
+}
+
+.shots {
+  gap: 4px;
+  border-radius: 17px;
+  overflow: hidden;
+}
+
+.shots .shot {
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    filter var(--ph-fast) ease;
+}
+
+.shots .shot:hover {
+  transform: scale(1.025);
+  filter: brightness(1.055);
+}
+
+.shotbig {
+  border-radius: 17px;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .12),
+    0 11px 28px rgba(0, 0, 0, .20);
+}
+
+/* Phone, calculator, calls and camera ----------------------------------- */
+.key {
+  background:
+    radial-gradient(circle at 28% 10%, rgba(255, 255, 255, .58), transparent 58%),
+    var(--key-bg);
+  box-shadow:
+    inset 0 0 0 .5px rgba(60, 60, 67, .08),
+    0 6px 14px rgba(0, 0, 0, .09);
+}
+
+.screen.dark .key {
+  background:
+    radial-gradient(circle at 28% 10%, rgba(255, 255, 255, .10), transparent 58%),
+    var(--key-bg);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .075),
+    0 7px 16px rgba(0, 0, 0, .27);
+}
+
+.callbtn,
+.cbtn {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .24),
+    inset 0 1px 0 rgba(255, 255, 255, .26),
+    0 9px 21px rgba(0, 0, 0, .20);
+}
+
+.callui {
+  background:
+    radial-gradient(85% 62% at 20% 0%, rgba(89, 112, 152, .32), transparent 65%),
+    radial-gradient(90% 62% at 100% 100%, rgba(82, 48, 96, .24), transparent 68%),
+    linear-gradient(180deg, #262932, #090a0e 82%);
+}
+
+.callav {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .30), transparent 58%),
+    linear-gradient(180deg, #96969d, #4c4c52);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .20),
+    0 13px 32px rgba(0, 0, 0, .32);
+}
+
+.cpad span {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .16), transparent 58%),
+    rgba(255, 255, 255, .135);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .14),
+    0 8px 19px rgba(0, 0, 0, .20);
+}
+
+.ckey {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .13), transparent 58%),
+    #333338;
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .06),
+    0 6px 14px rgba(0, 0, 0, .28);
+}
+
+.ckey.fn {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .50), transparent 58%),
+    #a5a5aa;
+}
+
+.ckey.op {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .30), transparent 58%),
+    #ff9f0a;
+}
+
+.camui {
+  background:
+    radial-gradient(95% 48% at 50% 0%, rgba(255, 255, 255, .045), transparent 68%),
+    #000;
+}
+
+.camchip,
+.camflip {
+  background:
+    radial-gradient(circle at 28% 8%, rgba(255, 255, 255, .14), transparent 58%),
+    rgba(60, 60, 67, .74);
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .12),
+    0 8px 18px rgba(0, 0, 0, .28);
+}
+
+.camview {
+  box-shadow:
+    inset 0 0 0 .5px rgba(255, 255, 255, .10),
+    0 10px 26px rgba(0, 0, 0, .30);
+}
+
+.camshutter {
+  box-shadow:
+    inset 0 0 0 4px #fff,
+    0 8px 20px rgba(0, 0, 0, .28);
+}
+
+/* Home indicator, touch feedback and keyboard clarity ------------------ */
+.homebar {
+  width: 142px;
+  height: 5px;
+  margin-left: -71px;
+  background: rgba(255, 255, 255, .76);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .30);
+  transition:
+    transform var(--ph-fast) var(--ph-spring),
+    opacity var(--ph-fast) ease,
+    background var(--ph-med) ease;
+}
+
+.homebar:hover {
+  transform: scaleX(1.06);
+}
+
+.homebar:active {
+  transform: scaleX(.92);
+}
+
+.touch-flare {
+  position: absolute;
+  z-index: 160;
+  width: 76px;
+  height: 76px;
+  margin: -38px 0 0 -38px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.24);
+  background:
+    radial-gradient(circle,
+      rgba(255, 255, 255, .34) 0%,
+      rgba(100, 190, 255, .16) 28%,
+      rgba(100, 190, 255, .05) 52%,
+      transparent 72%);
+  animation: ph27-touch-flare .48s var(--ph-ease) forwards;
+}
+
+@keyframes ph27-touch-flare {
+  0% { opacity: 0; transform: scale(.24); }
+  24% { opacity: .88; }
+  100% { opacity: 0; transform: scale(1.36); }
+}
+
+.navback,
+.navact,
+.qbtn,
+.shbtn,
+.gmute,
+.nx,
+.lx,
+.ccbtn,
+.ccpill,
+.camchip,
+.camflip,
+.sendbtn,
+.attach,
+.emoji {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.navback:focus-visible,
+.navact:focus-visible,
+.qbtn:focus-visible,
+.tile:focus-visible,
+.row:focus-visible,
+.bigbtn:focus-visible,
+.seg button:focus-visible,
+.tabbar button:focus-visible,
+.shbtn:focus-visible,
+.gmute:focus-visible,
+.nx:focus-visible,
+.lx:focus-visible,
+.ccbtn:focus-visible,
+.ccpill:focus-visible,
+.key:focus-visible,
+.ckey:focus-visible,
+.cbtn:focus-visible,
+.camchip:focus-visible,
+.camflip:focus-visible,
+.camshutter:focus-visible,
+.hushbtn:focus-visible,
+.stget:focus-visible,
+.plike:focus-visible,
+.field:focus-visible,
+.mailedit:focus-visible,
+.search input:focus-visible {
+  outline: 2px solid var(--ph-accent-300);
+  outline-offset: 2px;
+}
+
+/* Compact viewport guard. The JS user scale still applies on top of this shell. */
+@media (max-height: 860px) {
+  .device {
+    bottom: 1.2vh;
+  }
+}
+
+@media (max-height: 760px) {
+  .device {
+    bottom: .5vh;
+  }
+
+  .widget {
+    min-height: 98px;
+  }
+
+  .widgets {
+    padding-bottom: 9px;
+  }
+}
+
+/* Let scrollable surfaces own their natural axis while keeping edge navigation and
+   draggable controls responsive in Chromium Embedded Framework. */
+.appbody,
+.sheet,
+.shade {
+  touch-action: pan-y;
+}
+
+.seg.scroll,
+.switcher,
+.cards,
+.card {
+  touch-action: pan-x;
+}
+
+.pages,
+.ccslab,
+.tile {
+  touch-action: none;
+}
+
+/* This must remain the final motion rule so later component rules cannot revive it. */
+@media (prefers-reduced-motion: reduce) {
+  #device,
+  #device *,
+  #device *::before,
+  #device *::after {
+    animation-duration: .001ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  #device .pages.jiggle .tile,
+  #device.device.buzz .bezel,
+  #device.device.peeking .bezel {
+    animation: none !important;
+  }
 }

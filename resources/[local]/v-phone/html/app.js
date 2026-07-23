@@ -1,4 +1,4 @@
-// v-phone — iFruit, iOS 26 shell
+// v-phone — iFruit, Clear Glass 27 shell
 //
 // Every built-in app below is a VIEW. It renders what the owning module answered and
 // sends actions back to that module; it never keeps a copy. The moment an app caches a
@@ -15,12 +15,55 @@ const esc = PhoneUI.esc;
 const svg = PhoneUI.svg;
 const UI = PhoneUI;
 
-// Every call into Lua goes through here. The rejection is swallowed into an error
-// object rather than left to reject: an app that awaits this must get an answer it can
-// render, not a promise that never settles behind a loading spinner.
-const post = (n, b) => fetch(`https://v-phone/${n}`, {
-  method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(b || {}),
-}).then((r) => r.json()).catch(() => ({ error: 'x' }));
+// Every call into Lua goes through here. Network failures become renderable errors;
+// read requests from an abandoned view are suspended so they cannot repaint its successor.
+let viewController = typeof AbortController === 'function' ? new AbortController() : null;
+let viewEpoch = 0;
+
+function beginView() {
+  viewEpoch += 1;
+  if (!viewController) return;
+  viewController.abort();
+  viewController = new AbortController();
+}
+
+const RESOURCE_NAME = typeof GetParentResourceName === 'function'
+  ? GetParentResourceName()
+  : 'v-phone';
+
+function isViewRead(name, payload) {
+  const op = payload && payload.op;
+  if (['ambient', 'calls', 'conversation', 'app', 'card', 'places', 'airdropScan'].includes(name)) return true;
+  if (name === 'health') return op == null || op === 'get';
+  if (name === 'notes') return op === 'list';
+  if (name === 'mail') return op === 'me' || op === 'list' || op === 'saved';
+  if (name === 'photos' || name === 'voicemail') return op === 'list';
+  if (name === 'appStorage') return op === 'get';
+  if (name === 'mdt') return op === 'lookup' || op === 'warrants';
+  if (name === 'social') return ['me', 'feed', 'hushMe', 'hushNext'].includes(op);
+  return false;
+}
+
+const post = (n, b) => {
+  const options = {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(b || {}),
+  };
+  // Only read requests owned by a renderer are cancellable. Mutations, controls and
+  // refreshes must finish even when the player navigates while their response is in flight.
+  if (viewController && isViewRead(n, b)) options.signal = viewController.signal;
+  return fetch(`https://${RESOURCE_NAME}/${n}`, options)
+    .then((r) => r.json())
+    .catch((error) => {
+      if (error && error.name === 'AbortError') {
+        // Keep the abandoned async renderer suspended so it cannot paint an error state
+        // over the view that replaced it.
+        return new Promise(() => {});
+      }
+      return { error: 'x' };
+    });
+};
 
 // Tile backgrounds come from the icon table in sdk.js (UI.appIcon).
 
@@ -31,10 +74,12 @@ let call = null;
 let callStart = 0, callTimer = null;
 let openApp = null;
 let thread = null;
+let threadGroup = null;
 let dialed = '';
 let page = 0;
 let notifs = [];        // the notification centre, newest first
 let notifSeq = 0;       // stable ids so a card can be dismissed by hand
+let notificationOwner = null;
 let shadeManage = false;
 
 // An app id from whatever the banner carried. Most callers name the app; the SDK path
@@ -53,8 +98,8 @@ async function setAppMuted(id, on) {
 let recents = [];       // app ids, most recently opened first
 let available = [];     // what the operator permits; the store lists these
 let editing = false;    // home screen in arrange mode
-let folderOpen = null;
-let storeView = null;   // app id while a store page is open
+let navBackAction = null;
+let activeAppEpoch = 0;
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -73,16 +118,29 @@ setInterval(tick, 10000);
 // ══ Screens ════════════════════════════════════════════════════
 // The island is the phone's face. It should react to the phone being locked and unlocked
 // the way a real one does: a short pinch around a padlock, then back to a pill.
-let glanceTimer = null;
+let glanceTimer = null, shutterTimer = null;
+const ISLAND_MODES = ['live', 'notif', 'glance'];
+
+// Dynamic Island modes are mutually exclusive. Calls always win: a notification or
+// lock glance may be queued elsewhere, but it never paints over an active call.
+function setIslandMode(mode) {
+  const isl = byId('island');
+  const next = call ? 'live' : (ISLAND_MODES.includes(mode) ? mode : null);
+  ISLAND_MODES.forEach((name) => isl.classList.toggle(name, name === next));
+  delete isl.dataset.notif;
+}
+
 function islandGlance(icon, tint) {
   if (call) return;                       // a live call owns the island outright
   const isl = byId('island');
   byId('inicon').innerHTML = '<span class="iglyph" style="color:' + (tint || '#fff') + '">' + svg(icon) + '</span>';
   byId('inTitle').textContent = '';
   byId('inBody').textContent = '';
-  isl.classList.add('glance');
+  setIslandMode('glance');
   clearTimeout(glanceTimer);
-  glanceTimer = setTimeout(() => isl.classList.remove('glance'), 1500);
+  glanceTimer = setTimeout(() => {
+    if (!call && isl.classList.contains('glance')) setIslandMode(null);
+  }, 1500);
 }
 
 function unlock() {
@@ -105,8 +163,7 @@ function goHome() {
   if (byId('cc').classList.contains('on')) { byId('cc').classList.remove('on'); return; }
   if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
   if (byId('app').classList.contains('on')) { closeApp(); return; }
-  if (!byId('lock').classList.contains('out')) return;
-  lockScreen();
+  // The Home indicator returns to Home; locking belongs to the power button.
 }
 
 // ══ Home ═══════════════════════════════════════════════════════
@@ -130,7 +187,6 @@ function renderHome() {
   // The last four go in the dock, the way iOS ships: the apps you reach for without
   // thinking stay put while the grid pages move.
   const dockApps = apps.filter((a) => a.dock).slice(0, 4);
-  const gridApps = apps.filter((a) => !dockApps.includes(a));
 
   const items = layoutItems();
   paintPages(items);
@@ -218,6 +274,7 @@ function paintPages(items) {
   const pages = [];
   for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
   if (!pages.length) pages.push([]);
+  page = Math.max(0, Math.min(pages.length - 1, page));
 
   byId('pages').innerHTML = '<div class="ptrack">' + pages.map((pg) =>
     '<div class="page">' + pg.map((it, i) => {
@@ -301,7 +358,6 @@ function folderTile(it, i) {
 function openFolder(i) {
   const it = layoutItems()[i];
   if (!it || it.t !== 'folder') return;
-  folderOpen = i;
   byId('foldername').textContent = it.name;
   byId('folderapps').innerHTML = it.apps.map((id, k) => {
     const a = appById(id);
@@ -317,7 +373,7 @@ function openFolder(i) {
 }
 
 byId('folderview').addEventListener('click', (e) => {
-  if (e.target.id === 'folderview') { byId('folderview').classList.remove('on'); folderOpen = null; }
+  if (e.target.id === 'folderview') byId('folderview').classList.remove('on');
 });
 
 // ══ Arrange mode ═══════════════════════════════════════════════
@@ -484,7 +540,7 @@ function initArrange() {
     if (arr) { e.preventDefault(); onDragMove(e); }
   }, { passive: false });
 
-  window.addEventListener('pointerup', (e) => {
+  window.addEventListener('pointerup', () => {
     if (hold) { clearTimeout(hold); hold = null; }
     if (arr) { onDragEnd(); downTile = null; return; }
     // A tap on empty space in arrange mode leaves it, the way iOS does.
@@ -537,14 +593,30 @@ async function renderWidgets() {
 // ══ App shell ══════════════════════════════════════════════════
 // The zoom origin is taken from the icon that launched it. That one detail is most of
 // what makes opening an app feel like iOS rather than a page swap.
+function clearActiveApp() {
+  const epoch = ++activeAppEpoch;
+  return post('activeApp', { app: '', epoch });
+}
+
+function clearAppVisualState() {
+  const app = byId('app');
+  app.classList.remove('black', 'camfull');
+  byId('screen').classList.remove('appblack');
+  byId('navbar').classList.remove('hidden');
+}
+
 function enterApp(a, tile) {
+  beginView();
+  resetTransientUI();
   openApp = a; thread = null;
+  threadGroup = null;
+  navBackAction = null;
   // Most recent first, no duplicates. This is the switcher's whole model.
   recents = [a.id].concat(recents.filter((id) => id !== a.id)).slice(0, 8);
   const app = byId('app');
   // Leaving the camera for anywhere else drops its immersive chrome and unrotates.
-  byId('navbar').classList.remove('hidden');
-  app.classList.remove('camfull');
+  clearAppVisualState();
+  app.dataset.app = a.id;
   if (landscape) setLandscape(false);
   if (tile) {
     const r = tile.getBoundingClientRect();
@@ -558,44 +630,72 @@ function enterApp(a, tile) {
   byId('appfoot').innerHTML = '';
 
   if (a.page) {
-    // A third-party app is iframed and talks to us through sdk.js.
-    byId('appbody').innerHTML = `<iframe class="appframe" id="appframe" src="${esc(a.page)}"></iframe>`;
+    // A third-party app only receives a URL after Lua has bound this exact app id to
+    // the current NUI session. The opaque sandbox prevents same-origin parent access.
+    const epoch = ++activeAppEpoch;
+    byId('appbody').innerHTML =
+      `<iframe class="appframe" id="appframe" sandbox="allow-scripts" ` +
+      `title="${esc(L(a.label))}" aria-busy="true"></iframe>`;
     byId('appbody').style.padding = '0';
     byId('navbar').classList.add('hidden');
+    const frame = byId('appframe');
+    post('activeApp', { app: a.id, epoch }).then((r) => {
+      if (epoch !== activeAppEpoch || openApp !== a || byId('appframe') !== frame) return;
+      if (!r || !r.ok) {
+        clearActiveApp();
+        byId('navbar').classList.remove('hidden');
+        byId('appbody').style.padding = '';
+        body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), a.icon || 'dot'));
+        return;
+      }
+      frame.setAttribute('aria-busy', 'false');
+      frame.src = String(a.page || '');
+    });
     return;
   }
+  clearActiveApp();
   byId('appbody').style.padding = '';
-  byId('app').classList.remove('black');
-  byId('screen').classList.remove('appblack');
-  byId('navbar').classList.remove('hidden');
   const fn = RENDER[a.id];
   if (fn) fn(); else body(UI.empty(L('ph.no_app')));
 }
 
 function closeApp(instant) {
-  emojiClose();
+  beginView();
   const app = byId('app');
-  if (!app.classList.contains('on')) return;
-  byId('navbar').classList.remove('hidden');
-  app.classList.remove('camfull');
+  const wasOpen = app.classList.contains('on');
+  resetTransientUI();
+  clearActiveApp();
+  clearAppVisualState();
+  delete app.dataset.app;
   if (landscape) setLandscape(false);
   byId('screen').classList.remove('app-open');
-  if (instant) { app.classList.remove('on'); openApp = null; thread = null; threadGroup = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null; return; }
+  navBackAction = null;
+  foot('');
+  if (!wasOpen || instant) {
+    app.classList.remove('on', 'closing');
+    openApp = null; thread = null; threadGroup = null;
+    clearSocialAccounts();
+    return;
+  }
   app.classList.remove('on');
   app.classList.add('closing');
   setTimeout(() => { app.classList.remove('closing'); }, 300);
-  openApp = null; thread = null; threadGroup = null; storeView = null; socialAcc.bleeter = null; socialAcc.snap = null;
+  openApp = null; thread = null; threadGroup = null; clearSocialAccounts();
 }
 
-function setNav(title, backLabel, action) {
+function setNav(title, backLabel, action, onBack) {
+  navBackAction = typeof onBack === 'function' ? onBack : null;
   byId('navtitle').textContent = title || '';
   byId('navtitlesm').textContent = title || '';
-  byId('navbacktxt').textContent = backLabel || L('ph.home');
+  const backText = backLabel || L('ph.home');
+  byId('navbacktxt').textContent = backText;
+  byId('navback').setAttribute('aria-label', backText);
   const act = byId('navact');
   if (action) {
     act.classList.remove('hidden');
     act.className = 'navact' + (action.icon ? ' round' : '');
     act.innerHTML = action.icon ? svg(action.icon) : esc(action.label);
+    act.setAttribute('aria-label', action.label || (action.icon === 'phone' ? L('ph.call') : title) || 'Action');
     act.onclick = action.onClick;
   } else {
     act.classList.add('hidden');
@@ -625,7 +725,16 @@ byId('appbody').addEventListener('scroll', (e) => {
 });
 
 // ══ Built-in apps ══════════════════════════════════════════════
-const RENDER = {};
+const RENDER = new Proxy({}, {
+  set(target, key, render) {
+    target[key] = (...args) => {
+      if (!openApp || openApp.id !== String(key)) return;
+      beginView();
+      return render(...args);
+    };
+    return true;
+  },
+});
 
 // ── Phone ──────────────────────────────────────────────────────
 const KEYS = [['1', ''], ['2', 'ABC'], ['3', 'DEF'], ['4', 'GHI'], ['5', 'JKL'], ['6', 'MNO'],
@@ -711,12 +820,22 @@ RENDER.phone = () => {
 // The half of a Health app the game cannot work out for itself: blood type, allergies,
 // what you are on, who to call. It rides on the character, so it survives the handset.
 function healthRecord() {
-  setNav(L('app.health'), L('app.health'));
+  if (!openApp || openApp.id !== 'health') return;
+  beginView();
+  setNav(L('app.health'), L('app.health'), null, () => {
+    healthTab = 'today';
+    RENDER.health();
+  });
   loading();
   post('health', { op: 'get' }).then((d) => {
     const r = (d && d.record) || {};
     body(
-      UI.bigNumber(L('ph.steps'), String(r.steps || 0), L('ph.steps_today')) +
+      UI.hero({
+        appicon: 'health',
+        eyebrow: L('ph.steps'),
+        value: String(r.steps || 0),
+        subtitle: L('ph.steps_today'),
+      }) +
       UI.field('hblood', L('ph.blood'), r.blood || '', 'maxlength="6"') +
       UI.field('hallerg', L('ph.allergies'), r.allergies || '', 'maxlength="300"') +
       UI.field('hcond', L('ph.conditions'), r.conditions || '', 'maxlength="300"') +
@@ -731,6 +850,7 @@ function healthRecord() {
     rows('.row', (el) => el.addEventListener('click', () => {
       donor = !donor;
       el.querySelector('.sw').classList.toggle('on', donor);
+      el.setAttribute('aria-checked', donor ? 'true' : 'false');
     }));
     byId('hsave').addEventListener('click', async () => {
       const res = await post('health', { op: 'set', blood: byId('hblood').value,
@@ -761,7 +881,10 @@ RENDER.notes = async () => {
 };
 
 function noteEdit(n) {
-  setNav(n.id ? (n.title || L('ph.untitled')) : L('ph.note_new'), L('app.notes'));
+  if (!openApp || openApp.id !== 'notes') return;
+  beginView();
+  setNav(n.id ? (n.title || L('ph.untitled')) : L('ph.note_new'), L('app.notes'), null,
+    () => RENDER.notes());
   body(
     UI.field('ntitle', L('ph.note_title'), n.title || '', 'maxlength="80"') +
     '<textarea class="mailedit" id="nbody" maxlength="4000" placeholder="' + esc(L('ph.note_body')) + '">' +
@@ -801,6 +924,7 @@ RENDER.mail = async () => {
 // The address is chosen once and is what people write to, which is why it cannot be
 // edited away afterwards.
 function mailSignup(domains) {
+  if (!openApp || openApp.id !== 'mail') return;
   setNav(L('app.mail'), null);
   let domain = domains[0] || 'eyefind.info';
   body(
@@ -832,6 +956,8 @@ const MAIL_TABS = [
 ];
 
 async function mailList() {
+  if (!openApp || openApp.id !== 'mail') return;
+  beginView();
   setNav(L('app.mail'), null, { icon: 'add', onClick: () => mailCompose({}) });
   tabbar(MAIL_TABS, mailFolder, (t) => { mailFolder = t; mailList(); });
   body('<div class="mailaddr">' + esc(mailAcc || '') + '</div><div id="mlist"></div>');
@@ -862,6 +988,8 @@ async function mailList() {
 }
 
 function mailRead(m) {
+  if (!openApp || openApp.id !== 'mail') return;
+  beginView();
   // A draft is not something you read; it is something you carry on writing.
   if (m.folder === 'draft') { mailCompose({ draft: m }); return; }
   if (m.folder === 'inbox' && !Number(m.seen)) post('mail', { op: 'seen', boxId: m.box_id });
@@ -873,7 +1001,7 @@ function mailRead(m) {
       m.saved = saved ? 1 : 0;
       toast(L(saved ? 'ph.mail_kept' : 'ph.mail_unkept'));
     },
-  });
+  }, () => mailList());
   body(
     '<div class="mailhead">' +
       '<div class="mailsubj">' + esc(m.subject || L('ph.mail_nosubject')) + '</div>' +
@@ -900,6 +1028,8 @@ function mailRead(m) {
 
 // One composer for a new mail, a reply, a reply-all and an unfinished draft.
 function mailCompose(o) {
+  if (!openApp || openApp.id !== 'mail') return;
+  beginView();
   o = o || {};
   const d = o.draft, r = o.reply;
   let to = '', subject = '', bodyTxt = '', replyTo = 0, boxId = 0;
@@ -922,7 +1052,7 @@ function mailCompose(o) {
     replyTo = Number(r.mail_id || 0);
   }
 
-  setNav(L('ph.mail_new'), L('app.mail'));
+  setNav(L('ph.mail_new'), L('app.mail'), null, () => mailList());
   body(
     UI.field('mto', L('ph.mail_to_ph'), to, 'maxlength="400"') +
     UI.field('msubj', L('ph.mail_subject'), subject, 'maxlength="80"') +
@@ -965,25 +1095,54 @@ function filterCss(f) {
 
 // Photos arrive as rows now; older saves were bare strings.
 function photoRow(v) { return (typeof v === 'string') ? { url: v, album: '', filter: '' } : (v || {}); }
+function inlineBackground(url) {
+  const clean = Array.from(String(url || '')).filter((char) => {
+    const code = char.charCodeAt(0);
+    return code >= 32 && code !== 127;
+  }).join('');
+  const safe = clean
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
+  return 'background-image:url(&quot;' + esc(safe) + '&quot;)';
+}
 function photoStyle(v) {
   const r = photoRow(v);
-  return 'background-image:url(' + esc(r.url) + ');filter:' + filterCss(r.filter);
+  return inlineBackground(r.url) + ';filter:' + filterCss(r.filter);
 }
 
 // The shared picker: any composer can ask for a photo from the phone rather than making
 // the player paste a link they do not have.
 function pickPhoto(onPick) {
+  const host = byId('sheet');
+  const sourceOpen = host.classList.contains('on');
+  const sourceNode = host.firstChild;
   post('photos', { op: 'list' }).then((d) => {
+    if (sourceOpen
+      ? (!host.classList.contains('on') || host.firstChild !== sourceNode)
+      : host.classList.contains('on')) return;
     const shots = (d && d.photos) || [];
     if (!shots.length) { toast(L('ph.no_photos')); return; }
+    // A picker may be raised from a composer sheet. Detach that sheet instead of
+    // destroying it, so its fields and listeners are intact when a photo is chosen.
+    const restore = host.classList.contains('on') ? document.createDocumentFragment() : null;
+    if (restore) while (host.firstChild) restore.appendChild(host.firstChild);
+    const restoreComposer = restore ? () => {
+      sheetReturn = null;
+      emojiClose();
+      host.replaceChildren(restore);
+      host.classList.add('on');
+      byId('scrim').classList.add('on');
+    } : null;
     sheet(L('ph.pick_photo'),
       '<div class="shots">' + shots.map((v, i) =>
         '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>',
       () => [...byId('sheet').querySelectorAll('.shot')].forEach((el) => el.addEventListener('click', () => {
         const r = photoRow(shots[Number(el.dataset.i)]);
-        closeSheet();
+        if (restoreComposer) restoreComposer();
+        else closeSheet();
         onPick(r.url, r);
       })));
+    sheetReturn = restoreComposer;
   });
 }
 
@@ -1016,6 +1175,8 @@ function forwardSms(m) {
 // A missed call leaves a written message rather than a recording: nothing here can hold
 // audio, and a note you can actually read beats a fake tape.
 function renderVoicemail() {
+  if (!openApp || openApp.id !== 'phone' || phoneTab !== 'voicemail') return;
+  beginView();
   body('<div id="vmlist">' + UI.empty(L('ph.loading'), 'phone') + '</div>');
   post('voicemail', { op: 'list' }).then((r) => {
     const host = byId('vmlist');
@@ -1066,8 +1227,8 @@ function voicemailOffer(number) {
     () => byId('vmgo').addEventListener('click', async () => {
       const txt = byId('vmtext').value.trim();
       if (!txt) return;
-      const r = await post('voicemail', { op: 'leave', number, body: txt });
       closeSheet();
+      const r = await post('voicemail', { op: 'leave', number, body: txt });
       toast(r && r.ok ? L('ph.vm_sent') : L('ph.err_' + ((r && r.error) || 'x')));
     }));
 }
@@ -1099,9 +1260,15 @@ RENDER.messages = () => {
 };
 
 async function openGroup(id, name) {
+  if (!openApp || openApp.id !== 'messages') return;
+  beginView();
   thread = null;
   threadGroup = { id, name };
-  setNav(name, L('app.messages'));
+  setNav(name, L('app.messages'), null, () => {
+    threadGroup = null;
+    foot('');
+    RENDER.messages();
+  });
   loading();
   const res = await post('conversation', { group: id });
   if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
@@ -1109,10 +1276,16 @@ async function openGroup(id, name) {
 }
 
 async function openThread(number) {
+  if (!openApp || openApp.id !== 'messages') return;
+  beginView();
   thread = number;
   threadGroup = null;
   setNav(nameOfNumber(number), L('app.messages'), {
     icon: 'phone', onClick: () => post('call', { number }),
+  }, () => {
+    thread = null;
+    foot('');
+    RENDER.messages();
   });
   loading();
   const res = await post('conversation', { number });
@@ -1194,8 +1367,8 @@ function paintThread(messages) {
     sheet(L('ph.attach'),
       (shots.length
         ? '<div class="grouphead">' + esc(L('ph.attach_photo')) + '</div>' +
-          '<div class="shots" style="margin-bottom:12px">' + shots.map((u, i) =>
-            '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>'
+          '<div class="shots" style="margin-bottom:12px">' + shots.map((v, i) =>
+            '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>'
         : '') +
       UI.button(L('ph.pick_photo'), 'atpick', 'plain') +
       UI.field('aturl', L('ph.attach_url'), '', 'maxlength="300"') +
@@ -1212,12 +1385,12 @@ function paintThread(messages) {
           } else toast(L('ph.err_' + ((res && res.error) || 'x')));
         };
         [...byId('sheet').querySelectorAll('.shot')].forEach((sh) =>
-          sh.addEventListener('click', () => sendMedia({ kind: 'image', attachment: shots[Number(sh.dataset.i)], body: '' })));
-        byId('atpick').addEventListener('click', () => pickPhoto((url) => {
-        closeSheet();
-        post('send', Object.assign({ body: '', kind: 'photo', attachment: url }, target())).then(() => openThread(thread));
-      }));
-      byId('atgo').addEventListener('click', () => {
+          sh.addEventListener('click', () => sendMedia({
+            kind: 'image', attachment: photoRow(shots[Number(sh.dataset.i)]).url, body: '',
+          })));
+        byId('atpick').addEventListener('click', () =>
+          pickPhoto((url) => sendMedia({ body: '', kind: 'image', attachment: url })));
+        byId('atgo').addEventListener('click', () => {
           const u = byId('aturl').value.trim();
           if (u) sendMedia({ kind: 'image', attachment: u, body: '' });
         });
@@ -1303,7 +1476,7 @@ function contactSheet(c) {
   sheet(isNew ? L('ph.new_contact') : c.name,
     // The card, not just a name and a number: a face, a way to write, where they are,
     // when it is their birthday, and whatever you needed to remember about them.
-    (c.photo ? '<div class="cardphoto" style="background-image:url(' + esc(c.photo) + ')"></div>' : '') +
+    (c.photo ? '<div class="cardphoto" style="' + inlineBackground(c.photo) + '"></div>' : '') +
     UI.field('cname', L('ph.name'), c.name, 'maxlength="40"') +
     UI.field('cnum', L('ph.number'), c.number, 'maxlength="20"') +
     UI.field('cphoto', L('ph.c_photo'), c.photo || '', 'maxlength="400"') +
@@ -1345,7 +1518,12 @@ RENDER.bank = async () => {
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'bank')); return; }
   const tx = d.transactions || [];
   body(
-    UI.bigNumber(L('ph.balance'), money(d.bank), `${L('ph.cash')} ${money(d.cash)}`) +
+    UI.hero({
+      appicon: 'bank',
+      eyebrow: L('ph.balance'),
+      value: money(d.bank),
+      subtitle: `${L('ph.cash')} ${money(d.cash)}`,
+    }) +
     (tx.length
       ? UI.group(tx.map((t) => UI.row({
           title: t.label || t.type || '', subtitle: t.at || '',
@@ -1491,7 +1669,7 @@ RENDER.settings = () => {
         value: p.alertUrl ? L('ph.tone_custom') : L('ph.tone_' + (p.alertTone || 'ping')),
         chevron: true, data: { t: 'alerttone' } }),
     ]) +
-    (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
+    (p.wallpaperUrl ? '<div class="wallpreview" style="' + inlineBackground(p.wallpaperUrl) + '"></div>' : '') +
     (state.customWallpaper === false ? '' :
       UI.field('wurl', L('ph.wall_url'), p.wallpaperUrl || '') +
       '<div class="seg">' +
@@ -1689,15 +1867,25 @@ RENDER.settings = () => {
       if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
     } else if (r.dataset.t === 'dnd') {
       const res = await post('prefs', { dnd: !(state.prefs || {}).dnd });
-      if (res && res.ok) { state.prefs = res.prefs; RENDER.settings(); }
+      if (res && res.ok) {
+        state.prefs = res.prefs;
+        syncDndAudio();
+        RENDER.settings();
+      }
     }
   }));
 };
 
-// 0 is ultra clear, 100 fully tinted. Every alpha in the material is a calc() off this.
+// 0 is ultra clear, 100 fully tinted. Every material alpha is resolved from this value.
 function applyGlass(v) {
   const k = Math.max(0, Math.min(100, Number(v) || 0)) / 100;
-  byId('screen').style.setProperty('--gk', String(k));
+  const screen = byId('screen');
+  screen.style.setProperty('--gk', String(k));
+  // CEF is inconsistent with multiplication inside calc() when the factor comes from a
+  // custom property. Resolve the material alphas here into plain numeric channels.
+  screen.style.setProperty('--tint-a', (0.10 + k * 0.46).toFixed(3));
+  screen.style.setProperty('--sheen-a', (0.12 + k * 0.10).toFixed(3));
+  screen.style.setProperty('--rim-a', (0.22 + k * 0.18).toFixed(3));
 }
 
 function applyWallpaper() {
@@ -1716,7 +1904,7 @@ function applyWallpaper() {
     w.style.backgroundImage = '';
     w.style.backgroundSize = '';
     w.style.backgroundColor = '';
-    w.classList.add('wall-' + (p.wallpaper || 'ember'));
+    w.classList.add('wall-' + (p.wallpaper || 'aurora'));
   }
 }
 
@@ -1788,16 +1976,29 @@ let landscape = false;
 function applyDevice() {
   const p = state.prefs || {};
   const d = byId('device');
-  const size = p.size || 1;
+  const size = Math.max(0.75, Math.min(1.15, Number(p.size) || 1));
+  const viewport = window.visualViewport;
+  const vw = (viewport && viewport.width) || window.innerWidth || 1280;
+  const vh = (viewport && viewport.height) || window.innerHeight || 720;
+  const rawW = d.offsetWidth || 372;
+  const rawH = d.offsetHeight || 784;
+  const footprintW = landscape ? rawH : rawW;
+  const footprintH = landscape ? rawW : rawH;
+  const fit = Math.max(0.10, Math.min(1,
+    (vw - 24) / (footprintW * size),
+    (vh - 24) / (footprintH * size)));
+  const scale = size * fit;
+  d.style.setProperty('--device-fit', String(fit));
+  d.style.setProperty('--device-scale', String(scale));
   if (landscape) {
     // The phone lies on its side, centred so it cannot swing off-screen.
     d.style.left = '50%'; d.style.right = 'auto'; d.style.top = '50%'; d.style.bottom = 'auto';
     d.style.transformOrigin = 'center center';
-    d.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(' + size + ')';
+    d.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(' + scale + ')';
   } else {
     d.style.top = 'auto'; d.style.bottom = '2.5vh';
     d.style.transformOrigin = (p.side === 'left') ? 'left bottom' : 'right bottom';
-    d.style.transform = 'scale(' + size + ')';
+    d.style.transform = 'scale(' + scale + ')';
     d.style.right = (p.side === 'left') ? 'auto' : '3vw';
     d.style.left = (p.side === 'left') ? '3vw' : 'auto';
   }
@@ -1849,13 +2050,13 @@ RENDER.maps = async () => {
 let musicTab = 'library';
 
 async function musicLibrary() {
-  const r = await post('sdkStorage', { app: 'music', op: 'get', key: 'library' });
+  const r = await post('appStorage', { app: 'music', op: 'get', key: 'library' });
   let lib = [];
-  try { lib = JSON.parse((r && r.value) || '[]'); } catch (e) { lib = []; }
+  try { lib = JSON.parse((r && r.value) || '[]'); } catch { lib = []; }
   return Array.isArray(lib) ? lib : [];
 }
 async function musicSaveLibrary(lib) {
-  return post('sdkStorage', { app: 'music', op: 'set', key: 'library', value: JSON.stringify(lib.slice(0, 60)) });
+  return post('appStorage', { app: 'music', op: 'set', key: 'library', value: JSON.stringify(lib.slice(0, 60)) });
 }
 
 RENDER.music = async () => {
@@ -1984,8 +2185,10 @@ RENDER.property = async () => {
 // Police only by default, and the server re-checks that on every call: the app gate only
 // decides whether the icon is drawn.
 let mdtTab = 'warrants';
+let mdtLookupSeq = 0;
 
 RENDER.mdt = async () => {
+  mdtLookupSeq += 1;
   const seg =
     '<div class="seg">' +
       '<button class="' + (mdtTab === 'warrants' ? 'on' : '') + '" data-t="warrants">' + esc(L('ph.warrants')) + '</button>' +
@@ -1998,9 +2201,13 @@ RENDER.mdt = async () => {
     body(seg + UI.field('mq', L('ph.lookup_ph')) + UI.button(L('ph.search'), 'mgo') + '<div id="mres"></div>');
     wire();
     byId('mgo').addEventListener('click', async () => {
-      const res = await post('mdt', { op: 'lookup', query: byId('mq').value.trim() });
-      if (!res || res.error) { byId('mres').innerHTML = UI.empty(L('ph.err_' + ((res && res.error) || 'x'))); return; }
-      byId('mres').innerHTML =
+      const seq = ++mdtLookupSeq;
+      const host = byId('mres');
+      const query = byId('mq').value.trim();
+      const res = await post('mdt', { op: 'lookup', query });
+      if (seq !== mdtLookupSeq || byId('mres') !== host) return;
+      if (!res || res.error) { host.innerHTML = UI.empty(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+      host.innerHTML =
         UI.group([UI.row({ icon: 'id', title: res.name || '', subtitle: res.cid || '' })]) +
         ((res.records || []).length
           ? UI.group(res.records.map((r) => UI.row({
@@ -2092,13 +2299,77 @@ function anyOverlayOpen() {
 
 function closeOverlays() {
   ['cc', 'shade', 'switcher'].forEach((id) => byId(id).classList.remove('on'));
-  closeSheet();
+  closeSheet(true);
+}
+
+function resetTransientUI() {
+  ['cc', 'shade', 'switcher'].forEach((id) => byId(id).classList.remove('on'));
+  shadeManage = false;
+  closeSheet(true);
+  emojiClose();
+  byId('folderview').classList.remove('on');
+  if (editing) exitArrange();
+  else if (arr) endDrag(true);
+
+  clearTimeout(glanceTimer); glanceTimer = null;
+  clearTimeout(islandTimer); islandTimer = null;
+  clearTimeout(peekTimer); peekTimer = null;
+  clearTimeout(buzzTimer); buzzTimer = null;
+  clearTimeout(hudTimer); hudTimer = null;
+  clearTimeout(toastTimer); toastTimer = null;
+  clearTimeout(shutterTimer); shutterTimer = null;
+
+  byId('toast').classList.remove('on');
+  byId('hud').classList.remove('on');
+  byId('device').classList.remove('peeking', 'buzz', 'capturing');
+  byId('app').classList.remove('black');
+  byId('screen').classList.remove('appblack');
+  setIslandMode(call ? 'live' : null);
 }
 
 byId('screen').addEventListener('pointerdown', (e) => {
   const p = screenPoint(e);
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
-        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18 };
+        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18,
+        insideOverlay: !!(e.target.closest && e.target.closest('#sheet,#shade,#cc,#switcher')) };
+});
+
+let glassFrame = 0;
+let pendingGlassPoint = null;
+
+function trackGlassPointer(e) {
+  const p = screenPoint(e);
+  const x = Math.max(0, Math.min(100, (p.x / Math.max(1, p.w)) * 100));
+  const y = Math.max(0, Math.min(100, (p.y / Math.max(1, p.h)) * 100));
+  pendingGlassPoint = [x, y];
+  if (glassFrame) return;
+  glassFrame = requestAnimationFrame(() => {
+    const point = pendingGlassPoint;
+    glassFrame = 0;
+    pendingGlassPoint = null;
+    if (!point) return;
+    const screen = byId('screen');
+    screen.style.setProperty('--glass-x', point[0].toFixed(2) + '%');
+    screen.style.setProperty('--glass-y', point[1].toFixed(2) + '%');
+  });
+}
+
+byId('screen').addEventListener('pointermove', trackGlassPointer, { passive: true });
+byId('screen').addEventListener('pointerdown', (e) => {
+  trackGlassPointer(e);
+  const target = e.target.closest && e.target.closest(
+    'button, .tile, .row, .card, .ncard, .lnotif, .strowitem, .shot'
+  );
+  if (!target || !byId('screen').contains(target) || target.disabled) return;
+  const r = target.getBoundingClientRect();
+  if (getComputedStyle(target).position === 'static') target.style.position = 'relative';
+  const flare = document.createElement('span');
+  flare.className = 'touch-flare';
+  flare.setAttribute('aria-hidden', 'true');
+  flare.style.left = (e.clientX - r.left) + 'px';
+  flare.style.top = (e.clientY - r.top) + 'px';
+  target.appendChild(flare);
+  setTimeout(() => flare.remove(), 520);
 });
 
 byId('screen').addEventListener('pointerup', (e) => {
@@ -2123,6 +2394,10 @@ byId('screen').addEventListener('pointerup', (e) => {
     if (gg.x0 < gg.w / 2) openShade(); else openCC();
     return;
   }
+
+  // Scrolling a sheet/shade, moving a CC slider or flicking a switcher card belongs to
+  // that overlay. Only a genuine edge gesture above is allowed to escape it.
+  if (gg.insideOverlay) return;
 
   if (anyOverlayOpen()) { closeOverlays(); return; }
 
@@ -2155,7 +2430,9 @@ function openSwitcher() {
   byId('cards').innerHTML = list.map((a) =>
     '<div class="card glass" data-app="' + esc(a.id) + '">' +
       '<div class="chead"><span class="ic">' + svg(a.icon) + '</span>' +
-      '<b>' + esc(L(a.label)) + '</b></div><div class="cbody"></div></div>').join('') +
+      '<b>' + esc(L(a.label)) + '</b></div><div class="cbody">' +
+      '<div class="cpreview">' + UI.appIcon(a.icon, 'previewicon') +
+      '<b class="previewname">' + esc(L(a.label)) + '</b></div></div></div>').join('') +
     '<div class="switchhint">' + esc(L('ph.switch_hint')) + '</div>';
   byId('switcher').classList.add('on');
 
@@ -2167,9 +2444,14 @@ function openSwitcher() {
       y0 = null;
       if (flicked) {
         // Flick a card away to close the app, as on a real phone.
+        const id = c.dataset.app;
         c.classList.add('gone');
-        recents = recents.filter((id) => id !== c.dataset.app);
-        setTimeout(() => { if (!recents.length) byId('switcher').classList.remove('on'); else openSwitcher(); }, 240);
+        recents = recents.filter((recent) => recent !== id);
+        setTimeout(() => {
+          if (openApp && openApp.id === id) closeApp(true);
+          if (!recents.length) byId('switcher').classList.remove('on');
+          else openSwitcher();
+        }, 240);
         return;
       }
       const a = (state.apps || []).find((x) => x.id === c.dataset.app);
@@ -2317,9 +2599,12 @@ function descOf(a) {
 }
 
 function storeDetail(a) {
-  storeView = a.id;
+  if (!openApp || openApp.id !== 'store') return;
+  beginView();
   const has = isInstalled(a.id);
-  setNav(L('app.store'), null);
+  setNav(L('app.store'), L('app.store'), null, () => {
+    RENDER.store();
+  });
   body(
     '<div class="sthead">' + UI.appIcon(a.icon) +
       '<div class="stinfo"><div class="stbig">' + esc(L(a.label)) + '</div>' +
@@ -2348,7 +2633,7 @@ function storeDetail(a) {
   const so = byId('stopen');
   if (so) so.addEventListener('click', () => {
     const app = (state.apps || []).find((x) => x.id === a.id);
-    if (app) { storeView = null; enterApp(app, null); }
+    if (app) enterApp(app, null);
   });
   const sg = byId('stget');
   if (sg) sg.addEventListener('click', async () => { if (await storeInstall(a.id, true)) storeDetail(a); });
@@ -2409,7 +2694,6 @@ function storeRow(a) {
 }
 
 RENDER.store = () => {
-  storeView = null;
   setNav(L('app.store'), null);
 
   // Deduplicated by id: the registry is a config seed merged with the operator's rows, and
@@ -2547,13 +2831,13 @@ let reminders = null;
 
 async function loadReminders() {
   if (reminders) return reminders;
-  const r = await post('sdkStorage', { app: 'reminders', op: 'get', key: 'items' });
-  try { reminders = JSON.parse((r && r.value) || '[]') || []; } catch (e) { reminders = []; }
+  const r = await post('appStorage', { app: 'reminders', op: 'get', key: 'items' });
+  try { reminders = JSON.parse((r && r.value) || '[]') || []; } catch { reminders = []; }
   return reminders;
 }
 
 function saveReminders() {
-  return post('sdkStorage', { app: 'reminders', op: 'set', key: 'items', value: JSON.stringify(reminders) });
+  return post('appStorage', { app: 'reminders', op: 'set', key: 'items', value: JSON.stringify(reminders) });
 }
 
 RENDER.reminders = async () => {
@@ -2734,10 +3018,10 @@ function airdropShare(kind, payload) {
   sheet(L('ph.airdrop'),
     '<div class="airhint">' + esc(L('ph.airdrop_hint')) + '</div><div id="airlist"></div>',
     async () => {
-      byId('airlist').innerHTML = '<div class="airscan">' + esc(L('ph.airdrop_scanning')) + '</div>';
-      const r = await post('airdropScan');
       const host = byId('airlist');
-      if (!host) return;
+      host.innerHTML = '<div class="airscan">' + esc(L('ph.airdrop_scanning')) + '</div>';
+      const r = await post('airdropScan');
+      if (byId('airlist') !== host || !host.isConnected) return;
       if (!r || r.error) { host.innerHTML = UI.empty(L('ph.airdrop_' + ((r && r.error) || 'x')), 'airdrop'); return; }
       const devs = r.devices || [];
       if (!devs.length) { host.innerHTML = UI.empty(L('ph.airdrop_none'), 'airdrop'); return; }
@@ -2745,9 +3029,10 @@ function airdropShare(kind, payload) {
         icon: 'airdrop', tint: '#0A84FF', title: dv.name, subtitle: L('ph.airdrop_nearby'),
         chevron: true, data: { to: dv.id },
       })));
-      [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
-        const res = await post('airdropSend', { to: Number(el.dataset.to), kind, payload });
+      [...host.querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+        const to = Number(el.dataset.to);
         closeSheet();
+        const res = await post('airdropSend', { to, kind, payload });
         toast(res && res.ok ? L('ph.airdrop_sent') : L('ph.airdrop_' + ((res && res.error) || 'x')));
       }));
     });
@@ -2766,14 +3051,14 @@ function airdropOffer(o) {
     UI.button(L('ph.airdrop_decline'), 'airno', 'plain'),
     () => {
       byId('airok').addEventListener('click', async () => {
-        const r = await post('airdropRespond', { offerId: o.offerId, accept: true });
         closeSheet();
+        const r = await post('airdropRespond', { offerId: o.offerId, accept: true });
         if (r && r.ok) { await refresh(); toast(L('ph.airdrop_saved')); }
         else toast(L('ph.airdrop_' + ((r && r.error) || 'x')));
       });
       byId('airno').addEventListener('click', async () => {
-        await post('airdropRespond', { offerId: o.offerId, accept: false });
         closeSheet();
+        await post('airdropRespond', { offerId: o.offerId, accept: false });
       });
     });
 }
@@ -2805,7 +3090,7 @@ function legacyCopy(text, said) {
   ta.select();
   ta.setSelectionRange(0, ta.value.length);
   let ok = false;
-  try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+  try { ok = document.execCommand('copy'); } catch { ok = false; }
   document.body.removeChild(ta);
   toast(ok ? (said || L('ph.copied')) : L('ph.copy_failed'));
   return ok;
@@ -2839,14 +3124,22 @@ function tabbar(tabs, current, onPick) {
 // One account PER APP, because that is how the real ones work: your Bleeter handle is
 // not your Snapmatic handle unless you choose it twice.
 const socialAcc = {};
+function clearSocialAccounts() {
+  Object.keys(socialAcc).forEach((app) => { delete socialAcc[app]; });
+}
 
 const APP_ICON = { bleeter: 'bleet', snap: 'snap', hush: 'hush' };
+const socialActive = (app, epoch) =>
+  !!openApp && openApp.id === app && (epoch == null || epoch === viewEpoch);
 
 // A real account gate: a live session either opens the app, asks for a password, or runs
 // the sign-up wizard, decided by whether an account exists and whether you are logged in.
 async function needAccount(app, then) {
+  const epoch = viewEpoch;
+  if (!socialActive(app, epoch)) return;
   if (socialAcc[app]) { then(); return; }
   const r = await post('social', { op: 'me', app });
+  if (!socialActive(app, epoch)) return;
   if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'off')), APP_ICON[app] || 'bleet')); return; }
   if (r.authed && r.account) { socialAcc[app] = r.account; then(); return; }
   if (r.exists) { socialLogin(app, then); return; }
@@ -2863,6 +3156,8 @@ function acctHead(app, sub) {
 
 // Returning to a registered account: unlock it with the password.
 function socialLogin(app, then) {
+  const epoch = viewEpoch;
+  if (!socialActive(app, epoch)) return;
   body(
     acctHead(app, L('ph.soc_login_sub')) +
     UI.field('lpw', L('ph.soc_password'), '', 'type="password" maxlength="40"') +
@@ -2871,12 +3166,15 @@ function socialLogin(app, then) {
   );
   byId('lgo').addEventListener('click', async () => {
     const r = await post('social', { op: 'login', app, password: byId('lpw').value });
-    if (r && r.ok) { socialAcc[app] = r.account; then(); }
+    if (r && r.ok) socialAcc[app] = r.account;
+    if (!socialActive(app, epoch)) return;
+    if (r && r.ok) then();
     else toast(L('ph.err_' + ((r && r.error) || 'x')));
   });
   // "Not you?" logs the stored account out for this session and starts a fresh sign-up.
   byId('lforget').addEventListener('click', async () => {
     await post('social', { op: 'logout', app });
+    if (!socialActive(app, epoch)) return;
     socialSignup(app, then);
   });
 }
@@ -2885,11 +3183,14 @@ function socialLogin(app, then) {
 // progress line, and nothing skippable - the account the network knows you by is built
 // here, not guessed.
 function socialSignup(app, then) {
+  const epoch = viewEpoch;
+  if (!socialActive(app, epoch)) return;
   const st = { step: 1, number: '' };
   const steps = 3;
   const prog = (n) => '<div class="signprog">' + esc(L('ph.soc_step')) + ' ' + n + '/' + steps + '</div>';
 
   const render = () => {
+    if (!socialActive(app, epoch)) return;
     if (st.step === 1) {
       body(
         acctHead(app, L('ph.soc_join_sub')) + prog(1) +
@@ -2900,6 +3201,7 @@ function socialSignup(app, then) {
       );
       byId('sc1').addEventListener('click', async () => {
         const r = await post('social', { op: 'requestCode', app });
+        if (!socialActive(app, epoch)) return;
         if (r && r.ok) { st.number = r.number; st.step = 2; render(); toast(L('ph.soc_code_sent')); }
         else toast(L('ph.err_' + ((r && r.error) || 'x')));
       });
@@ -2913,11 +3215,13 @@ function socialSignup(app, then) {
       byId('scode').focus();
       byId('sc2').addEventListener('click', async () => {
         const r = await post('social', { op: 'verifyCode', app, code: byId('scode').value.trim() });
+        if (!socialActive(app, epoch)) return;
         if (r && r.ok) { st.step = 3; render(); }
         else toast(L('ph.err_' + ((r && r.error) || 'x')));
       });
       byId('sc2r').addEventListener('click', async () => {
         const r = await post('social', { op: 'requestCode', app });
+        if (!socialActive(app, epoch)) return;
         if (r && r.ok) { st.number = r.number; toast(L('ph.soc_code_sent')); }
         else toast(L('ph.err_' + ((r && r.error) || 'x')));
       });
@@ -2938,7 +3242,9 @@ function socialSignup(app, then) {
         const r = await post('social', { op: 'register', app,
           handle: byId('shandle').value.trim(), displayname: byId('sdisplay').value.trim(),
           password: byId('spw').value, avatar: byId('savatar').value.trim(), bio: byId('sbio').value.trim() });
-        if (r && r.ok) { socialAcc[app] = r.account; toast(L('ph.soc_made')); then(); }
+        if (r && r.ok) socialAcc[app] = r.account;
+        if (!socialActive(app, epoch)) return;
+        if (r && r.ok) { toast(L('ph.soc_made')); then(); }
         else toast(L('ph.err_' + ((r && r.error) || 'x')));
       });
     }
@@ -2948,7 +3254,7 @@ function socialSignup(app, then) {
 
 function postCard(pst) {
   const av = pst.avatar
-    ? '<span class="pav" style="background-image:url(' + esc(pst.avatar) + ')"></span>'
+    ? '<span class="pav" style="' + inlineBackground(pst.avatar) + '"></span>'
     : '<span class="pav">' + esc(String(pst.handle || '?').slice(0, 1).toUpperCase()) + '</span>';
   return '<div class="post" data-id="' + pst.id + '">' +
     '<div class="phead">' + av +
@@ -2974,6 +3280,9 @@ function wireLikes() {
 }
 
 async function socialFeed(kind, emptyKey) {
+  const appId = kind === 'photo' ? 'snap' : 'bleeter';
+  if (!openApp || openApp.id !== appId) return;
+  beginView();
   loading();
   const r = await post('social', { op: 'feed', kind });
   if (!r || r.error) { body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), 'bleet')); return; }
@@ -3015,8 +3324,8 @@ RENDER.snap = () => needAccount('snap', async () => {
     const shots = state.photos || [];
     if (!shots.length) { toast(L('ph.snap_noshots')); return; }
     sheet(L('ph.snap_new'),
-      '<div class="shots" style="margin-bottom:10px">' + shots.map((u, i) =>
-        '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>' +
+      '<div class="shots" style="margin-bottom:10px">' + shots.map((v, i) =>
+        '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>' +
       UI.field('scap', L('ph.snap_caption'), '', 'maxlength="140"') +
         UI.button('😊 ' + L('ph.emoji'), 'semoji', 'plain'),
       () => {
@@ -3024,7 +3333,7 @@ RENDER.snap = () => needAccount('snap', async () => {
         [...byId('sheet').querySelectorAll('.shot')].forEach((el) =>
           el.addEventListener('click', async () => {
             const r = await post('social', { op: 'post', kind: 'photo',
-              image: shots[Number(el.dataset.i)], body: byId('scap').value });
+              image: photoRow(shots[Number(el.dataset.i)]).url, body: byId('scap').value });
             emojiClose(); closeSheet();
             if (r && r.ok) RENDER.snap(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
           }));
@@ -3036,6 +3345,8 @@ RENDER.snap = () => needAccount('snap', async () => {
 // -- Hush -------------------------------------------------------
 RENDER.hush = () => needAccount('hush', hushMain);
 async function hushMain() {
+  if (!openApp || openApp.id !== 'hush') return;
+  beginView();
   setNav(L('app.hush'), null);
   loading();
   const me = await post('social', { op: 'hushMe' });
@@ -3064,7 +3375,7 @@ async function hushMain() {
 
   body(
     '<div class="hushcard">' +
-      '<div class="hphoto"' + (pf.photo ? ' style="background-image:url(' + esc(pf.photo) + ')"' : '') + '>' +
+      '<div class="hphoto"' + (pf.photo ? ' style="' + inlineBackground(pf.photo) + '"' : '') + '>' +
         '<div class="hname">' + esc(pf.name || '?') + (pf.age ? ', ' + pf.age : '') + '</div></div>' +
       (pf.bio ? '<div class="hbio">' + esc(pf.bio) + '</div>' : '') +
     '</div>' +
@@ -3094,7 +3405,7 @@ async function hushMain() {
 // pointed a tone at their own MP3. That link is host-gated on the server.
 let AC = null;
 function audio() {
-  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = false; } }
+  if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch { AC = false; } }
   if (AC && AC.state === 'suspended') AC.resume();
   return AC || null;
 }
@@ -3128,7 +3439,7 @@ let ringEl = null;      // the <audio> for a custom link, so it can be stopped
 let ringTimer = null;
 
 function stopTone() {
-  if (ringEl) { try { ringEl.pause(); } catch (e) {} ringEl = null; }
+  if (ringEl) { try { ringEl.pause(); } catch {} ringEl = null; }
   clearInterval(ringTimer); ringTimer = null;
 }
 
@@ -3146,7 +3457,7 @@ function playTone(name, url, vol, loop) {
       el.play().catch(() => {});
       if (loop) ringEl = el;
       return;
-    } catch (e) { /* fall through to the built-in */ }
+    } catch { /* fall through to the built-in */ }
   }
   const score = TONES[name] || TONES.classic;
   score.forEach(([f, t, d]) => note(f, t, d, 0.12 * v, 'sine'));
@@ -3156,6 +3467,7 @@ function playTone(name, url, vol, loop) {
 function playRingtone() {
   const p = state.prefs || {};
   stopTone();
+  if (p.dnd) return;
   const name = p.ringtone || 'classic', url = p.ringUrl || null;
   playTone(name, url, p.ringVolume, true);
   if (!url) {
@@ -3168,7 +3480,22 @@ function stopRingtone() { stopTone(); }
 // Everything that is not a call: a message, a mail, a notification.
 function playAlert() {
   const p = state.prefs || {};
+  if (p.dnd) return;
   playTone(p.alertTone || 'ping', p.alertUrl || null, p.ringVolume, false);
+}
+
+function syncDndAudio() {
+  if ((state.prefs || {}).dnd) {
+    stopRingtone();
+    const island = byId('island');
+    if (island && island.classList.contains('notif')) {
+      clearTimeout(islandTimer);
+      islandTimer = null;
+      setIslandMode(null);
+    }
+    return;
+  }
+  if (call && call.state === 'in') playRingtone();
 }
 
 // ══ Buzz and peek ══════════════════════════════════════════════
@@ -3178,6 +3505,7 @@ function playAlert() {
 let buzzTimer = null, peekTimer = null;
 
 function buzzDevice() {
+  if ((state.prefs || {}).dnd) return;
   const d = byId('device');
   d.classList.remove('buzz');
   void d.offsetWidth;               // restart the animation rather than ignore a re-trigger
@@ -3188,6 +3516,7 @@ function buzzDevice() {
 
 function showPeek(kind, data) {
   const d = byId('device');
+  if (call || (state.prefs || {}).dnd) return;
   // No phone on them, nothing to lift out of a pocket. The client checks this too; it is
   // repeated here so the rule holds whoever sends the message.
   if (data && data.hasItem === false) return;
@@ -3202,15 +3531,46 @@ function showPeek(kind, data) {
   byId('inicon').innerHTML = UI.appIcon(kind === 'message' ? 'messages' : (data.app || data.icon || 'dot'));
   byId('inTitle').textContent = title;
   byId('inBody').textContent = bodyTxt;
-  byId('island').classList.add('notif');
+  setIslandMode('notif');
   buzzDevice();
 
   clearTimeout(peekTimer);
   peekTimer = setTimeout(() => {
-    byId('island').classList.remove('notif');
+    if (!call) setIslandMode(null);
     d.classList.remove('peeking');
     d.classList.add('hidden');
+    peekTimer = null;
   }, 4600);
+}
+
+function archivePeek(kind, data) {
+  data = data || {};
+  const app = kind === 'message' ? 'messages' : notifApp(data);
+  if (appMuted(app)) return;
+  const title = kind === 'message'
+    ? (data.groupName || nameOfNumber(data.from) || L('ph.new_message_t'))
+    : (data.title || L('ph.notification'));
+  const bodyText = kind === 'message' ? (data.body || L('ph.attach')) : (data.body || '');
+  const onClick = () => {
+    const target = (state.apps || []).find((entry) => entry.id === app);
+    if (!target) return;
+    enterApp(target, null);
+    if (kind === 'message') {
+      if (data.group) openGroup(data.group, data.groupName || L('ph.groups'));
+      else if (data.from) openThread(data.from);
+    }
+  };
+  notifs.unshift({
+    id: ++notifSeq,
+    app,
+    icon: kind === 'message' ? 'messages' : (data.icon || app),
+    title,
+    body: bodyText,
+    at: Date.now(),
+    onClick,
+  });
+  notifs = notifs.slice(0, 40);
+  paintNotifs();
 }
 
 // ══ Emoji ══════════════════════════════════════════════════════
@@ -3242,7 +3602,7 @@ function paintEmoji() {
       const at = (inp.selectionStart != null) ? inp.selectionStart : inp.value.length;
       inp.value = inp.value.slice(0, at) + b.dataset.e + inp.value.slice(at);
       const pos = at + b.dataset.e.length;
-      try { inp.setSelectionRange(pos, pos); } catch (e) {}
+      try { inp.setSelectionRange(pos, pos); } catch {}
       inp.focus();
     }));
 }
@@ -3254,18 +3614,67 @@ function emojiOpen(inputId) {
 function emojiClose() { byId('emojipanel').classList.remove('on'); emojiTarget = null; }
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════
+let sheetReturn = null;
+const promptQueue = [];
+let activePrompt = false;
+let promptExpiryTimer = null;
+
+function pumpPrompts() {
+  if (activePrompt || byId('sheet').classList.contains('on')) return;
+  while (promptQueue.length) {
+    const entry = promptQueue.shift();
+    const remaining = entry.expires - Date.now();
+    if (remaining <= 0) continue;
+    activePrompt = true;
+    entry.show();
+    clearTimeout(promptExpiryTimer);
+    promptExpiryTimer = setTimeout(() => {
+      promptExpiryTimer = null;
+      if (activePrompt) closeSheet();
+    }, remaining);
+    return;
+  }
+}
+
+function enqueuePrompt(show, ttlMs) {
+  if (typeof show !== 'function') return;
+  const now = Date.now();
+  for (let i = promptQueue.length - 1; i >= 0; i -= 1) {
+    if (promptQueue[i].expires <= now) promptQueue.splice(i, 1);
+  }
+  while (promptQueue.length >= 6) promptQueue.shift();
+  promptQueue.push({
+    show,
+    expires: now + Math.max(1000, Number(ttlMs) || 30000),
+  });
+  pumpPrompts();
+}
+
 function sheet(title, html, after) {
+  sheetReturn = null;
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
   byId('sheet').classList.add('on');
   byId('scrim').classList.add('on');
   if (after) after();
 }
-function closeSheet() {
+function closeSheet(force) {
   if (typeof emojiClose === 'function') emojiClose();
+  if (!force && sheetReturn) {
+    const restore = sheetReturn;
+    sheetReturn = null;
+    restore();
+    return;
+  }
+  sheetReturn = null;
+  clearTimeout(promptExpiryTimer);
+  promptExpiryTimer = null;
   byId('sheet').classList.remove('on');
   byId('scrim').classList.remove('on');
+  activePrompt = false;
+  if (force) promptQueue.length = 0;
+  else setTimeout(pumpPrompts, 0);
 }
-byId('scrim').addEventListener('click', closeSheet);
+byId('scrim').addEventListener('click', () => closeSheet());
 
 let toastTimer = null;
 function toast(text) {
@@ -3287,9 +3696,11 @@ function banner(b) {
               at: Date.now(), onClick: b.onClick || null };
   notifs.unshift(n);
   notifs = notifs.slice(0, 40);
-  playAlert();
   paintNotifs();
   if (byId('shade').classList.contains('on')) renderShade();
+  // Focus keeps a quiet history in Notification Centre without lighting the island.
+  if ((state.prefs || {}).dnd) return;
+  playAlert();
   islandNotify(n);
 }
 
@@ -3301,16 +3712,19 @@ function islandNotify(n) {
   byId('inicon').innerHTML = UI.appIcon(n.icon);
   byId('inTitle').textContent = n.title;
   byId('inBody').textContent = n.body;
-  isl.classList.add('notif');
+  setIslandMode('notif');
   isl.dataset.notif = n.id;
   clearTimeout(islandTimer);
-  islandTimer = setTimeout(() => { if (!call) isl.classList.remove('notif'); }, 4200);
+  islandTimer = setTimeout(() => {
+    if (!call && isl.classList.contains('notif')) setIslandMode(null);
+    islandTimer = null;
+  }, 4200);
 }
 byId('island').addEventListener('click', () => {
   const isl = byId('island');
   if (!isl.classList.contains('notif')) return;
   const n = notifs.find((x) => String(x.id) === isl.dataset.notif);
-  isl.classList.remove('notif');
+  setIslandMode(null);
   clearTimeout(islandTimer);
   if (n && n.onClick) n.onClick();
 });
@@ -3331,7 +3745,7 @@ function paintNotifs() {
       ? `<button class="lockclear" id="lockclear" type="button">${esc(L('ph.clear_all'))}</button>`
       : '') +
     shown.map((n, i) =>
-      `<div class="lnotif glass" style="--i:${i}" data-nid="${n.id}">` +
+      `<div class="lnotif glass" style="animation-delay:${i * 50}ms" data-nid="${n.id}">` +
       `<span class="lic">${UI.appIcon(n.icon)}</span>` +
       `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
       `<span class="lb">${esc(n.body || '')}</span></span>` +
@@ -3361,7 +3775,7 @@ function paintNotifs() {
 }
 
 // ══ Calls ══════════════════════════════════════════════════════
-let callMuted = false, callSpeaker = false;
+let callSpeaker = false;
 
 function fmtDuration(s) {
   const m = Math.floor(s / 60), r = s % 60;
@@ -3370,12 +3784,11 @@ function fmtDuration(s) {
 
 function renderCall() {
   const ui = byId('callui');
-  const island = byId('island');
   // The page owns the ringing: it is the only side that can play a player's own MP3.
   if (call && call.state === 'in') playRingtone(); else stopRingtone();
   if (!call) {
     ui.classList.remove('on');
-    island.classList.remove('live');
+    setIslandMode(null);
     clearInterval(callTimer); callTimer = null;
     return;
   }
@@ -3387,16 +3800,19 @@ function renderCall() {
     call.state === 'in' ? L('ph.incoming') : call.state === 'out' ? L('ph.calling') : '';
 
   // Live activity in the island, which is what a modern iPhone does with a call.
-  island.classList.add('live');
+  setIslandMode('live');
   byId('islandIcon').innerHTML = svg('phone');
   byId('islandT1').textContent = name;
   byId('islandT2').textContent = call.state === 'active' ? L('ph.in_call')
     : call.state === 'in' ? L('ph.incoming') : L('ph.calling');
 
   if (call.state === 'active') {
+    if (!callTimer) callStart = Date.now();
+    const elapsed = Math.floor((Date.now() - callStart) / 1000);
+    byId('callstate').innerHTML =
+      `<span class="calltimer" id="ctimer">${fmtDuration(elapsed)}</span>`;
+    byId('islandT2').textContent = fmtDuration(elapsed);
     if (!callTimer) {
-      callStart = Date.now();
-      byId('callstate').innerHTML = `<span class="calltimer" id="ctimer">0:00</span>`;
       callTimer = setInterval(() => {
         const s = Math.floor((Date.now() - callStart) / 1000);
         const el = byId('ctimer'); if (el) el.textContent = fmtDuration(s);
@@ -3404,14 +3820,10 @@ function renderCall() {
       }, 1000);
     }
     byId('callpad').innerHTML =
-      `<div class="cpad ${callMuted ? 'on' : ''}" data-a="mute"><span>${svg('mute')}</span><em>${esc(L('ph.mute'))}</em></div>` +
-      `<div class="cpad" data-a="keypad"><span>${svg('keypad')}</span><em>${esc(L('ph.keypad'))}</em></div>` +
       `<div class="cpad ${callSpeaker ? 'on' : ''}" data-a="speaker"><span>${svg('speaker')}</span><em>${esc(L('ph.speaker'))}</em></div>`;
     [...byId('callpad').querySelectorAll('.cpad')].forEach((p) => p.addEventListener('click', () => {
-      // Local comfort toggles only: the audio itself belongs to v-voice, and a phone
-      // that pretended to mute a Mumble channel would be lying about being heard.
-      if (p.dataset.a === 'mute') { callMuted = !callMuted; }
-      else if (p.dataset.a === 'speaker') {
+      // The only exposed audio control is backed by the real proximity speaker bridge.
+      if (p.dataset.a === 'speaker') {
         // A real speaker: the server works out who is close enough to hear it.
         callSpeaker = !callSpeaker;
         post('speaker', { on: callSpeaker }).then((r) => {
@@ -3443,8 +3855,16 @@ let ccNow = null;   // last-known now-playing, so the panel opens without a flas
 
 async function toggleCC(key) {
   const p = state.prefs || {};
-  const r = await post('prefs', { [key]: !p[key] });
-  if (r && r.ok) { state.prefs = r.prefs; applyPower(state._power || {}); applyStatusFlags(); renderCC(); }
+  const defaultsOn = key === 'wifi' || key === 'cellular';
+  const current = defaultsOn ? p[key] !== false : p[key] === true;
+  const r = await post('prefs', { [key]: !current });
+  if (r && r.ok) {
+    state.prefs = r.prefs;
+    if (key === 'dnd') syncDndAudio();
+    applyPower(state._power || {});
+    applyStatusFlags();
+    renderCC();
+  }
 }
 
 function renderCC() {
@@ -3477,14 +3897,20 @@ function renderCC() {
     `<div class="fill" style="height:${Math.round(bright * 100)}%"></div><div class="gl">${svg('sun')}</div>`;
   byId('ccvol').innerHTML =
     `<div class="fill" style="height:${Math.round(volume * 100)}%"></div><div class="gl">${svg('speaker')}</div>`;
-  wireSlab('ccbright', async (v) => {
+  wireSlab('ccbright', (v) => {
+    const brightness = 0.35 + v * 0.65;
+    state.prefs = Object.assign({}, state.prefs || {}, { brightness });
+    applyBrightness();
+    byId('ccbright').querySelector('.fill').style.height = Math.round(brightness * 100) + '%';
+  }, async (v) => {
+    const commit = ++brightnessCommit;
     const r = await post('prefs', { brightness: 0.35 + v * 0.65 });
-    if (r && r.ok) { state.prefs = r.prefs; applyBrightness(); }
-    byId('ccbright').querySelector('.fill').style.height = Math.round((0.35 + v * 0.65) * 100) + '%';
+    if (commit === brightnessCommit && r && r.ok) state.prefs = r.prefs;
   });
-  wireSlab('ccvol', async (v) => {
+  wireSlab('ccvol', (v) => {
     volume = v;
     byId('ccvol').querySelector('.fill').style.height = Math.round(v * 100) + '%';
+  }, async (v) => {
     if (ccNow) await post('music', { id: ccNow.id, action: 'volume', volume: v });
   });
 
@@ -3497,9 +3923,36 @@ function renderCC() {
 }
 
 let ccTorch = false;
+let torchCommit = 0;
+let torchPending = false;
+
+function paintTorchState() {
+  const quick = byId('qtorch');
+  quick.classList.toggle('on', ccTorch);
+  quick.setAttribute('aria-pressed', ccTorch ? 'true' : 'false');
+}
+
+async function toggleTorch() {
+  if (torchPending) return;
+  torchPending = true;
+  const commit = ++torchCommit;
+  const next = !ccTorch;
+  const r = await post('torch', { on: next });
+  if (commit !== torchCommit) return;
+  torchPending = false;
+  if (!r || !r.ok) {
+    toast(L('ph.err_' + ((r && r.error) || 'x')));
+    return;
+  }
+  ccTorch = next;
+  paintTorchState();
+  toast(L(ccTorch ? 'ph.torch_on' : 'ph.torch_off'));
+  if (byId('cc').classList.contains('on')) renderCC();
+}
+
 async function ccToggle(c) {
   if (c === 'dnd') { await toggleCC('dnd'); return; }
-  if (c === 'torch') { ccTorch = !ccTorch; post('torch', { on: ccTorch }); toast(L(ccTorch ? 'ph.torch_on' : 'ph.torch_off')); renderCC(); return; }
+  if (c === 'torch') { await toggleTorch(); return; }
   byId('cc').classList.remove('on');
   const id = c === 'camera' ? 'camera' : 'settings';
   const a = (state.apps || []).find((x) => x.id === id);
@@ -3507,16 +3960,42 @@ async function ccToggle(c) {
 }
 
 // A vertical slider: press or drag anywhere in the slab, the fill follows the finger.
-function wireSlab(id, onChange) {
+const slabCallbacks = new WeakMap();
+const slabCommits = new WeakMap();
+const wiredSlabs = new WeakSet();
+let brightnessCommit = 0;
+
+function wireSlab(id, onChange, onCommit) {
   const el = byId(id);
+  slabCallbacks.set(el, onChange);
+  slabCommits.set(el, onCommit);
+  if (wiredSlabs.has(el)) return;
+  wiredSlabs.add(el);
   const to = (e) => {
     const r = el.getBoundingClientRect();
     return Math.max(0, Math.min(1, 1 - (e.clientY - r.top) / r.height));
   };
-  let down = false;
-  el.addEventListener('pointerdown', (e) => { down = true; el.setPointerCapture(e.pointerId); onChange(to(e)); });
-  el.addEventListener('pointermove', (e) => { if (down) onChange(to(e)); });
-  el.addEventListener('pointerup', () => { down = false; });
+  const emit = (e) => {
+    const value = to(e);
+    const fn = slabCallbacks.get(el);
+    if (fn) fn(value);
+    return value;
+  };
+  let down = false, value = 0;
+  el.addEventListener('pointerdown', (e) => {
+    down = true;
+    el.setPointerCapture(e.pointerId);
+    value = emit(e);
+  });
+  el.addEventListener('pointermove', (e) => { if (down) value = emit(e); });
+  el.addEventListener('pointerup', (e) => {
+    if (!down) return;
+    value = emit(e);
+    down = false;
+    const commit = slabCommits.get(el);
+    if (commit) commit(value);
+  });
+  el.addEventListener('pointercancel', () => { down = false; });
 }
 
 // The control centre's media tile reads from v-music, refreshed each time it opens.
@@ -3543,18 +4022,27 @@ window.addEventListener('message', async (e) => {
   const d = e.data || {};
   if (d.__phone !== 'sdk') return;
   const frame = byId('appframe');
+  if (!frame || !frame.contentWindow || e.source !== frame.contentWindow ||
+      !openApp || !openApp.page) return;
+  const source = e.source;
+  const appId = openApp.id;
+  const appIcon = openApp.icon || 'dot';
   const reply = (payload) => {
-    if (frame && frame.contentWindow) {
-      frame.contentWindow.postMessage({ __phone: 'reply', id: d.id, payload }, '*');
-    }
+    // Reply to the window that made this request, even if navigation has replaced the
+    // current iframe while an asynchronous callback was in flight.
+    if (source) source.postMessage({ __phone: 'reply', id: d.id, payload }, '*');
   };
 
   if (d.op === 'title') { setNav(d.data && d.data.title, null); byId('navbar').classList.remove('hidden'); return reply({ ok: true }); }
-  if (d.op === 'close') { closeApp(); return reply({ ok: true }); }
+  if (d.op === 'close') { reply({ ok: true }); closeApp(); return; }
   if (d.op === 'toast') { toast((d.data && d.data.text) || ''); return reply({ ok: true }); }
-  if (d.op === 'notify') { banner({ app: (openApp && openApp.id) || 'dot', icon: (openApp && openApp.icon) || 'dot', title: d.data.title, body: d.data.body }); return reply({ ok: true }); }
+  if (d.op === 'notify') {
+    const data = d.data || {};
+    banner({ app: appId, icon: appIcon, title: data.title, body: data.body });
+    return reply({ ok: true });
+  }
   if (d.op === 'badge') {
-    const a = (state.apps || []).find((x) => openApp && x.id === openApp.id);
+    const a = (state.apps || []).find((x) => x.id === appId);
     if (a) {
       a.badge = Number(d.data && d.data.count) || 0;
       // Repaint, or the count only appears the next time something else happens to
@@ -3568,7 +4056,7 @@ window.addEventListener('message', async (e) => {
   // The app id is stamped LAST, so a page cannot claim to be a different app by
   // putting its own `app` in the payload. Everything an app is allowed to reach is
   // namespaced under this id.
-  reply(await fn(Object.assign({}, d.data || {}, { app: openApp && openApp.id })));
+  reply(await fn(Object.assign({}, d.data || {}, { app: appId })));
 });
 
 // ══ Refresh ════════════════════════════════════════════════════
@@ -3611,41 +4099,31 @@ byId('island').addEventListener('click', () => { if (call) renderCall(); });
 byId('status').style.pointerEvents = 'auto';
 
 byId('navback').addEventListener('click', () => {
-  if (openApp && openApp.id === 'store' && storeView) {
-    storeView = null;
-    RENDER.store();
-    return;
-  }
-  // Back inside Mail steps to the folder list. Falling through to closeApp here is what
-  // made tapping "Mail" quit the app instead of leaving the message.
-  if (openApp && openApp.id === 'notes') { RENDER.notes(); return; }
-  if (openApp && openApp.id === 'mail' && mailAcc) {
-    mailList();
-    return;
-  }
-  if (openApp && openApp.id === 'messages' && (thread || threadGroup)) {
-    if (threadGroup) {
-      // Back from a group steps to the list, exactly as it does from a DM. Falling
-      // through to closeApp here is how back used to throw you out of the app.
-      threadGroup = null; foot('');
-      RENDER.messages();
-      return;
-    }
-    thread = null; foot('');
-    RENDER.messages();
-    return;
-  }
+  const onBack = navBackAction;
+  navBackAction = null;
+  if (onBack) { onBack(); return; }
   closeApp();
 });
 
-byId('qcam').addEventListener('click', () => toast(L('ph.camera_off')));
-byId('qtorch').addEventListener('click', () => toast(L('ph.torch_hint')));
+byId('qcam').addEventListener('click', () => {
+  const camera = (state.apps || []).find((a) => a.id === 'camera');
+  if (!state.camera || !camera) {
+    toast(L('ph.camera_off'));
+    return;
+  }
+  if (!byId('lock').classList.contains('out')) unlock();
+  enterApp(camera, byId('qcam'));
+});
+byId('qtorch').addEventListener('click', toggleTorch);
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (byId('cc').classList.contains('on')) { byId('cc').classList.remove('on'); return; }
-    if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
+    const hadTransient = anyOverlayOpen() || byId('folderview').classList.contains('on') ||
+      byId('emojipanel').classList.contains('on') || editing || !!arr;
+    resetTransientUI();
+    if (hadTransient) return;
     if (byId('app').classList.contains('on')) { closeApp(); return; }
+    clearActiveApp();
     post('close');
     return;
   }
@@ -3654,6 +4132,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 byId('pages').addEventListener('wheel', (e) => { flipPage(e.deltaY > 0 ? 1 : -1); }, { passive: true });
+window.addEventListener('resize', applyDevice, { passive: true });
+if (window.visualViewport) window.visualViewport.addEventListener('resize', applyDevice, { passive: true });
 
 // The phone keeps game input flowing so you can walk and drive while using it. A focused
 // text field is the exception: the client holds the keyboard for the page while you type,
@@ -3668,16 +4148,30 @@ document.addEventListener('focusout', (e) => {
 
 // ══ Lua → page ═════════════════════════════════════════════════
 window.addEventListener('message', (e) => {
+  // CEF host messages have no foreign Window source. An iframe must never be able to
+  // impersonate Lua with an { action: ... } payload.
+  if (e.source && e.source !== window) return;
   const d = e.data || {};
   if (d.__phone) return;                       // SDK traffic, handled above
   if (d.action === 'open') {
+    torchCommit += 1;
+    torchPending = false;
+    resetTransientUI();
     S = d.strings || {};
+    if (notificationOwner && notificationOwner !== d.number) notifs = [];
+    notificationOwner = d.number || null;
     state = d;
     available = d.available || d.apps || [];
     state.sounds = d.sounds || state.sounds || {};
     call = d.call || null;
-    dialed = ''; thread = null; openApp = null; page = 0;
+    dialed = ''; thread = null; threadGroup = null; openApp = null; page = 0;
+    const locale = String(d.locale || d.lang || 'en').trim().replace('_', '-');
+    document.documentElement.lang = locale || 'en';
     byId('device').classList.remove('hidden');
+    byId('qtorch').setAttribute('aria-label', L('ph.torch'));
+    byId('qcam').setAttribute('aria-label', L('app.camera'));
+    byId('homebar').setAttribute('aria-label', L('ph.home'));
+    byId('arrangedone').setAttribute('aria-label', L('ph.arrange_done'));
     byId('locknum').textContent = d.number || '';
     applyWallpaper();
     applyDevice();
@@ -3696,18 +4190,23 @@ window.addEventListener('message', (e) => {
     closeApp(true);
     renderCall();
   } else if (d.action === 'close') {
+    torchCommit += 1;
+    torchPending = false;
+    resetTransientUI();
+    closeApp(true);
+    ccTorch = false;
+    paintTorchState();
     byId('device').classList.add('hidden');
-    byId('cc').classList.remove('on');
-    closeSheet();
   } else if (d.action === 'call') {
     const was = call && call.state;
     call = d.call || null;
     if (!call || call.state !== 'active') { clearInterval(callTimer); callTimer = null; }
-    if (call && call.state !== was) { callMuted = false; callSpeaker = false; }
+    if (call && call.state !== was) { callSpeaker = false; }
     renderCall();
   } else if (d.action === 'message') {
     const m = d.message || {};
-    const inOpenThread = (threadGroup && m.group === threadGroup.id) ||
+    const inOpenThread = (threadGroup && m.group != null &&
+                          String(m.group) === String(threadGroup.id)) ||
                          (!m.group && thread && m.from === thread);
     if (inOpenThread) {
       const el = byId('thread');
@@ -3717,9 +4216,17 @@ window.addEventListener('message', (e) => {
         byId('appbody').scrollTop = byId('appbody').scrollHeight;
       }
     } else {
-      banner({ app: 'messages', icon: 'messages', title: d.message.group ? (d.message.groupName || L('ph.groups')) : nameOfNumber(d.message.from), body: d.message.body || L('ph.attach'),
-               onClick: () => { const a = (state.apps || []).find((x) => x.id === 'messages');
-                                if (a) { enterApp(a, null); openThread(d.message.from); } } });
+      const groupId = m.group;
+      const groupName = m.groupName || L('ph.groups');
+      banner({ app: 'messages', icon: 'messages',
+        title: groupId ? groupName : nameOfNumber(m.from), body: m.body || L('ph.attach'),
+        onClick: () => {
+          const a = (state.apps || []).find((x) => x.id === 'messages');
+          if (!a) return;
+          enterApp(a, null);
+          if (groupId) openGroup(groupId, groupName);
+          else openThread(m.from);
+        } });
       refresh().then(() => { if (!openApp) renderHome(); });
     }
   } else if (d.action === 'power') {
@@ -3728,13 +4235,31 @@ window.addEventListener('message', (e) => {
     banner(d.banner || {});
   } else if (d.action === 'buzz') {
     buzzDevice();
+  } else if (d.action === 'shutter') {
+    const device = byId('device');
+    device.classList.remove('capturing');
+    void device.offsetWidth;
+    device.classList.add('capturing');
+    clearTimeout(shutterTimer);
+    shutterTimer = setTimeout(() => {
+      device.classList.remove('capturing');
+      shutterTimer = null;
+    }, 220);
+  } else if (d.action === 'shutterDone') {
+    clearTimeout(shutterTimer);
+    shutterTimer = null;
+    byId('device').classList.remove('capturing');
   } else if (d.action === 'peek') {
     if (d.strings && !Object.keys(S || {}).length) S = d.strings;
     showPeek(d.kind, d.data || {});
+  } else if (d.action === 'archive') {
+    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    archivePeek(d.kind, d.data || {});
   } else if (d.action === 'voicemailOffer') {
-    voicemailOffer(d.number || '');
+    enqueuePrompt(() => voicemailOffer(d.number || ''), d.ttlMs);
   } else if (d.action === 'airdrop') {
-    airdropOffer(d.offer || {});
+    const offer = d.offer || {};
+    enqueuePrompt(() => airdropOffer(offer), offer.ttlMs);
   } else if (d.action === 'airdropResult') {
     const r = d.result || {};
     toast(r.ok ? (L('ph.airdrop_took') + (r.name ? ' ' + r.name : '')) : L('ph.airdrop_declined'));

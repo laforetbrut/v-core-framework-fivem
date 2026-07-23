@@ -11,10 +11,37 @@
 -- channel. The phone only decides who is talking to whom, and the server decides that.
 
 local isOpen  = false
+local isOpening = false
+local openingAssets = false
+local openRequest = 0
+local menuClaimed = false
 local phoneTorch = false   -- control-centre flashlight
 local myNumber = nil
 local call    = nil          -- { id, state = 'out'|'in'|'active', number }
 local power   = { battery = 100, charging = false, signal = 4 }
+local activeSdkApp = nil     -- selected by the phone shell, never by an SDK payload
+local activeSdkEpoch = 0     -- rejects late shell requests that arrive out of order
+local sdkApps = {}           -- installed iframe apps allowed for this open session
+local pendingUiActions = {}  -- prompts received while the asynchronous open is in flight
+local applyServerCall
+
+local function sdkAppId(value)
+    local id = tostring(value or '')
+    if id == '' then return '' end
+    if not id:match('^[%w_-]+$') then return nil end
+    return id
+end
+
+local function syncSdkApps(apps)
+    sdkApps = {}
+    if type(apps) == 'table' then
+        for _, app in ipairs(apps) do
+            local id = type(app) == 'table' and sdkAppId(app.id) or nil
+            if id and id ~= '' and app.page then sdkApps[id] = true end
+        end
+    end
+    if activeSdkApp and not sdkApps[activeSdkApp] then activeSdkApp = nil end
+end
 
 local function strings()
     return Locales[(LocalPlayer.state and LocalPlayer.state.lang) or 'fr'] or Locales.fr or {}
@@ -30,18 +57,33 @@ local function voice() return GetResourceState('v-voice') == 'started' end
 -- while a call comes in, buzzes for a message, and - when it is in your pocket rather than
 -- in your hand - lifts the top of the handset into view to show you the notification.
 local ringing = false
-local prefsCache = { vibrate = true, ringVolume = 0.7, ringtone = 'default' }
+local ringSoundId = nil
+local prefsCache = {
+    dnd = false, vibrate = true, ringVolume = 0.7, ringtone = 'default',
+    notifMuted = {},
+}
+local prefsCacheReady = false
+local speakerListens = {}
 
 local function buzz(strong)
-    if prefsCache.vibrate == false then return end
+    if prefsCache.dnd or prefsCache.vibrate == false then return end
     -- The handset shakes on screen; the pad rumbles if there is one.
     SendNUIMessage({ action = 'buzz' })
     SetPadShake(0, strong and 260 or 130, strong and 90 or 55)
 end
 
+local function stopRingSound()
+    if not ringSoundId then return end
+    StopSound(ringSoundId)
+    ReleaseSoundId(ringSoundId)
+    ringSoundId = nil
+end
+
 local function ringOnce()
     -- The base game's own phone ring, so it sits in the world's sound world.
-    PlaySoundFrontend(-1, 'Remote_Ring', 'Phone_SoundSet_Michael', true)
+    stopRingSound()
+    ringSoundId = GetSoundId()
+    PlaySoundFrontend(ringSoundId, 'Remote_Ring', 'Phone_SoundSet_Michael', true)
 end
 
 local function startRinging()
@@ -49,8 +91,10 @@ local function startRinging()
     ringing = true
     CreateThread(function()
         while ringing do
-            if prefsCache.ringVolume > 0 then ringOnce() end
-            buzz(true)
+            if not prefsCache.dnd and not isOpen then
+                if prefsCache.ringVolume > 0 then ringOnce() end
+                buzz(true)
+            end
             Wait(1400)
         end
     end)
@@ -58,15 +102,42 @@ end
 
 local function stopRinging()
     ringing = false
-    StopSound(-1)
+    stopRingSound()
+end
+
+local function syncPrefsCache(pf)
+    if type(pf) ~= 'table' then return end
+    prefsCache.dnd = pf.dnd == true
+    prefsCache.vibrate = pf.vibrate ~= false
+    prefsCache.ringVolume = tonumber(pf.ringVolume) or 0.7
+    prefsCache.ringtone = pf.ringtone or 'default'
+    prefsCache.notifMuted = {}
+    for _, app in ipairs(type(pf.notifMuted) == 'table' and pf.notifMuted or {}) do
+        prefsCache.notifMuted[tostring(app)] = true
+    end
+    prefsCacheReady = true
+    if prefsCache.dnd then
+        stopRingSound()
+        StopPadShake(0)
+    end
+end
+
+local function notificationMuted(kind, data)
+    local app = kind == 'message' and 'messages' or 'dot'
+    if kind ~= 'message' and type(data) == 'table' then
+        app = tostring(data.app or data.icon or app)
+    end
+    return prefsCache.notifMuted[app] == true
 end
 
 -- The peek: the phone is in a pocket, so the top of it rises into view with the
 -- notification on it and slides back down. It never takes focus - you are being shown
 -- something, not asked to do anything.
 local function peek(kind, data)
-    if isOpen then return end
+    if isOpen or notificationMuted(kind, data) then return end
     if data and data.hasItem == false then return end   -- no phone on them, nothing to peek
+    SendNUIMessage({ action = 'archive', kind = kind, data = data or {}, strings = strings() })
+    if prefsCache.dnd then return end
     SendNUIMessage({ action = 'peek', kind = kind, data = data or {}, strings = strings() })
     buzz(false)
 end
@@ -143,52 +214,141 @@ end
 -- Open / close
 -- ══════════════════════════════════════════════════════════════
 local function openPhone()
-    if isOpen then return end
+    if isOpen or isOpening or openingAssets then return end
     if exports['v-core']:IsAnyMenuOpen() then return end
 
+    isOpening = true
+    openRequest = openRequest + 1
+    local request = openRequest
+
+    -- A missing callback must not leave the key locked forever. Invalidating the request
+    -- also prevents a very late answer from taking focus after the timeout.
+    SetTimeout(10000, function()
+        if isOpening and openRequest == request then
+            isOpening = false
+            openRequest = openRequest + 1
+        end
+    end)
+
     V.Request('v-phone:open', function(state)
+        if request ~= openRequest then return end
+        isOpening = false
         if not state or state.error then
             V.Notify(L('ph.err_' .. ((state and state.error) or 'x')), 'error')
             return
         end
+
+        -- Another menu may have opened while the server was answering. Re-check at the
+        -- last possible moment before this resource takes cursor and keyboard focus.
+        if isOpen or exports['v-core']:IsAnyMenuOpen() then return end
+
         isOpen = true
         myNumber = state.number
         SetNuiFocus(true, true)          -- focus is per-resource: only the page owner may take it
         -- Keep game input flowing so the player can still walk and drive; the guard thread
         -- disables only aim/shoot/look so the cursor and the world do not fight.
         SetNuiFocusKeepInput(true)
-        attachProp()
-        refreshPose()
-        startGuard()
         exports['v-core']:MenuOpened('v-phone')
+        menuClaimed = true
+        startGuard()
         -- The screen is what drains a phone, so the server has to know it is on.
         TriggerServerEvent('v-phone:server:screen', true)
-        local pf = state.prefs or {}
-        prefsCache.vibrate = pf.vibrate ~= false
-        prefsCache.ringVolume = tonumber(pf.ringVolume) or 0.7
-        prefsCache.ringtone = pf.ringtone or 'default'
+        syncPrefsCache(state.prefs or {})
+        syncSdkApps(state.apps)
+        if state.call ~= nil and applyServerCall then applyServerCall(state.call, false) end
+        power = {
+            battery = tonumber(state.battery) or power.battery,
+            charging = state.charging == true,
+            signal = tonumber(state.signal) or power.signal,
+        }
         state.action  = 'open'
+        state.locale  = (LocalPlayer.state and LocalPlayer.state.lang) or 'fr'
         state.strings = strings()
         state.call    = call
         state.power   = power
         SendNUIMessage(state)
+        if call and call.state == 'in' then stopRingSound() end
+
+        -- `action=open` resets every transient sheet in the page. Deliver prompts only
+        -- after that reset has been queued, in the same FIFO order as NUI messages.
+        local queued = pendingUiActions
+        pendingUiActions = {}
+        local now = GetGameTimer()
+        for _, entry in ipairs(queued) do
+            if not entry.expires or now <= entry.expires then
+                local remaining = entry.expires and math.max(1, entry.expires - now) or nil
+                entry.message.ttlMs = remaining
+                if entry.message.offer then entry.message.offer.ttlMs = remaining end
+                SendNUIMessage(entry.message)
+            end
+        end
+
+        -- The NUI is fully initialised before model/animation loading can yield. Incoming
+        -- prompts therefore cannot arrive ahead of `action=open` and be reset by it.
+        openingAssets = true
+        attachProp()
+        if not isOpen or request ~= openRequest then
+            openingAssets = false
+            clearHand()
+            return
+        end
+        refreshPose()
+        if not isOpen or request ~= openRequest then
+            openingAssets = false
+            clearHand()
+            return
+        end
+        openingAssets = false
     end)
 end
 
 local function closePhone()
+    if isOpening or isOpen then
+        openRequest = openRequest + 1
+    end
+    if isOpening then
+        isOpening = false
+    end
     if not isOpen then return end
     isOpen = false
+    phoneTorch = false
+    activeSdkApp = nil
     if not call then stopRinging() end
     SetNuiFocusKeepInput(false)
     SetNuiFocus(false, false)
     clearHand()
-    exports['v-core']:MenuClosed('v-phone')
+    if menuClaimed then
+        menuClaimed = false
+        exports['v-core']:MenuClosed('v-phone')
+    end
     TriggerServerEvent('v-phone:server:screen', false)
     SendNUIMessage({ action = 'close' })
 end
 
 RegisterCommand('vphone', function() if isOpen then closePhone() else openPhone() end end, false)
 RegisterKeyMapping('vphone', 'Open the phone', 'keyboard', Config.Key or 'F1')
+
+local function sendWhenOpen(message)
+    if isOpen then
+        SendNUIMessage(message)
+        return
+    end
+    local now = GetGameTimer()
+    for i = #pendingUiActions, 1, -1 do
+        if pendingUiActions[i].expires and now > pendingUiActions[i].expires then
+            table.remove(pendingUiActions, i)
+        end
+    end
+    -- A prompt storm must remain bounded even if the phone cannot currently open.
+    while #pendingUiActions >= 6 do table.remove(pendingUiActions, 1) end
+    local seconds = message.action == 'airdrop'
+        and tonumber(Config.Airdrop and Config.Airdrop.offerTtl) or 30
+    pendingUiActions[#pendingUiActions + 1] = {
+        message = message,
+        expires = now + math.max(1, seconds) * 1000,
+    }
+    openPhone()
+end
 
 -- ══════════════════════════════════════════════════════════════
 -- App data
@@ -242,26 +402,35 @@ end)
 RegisterNUICallback('prefs', function(data, cb)
     V.Request('v-phone:prefs', function(res)
         -- Keep the sound layer in step with what the player just changed.
-        local pf = res and res.prefs
-        if pf then
-            prefsCache.vibrate = pf.vibrate ~= false
-            prefsCache.ringVolume = tonumber(pf.ringVolume) or 0.7
-            prefsCache.ringtone = pf.ringtone or 'default'
-        end
+        syncPrefsCache(res and res.prefs)
         cb(res or { error = 'x' })
     end, data)
 end)
 RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
 RegisterNUICallback('mail',          relay('v-phone:mail'))
 RegisterNUICallback('notes',         relay('v-phone:notes'))
-RegisterNUICallback('health',        relay('v-phone:health'))
 RegisterNUICallback('speaker',       relay('v-phone:speaker'))
 
 --- Somebody near you put their phone on speaker, so you hear their call. Listening only:
 --- the export never lets you transmit into a conversation you are not part of.
 RegisterNetEvent('v-phone:client:speaker', function(d)
-    if not voice() then return end
-    exports['v-voice']:SpeakerListen(d and d.id, d and d.on == true)
+    local id = tonumber(d and d.id)
+    if not id then return end
+    local on = d and d.on == true
+    if on then
+        speakerListens[id] = true
+    else
+        speakerListens[id] = nil
+    end
+    if voice() then exports['v-voice']:SpeakerListen(id, on) end
+end)
+
+AddEventHandler('onClientResourceStart', function(resource)
+    if resource ~= 'v-voice' then return end
+    if call and call.state == 'active' then exports['v-voice']:PhoneCallStart(call.id) end
+    for id in pairs(speakerListens) do
+        exports['v-voice']:SpeakerListen(id, true)
+    end
 end)
 
 -- ── Steps ──────────────────────────────────────────────────────
@@ -302,7 +471,10 @@ RegisterNUICallback('close', function(_, cb) closePhone(); cb('ok') end)
 -- eventually disagree with the database.
 RegisterNUICallback('refresh', function(_, cb)
     V.Request('v-phone:open', function(res)
-        if res and res.ok then myNumber = res.number end
+        if res and res.ok then
+            myNumber = res.number
+            syncSdkApps(res.apps)
+        end
         cb(res or { error = 'x' })
     end)
 end)
@@ -336,6 +508,11 @@ RegisterNUICallback('holdInput', function(data, cb)
 end)
 
 RegisterNUICallback('torch', function(data, cb)
+    if not isOpen then
+        phoneTorch = false
+        cb({ error = 'closed' })
+        return
+    end
     phoneTorch = data and data.on == true
     cb({ ok = true })
 end)
@@ -378,9 +555,16 @@ end)
 -- Camera, health and layout
 -- ══════════════════════════════════════════════════════════════
 
---- v-status already tracks hunger, thirst, stress, bleeding and illness, so the Health
---- app reads them rather than keeping a second set that would drift.
-RegisterNUICallback('health', function(_, cb)
+--- The Health app has two data owners behind one stable NUI endpoint:
+--- `get`/`set` are the persisted medical record owned by v-phone, while a request with no
+--- operation is the live status snapshot owned by v-status.
+RegisterNUICallback('health', function(data, cb)
+    local op = data and data.op
+    if op == 'get' or op == 'set' then
+        V.Request('v-phone:health', function(res) cb(res or { error = 'x' }) end, data)
+        return
+    end
+    if op ~= nil then cb({ error = 'x' }) return end
     if GetResourceState('v-status') ~= 'started' then cb({ error = 'off' }) return end
     local st = exports['v-status']:Get() or {}
     cb({
@@ -429,64 +613,146 @@ end)
 --- megabytes per shot, and the operator's upload target is the whole reason the camera
 --- setting has one.
 RegisterNUICallback('shoot', function(_, cb)
-    if GetResourceState('screenshot-basic') ~= 'started' then cb({ error = 'nocam' }) return end
+    local finished = false
+    local focusReleased = false
+    local captureRequest = openRequest
+
+    -- screenshot-basic and the upload endpoint are both asynchronous. Whichever path
+    -- finishes first owns the reply; late callbacks become harmless no-ops.
+    local function finish(result)
+        if finished then return end
+        finished = true
+        result = type(result) == 'table' and result or { error = 'x' }
+
+        if focusReleased and isOpen and openRequest == captureRequest then
+            SetNuiFocus(true, true)
+            SetNuiFocusKeepInput(true)
+        end
+        SendNUIMessage({
+            action = 'shutterDone',
+            ok = result.ok == true,
+            error = result.error,
+        })
+        cb(result)
+    end
+
+    if GetResourceState('screenshot-basic') ~= 'started' then
+        finish({ error = 'nocam' })
+        return
+    end
     local target = tostring(V.Setting('cameraUpload', '') or '')
-    if target == '' then cb({ error = 'noupload' }) return end
+    if target == '' then
+        finish({ error = 'noupload' })
+        return
+    end
 
     -- Hide the phone for the shot, or every photo is a picture of the phone.
     SendNUIMessage({ action = 'shutter' })
+    focusReleased = true
     SetNuiFocus(false, false)
     Wait(120)
 
-    exports['screenshot-basic']:requestScreenshotUpload(target, 'files[]', { encoding = 'jpg', quality = 0.85 },
-        function(data)
-            SetNuiFocus(true, true)
-            local ok, res = pcall(json.decode, data)
-            -- Upload targets disagree about where they put the URL, so look in the two
-            -- shapes that cover almost all of them and fail honestly otherwise.
-            local url = ok and res and (
-                (res.attachments and res.attachments[1] and res.attachments[1].url)
-                or res.url or res.link or (res.data and res.data.link))
-            if not url then cb({ error = 'upload' }) return end
-            V.Request('v-phone:photo', function(r) cb(r or { error = 'x' }) end,
-                { op = 'add', url = url })
-        end)
+    -- A broken upload target must still release the NUI request and restore the shutter.
+    SetTimeout(20000, function() finish({ error = 'upload' }) end)
+
+    local called = pcall(function()
+        exports['screenshot-basic']:requestScreenshotUpload(
+            target,
+            'files[]',
+            { encoding = 'jpg', quality = 0.85 },
+            function(raw)
+                if finished then return end
+                local ok, res = pcall(json.decode, raw)
+                -- Upload targets disagree about where they put the URL, so look in the two
+                -- shapes that cover almost all of them and fail honestly otherwise.
+                local url = ok and res and (
+                    (res.attachments and res.attachments[1] and res.attachments[1].url)
+                    or res.url or res.link or (res.data and res.data.link))
+                if not url then finish({ error = 'upload' }) return end
+                if finished then return end
+                V.Request('v-phone:photo', function(r) finish(r or { error = 'x' }) end,
+                    { op = 'add', url = url })
+            end
+        )
+    end)
+    if not called then finish({ error = 'upload' }) end
 end)
 
 -- ══════════════════════════════════════════════════════════════
 -- App SDK relays
 -- ══════════════════════════════════════════════════════════════
--- A third-party app talks to its OWN server code and nothing else. The full callback
--- and event names are composed here from the app id the phone supplies, so a page has
--- no way to spell `v-banking:withdraw` even if it tries: the id never comes from the
--- page's payload.
-local function sdkApp(data)
-    local app = tostring((data and data.app) or ''):gsub('[^%w_-]', '')
-    if app == '' then return nil end
-    return app
+-- The shell announces which installed iframe is active. SDK payloads are deliberately
+-- unable to select or override this namespace.
+RegisterNUICallback('activeApp', function(data, cb)
+    if not isOpen then
+        activeSdkApp = nil
+        cb({ error = 'closed' })
+        return
+    end
+
+    local epoch = math.floor(tonumber(data and data.epoch) or 0)
+    if epoch <= activeSdkEpoch then
+        cb({ error = 'stale' })
+        return
+    end
+    activeSdkEpoch = epoch
+
+    local app = sdkAppId(data and data.app)
+    if app == '' then
+        activeSdkApp = nil
+        cb({ ok = true })
+        return
+    end
+    if not app or not sdkApps[app] then
+        activeSdkApp = nil
+        cb({ error = 'forbidden' })
+        return
+    end
+
+    activeSdkApp = app
+    cb({ ok = true, app = app })
+end)
+
+local function sdkApp()
+    if not isOpen then return nil end
+    return activeSdkApp
 end
 
 RegisterNUICallback('sdkRequest', function(data, cb)
-    local app = sdkApp(data)
+    local app = sdkApp()
     local method = tostring((data and data.method) or ''):gsub('[^%w_-]', '')
     if not app or method == '' then cb({ error = 'forbidden' }) return end
     V.Request(app .. ':' .. method, function(res) cb(res == nil and { ok = true } or res) end, data.payload)
 end)
 
 RegisterNUICallback('sdkEmit', function(data, cb)
-    local app = sdkApp(data)
+    local app = sdkApp()
     local event = tostring((data and data.event) or ''):gsub('[^%w_-]', '')
     if not app or event == '' then cb({ error = 'forbidden' }) return end
     TriggerServerEvent(app .. ':' .. event, data.payload)
     cb({ ok = true })
 end)
 
-RegisterNUICallback('sdkStorage', function(data, cb)
-    local app = sdkApp(data)
-    if not app then cb({ error = 'forbidden' }) return end
+local function appStorage(app, data, cb)
+    data = type(data) == 'table' and data or {}
     V.Request('v-phone:storage', function(res) cb(res or { error = 'x' }) end, {
         app = app, op = data.op, key = data.key, value = data.value,
     })
+end
+
+-- Built-in apps that use the generic key/value store have their own narrow route. The
+-- payload chooses only between canonical ids held here; it cannot name a third-party app.
+local BUILTIN_STORAGE_APPS = { music = 'music', reminders = 'reminders' }
+RegisterNUICallback('appStorage', function(data, cb)
+    local app = isOpen and BUILTIN_STORAGE_APPS[tostring((data and data.app) or '')] or nil
+    if not app then cb({ error = 'forbidden' }) return end
+    appStorage(app, data, cb)
+end)
+
+RegisterNUICallback('sdkStorage', function(data, cb)
+    local app = sdkApp()
+    if not app then cb({ error = 'forbidden' }) return end
+    appStorage(app, data, cb)
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -500,6 +766,48 @@ end
 local function leaveCallAudio()
     if voice() then exports['v-voice']:PhoneCallEnd(call and call.id) end
 end
+
+applyServerCall = function(nextCall, notifyUi)
+    local previous = call
+    if type(nextCall) ~= 'table' then
+        if previous and previous.state == 'active' then leaveCallAudio() end
+        call = nil
+        stopRinging()
+    else
+        call = {
+            id = tonumber(nextCall.id),
+            state = tostring(nextCall.state or ''),
+            number = nextCall.number,
+        }
+        if call.state == 'active'
+            and (not previous or previous.id ~= call.id or previous.state ~= 'active') then
+            stopRinging()
+            joinCallAudio()
+        elseif call.state == 'in' then
+            startRinging()
+        end
+    end
+    refreshPose()
+    if notifyUi ~= false then SendNUIMessage({ action = 'call', call = call }) end
+end
+
+CreateThread(function()
+    Wait(1500)
+    for _ = 1, 20 do
+        local synced = false
+        V.Request('v-phone:callState', function(res)
+            if res and res.ok then
+                applyServerCall(res.call, true)
+                synced = true
+            end
+        end)
+        for _ = 1, 20 do
+            if synced then return end
+            Wait(100)
+        end
+        Wait(1500)
+    end
+end)
 
 RegisterNUICallback('call', function(data, cb)
     V.Request('v-phone:call', function(res)
@@ -559,14 +867,15 @@ RegisterNetEvent('v-phone:client:power', function(p)
     -- Warn once on the way past each threshold, not every tick past it. It arrives as a
     -- real phone notification - so it buzzes, lands in the notification centre, and peeks
     -- the handset out of a pocket - rather than as a message in the corner of the screen.
-    local low, crit = 15, 5
+    local low = tonumber(Config.Battery and Config.Battery.lowAt) or 20
+    local crit = tonumber(Config.Battery and Config.Battery.criticalAt) or 5
     local function batteryWarn(key)
         local b = { app = 'settings', icon = 'settings',
                     title = L('ph.battery_title'):format(math.floor(power.battery or 0)),
                     body = L(key), hasItem = true }
         if isOpen then
             SendNUIMessage({ action = 'banner', banner = b })
-            buzz(false)
+            if not notificationMuted('banner', b) then buzz(false) end
         else
             peek('banner', b)
         end
@@ -586,8 +895,7 @@ end)
 -- Notifications
 -- ══════════════════════════════════════════════════════════════
 RegisterNetEvent('v-phone:client:airdrop', function(offer)
-    if not isOpen then openPhone() end
-    SendNUIMessage({ action = 'airdrop', offer = offer })
+    sendWhenOpen({ action = 'airdrop', offer = offer })
 end)
 
 RegisterNetEvent('v-phone:client:airdropResult', function(res)
@@ -597,7 +905,7 @@ end)
 RegisterNetEvent('v-phone:client:message', function(msg)
     if isOpen then
         SendNUIMessage({ action = 'message', message = msg })
-        buzz(false)
+        if not notificationMuted('message', msg) then buzz(false) end
     else
         peek('message', msg)
     end
@@ -606,7 +914,7 @@ end)
 RegisterNetEvent('v-phone:client:banner', function(b)
     if isOpen then
         SendNUIMessage({ action = 'banner', banner = b })
-        buzz(false)
+        if not notificationMuted('banner', b) then buzz(false) end
     else
         peek('banner', b)
     end
@@ -614,10 +922,31 @@ end)
 
 -- Nobody picked up. Offer to leave a voicemail, on the phone, where it belongs.
 RegisterNetEvent('v-phone:client:voicemailOffer', function(d)
-    if not isOpen then openPhone() end
-    SetTimeout(400, function()
-        SendNUIMessage({ action = 'voicemailOffer', number = (d and d.number) or '' })
-    end)
+    sendWhenOpen({ action = 'voicemailOffer', number = (d and d.number) or '' })
+end)
+
+-- The persisted Focus/sound preferences are needed before the first notification, not
+-- only after the player has opened the phone once. The server also pushes them on load;
+-- this retry covers a resource restart while the character is already online.
+RegisterNetEvent('v-phone:client:prefsSync', function(prefs)
+    syncPrefsCache(prefs)
+end)
+
+CreateThread(function()
+    Wait(1500)
+    for _ = 1, 20 do
+        local answered = false
+        V.Request('v-phone:prefs', function(res)
+            syncPrefsCache(res and res.prefs)
+            answered = true
+        end)
+        for _ = 1, 20 do
+            if answered or prefsCacheReady then break end
+            Wait(100)
+        end
+        if prefsCacheReady then return end
+        Wait(1500)
+    end
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -630,9 +959,41 @@ exports('Close',     function() closePhone() end)
 exports('OnCall',    function() return call end)
 
 AddEventHandler('onResourceStop', function(res)
-    if res == GetCurrentResourceName() then
-        leaveCallAudio()
-        SetNuiFocus(false, false)
+    if res ~= GetCurrentResourceName() then return end
+
+    local wasOpen = isOpen
+    local hadMenu = menuClaimed
+    isOpening = false
+    openingAssets = false
+    openRequest = openRequest + 1
+    pendingUiActions = {}
+
+    -- Release every piece of state owned outside the Lua VM before this resource vanishes.
+    if call then leaveCallAudio() end
+    if voice() then
+        for id in pairs(speakerListens) do
+            pcall(function() exports['v-voice']:SpeakerListen(id, false) end)
+        end
+    end
+    speakerListens = {}
+    call = nil
+    stopRinging()
+    StopPadShake(0)
+    phoneTorch = false
+    activeSdkApp = nil
+    sdkApps = {}
+    isOpen = false
+    menuClaimed = false
+
+    SetNuiFocusKeepInput(false)
+    SetNuiFocus(false, false)
+    clearHand()
+
+    if wasOpen then
+        TriggerServerEvent('v-phone:server:screen', false)
+    end
+    if hadMenu and GetResourceState('v-core') == 'started' then
+        pcall(function() exports['v-core']:MenuClosed('v-phone') end)
     end
 end)
 

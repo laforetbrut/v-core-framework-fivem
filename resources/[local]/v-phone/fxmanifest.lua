@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-phone'
 author 'vyrriox'
 description 'v-phone — iFruit: the primary interaction surface, a shell over the modules that own the data (v-core module)'
-version '0.2.0'
+version '0.3.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

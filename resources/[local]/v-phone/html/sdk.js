@@ -117,8 +117,8 @@
   const svg = (n) => {
     const d = ICONS[n] || ICONS.dot;
     return FILLED[n]
-      ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="' + d + '"/></svg>'
-      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+      ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="' + d + '"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" aria-hidden="true" focusable="false" ' +
         'stroke-linecap="round" stroke-linejoin="round"><path d="' + d + '"/></svg>';
   };
 
@@ -164,10 +164,34 @@
       let attrs = '';
       const data = o.data || {};
       for (const k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
+      if (o.toggle !== undefined) {
+        attrs += ' role="switch" aria-checked="' + (o.toggle ? 'true' : 'false') + '"';
+      }
       return '<button class="row ' + (lead ? 'lead' : '') + '" type="button"' + attrs + '>' + lead +
         '<span class="rmain"><span class="rt">' + esc(o.title) + '</span>' +
         (o.subtitle ? '<span class="rs">' + esc(o.subtitle) + '</span>' : '') +
         '</span>' + tail + '</button>';
+    },
+
+    /**
+     * A distinctive app summary. It is intentionally generic enough for built-in and
+     * drop-in apps: the active app supplies the colour through the phone shell.
+     */
+    hero: function (o) {
+      o = o || {};
+      const lead = o.appicon
+        ? UI.appIcon(o.appicon, 'heroicon')
+        : (o.icon ? '<span class="heroicon ricon">' + svg(o.icon) + '</span>' : '');
+      return '<section class="apphero">' +
+        '<div class="herohead">' + lead +
+          '<div class="herocopy">' +
+            (o.eyebrow ? '<div class="heroeyebrow">' + esc(o.eyebrow) + '</div>' : '') +
+            (o.title ? '<div class="herotitle">' + esc(o.title) + '</div>' : '') +
+          '</div>' +
+        '</div>' +
+        (o.value !== undefined ? '<div class="herovalue">' + esc(o.value) + '</div>' : '') +
+        (o.subtitle ? '<div class="herosub">' + esc(o.subtitle) + '</div>' : '') +
+      '</section>';
     },
 
     bigNumber: function (label, value, sub) {
@@ -184,11 +208,11 @@
 
     field: function (id, placeholder, value, attrs) {
       return '<input class="field" id="' + esc(id) + '" placeholder="' + esc(placeholder) +
-        '" value="' + esc(value || '') + '" ' + (attrs || '') + ' />';
+        '" aria-label="' + esc(placeholder) + '" value="' + esc(value || '') + '" ' + (attrs || '') + ' />';
     },
 
     empty: function (text, icon) {
-      return '<div class="empty">' + (icon ? svg(icon) : '') + '<div>' + esc(text) + '</div></div>';
+      return '<div class="empty" role="status">' + (icon ? svg(icon) : '') + '<div>' + esc(text) + '</div></div>';
     },
 
     /** Replace the app body. Inside a frame this is the document body. */
@@ -270,7 +294,7 @@
   /** The coloured app tile. `cls` adds context classes ('appx' inside a row). */
   UI.appIcon = function (name, cls) {
     const t = TILES[name];
-    const open = '<span class="ic ' + (cls || '') + '" style="background:' +
+    const open = '<span class="ic ' + (cls || '') + '" aria-hidden="true" style="background:' +
       (t ? t.bg : GREY) + '">';
     if (!t) return open + svg(name) + '</span>';
     return open + '<svg viewBox="0 0 24 24" fill="' + (t.fill || '#fff') + '"><path d="' +
@@ -288,22 +312,26 @@
   const pending = {};
 
   root.addEventListener('message', function (e) {
+    // A sandboxed app has an opaque origin, so source identity is the reliable boundary.
+    // Only the phone window that owns this frame may resolve its requests.
+    if (e.source !== root.parent) return;
     const d = e.data || {};
     if (d.__phone !== 'reply' || !pending[d.id]) return;
-    const resolve = pending[d.id];
+    const request = pending[d.id];
     delete pending[d.id];
-    resolve(d.payload);
+    clearTimeout(request.timer);
+    request.resolve(d.payload);
   });
 
   function send(op, data) {
     return new Promise(function (resolve) {
       const id = ++seq;
-      pending[id] = resolve;
-      root.parent.postMessage({ __phone: 'sdk', id: id, op: op, data: data || {} }, '*');
       // A phone that went away must not leave the app waiting for ever.
-      setTimeout(function () {
+      const timer = setTimeout(function () {
         if (pending[id]) { delete pending[id]; resolve({ error: 'timeout' }); }
       }, 10000);
+      pending[id] = { resolve: resolve, timer: timer };
+      root.parent.postMessage({ __phone: 'sdk', id: id, op: op, data: data || {} }, '*');
     });
   }
 

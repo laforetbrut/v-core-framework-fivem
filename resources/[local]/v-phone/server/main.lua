@@ -22,6 +22,17 @@ local CallOf   = {}      -- [source]    = callId
 local Apps     = {}      -- [id]        = registry row (config seed + RegisterApp)
 local WorldApps = {}     -- [id]        = the operator's row from v-world
 local callSeq  = 0
+local MessageLastSend = {}
+local MessageBusy = {}
+
+-- Forward declarations used by helpers defined before their implementation blocks.
+-- Without these locals Lua resolves the earlier references as globals, even though a
+-- same-named local is declared later in this file.
+local Signal
+local batteryOf
+local requireItem
+local phoneReachable
+local speakerOff
 
 local function num(v, d) return tonumber(v) or d or 0 end
 
@@ -176,7 +187,10 @@ local loadWorldApps
 
 local function registerApp(id, info, owner)
     id = tostring(id or '')
-    if id == '' then return false end
+    if id == '' or not id:match('^[%w_-]+$') then
+        print(('[v-phone] rejected invalid app id %q from %s'):format(id, tostring(owner or 'config')))
+        return false
+    end
     Apps[id] = {
         id    = id,
         label = tostring(info.label or id),
@@ -287,10 +301,74 @@ local function wallpaperAllowed(url)
     local host = url:match('^https?://([^/]+)')
     if not host then return false end
     host = host:lower():gsub(':%d+$', '')
-    for _, allowed in ipairs(V.Setting('wallpaperHosts', Config.WallpaperHosts) or Config.WallpaperHosts) do
+    local configured = V.Setting(
+        'wallpaperHosts',
+        table.concat(Config.WallpaperHosts or {}, ', ')
+    )
+    local allowedHosts = {}
+    if type(configured) == 'table' then
+        allowedHosts = configured
+    else
+        for allowed in tostring(configured or ''):gmatch('[^,%s]+') do
+            allowedHosts[#allowedHosts + 1] = allowed:lower()
+        end
+    end
+    for _, allowed in ipairs(allowedHosts) do
+        allowed = tostring(allowed):lower():gsub('^%s+', ''):gsub('%s+$', '')
         if host == allowed or host:sub(-(#allowed + 1)) == '.' .. allowed then return true end
     end
     return false
+end
+
+local function wallpaperId(value)
+    value = tostring(value or '')
+    for _, id in ipairs(Config.Wallpapers or {}) do
+        if value == tostring(id) then return value end
+    end
+    return nil
+end
+
+local function cleanAppId(value)
+    local id = tostring(value or ''):sub(1, 40)
+    return id ~= '' and id:match('^[%w_-]+$') and id or nil
+end
+
+local function stringIdList(value, limit)
+    local out, seen = {}, {}
+    if type(value) ~= 'table' then return out end
+    for _, raw in ipairs(value) do
+        local id = cleanAppId(raw)
+        if id and not seen[id] then
+            seen[id] = true
+            out[#out + 1] = id
+            if #out >= (limit or 64) then break end
+        end
+    end
+    return out
+end
+
+local function cleanLayout(value)
+    if type(value) ~= 'table' or type(value.items) ~= 'table' then return nil end
+    local items = {}
+    for _, raw in ipairs(value.items) do
+        if type(raw) == 'table' then
+            if raw.t == 'folder' then
+                local apps = stringIdList(raw.apps, 24)
+                if #apps > 0 then
+                    items[#items + 1] = {
+                        t = 'folder',
+                        name = tostring(raw.name or ''):sub(1, 40),
+                        apps = apps,
+                    }
+                end
+            else
+                local id = cleanAppId(raw.id)
+                if id then items[#items + 1] = { t = 'app', id = id } end
+            end
+        end
+        if #items >= 100 then break end
+    end
+    return { items = items }
 end
 
 local function prefsOf(p)
@@ -300,7 +378,7 @@ local function prefsOf(p)
     -- It is a real stored preference driving a CSS variable, not a decorative control.
     local glass = tonumber(m.glass)
     return {
-        wallpaper = tostring(m.wallpaper or Config.DefaultWallpaper),
+        wallpaper = wallpaperId(m.wallpaper) or Config.DefaultWallpaper,
         dnd       = m.dnd == true,
         -- Control centre toggles. Each one is real: airplane and cellular drive the
         -- signal the status bar draws, wifi and bluetooth their own glyphs, brightness a
@@ -312,7 +390,7 @@ local function prefsOf(p)
         brightness = math.max(0.35, math.min(1, tonumber(m.brightness) or 1)),
         -- Which apps the player has silenced. A muted app still exists; it just does not
         -- light up the island or land in the list.
-        notifMuted = (type(m.notifMuted) == 'table') and m.notifMuted or {},
+        notifMuted = stringIdList(m.notifMuted, 64),
         -- Apps are light by default, as they are on iOS. This flips the six
         -- surface values and nothing else.
         dark      = m.dark == true,
@@ -336,18 +414,19 @@ local function prefsOf(p)
         -- What the player REMOVED, not what they installed. Storing the removals
         -- means a new app an operator adds later is there without every existing
         -- character having to go and find it in the store.
-        removed   = (type(m.removed) == 'table') and m.removed or {},
+        removed   = stringIdList(m.removed, 128),
         -- Optional apps are tracked by what was ADDED, not by what was left alone:
         -- absent is their starting state, so a missing entry has to mean "not yet".
-        added     = (type(m.added) == 'table') and m.added or {},
+        added     = stringIdList(m.added, 128),
         actionApp = m.actionApp and tostring(m.actionApp) or nil,
         -- A linked wallpaper, its fit, and the shape of the device itself.
-        wallpaperUrl = m.wallpaperUrl and tostring(m.wallpaperUrl) or nil,
+        wallpaperUrl = V.SettingBool('customWallpaper', true)
+                       and m.wallpaperUrl and tostring(m.wallpaperUrl) or nil,
         wallFit   = (m.wallFit == 'contain') and 'contain' or Config.WallpaperFit,
         size      = math.max(0.75, math.min(1.15, tonumber(m.size) or Config.DeviceSize)),
         side      = (m.side == 'left') and 'left' or 'right',
         -- The home screen: the player's own order, and any folders they made.
-        layout    = (type(m.layout) == 'table') and m.layout or nil,
+        layout    = cleanLayout(m.layout),
     }
 end
 
@@ -436,6 +515,10 @@ end
 --- that standing in a tunnel actually means something.
 local function hasBars(src)
     if not V.SettingBool('battery', true) and (Signal[src] == nil) then return true end
+    local p = Core and Core.GetPlayer(src)
+    if not p then return false end
+    local prefs = prefsOf(p)
+    if prefs.airplane or prefs.cellular == false then return false end
     return (Signal[src] or 4) > 0
 end
 
@@ -476,7 +559,7 @@ local function sendMessage(fromCid, toNumber, body, kind, attachment)
     -- Delivered live only if they are on: an offline character reads it next time they
     -- open the app, which is what the table is for.
     local target = Online[numberOfCid(toCid) or '']
-    if target then
+    if target and phoneReachable(target) then
         TriggerClientEvent('v-phone:client:message', target, {
             from = numberOfCid(fromCid), fromCid = fromCid, body = body, id = id,
             kind = kind, attachment = attachment, hasItem = requireItem(target),
@@ -511,11 +594,11 @@ local function sendGroup(p, groupId, body, kind, attachment)
         'SELECT citizenid FROM phone_group_members WHERE group_id = ?', { groupId }) or {}) do
         if m.citizenid ~= p.citizenid then
             local target = Online[numberOfCid(m.citizenid) or '']
-            if target then
+            if target and phoneReachable(target) then
                 TriggerClientEvent('v-phone:client:message', target, {
                     from = fromNumber, fromCid = p.citizenid, body = body, id = id,
                     kind = kind, attachment = attachment,
-                    group = groupId, groupName = gname,
+                    group = groupId, groupName = gname, hasItem = requireItem(target),
                 })
             end
         end
@@ -568,13 +651,25 @@ local function endCall(id, reason)
     end
 end
 
+local function allocateCallId()
+    -- v-voice maps phone calls over 24 dedicated Mumble channels. Never hand two live
+    -- conversations the same modulo slot.
+    for _ = 1, 24 do
+        callSeq = (callSeq % 24) + 1
+        if not Calls[callSeq] then return callSeq end
+    end
+    return nil
+end
+
 local function startCall(src, p, toNumber, anonymous)
     if CallOf[src] then return nil, 'busy' end
+    if not requireItem(src) then return nil, 'nophone' end
+    if V.SettingBool('battery', true) and batteryOf(src) <= 0 then return nil, 'flat' end
     if not hasBars(src) then return nil, 'nosignal' end
     -- And the person being called has to be reachable too, or a call would ring somebody
     -- standing in a tunnel.
     local target0 = Online[toNumber]
-    if target0 and (Signal[target0] or 4) <= 0 then return nil, 'unreachable' end
+    if target0 and not phoneReachable(target0) then return nil, 'unreachable' end
 
     local toCid = cidOfNumber(toNumber)
     if not toCid then return nil, 'nonumber' end
@@ -582,18 +677,20 @@ local function startCall(src, p, toNumber, anonymous)
 
     local target = Online[toNumber]
     if not target then return nil, 'offline' end
+    if not requireItem(target) then return nil, 'unreachable' end
     if CallOf[target] then return nil, 'busy_them' end
 
     local tp = Core.GetPlayer(target)
     if tp and prefsOf(tp).dnd then return nil, 'dnd' end
 
-    callSeq = callSeq + 1
-    local id = callSeq
-    Calls[id] = {
+    local id = allocateCallId()
+    if not id then return nil, 'capacity' end
+    local callRecord = {
         a = src, b = target, state = 'ringing', at = os.time(),
         aNum = numberOfCid(p.citizenid), bNum = toNumber,
         anonymous = anonymous and V.SettingBool('anonymous', false) or false,
     }
+    Calls[id] = callRecord
     CallOf[src], CallOf[target] = id, id
 
     TriggerClientEvent('v-phone:client:callOut', src, { id = id, number = toNumber })
@@ -607,7 +704,7 @@ local function startCall(src, p, toNumber, anonymous)
     local ring = math.floor(num(S('ringSeconds', Config.Calls.ringSeconds), 30))
     SetTimeout(ring * 1000, function()
         local c = Calls[id]
-        if c and c.state == 'ringing' then endCall(id, 'noanswer') end
+        if c == callRecord and c.state == 'ringing' then endCall(id, 'noanswer') end
     end)
     return id, nil
 end
@@ -623,7 +720,7 @@ local function answerCall(src)
 
     local cap = math.floor(num(S('maxMinutes', Config.Calls.maxMinutes), 30))
     SetTimeout(cap * 60000, function()
-        if Calls[id] then endCall(id, 'timeout') end
+        if Calls[id] == c then endCall(id, 'timeout') end
     end)
     return true
 end
@@ -635,11 +732,31 @@ end
 -- a client that reported its own signal would report five bars from inside a tunnel.
 
 local Battery = {}       -- [source] = level 0..100
-local Signal  = {}       -- [source] = bars 0..4
+Signal = {}             -- [source] = bars 0..4
 local Charging = {}      -- [source] = true while in reach of something that charges
 
-local function batteryOf(src)
+batteryOf = function(src)
     return math.max(0, math.min(100, math.floor(Battery[src] or 100)))
+end
+
+local function currentCallFor(src)
+    local id = CallOf[src]
+    local c = id and Calls[id]
+    if not c then return nil end
+    local mineIsCaller = c.a == src
+    return {
+        id = id,
+        state = c.state == 'active' and 'active' or (mineIsCaller and 'out' or 'in'),
+        number = mineIsCaller and c.bNum or (c.anonymous and '' or c.aNum),
+    }
+end
+
+local function pushPower(src)
+    TriggerClientEvent('v-phone:client:power', src, {
+        battery = batteryOf(src),
+        charging = Charging[src] or false,
+        signal = Signal[src] or 4,
+    })
 end
 
 local function setBattery(src, level)
@@ -647,9 +764,7 @@ local function setBattery(src, level)
     local was = batteryOf(src)
     Battery[src] = level
     if math.floor(level) ~= was then
-        TriggerClientEvent('v-phone:client:power', src, {
-            battery = math.floor(level), charging = Charging[src] or false, signal = Signal[src] or 4,
-        })
+        pushPower(src)
     end
     return level
 end
@@ -657,7 +772,7 @@ end
 exports('GetBattery', function(src) return batteryOf(src) end)
 exports('AddBattery', function(src, delta) return setBattery(src, batteryOf(src) + (tonumber(delta) or 0)) end)
 exports('GetSignal',  function(src) return Signal[src] or 4 end)
-exports('HasSignal',  function(src) return (Signal[src] or 4) > 0 end)
+exports('HasSignal',  function(src) return hasBars(src) end)
 
 --- The ceiling from any dead zone the player is standing in. Zones overlap on purpose:
 --- the WORST one wins, so a tunnel inside a weak-signal desert is still a tunnel.
@@ -706,7 +821,8 @@ local Open = {}          -- [source] = true while the screen is on
 CreateThread(function()
     while true do
         Wait(TICK * 1000)
-        if V.SettingBool('battery', true) then
+        if Core then
+            local batteryEnabled = V.SettingBool('battery', true)
             local hours = math.max(0.25, tonumber(V.Setting('hoursToEmpty', Config.Battery.hoursToEmpty)) or 8.0)
             local mult  = math.max(1.0, tonumber(V.Setting('screenDrain', Config.Battery.screenMultiplier)) or 3.0)
             local full  = math.max(1.0, tonumber(V.Setting('chargeMinutes', Config.Battery.chargeMinutes)) or 45.0)
@@ -720,14 +836,25 @@ CreateThread(function()
                 if p then
                     local ped = GetPlayerPed(src)
                     local coords = GetEntityCoords(ped)
+                    local oldSignal, oldCharging = Signal[src], Charging[src]
+                    local oldBattery = batteryOf(src)
                     Signal[src] = signalAt(coords)
 
                     local rate = chargeRateAt(src, ped, coords)
                     Charging[src] = rate > 0
-                    if rate > 0 then
+                    if not batteryEnabled then
+                        setBattery(src, 100)
+                    elseif rate > 0 then
                         setBattery(src, batteryOf(src) + chargePerTick * rate)
                     else
                         setBattery(src, batteryOf(src) - drainPerTick * (Open[src] and mult or 1.0))
+                    end
+                    if batteryOf(src) == oldBattery
+                        and (Signal[src] ~= oldSignal or Charging[src] ~= oldCharging) then
+                        pushPower(src)
+                    end
+                    if CallOf[src] and (batteryOf(src) <= 0 or not hasBars(src)) then
+                        endCall(CallOf[src], batteryOf(src) <= 0 and 'flat' or 'nosignal')
                     end
                 end
             end
@@ -744,13 +871,19 @@ exports('SetScreenOn', function(src, on) Open[src] = on and true or nil end)
 -- in the catalogue would look like the other one is broken.
 local PHONE_ITEMS = { 'phone', 'iphone' }
 
-local function requireItem(src)
+requireItem = function(src)
     if not V.SettingBool('requireItem', false) then return true end
     local inv = V.Use('v-inventory')
     for _, item in ipairs(PHONE_ITEMS) do
         if num(inv.GetItemCount(src, item), 0) > 0 then return true end
     end
     return false
+end
+
+phoneReachable = function(src)
+    if not Core.GetPlayer(src) or not requireItem(src) then return false end
+    if V.SettingBool('battery', true) and batteryOf(src) <= 0 then return false end
+    return hasBars(src)
 end
 
 V.Callback('v-phone:open', function(src, resolve)
@@ -800,6 +933,7 @@ V.Callback('v-phone:open', function(src, resolve)
         camera     = V.SettingBool('camera', false)
                      and (tostring(V.Setting('cameraUpload', '')) ~= '') or false,
         customWallpaper = V.SettingBool('customWallpaper', true),
+        call = currentCallFor(src) or false,
     })
 end)
 
@@ -836,7 +970,17 @@ end)
 V.Callback('v-phone:send', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
+    if not requireItem(src) then resolve({ error = 'nophone' }) return end
+    if V.SettingBool('battery', true) and batteryOf(src) <= 0 then
+        resolve({ error = 'flat' }) return
+    end
     if not hasBars(src) then resolve({ error = 'nosignal' }) return end
+    local now = GetGameTimer()
+    if MessageBusy[src] or (MessageLastSend[src] and now - MessageLastSend[src] < 400) then
+        resolve({ error = 'rate' }) return
+    end
+    MessageLastSend[src] = now
+    MessageBusy[src] = true
     local row, err
     local groupId = tonumber(data and data.group)
     if groupId then
@@ -846,6 +990,7 @@ V.Callback('v-phone:send', function(src, resolve, data)
         row, err = sendMessage(p.citizenid, tostring((data and data.number) or ''),
             data and data.body, data and data.kind, data and data.attachment)
     end
+    MessageBusy[src] = nil
     if not row then resolve({ error = err }) return end
     resolve({ ok = true, id = row.id, body = row.body, kind = row.kind, attachment = row.attachment })
 end)
@@ -924,8 +1069,13 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local prefs = prefsOf(p)
+    local networkWasOn = not prefs.airplane and prefs.cellular ~= false
     if data then
-        if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
+        if data.wallpaper then
+            local selected = wallpaperId(data.wallpaper)
+            if not selected then resolve({ error = 'x' }) return end
+            prefs.wallpaper = selected
+        end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
         if data.gridCols ~= nil then prefs.gridCols = math.max(3, math.min(6, math.floor(num(data.gridCols, 4)))) end
         if data.gridRows ~= nil then prefs.gridRows = math.max(3, math.min(7, math.floor(num(data.gridRows, 4)))) end
@@ -961,10 +1111,15 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.wifi      ~= nil then prefs.wifi      = data.wifi == true end
         if data.bluetooth ~= nil then prefs.bluetooth = data.bluetooth == true end
         if data.brightness ~= nil then prefs.brightness = math.max(0.35, math.min(1, num(data.brightness, 1))) end
-        if type(data.notifMuted) == 'table' then prefs.notifMuted = data.notifMuted end
+        if type(data.notifMuted) == 'table' then
+            prefs.notifMuted = stringIdList(data.notifMuted, 64)
+        end
         if data.dark ~= nil then prefs.dark = data.dark == true end
         if data.wallpaperUrl ~= nil then
             local url = tostring(data.wallpaperUrl):sub(1, 400)
+            if url ~= '' and not V.SettingBool('customWallpaper', true) then
+                resolve({ error = 'off' }) return
+            end
             if url ~= '' and not wallpaperAllowed(url) then resolve({ error = 'badhost' }) return end
             prefs.wallpaperUrl = (url ~= '') and url or nil
         end
@@ -972,7 +1127,7 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         if data.size ~= nil then prefs.size = math.max(0.75, math.min(1.15, num(data.size, 1.0))) end
         if data.side ~= nil then prefs.side = (data.side == 'left') and 'left' or 'right' end
         if data.layout ~= nil then
-            prefs.layout = (type(data.layout) == 'table') and data.layout or nil
+            prefs.layout = cleanLayout(data.layout)
         end
         if data.actionApp ~= nil then
             prefs.actionApp = (data.actionApp ~= '') and tostring(data.actionApp) or nil
@@ -982,6 +1137,10 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         end
     end
     p.SetMetadata('phone', prefs)
+    if networkWasOn and (prefs.airplane or prefs.cellular == false) then
+        local id = CallOf[src]
+        if id then endCall(id, 'nosignal') end
+    end
     resolve({ ok = true, prefs = prefs })
 end)
 
@@ -1144,7 +1303,10 @@ end)
 V.Callback('v-phone:photo', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    if not V.SettingBool('camera', false) then resolve({ error = 'off' }) return end
+    local op = tostring((data and data.op) or 'list')
+    if op == 'add' and not V.SettingBool('camera', false) then
+        resolve({ error = 'off' }) return
+    end
 
     local shots = p.GetMetadata('photos')
     if type(shots) ~= 'table' then shots = {} end
@@ -1156,10 +1318,10 @@ V.Callback('v-phone:photo', function(src, resolve, data)
         if type(v) == 'string' then shots[i] = { url = v, album = '', filter = '' } changed = true end
     end
 
-    local op = tostring((data and data.op) or 'list')
     if op == 'add' then
         local url = tostring((data and data.url) or ''):sub(1, 400)
         if url == '' then resolve({ error = 'x' }) return end
+        if not wallpaperAllowed(url) then resolve({ error = 'badhost' }) return end
         table.insert(shots, 1, { url = url, album = '', filter = '' })
         while #shots > 60 do table.remove(shots) end     -- a gallery, not an archive
         changed = true
@@ -1198,6 +1360,16 @@ V.Callback('v-phone:photo', function(src, resolve, data)
     resolve({ ok = true, photos = shots, albums = albums })
 end)
 
+local function ownsPhoto(p, url)
+    local shots = p and p.GetMetadata('photos')
+    if type(shots) ~= 'table' then return false end
+    for _, shot in ipairs(shots) do
+        local stored = type(shot) == 'table' and shot.url or shot
+        if tostring(stored or '') == url then return true end
+    end
+    return false
+end
+
 -- ══════════════════════════════════════════════════════════════
 -- AirDrop
 -- Send a contact, a number or a photo to a nearby phone. Both ends need Bluetooth on and
@@ -1206,6 +1378,7 @@ end)
 -- does anything land. Nothing is written to a phone that did not say yes.
 -- ══════════════════════════════════════════════════════════════
 local AirOffers = {}     -- [offerId] = { from, to, kind, payload, at }
+local AirLastSend = {}
 local airSeq = 0
 
 local function btOn(pl)
@@ -1224,10 +1397,15 @@ local function airRange()
     return (Config.Airdrop and Config.Airdrop.range) or 12.0
 end
 
+local function airOfferTtl()
+    return math.max(1, tonumber(Config.Airdrop and Config.Airdrop.offerTtl) or 30)
+end
+
 -- Who this player could AirDrop to right now: online, Bluetooth on, and close enough.
 V.Callback('v-phone:airdropScan', function(src, resolve)
     local me = Core.GetPlayer(src)
     if not me then resolve(false) return end
+    if not phoneReachable(src) then resolve({ error = 'gone' }) return end
     if not btOn(me) then resolve({ error = 'bt' }) return end
     local c0 = coordsOf(src)
     if not c0 then resolve({ ok = true, devices = {} }) return end
@@ -1237,7 +1415,7 @@ V.Callback('v-phone:airdropScan', function(src, resolve)
         local tid = tonumber(sid)
         if tid and tid ~= src then
             local tp = Core.GetPlayer(tid)
-            if tp and btOn(tp) then
+            if tp and phoneReachable(tid) and btOn(tp) then
                 local c = coordsOf(tid)
                 if c and #(c0 - c) <= airRange() then
                     out[#out + 1] = { id = tid, name = tp.name or 'iPhone' }
@@ -1253,11 +1431,14 @@ end)
 V.Callback('v-phone:airdropSend', function(src, resolve, data)
     local me = Core.GetPlayer(src)
     if not me then resolve(false) return end
+    if not phoneReachable(src) then resolve({ error = 'gone' }) return end
     if not btOn(me) then resolve({ error = 'bt' }) return end
 
     local to = tonumber(data and data.to)
     local tp = to and Core.GetPlayer(to)
-    if not tp or not btOn(tp) then resolve({ error = 'gone' }) return end
+    if to == src or not tp or not phoneReachable(to) or not btOn(tp) then
+        resolve({ error = 'gone' }) return
+    end
 
     local c0, c1 = coordsOf(src), coordsOf(to)
     if not c0 or not c1 or #(c0 - c1) > airRange() then resolve({ error = 'range' }) return end
@@ -1270,19 +1451,42 @@ V.Callback('v-phone:airdropSend', function(src, resolve, data)
         if payload.number == '' then resolve({ error = 'x' }) return end
     elseif kind == 'photo' then
         payload = { url = tostring(pin.url or ''):sub(1, 400) }
-        if payload.url == '' then resolve({ error = 'x' }) return end
+        if payload.url == '' or not wallpaperAllowed(payload.url) or not ownsPhoto(me, payload.url) then
+            resolve({ error = 'x' }) return
+        end
     else
         resolve({ error = 'x' }) return
     end
 
+    local now = GetGameTimer()
+    local last = AirLastSend[src]
+    local outstanding = 0
+    for _, pending in pairs(AirOffers) do
+        if pending.from == src then outstanding = outstanding + 1 end
+    end
+    if (last and now - last < 800) or outstanding >= 3 then
+        resolve({ error = 'busy' }) return
+    end
+    AirLastSend[src] = now
+
     airSeq = airSeq + 1
     local offerId = airSeq
-    AirOffers[offerId] = { from = src, to = to, kind = kind, payload = payload, at = os.time() }
+    local offer = { from = src, to = to, kind = kind, payload = payload, at = os.time() }
+    AirOffers[offerId] = offer
+
+    -- A receiver may ignore the prompt or disconnect. Retire the exact offer object so
+    -- abandoned handshakes cannot accumulate for the lifetime of the resource.
+    SetTimeout(math.floor(airOfferTtl() * 1000), function()
+        if AirOffers[offerId] == offer then AirOffers[offerId] = nil end
+    end)
 
     local preview = (kind == 'photo') and payload.url
         or (payload.name ~= '' and (payload.name .. ' - ' .. payload.number) or payload.number)
     TriggerClientEvent('v-phone:client:airdrop', to,
-        { offerId = offerId, from = me.name or 'iPhone', kind = kind, preview = preview })
+        {
+            offerId = offerId, from = me.name or 'iPhone', kind = kind, preview = preview,
+            ttlMs = math.floor(airOfferTtl() * 1000),
+        })
     resolve({ ok = true })
 end)
 
@@ -1295,7 +1499,7 @@ V.Callback('v-phone:airdropRespond', function(src, resolve, data)
     AirOffers[id] = nil
 
     -- Expired offers are simply dropped.
-    if (os.time() - o.at) > ((Config.Airdrop and Config.Airdrop.offerTtl) or 30) then
+    if (os.time() - o.at) > airOfferTtl() then
         resolve({ error = 'gone' }) return
     end
 
@@ -1307,13 +1511,21 @@ V.Callback('v-phone:airdropRespond', function(src, resolve, data)
     end
 
     local rp = Core.GetPlayer(src)
-    if not rp then resolve(false) return end
+    local sp = Core.GetPlayer(o.from)
+    if not rp or not sp or not phoneReachable(src) or not phoneReachable(o.from)
+        or not btOn(rp) or not btOn(sp) then
+        resolve({ error = 'gone' }) return
+    end
+    local senderCoords, receiverCoords = coordsOf(o.from), coordsOf(src)
+    if not senderCoords or not receiverCoords or #(senderCoords - receiverCoords) > airRange() then
+        resolve({ error = 'range' }) return
+    end
 
     if o.kind == 'photo' then
         local shots = rp.GetMetadata('photos')
         if type(shots) ~= 'table' then shots = {} end
-        table.insert(shots, 1, o.payload.url)
-        while #shots > 30 do table.remove(shots) end
+        table.insert(shots, 1, { url = o.payload.url, album = '', filter = '' })
+        while #shots > 60 do table.remove(shots) end
         rp.SetMetadata('photos', shots)
     else
         local nm = o.payload.name ~= '' and o.payload.name or o.payload.number
@@ -1705,7 +1917,7 @@ local function speakerSync(id)
     end
 end
 
-local function speakerOff(id)
+speakerOff = function(id)
     local st = Speaker[id]
     if not st then return end
     for t in pairs(st.heard) do
@@ -1722,16 +1934,24 @@ V.Callback('v-phone:speaker', function(src, resolve, data)
 
     if not on then speakerOff(id) resolve({ ok = true, on = false }) return end
 
-    Speaker[id] = Speaker[id] or { heard = {} }
+    if Speaker[id] then
+        speakerSync(id)
+        resolve({ ok = true, on = true })
+        return
+    end
+    local speakerState = { heard = {} }
+    local callRecord = c
+    Speaker[id] = speakerState
     speakerSync(id)
     -- People walk. Re-checked while it is on, so somebody who wanders over hears it and
     -- somebody who wanders off stops.
     CreateThread(function()
-        while Speaker[id] and Calls[id] and Calls[id].state == 'active' do
+        while Speaker[id] == speakerState and Calls[id] == callRecord
+            and callRecord.state == 'active' do
             speakerSync(id)
             Wait(2500)
         end
-        speakerOff(id)
+        if Speaker[id] == speakerState then speakerOff(id) end
     end)
     resolve({ ok = true, on = true })
 end)
@@ -1811,13 +2031,32 @@ RegisterNetEvent('v-phone:server:screen', function(on)
     Open[source] = on and true or nil
 end)
 
-AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
+V.Callback('v-phone:callState', function(src, resolve)
+    if not Core.GetPlayer(src) then resolve(false) return end
+    resolve({ ok = true, call = currentCallFor(src) or false })
+end)
+
+local function hydratePlayer(src, player)
+    if not player then return end
     ensureNumber(src, player)
-    -- Carried over from the last session, because a phone that was flat when you logged
-    -- off is flat when you come back.
     local saved = player.GetMetadata('battery')
-    Battery[src] = (type(saved) == 'number') and math.max(0, math.min(100, saved)) or 100
-    Signal[src] = 4
+    Battery[src] = V.SettingBool('battery', true)
+        and ((type(saved) == 'number') and math.max(0, math.min(100, saved)) or 100)
+        or 100
+    local ped = GetPlayerPed(src)
+    if ped and ped ~= 0 then
+        local coords = GetEntityCoords(ped)
+        Signal[src] = signalAt(coords)
+        Charging[src] = chargeRateAt(src, ped, coords) > 0
+    else
+        Signal[src], Charging[src] = 4, false
+    end
+    TriggerClientEvent('v-phone:client:prefsSync', src, prefsOf(player))
+    pushPower(src)
+end
+
+AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
+    if Core then hydratePlayer(src, player) end
 end)
 
 AddEventHandler('playerDropped', function()
@@ -1825,6 +2064,11 @@ AddEventHandler('playerDropped', function()
     local p = Core.GetPlayer(src)
     if p and Battery[src] then p.SetMetadata('battery', math.floor(Battery[src])) end
     Battery[src], Signal[src], Charging[src], Open[src] = nil, nil, nil, nil
+    MessageLastSend[src], MessageBusy[src] = nil, nil
+    AirLastSend[src] = nil
+    for offerId, offer in pairs(AirOffers) do
+        if offer.from == src or offer.to == src then AirOffers[offerId] = nil end
+    end
     local id = CallOf[src]
     if id then endCall(id, 'dropped') end
     for n, s in pairs(Online) do if s == src then Online[n] = nil end end
@@ -1832,6 +2076,17 @@ end)
 
 AddEventHandler('v-world:server:changed', function(domain)
     if domain == 'apps' or not domain then loadWorldApps() end
+end)
+
+AddEventHandler('onResourceStop', function(resource)
+    if resource ~= GetCurrentResourceName() or not Core then return end
+    for _, raw in ipairs(GetPlayers()) do
+        local src = tonumber(raw)
+        local player = src and Core.GetPlayer(src)
+        if player and Battery[src] then
+            player.SetMetadata('battery', math.floor(Battery[src]))
+        end
+    end
 end)
 
 CreateThread(function()
@@ -2026,6 +2281,13 @@ CreateThread(function()
             ON DUPLICATE KEY UPDATE v = VALUES(v)]])
         loadWorldApps()
         print('[v-phone] home screen order re-seeded')
+    end
+
+    -- A resource restart does not replay the framework's player-loaded event. Rebuild
+    -- every online index and persisted power state before accepting calls/messages.
+    for _, raw in ipairs(GetPlayers()) do
+        local src = tonumber(raw)
+        if src then hydratePlayer(src, Core.GetPlayer(src)) end
     end
 
     -- Retention, once at boot. A prune on a timer would be a second thing to reason about
