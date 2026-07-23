@@ -23,7 +23,8 @@ PhoneApps = PhoneApps or {}
 
 --- Declare a phone app.
 ---
---- Called from `apps/<id>/app.lua`. The only required fields are `id` and `label`; the
+--- Called from `apps/<id>/app.lua`. The only required fields are `id` and `label`; ids
+--- use letters, numbers, `_` and `-` so the SDK namespace and folder URL stay unambiguous.
 --- page defaults to `index.html` inside your own folder, which is where it should be.
 ---
 ---     PhoneApp {
@@ -37,14 +38,15 @@ PhoneApps = PhoneApps or {}
 function PhoneApp(def)
     if type(def) ~= 'table' then return end
     local id = tostring(def.id or '')
-    if id == '' then
-        print('^1[v-phone] an app in apps/ declared no id and was skipped^0')
+    if id == '' or not id:match('^[%w_-]+$') then
+        print(('^1[v-phone] invalid app id %q (use letters, numbers, _ or -); skipped^0'):format(id))
         return
     end
 
     -- The page lives in the app's own folder. A folder that wants a different file name
     -- says so; everything else gets index.html for free.
-    def.page = def.page or ('https://cfx-nui-v-phone/apps/' .. id .. '/' .. (def.file or 'index.html'))
+    local resource = GetCurrentResourceName()
+    def.page = def.page or ('https://cfx-nui-' .. resource .. '/apps/' .. id .. '/' .. (def.file or 'index.html'))
     def.label = def.label or id
     def.icon = def.icon or 'dot'
     def.category = def.category or 'utilities'

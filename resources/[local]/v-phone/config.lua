@@ -133,12 +133,12 @@ Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'duty'
 -- The chrome is the phone's; the accent, panel and radius come from v-ui, so a server that
 -- themes the framework purple gets a purple phone rather than an orange rectangle in a
 -- purple world.
-Config.Wallpapers = { 'dune', 'grid', 'night', 'ember' }
-Config.DefaultWallpaper = 'ember'
+Config.Wallpapers = { 'aurora', 'lagoon', 'dune', 'grid', 'night', 'ember' }
+Config.DefaultWallpaper = 'aurora'
 
 -- iOS 27's transparency slider, as a starting value: 0 is ultra clear glass, 100 is
 -- fully tinted. Players move it themselves in Settings; this is only where they begin.
-Config.DefaultGlass = 55
+Config.DefaultGlass = 42
 
 -- ── Custom wallpapers ──────────────────────────────────────────
 -- A player may point the phone at an image on the web. That is a URL a client will fetch,
