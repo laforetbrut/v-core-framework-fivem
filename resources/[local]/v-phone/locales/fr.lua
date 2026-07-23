@@ -108,6 +108,18 @@ local T = {
 
     -- ── Emplois ──
     ['ph.current_job']  = 'Emploi actuel',
+    ['ph.my_job'] = "Mon emploi",
+    ['ph.employer'] = "Employeur",
+    ['ph.rank'] = "Echelon",
+    ['ph.salary'] = "Salaire",
+    ['ph.grade'] = "Grade",
+    ['ph.per_pay'] = "par paie",
+    ['ph.progression'] = "Progression",
+    ['ph.ladder'] = "Grilles",
+    ['ph.you_are_here'] = "Votre poste actuel",
+    ['ph.ranks'] = "echelons",
+    ['ph.unemployed'] = "Sans emploi",
+    ['ph.unemployed_hint'] = "Passez a la mairie ou consultez les offres pour trouver un poste.",
     ['ph.openings']     = 'Postes ouverts',
     ['ph.no_jobs']      = 'Rien de proposé pour le moment',
     ['ph.jobs_hint']    = "Rendez-vous à la mairie pour signer",

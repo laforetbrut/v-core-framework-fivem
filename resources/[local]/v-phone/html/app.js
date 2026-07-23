@@ -1344,19 +1344,68 @@ RENDER.wallet = async () => {
 
 // ── Jobs ───────────────────────────────────────────────────────
 // Read only, and deliberately: signing on happens at a desk.
+let jobsTab = 'me';
+
 RENDER.jobs = async () => {
+  tabbar([
+    { id: 'me', icon: 'id', label: 'ph.my_job' },
+    { id: 'open', icon: 'jobs', label: 'ph.openings' },
+  ], jobsTab, (t) => { jobsTab = t; RENDER.jobs(); });
   loading();
   const d = await post('app', { app: 'jobs' });
   if (!d || d.error) { body(UI.empty(L('ph.err_off'), 'jobs')); return; }
-  const list = d.jobs || [];
-  body(
-    UI.bigNumber(L('ph.current_job'), d.current || '') +
-    (list.length
+
+  if (jobsTab === 'open') {
+    const list = d.jobs || [];
+    body(list.length
       ? UI.group(list.map((j) => UI.row({
-          icon: 'jobs', tint: '#5856D6', title: j.label || j.name, subtitle: j.grade || '',
+          icon: 'jobs', tint: '#5856D6', title: j.label || j.name,
+          subtitle: (j.grade || '') + (j.ranks ? '  -  ' + j.ranks + ' ' + L('ph.ranks') : ''),
           value: money(j.salary), mono: true,
         })), { header: L('ph.openings'), footer: L('ph.jobs_hint') })
-      : UI.empty(L('ph.no_jobs'), 'jobs'))
+      : UI.empty(L('ph.no_jobs'), 'jobs'));
+    return;
+  }
+
+  // The employment card: the job, the rank held inside it, and the whole ladder, so a
+  // player can see where they stand rather than only what they are called.
+  const me = d.me || {};
+  const unemployed = !me.name || me.name === 'unemployed';
+  if (unemployed) {
+    body(UI.empty(L('ph.unemployed'), 'jobs') +
+      '<div class="groupfoot">' + esc(L('ph.unemployed_hint')) + '</div>');
+    return;
+  }
+
+  const ladder = me.ladder || [];
+  const top = ladder.length ? ladder[ladder.length - 1].grade : me.grade;
+  const pct = top > 0 ? Math.round((Number(me.grade) / top) * 100) : 100;
+
+  body(
+    // Who you are at work, in the shape a payslip uses.
+    '<div class="jobcard">' +
+      '<div class="jobname">' + esc(me.label || me.name) + '</div>' +
+      '<div class="jobgrade">' + esc(me.gradeLabel || (L('ph.grade') + ' ' + me.grade)) + '</div>' +
+      '<div class="jobpay">' + esc(money(me.salary)) + ' <span>' + esc(L('ph.per_pay')) + '</span></div>' +
+    '</div>' +
+    UI.group([
+      UI.row({ icon: 'jobs', tint: '#5856D6', title: L('ph.employer'), value: me.label || me.name }),
+      UI.row({ icon: 'id', tint: '#8E8E93', title: L('ph.rank'),
+               value: (Number(me.grade) + 1) + ' / ' + (me.ranks || ladder.length || 1) }),
+      UI.row({ icon: 'bank', tint: '#34C759', title: L('ph.salary'), value: money(me.salary), mono: true }),
+    ]) +
+    // Progress through the ladder, because a rank means nothing without the rungs.
+    '<div class="grouphead">' + esc(L('ph.progression')) + '</div>' +
+    '<div class="jobbar"><i style="width:' + pct + '%"></i></div>' +
+    (ladder.length
+      ? UI.group(ladder.map((g) => UI.row({
+          icon: Number(g.grade) === Number(me.grade) ? 'check' : 'chevron',
+          tint: Number(g.grade) === Number(me.grade) ? '#34C759' : '#48484A',
+          title: g.name || (L('ph.grade') + ' ' + g.grade),
+          subtitle: Number(g.grade) === Number(me.grade) ? L('ph.you_are_here') : '',
+          value: money(g.salary), mono: true,
+        })), { header: L('ph.ladder') })
+      : '')
   );
 };
 
