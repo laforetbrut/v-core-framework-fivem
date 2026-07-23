@@ -241,8 +241,55 @@ The phone is the surface most of the game is played through, so an app is the sh
 route from an idea to something players actually use. There is no build step, no
 framework and no bundler: an app is **one HTML file and eight lines of Lua**.
 
-`resources/[local]/v-phone-notes` is a complete worked example that ships with the
-framework. Copy it.
+There are two ways to ship one. **Dropping a folder into the phone is the short one**,
+and it is the one to reach for unless you have a reason not to.
+
+### The short way: drop a folder into `apps/`
+
+Inside `resources/[local]/v-phone` there is an `apps/` folder. Anything you put in it is
+picked up automatically - no edit to the manifest, no edit to the config, no new resource
+to start. Copy `apps/example`, rename it, and you have an app.
+
+```
+v-phone/apps/
+  myapp/
+    app.lua        <- required: declares the app
+    index.html     <- required: the page
+    client.lua     <- optional: runs on the client
+    server.lua     <- optional: runs on the server
+```
+
+`app.lua` is the whole Lua side:
+
+```lua
+PhoneApp {
+    id       = 'myapp',
+    label    = 'My App',        -- a literal, or a locale key the phone can resolve
+    icon     = 'note',          -- any key from PhoneUI.icons
+    category = 'utilities',     -- where it sits in the FruitStore
+    desc     = 'One line for its store page.',
+    optional = true,            -- absent until downloaded, like any app
+}
+```
+
+That is it. The page defaults to `index.html` inside your own folder, the slot is assigned
+after the built-ins, and `client.lua` / `server.lua` are loaded like any other script if
+you ship them. Restart `v-phone` and the app is in the FruitStore.
+
+Two things worth knowing:
+
+- **`app.lua` is a shared script.** It runs on both sides, because the server needs the
+  declaration to register the app and the client needs it to draw. `PhoneApp` is written
+  so being called twice is harmless.
+- **Your folder name and your `id` should match.** The default page path is built from the
+  id, so `apps/myapp/` with `id = 'myapp'` finds `apps/myapp/index.html` without you
+  saying so.
+
+### The long way: a separate resource
+
+An app can also be its own resource, which is what you want if it ships independently of
+the phone or has substantial server logic of its own.
+`resources/[local]/v-phone-notes` is a complete worked example. Copy it.
 
 ### The eight lines
 

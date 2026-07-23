@@ -1808,6 +1808,16 @@ CreateThread(function()
     end
     loadWorldApps()
 
+    -- Drop-in apps: whatever an `apps/<id>/app.lua` declared. They go through the same
+    -- registration a third-party resource uses, so from here on the phone cannot tell an
+    -- app folder from an app resource - which is the whole point.
+    for _, def in ipairs(PhoneApps or {}) do
+        if registerApp(def.id, def, 'v-phone') then
+            print(('[v-phone] app folder loaded: %s'):format(def.id))
+        end
+    end
+    loadWorldApps()
+
     -- Any app that registered before v-world was ready still needs its editor row.
     for id, a in pairs(Apps) do
         if not WorldApps[id] then

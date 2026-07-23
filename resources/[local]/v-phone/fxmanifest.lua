@@ -26,13 +26,21 @@ shared_scripts {
     'locales/en.lua',
     'locales/fr.lua',
     'config.lua',
+    -- Drop-in apps. `_loader.lua` defines PhoneApp(); the glob after it picks up every
+    -- app folder, so adding an app is adding a folder and nothing else.
+    'apps/_loader.lua',
+    'apps/*/app.lua',
 }
 
-client_script 'client/main.lua'
+client_scripts {
+    'client/main.lua',
+    'apps/*/client.lua',      -- optional, per app folder
+}
 
 server_scripts {
     '@oxmysql/lib/MySQL.lua',
     'server/main.lua',
+    'apps/*/server.lua',      -- optional, per app folder
 }
 
 ui_page 'html/index.html'
@@ -44,4 +52,11 @@ files {
     -- The app SDK. Served to any resource that ships a phone app, which is why it
     -- is a file rather than a copied snippet.
     'html/sdk.js',
+    -- Everything a dropped-in app ships. The page and whatever it loads beside it.
+    'apps/*/*.html',
+    'apps/*/*.css',
+    'apps/*/*.js',
+    'apps/*/*.png',
+    'apps/*/*.jpg',
+    'apps/*/*.svg',
 }
