@@ -313,7 +313,10 @@ input { font: inherit; }
 .pages { flex: 1; min-height: 0; overflow: hidden; }
 .ptrack { display: flex; height: 100%; will-change: transform;
   transition: transform .34s cubic-bezier(.32,.72,0,1); }
-.page { flex: 0 0 100%; padding: 12px 22px 0;
+/* A flex item refuses to go below its min-content width unless it is told to. At six
+   columns the labels made that minimum wider than the screen, so the page grew past
+   its own viewport and the last column was cut off by the bezel. */
+.page { flex: 0 0 100%; min-width: 0; padding: 12px 22px 0;
   /* The player picks the grid in Settings; the column count drives everything else. */
   display: grid; grid-template-columns: repeat(var(--gcols, 4), 1fr);
   /* Rows share the page rather than stacking past the bottom of it, which is what made
@@ -1476,7 +1479,7 @@ input { font: inherit; }
 /* A tile must fit the row it was given. Without this the label wrapped to a second line,
    the tile grew past its cell, and the page reported an overflow no icon size could fix -
    which is why the four-row grids looked broken however small the icons went. */
-.pages .tile { min-height: 0; }
+.pages .tile { min-height: 0; min-width: 0; }
 .pages .tile .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%; }
 
