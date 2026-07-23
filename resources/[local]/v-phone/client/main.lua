@@ -253,6 +253,7 @@ RegisterNUICallback('prefs', function(data, cb)
 end)
 RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
 RegisterNUICallback('mail',          relay('v-phone:mail'))
+RegisterNUICallback('notes',         relay('v-phone:notes'))
 RegisterNUICallback('lookup',        relay('v-phone:lookup'))
 
 RegisterNUICallback('close', function(_, cb) closePhone(); cb('ok') end)
