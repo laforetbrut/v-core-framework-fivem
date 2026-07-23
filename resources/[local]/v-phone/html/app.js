@@ -639,6 +639,46 @@ RENDER.phone = () => {
   byId('dial').addEventListener('click', () => { if (dialed) post('call', { number: dialed }); });
 };
 
+// ── Notes ──────────────────────────────────────────────────────
+// Part of the phone rather than a sample resource: notes are the one thing people expect
+// to survive everything else, so they live with the phone's own data.
+RENDER.notes = async () => {
+  setNav(L('app.notes'), null, { icon: 'add', onClick: () => noteEdit({}) });
+  loading();
+  const d = await post('notes', { op: 'list' });
+  const list = (d && d.notes) || [];
+  if (!list.length) { body(UI.empty(L('ph.no_notes'), 'note')); return; }
+  body(UI.group(list.map((n) => UI.row({
+    icon: 'note', tint: '#FFCC00', title: n.title || L('ph.untitled'),
+    subtitle: String(n.at || '').slice(5, 16), chevron: true, data: { id: n.id },
+  }))));
+  rows('.row', (el) => el.addEventListener('click', () => {
+    const n = list.find((x) => String(x.id) === el.dataset.id);
+    if (n) noteEdit(n);
+  }));
+};
+
+function noteEdit(n) {
+  setNav(n.id ? (n.title || L('ph.untitled')) : L('ph.note_new'), L('app.notes'));
+  body(
+    UI.field('ntitle', L('ph.note_title'), n.title || '', 'maxlength="80"') +
+    '<textarea class="mailedit" id="nbody" maxlength="4000" placeholder="' + esc(L('ph.note_body')) + '">' +
+      esc(n.body || '') + '</textarea>' +
+    UI.button(L('ph.save'), 'nsave', 'tinted') +
+    (n.id ? UI.button(L('ph.delete'), 'ndel', 'destructive') : '')
+  );
+  byId('nsave').addEventListener('click', async () => {
+    const r = await post('notes', { op: 'save', id: n.id, title: byId('ntitle').value, body: byId('nbody').value });
+    if (r && r.ok) { toast(L('ph.saved')); RENDER.notes(); }
+    else toast(L('ph.err_' + ((r && r.error) || 'x')));
+  });
+  const del = byId('ndel');
+  if (del) del.addEventListener('click', async () => {
+    await post('notes', { op: 'del', id: n.id });
+    toast(L('ph.deleted')); RENDER.notes();
+  });
+}
+
 // ── Mail ───────────────────────────────────────────────────────
 // A mail client, not a second Messages: an address you own, folders, group recipients,
 // drafts you can come back to, replies that quote who they answer, and a keep flag that
@@ -741,10 +781,13 @@ function mailRead(m) {
     '</div>' +
     '<div class="mailbody">' + esc(m.body || '') + '</div>' +
     UI.button(L('ph.mail_reply'), 'mreply', 'tinted') +
+    UI.button(L('ph.mail_forward'), 'mfwd', 'plain') +
     ((m.to_addr || '').indexOf(',') !== -1 ? UI.button(L('ph.mail_reply_all'), 'mreplyall', 'plain') : '') +
     UI.button(L('ph.delete'), 'mdel', 'destructive')
   );
   byId('mreply').addEventListener('click', () => mailCompose({ reply: m, all: false }));
+  // Forward keeps the message and clears the recipients: the point is to send it on.
+  byId('mfwd').addEventListener('click', () => mailCompose({ forward: m }));
   const ra = byId('mreplyall');
   if (ra) ra.addEventListener('click', () => mailCompose({ reply: m, all: true }));
   byId('mdel').addEventListener('click', async () => {
@@ -762,6 +805,10 @@ function mailCompose(o) {
   if (d) {
     to = d.to_addr || ''; subject = d.subject || ''; bodyTxt = d.body || '';
     replyTo = Number(d.reply_to || 0); boxId = Number(d.box_id || 0);
+  } else if (o.forward) {
+    const f = o.forward;
+    subject = /^(fwd|tr):/i.test(f.subject || '') ? f.subject : ('Fwd: ' + (f.subject || ''));
+    bodyTxt = '\n\n--- ' + (f.from_addr || '') + ' ---\n' + (f.body || '');
   } else if (r) {
     // Reply goes to the writer; reply-all adds everyone it was addressed to but you.
     const others = o.all
@@ -796,6 +843,45 @@ function mailCompose(o) {
     const res = await post('mail', payload('draft'));
     if (res && res.ok) { toast(L('ph.mail_drafted')); mailFolder = 'draft'; mailList(); }
     else toast(L('ph.err_' + ((res && res.error) || 'x')));
+  });
+}
+
+// ── Photos: filters, albums, and a picker every app can raise ──
+// A filter is a stored name drawn with CSS, never a re-encoded image: the phone holds a
+// link and how to draw it, which is the only thing it can honestly hold.
+const FILTERS = ['none', 'mono', 'noir', 'fade', 'warm', 'cool', 'vivid'];
+function filterCss(f) {
+  return ({
+    mono:  'grayscale(1)',
+    noir:  'grayscale(1) contrast(1.5) brightness(.9)',
+    fade:  'saturate(.7) contrast(.88) brightness(1.08)',
+    warm:  'sepia(.35) saturate(1.25) hue-rotate(-12deg)',
+    cool:  'saturate(1.1) hue-rotate(14deg) brightness(1.03)',
+    vivid: 'saturate(1.6) contrast(1.12)',
+  })[f] || 'none';
+}
+
+// Photos arrive as rows now; older saves were bare strings.
+function photoRow(v) { return (typeof v === 'string') ? { url: v, album: '', filter: '' } : (v || {}); }
+function photoStyle(v) {
+  const r = photoRow(v);
+  return 'background-image:url(' + esc(r.url) + ');filter:' + filterCss(r.filter);
+}
+
+// The shared picker: any composer can ask for a photo from the phone rather than making
+// the player paste a link they do not have.
+function pickPhoto(onPick) {
+  post('photos', { op: 'list' }).then((d) => {
+    const shots = (d && d.photos) || [];
+    if (!shots.length) { toast(L('ph.no_photos')); return; }
+    sheet(L('ph.pick_photo'),
+      '<div class="shots">' + shots.map((v, i) =>
+        '<div class="shot" data-i="' + i + '" style="' + photoStyle(v) + '"></div>').join('') + '</div>',
+      () => [...byId('sheet').querySelectorAll('.shot')].forEach((el) => el.addEventListener('click', () => {
+        const r = photoRow(shots[Number(el.dataset.i)]);
+        closeSheet();
+        onPick(r.url, r);
+      })));
   });
 }
 
@@ -976,6 +1062,7 @@ function paintThread(messages) {
           '<div class="shots" style="margin-bottom:12px">' + shots.map((u, i) =>
             '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>'
         : '') +
+      UI.button(L('ph.pick_photo'), 'atpick', 'plain') +
       UI.field('aturl', L('ph.attach_url'), '', 'maxlength="300"') +
       UI.button(L('ph.attach_send'), 'atgo') +
       UI.button(L('ph.attach_loc'), 'atloc', 'plain'),
@@ -991,7 +1078,11 @@ function paintThread(messages) {
         };
         [...byId('sheet').querySelectorAll('.shot')].forEach((sh) =>
           sh.addEventListener('click', () => sendMedia({ kind: 'image', attachment: shots[Number(sh.dataset.i)], body: '' })));
-        byId('atgo').addEventListener('click', () => {
+        byId('atpick').addEventListener('click', () => pickPhoto((url) => {
+        closeSheet();
+        post('send', Object.assign({ body: '', kind: 'photo', attachment: url }, target())).then(() => openThread(thread));
+      }));
+      byId('atgo').addEventListener('click', () => {
           const u = byId('aturl').value.trim();
           if (u) sendMedia({ kind: 'image', attachment: u, body: '' });
         });
@@ -2206,7 +2297,7 @@ RENDER.camera = async () => {
       '</div>' +
       '<div class="cammode"><span class="on">' + esc(L('ph.cam_photo')) + '</span></div>' +
       '<div class="camctl">' +
-        (last ? '<button class="camroll" id="camroll" type="button" style="background-image:url(' + esc(last) + ')"></button>'
+        (last ? '<button class="camroll" id="camroll" type="button" style="' + photoStyle(last) + '"></button>'
               : '<span class="camroll empty"></span>') +
         '<button class="camshutter" id="shoot" type="button"><span></span></button>' +
         '<button class="camflip" id="camland2" type="button">' + svg('landscape') + '</button>' +
@@ -2233,23 +2324,74 @@ RENDER.camera = async () => {
 
 // The Gallery: every photo, tap to view, and from there set it as wallpaper, AirDrop it,
 // or delete it. Same store as the camera - one shoots, one keeps.
+let galleryAlbum = '';     // '' is everything
+
 RENDER.gallery = async () => {
   const d = await post('photos', { op: 'list' });
   const shots = (d && d.photos) || [];
+  const albums = (d && d.albums) || [];
+  setNav(L('app.gallery'), null);
   if (!shots.length) { body(UI.empty(L('ph.no_photos'), 'images')); return; }
-  body('<div class="shots">' + shots.map((u, i) =>
-    '<div class="shot" data-i="' + i + '" style="background-image:url(' + esc(u) + ')"></div>').join('') + '</div>');
-  rows('.shot', (el) => el.addEventListener('click', () => photoSheet(shots, Number(el.dataset.i))));
+
+  // Albums are worked out from the photos, so the strip can never list one that is empty.
+  const strip = '<div class="seg scroll" id="galbums">' +
+    '<button class="' + (galleryAlbum === '' ? 'on' : '') + '" data-a="">' + esc(L('ph.all_photos')) + '</button>' +
+    albums.map((a) => '<button class="' + (galleryAlbum === a ? 'on' : '') + '" data-a="' + esc(a) + '">' +
+      esc(a) + '</button>').join('') + '</div>';
+
+  const shown = shots.map((v, i) => ({ v: photoRow(v), i }))
+    .filter((x) => galleryAlbum === '' || x.v.album === galleryAlbum);
+
+  body(strip + (shown.length
+    ? '<div class="shots">' + shown.map((x) =>
+        '<div class="shot" data-i="' + x.i + '" style="' + photoStyle(x.v) + '"></div>').join('') + '</div>'
+    : UI.empty(L('ph.album_empty'), 'images')));
+
+  qrows('galbums', 'button', (b) => b.addEventListener('click', () => {
+    galleryAlbum = b.dataset.a; RENDER.gallery();
+  }));
+  rows('.shot', (el) => el.addEventListener('click', () => photoSheet(shots, Number(el.dataset.i), albums)));
 };
 
-function photoSheet(shots, i) {
-  const url = shots[i];
+function photoSheet(shots, i, albums) {
+  const r = photoRow(shots[i]);
+  const url = r.url;
   sheet(L('app.gallery'),
-    '<img class="shotbig" src="' + esc(url) + '" />' +
+    '<img class="shotbig" id="shotbig" src="' + esc(url) + '" style="filter:' + filterCss(r.filter) + '" />' +
+    // Retouching: pick a look, it applies live and is remembered with the photo.
+    '<div class="grouphead">' + esc(L('ph.filters')) + '</div>' +
+    '<div class="seg scroll" id="sfilters">' + FILTERS.map((f) =>
+      '<button class="' + ((r.filter || 'none') === f ? 'on' : '') + '" data-f="' + f + '">' +
+      esc(L('ph.filter_' + f)) + '</button>').join('') + '</div>' +
+    UI.button(L('ph.album_set'), 'salbum', 'plain') +
     UI.button(L('ph.airdrop_share'), 'sshare', 'tinted') +
     UI.button(L('ph.set_wallpaper'), 'swall') +
     UI.button(L('ph.delete'), 'sdel', 'destructive'),
     () => {
+      [...byId('sheet').querySelectorAll('#sfilters button')].forEach((b) =>
+        b.addEventListener('click', async () => {
+          const f = b.dataset.f;
+          byId('shotbig').style.filter = filterCss(f);
+          [...byId('sfilters').querySelectorAll('button')].forEach((x) => x.classList.toggle('on', x === b));
+          await post('photos', { op: 'edit', index: i + 1, filter: f === 'none' ? '' : f });
+        }));
+      byId('salbum').addEventListener('click', () => {
+        const list = (albums || []).slice();
+        sheet(L('ph.album_set'),
+          UI.field('albname', L('ph.album_name'), r.album || '', 'maxlength="40"') +
+          UI.button(L('ph.save'), 'albgo', 'tinted') +
+          (list.length ? UI.group(list.map((a) => UI.row({ icon: 'folder', title: a, data: { alb: a } }))) : ''),
+          () => {
+            byId('albgo').addEventListener('click', async () => {
+              await post('photos', { op: 'edit', index: i + 1, album: byId('albname').value.trim() });
+              closeSheet(); RENDER.gallery();
+            });
+            [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+              await post('photos', { op: 'edit', index: i + 1, album: el.dataset.alb });
+              closeSheet(); RENDER.gallery();
+            }));
+          });
+      });
       byId('sshare').addEventListener('click', () => airdropShare('photo', { url }));
       byId('swall').addEventListener('click', async () => {
         const r = await post('prefs', { wallpaperUrl: url });
@@ -2260,6 +2402,7 @@ function photoSheet(shots, i) {
       byId('sdel').addEventListener('click', async () => {
         await post('photos', { op: 'del', index: i + 1 });
         closeSheet();
+        toast(L('ph.photo_deleted'));
         if (openApp && openApp.id === 'gallery') RENDER.gallery(); else RENDER.camera();
       });
     });
@@ -2525,9 +2668,16 @@ RENDER.bleeter = () => needAccount('bleeter', async () => {
   setNav(L('app.bleeter'), null, { icon: 'add', onClick: () => {
     sheet(L('ph.bleet_new'),
       UI.field('btext', L('ph.bleet_ph'), '', 'maxlength="280"') +
-        UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') + UI.button(L('ph.bleet_send'), 'bgo'),
+        UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') +
+        UI.button(L('ph.pick_photo'), 'bpick', 'plain') + UI.button(L('ph.bleet_send'), 'bgo'),
       () => {
         byId('bemoji').addEventListener('click', () => emojiOpen('btext'));
+        // A post can carry a photo straight off the phone rather than a pasted link.
+        byId('bpick').addEventListener('click', () => pickPhoto(async (url) => {
+          const r = await post('social', { op: 'post', kind: 'photo', body: byId('btext').value, image: url });
+          closeSheet();
+          if (r && r.ok) RENDER.bleeter(); else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        }));
         byId('bgo').addEventListener('click', async () => {
           const r = await post('social', { op: 'post', kind: 'text', body: byId('btext').value });
           emojiClose(); closeSheet();
@@ -3142,6 +3292,7 @@ byId('navback').addEventListener('click', () => {
   }
   // Back inside Mail steps to the folder list. Falling through to closeApp here is what
   // made tapping "Mail" quit the app instead of leaving the message.
+  if (openApp && openApp.id === 'notes') { RENDER.notes(); return; }
   if (openApp && openApp.id === 'mail' && mailAcc) {
     mailList();
     return;

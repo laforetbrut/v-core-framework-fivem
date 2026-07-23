@@ -1045,6 +1045,47 @@ local PLACE_SOURCES = {
 --- are the operator's decision and the phone's, not the player's.
 --- The camera's gallery. Only ever URLs: the upload target the operator configured
 --- returns one, and a data URI would be megabytes of base64 in a metadata column.
+-- ══════════════════════════════════════════════════════════════
+-- Notes
+-- ══════════════════════════════════════════════════════════════
+-- Native now rather than a sample resource: notes are the one thing on a phone people
+-- expect to survive everything else, so they live with the phone's own data.
+V.Callback('v-phone:notes', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local op = tostring((data and data.op) or 'list')
+
+    if op == 'list' then
+        resolve({ ok = true, notes = MySQL.query.await(
+            'SELECT id, title, body, at FROM phone_notes WHERE citizenid = ? ORDER BY id DESC LIMIT 100',
+            { p.citizenid }) or {} })
+        return
+    end
+    if op == 'save' then
+        local title = tostring((data and data.title) or ''):sub(1, 80)
+        local bodyTxt = tostring((data and data.body) or ''):sub(1, 4000)
+        if title == '' and bodyTxt == '' then resolve({ error = 'empty' }) return end
+        if title == '' then title = bodyTxt:sub(1, 40) end
+        local id = math.floor(num(data and data.id, 0))
+        if id > 0 then
+            MySQL.update.await('UPDATE phone_notes SET title = ?, body = ? WHERE id = ? AND citizenid = ?',
+                { title, bodyTxt, id, p.citizenid })
+        else
+            id = MySQL.insert.await('INSERT INTO phone_notes (citizenid, title, body) VALUES (?,?,?)',
+                { p.citizenid, title, bodyTxt })
+        end
+        resolve({ ok = true, id = id })
+        return
+    end
+    if op == 'del' then
+        MySQL.update('DELETE FROM phone_notes WHERE id = ? AND citizenid = ?',
+            { math.floor(num(data and data.id, 0)), p.citizenid })
+        resolve({ ok = true })
+        return
+    end
+    resolve({ error = 'x' })
+end)
+
 V.Callback('v-phone:photo', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -1053,19 +1094,53 @@ V.Callback('v-phone:photo', function(src, resolve, data)
     local shots = p.GetMetadata('photos')
     if type(shots) ~= 'table' then shots = {} end
 
+    -- A photo used to be a bare URL. It is a row now - url, album, filter - and old
+    -- string entries are lifted into one as they are read, so nobody loses a picture.
+    local changed = false
+    for i, v in ipairs(shots) do
+        if type(v) == 'string' then shots[i] = { url = v, album = '', filter = '' } changed = true end
+    end
+
     local op = tostring((data and data.op) or 'list')
     if op == 'add' then
         local url = tostring((data and data.url) or ''):sub(1, 400)
         if url == '' then resolve({ error = 'x' }) return end
-        table.insert(shots, 1, url)
-        while #shots > 30 do table.remove(shots) end     -- a gallery, not an archive
-        p.SetMetadata('photos', shots)
+        table.insert(shots, 1, { url = url, album = '', filter = '' })
+        while #shots > 60 do table.remove(shots) end     -- a gallery, not an archive
+        changed = true
     elseif op == 'del' then
         local i = math.floor(num(data and data.index, 0))
-        if shots[i] then table.remove(shots, i) end
-        p.SetMetadata('photos', shots)
+        if shots[i] then table.remove(shots, i) changed = true end
+    elseif op == 'edit' then
+        -- Retouching is a stored filter name, not a re-encoded image: the phone never
+        -- holds pixels, only the link and how to draw it.
+        local i = math.floor(num(data and data.index, 0))
+        if shots[i] then
+            if data.album ~= nil then shots[i].album = tostring(data.album):sub(1, 40) end
+            if data.filter ~= nil then shots[i].filter = tostring(data.filter):sub(1, 20) end
+            changed = true
+        end
+    elseif op == 'album' then
+        -- Renaming or emptying an album, across every photo that carries it.
+        local from = tostring((data and data.from) or '')
+        local to = tostring((data and data.to) or ''):sub(1, 40)
+        for _, sh in ipairs(shots) do
+            if sh.album == from then sh.album = to changed = true end
+        end
     end
-    resolve({ ok = true, photos = shots })
+    if changed then p.SetMetadata('photos', shots) end
+
+    -- The albums that actually exist, worked out from the photos rather than kept in a
+    -- second list that could disagree with them.
+    local albums, seen = {}, {}
+    for _, sh in ipairs(shots) do
+        if sh.album and sh.album ~= '' and not seen[sh.album] then
+            seen[sh.album] = true
+            albums[#albums + 1] = sh.album
+        end
+    end
+    table.sort(albums)
+    resolve({ ok = true, photos = shots, albums = albums })
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -1634,6 +1709,15 @@ CreateThread(function()
         `group_id`  INT UNSIGNED NOT NULL,
         `citizenid` VARCHAR(16) NOT NULL,
         PRIMARY KEY (`group_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_notes` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `title`     VARCHAR(120) NOT NULL DEFAULT '',
+        `body`      TEXT,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `owner_idx` (`citizenid`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_mail_accounts` (
