@@ -153,7 +153,12 @@ function paintPages(items) {
   // however many pages were needed, which meant installing a single app re-flowed every
   // page and threw away an arrangement the player had made. A page holds what a page
   // holds; anything past that starts a new one, and the pages before it never move.
-  arrPerPage = 16;
+  // How much that is, is the player's own choice of grid.
+  const gp = state.prefs || {};
+  const gCols = Math.max(3, Math.min(6, Number(gp.gridCols) || 4));
+  const gRows = Math.max(3, Math.min(7, Number(gp.gridRows) || 4));
+  byId('pages').style.setProperty('--gcols', String(gCols));
+  arrPerPage = gCols * gRows;
   const pages = [];
   for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
   if (!pages.length) pages.push([]);
@@ -1362,6 +1367,8 @@ RENDER.settings = () => {
     UI.group([
       UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.my_number'), value: state.number || '',
                data: { copy: state.number || '' } }),
+      UI.row({ icon: 'folder', tint: '#5AC8FA', title: L('ph.grid'),
+        value: (p.gridCols || 4) + ' x ' + (p.gridRows || 4), chevron: true, data: { t: 'grid' } }),
       UI.row({ icon: 'moon', tint: '#5856D6', title: L('ph.dark_mode'),
         value: L('ph.theme_' + (p.darkMode || (p.dark ? 'dark' : 'light'))), chevron: true, data: { t: 'theme' } }),
       UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.vibrate'), toggle: p.vibrate !== false, data: { t: 'vibrate' } }),
@@ -1477,6 +1484,21 @@ RENDER.settings = () => {
       if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
     } else if (r.dataset.copy) {
       copyText(r.dataset.copy);
+    } else if (r.dataset.t === 'grid') {
+      // The layouts a phone actually offers: fewer, larger icons or more, smaller ones.
+      const opts = [[4, 4], [4, 5], [4, 6], [5, 5], [5, 6], [6, 6], [3, 4]];
+      sheet(L('ph.grid'),
+        UI.group(opts.map(([c, rw]) => UI.row({
+          title: c + ' x ' + rw, subtitle: (c * rw) + ' ' + L('ph.grid_per_page'),
+          value: ((p.gridCols || 4) === c && (p.gridRows || 4) === rw) ? '✓' : '',
+          data: { gc: String(c), gr: String(rw) },
+        }))) + '<div class="groupfoot">' + esc(L('ph.grid_hint')) + '</div>',
+        () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const res = await post('prefs', { gridCols: Number(el.dataset.gc), gridRows: Number(el.dataset.gr) });
+          closeSheet();
+          if (res && res.ok) { state.prefs = res.prefs; renderHome(); RENDER.settings(); }
+        })));
+      return;
     } else if (r.dataset.t === 'theme') {
       const t = state.theme || {};
       const opts = [['light', 'ph.theme_light'], ['dark', 'ph.theme_dark']];
