@@ -1206,7 +1206,7 @@ server code. `Phone.request('save', x)` becomes `V.Callback('<appId>:save')`, wi
 supplied by the phone rather than the message, so an app cannot reach
 `v-banking:withdraw` - not because the phone refuses, but because the name cannot be
 formed. Per-app, per-character storage means most apps need no table and no server file at
-all. `v-phone-notes` ships as the worked example.
+all. `v-phone/apps/example` ships as the worked example.
 
 Ten settings. The conversation list is three plain queries rather than one with window
 functions: MariaDB only grew those in 10.2, and working on the operator's database matters

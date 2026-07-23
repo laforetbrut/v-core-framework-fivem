@@ -323,6 +323,10 @@ local function prefsOf(p)
                     and m.darkMode or (m.dark == true and 'dark' or 'light'),
         vibrate   = (m.vibrate == nil) and true or (m.vibrate == true),
         ringVolume = math.max(0, math.min(1, tonumber(m.ringVolume) or 0.7)),
+        -- The home screen grid, the way a real phone lets you pick one. Columns decide
+        -- how big the icons are; rows decide how many fit before a new page starts.
+        gridCols = math.max(3, math.min(6, math.floor(tonumber(m.gridCols) or 4))),
+        gridRows = math.max(3, math.min(7, math.floor(tonumber(m.gridRows) or 4))),
         -- Which built-in tone, and the player's own link if they set one. The link wins
         -- when it is there, which is what choosing it means.
         alertTone = tostring(m.alertTone or 'ping'),
@@ -923,6 +927,8 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
     if data then
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
+        if data.gridCols ~= nil then prefs.gridCols = math.max(3, math.min(6, math.floor(num(data.gridCols, 4)))) end
+        if data.gridRows ~= nil then prefs.gridRows = math.max(3, math.min(7, math.floor(num(data.gridRows, 4)))) end
         if data.alertTone then prefs.alertTone = tostring(data.alertTone) end
         -- A tone link is a URL a client will fetch, so it goes through the same host gate
         -- as a wallpaper. An empty string clears it back to the built-in.

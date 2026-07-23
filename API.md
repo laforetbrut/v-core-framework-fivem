@@ -310,7 +310,7 @@ An app can also be a folder dropped into `v-phone/apps/`. `apps/<id>/app.lua` ca
 with the page defaulting to `apps/<id>/index.html`. See DEVELOPERS.md.
 -- the page then uses https://cfx-nui-v-phone/sdk.js: PhoneUI (the kit) + Phone (the bridge)
 -- Phone.request/emit/storage/notify/badge/toast/title/close/contacts/message/call
--- see DEVELOPERS.md "Shipping a phone app" and resources/[local]/v-phone-notes
+-- see DEVELOPERS.md "Shipping a phone app" and resources/[local]/v-phone/apps/example
 exports['v-phone']:UnregisterApp(id) / GetApps(src)
 
 -- v-banking (server) - the digital card

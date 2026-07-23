@@ -288,8 +288,8 @@ Two things worth knowing:
 ### The long way: a separate resource
 
 An app can also be its own resource, which is what you want if it ships independently of
-the phone or has substantial server logic of its own.
-`resources/[local]/v-phone-notes` is a complete worked example. Copy it.
+the phone or has substantial server logic of its own. It registers itself the same way,
+from its own `V.Ready`:
 
 ### The eight lines
 
@@ -303,7 +303,7 @@ V.Ready(function()
         desc  = 'One line for its FruitStore page',
         category = 'utilities',  -- social | finance | utilities | travel | work | entertainment | health
         optional = true,         -- absent until downloaded from the store, which is what a third-party app is
-        page  = 'https://cfx-nui-v-phone-notes/html/index.html',
+        page  = 'https://cfx-nui-your-resource/html/index.html',
     })
 end)
 ```
