@@ -304,6 +304,10 @@ exports['v-phone']:NumberOf(src) / IsOnCall(src)
 exports['v-phone']:SendMessage(fromCid, toNumber, body)    -- returns ok, errorKey
 exports['v-phone']:Notify(src, app, title, body)           -- a banner on their phone
 exports['v-phone']:RegisterApp(id, { label, icon, page, slot, dock, desc, category, optional, required })
+
+An app can also be a folder dropped into `v-phone/apps/`. `apps/<id>/app.lua` calls
+`PhoneApp{ id, label, icon, category, desc, optional }` and the phone registers it at boot,
+with the page defaulting to `apps/<id>/index.html`. See DEVELOPERS.md.
 -- the page then uses https://cfx-nui-v-phone/sdk.js: PhoneUI (the kit) + Phone (the bridge)
 -- Phone.request/emit/storage/notify/badge/toast/title/close/contacts/message/call
 -- see DEVELOPERS.md "Shipping a phone app" and resources/[local]/v-phone-notes

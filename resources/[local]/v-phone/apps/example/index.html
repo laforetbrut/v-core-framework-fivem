@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <!-- The phone's own stylesheet, so the app looks like the phone rather than like a
+       page that happens to be inside it. -->
+  <link rel="stylesheet" href="https://cfx-nui-v-phone/html/style.css" />
+  <!-- The kit and the bridge: PhoneUI draws, Phone talks to the phone. -->
+  <script src="https://cfx-nui-v-phone/html/sdk.js"></script>
+  <style>
+    body { margin: 0; background: var(--app-bg); color: var(--app-label);
+           font-family: var(--ios-font); }
+    .wrap { padding: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap" id="app"></div>
+
+  <script>
+    const UI = PhoneUI;
+    const el = document.getElementById('app');
+
+    // Phone.storage is persisted by the phone, per app and per character. An app that
+    // only keeps a little state needs no table, no migration and no callback.
+    async function draw() {
+      // Every Phone.* call resolves to the server's reply, so the value is on `.value`.
+      const saved = await Phone.storage.get('count');
+      const count = Number((saved && saved.value) || 0);
+
+      el.innerHTML =
+        UI.bigNumber('Taps', String(count)) +
+        UI.group([
+          UI.row({ icon: 'check', tint: '#34C759', title: 'Tap me', chevron: true, data: { a: 'tap' } }),
+          UI.row({ icon: 'trash', tint: '#FF3B30', title: 'Reset', data: { a: 'reset' } }),
+        ], { header: 'Example', footer: 'Stored per character by the phone.' }) +
+        UI.button('Say hello', 'hello');
+
+      [...el.querySelectorAll('.row')].forEach((r) => r.addEventListener('click', async () => {
+        await Phone.storage.set('count', r.dataset.a === 'reset' ? 0 : count + 1);
+        draw();
+      }));
+      document.getElementById('hello').addEventListener('click', () => {
+        // A toast on the phone, not in the page: the phone owns its own chrome.
+        Phone.toast('Hello from apps/example');
+      });
+    }
+
+    // Phone.ready fires once the phone has handed the app its context.
+    Phone.ready(() => { Phone.title('Example'); draw(); });
+  </script>
+</body>
+</html>
