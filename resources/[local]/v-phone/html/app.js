@@ -6056,6 +6056,10 @@ byId('sheet').addEventListener('pointerdown', (e) => {
   const host = byId('sheet');
   const r = host.getBoundingClientRect();
   if (e.clientY > r.top + 58) return;
+  // A sheet that puts a control in its own header - the spotlight's close button, for
+  // one - was capturing the pointer for a drag, and a captured pointer never delivers
+  // its click to the control underneath. The grab area yields to anything tappable.
+  if (e.target.closest('button, a, input, select, textarea, [data-app], [role="button"]')) return;
   sheetDrag = { y: e.clientY, pointerId: e.pointerId };
   host.classList.add('dragging');
   if (host.setPointerCapture) {
