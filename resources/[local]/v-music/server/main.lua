@@ -162,6 +162,15 @@ V.Callback('v-music:play', function(src, resolve, data)
         s.netid = NetworkGetNetworkIdFromEntity(veh)
         s.range = num(Config.Vehicle.range, 22.0)
 
+    elseif kind == 'headphones' then
+        -- Headphones: the same track, heard by nobody else. The source is marked private
+        -- and every other client refuses to play it, so it never leaves this player's ears.
+        id = 'ear:' .. p.citizenid
+        s = Sources[id] or { id = id, kind = 'headphones', cid = p.citizenid }
+        s.player = src
+        s.private = src
+        s.range = 0.0
+
     elseif kind == 'phone' then
         -- The player's own phone on speaker. It follows them rather than sitting at a
         -- fixed point, so the source carries the owner and the client resolves the ped.

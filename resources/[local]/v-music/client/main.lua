@@ -110,9 +110,18 @@ CreateThread(function()
             local ped = PlayerPedId()
             local me = GetEntityCoords(ped)
             local myVeh = GetVehiclePedIsIn(ped, false)
+            local myId = GetPlayerServerId(PlayerId())
             for id, s in pairs(Sources) do
                 local pos, ent = positionOf(s)
-                local vol = attenuate(#(me - pos), num(s.range, 25.0)) * num(s.volume, 0.6)
+                local vol
+                if s.private then
+                    -- Somebody's headphones. Silent for everyone except the ear it
+                    -- belongs to, and at full volume there, because distance from
+                    -- yourself is not a thing.
+                    vol = (s.private == myId) and num(s.volume, 0.6) or 0.0
+                else
+                    vol = attenuate(#(me - pos), num(s.range, 25.0)) * num(s.volume, 0.6)
+                end
                 -- Sitting in the car it belongs to is the loud seat; everyone else hears
                 -- it through the bodywork.
                 if s.kind == 'vehicle' and ent and myVeh ~= ent then
