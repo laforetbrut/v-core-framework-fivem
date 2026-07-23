@@ -71,10 +71,25 @@ function tick() {
 setInterval(tick, 10000);
 
 // ══ Screens ════════════════════════════════════════════════════
+// The island is the phone's face. It should react to the phone being locked and unlocked
+// the way a real one does: a short pinch around a padlock, then back to a pill.
+let glanceTimer = null;
+function islandGlance(icon, tint) {
+  if (call) return;                       // a live call owns the island outright
+  const isl = byId('island');
+  byId('inicon').innerHTML = '<span class="iglyph" style="color:' + (tint || '#fff') + '">' + svg(icon) + '</span>';
+  byId('inTitle').textContent = '';
+  byId('inBody').textContent = '';
+  isl.classList.add('glance');
+  clearTimeout(glanceTimer);
+  glanceTimer = setTimeout(() => isl.classList.remove('glance'), 1500);
+}
+
 function unlock() {
   byId('lock').classList.add('out');
   byId('lockquick').classList.add('hidden');
   byId('home').classList.remove('behind');
+  islandGlance('lockopen', '#30D158');
   renderHome();
 }
 
@@ -83,6 +98,7 @@ function lockScreen() {
   byId('lock').classList.remove('out');
   byId('lockquick').classList.remove('hidden');
   byId('home').classList.add('behind');
+  islandGlance('lockshut', '#fff');
 }
 
 function goHome() {

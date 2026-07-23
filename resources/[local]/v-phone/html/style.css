@@ -791,10 +791,21 @@ input { font: inherit; }
 .widget.cal .wnum { font-family: var(--ios-num); font-size: 40px; font-weight: 500; line-height: 1; }
 
 /* ══ Search pill above the dock ═══════════════════════════════ */
-.searchpill { display: flex; align-items: center; justify-content: center; gap: 5px;
-  align-self: center; padding: 5px 13px; border-radius: 99px; font-size: 12px;
-  color: rgba(255,255,255,.9); margin-bottom: 8px; }
-.searchpill svg { width: 12px; height: 12px; }
+.searchpill { display: flex; align-items: center; justify-content: center; gap: 6px;
+  align-self: center; padding: 7px 16px 7px 14px; border-radius: 99px;
+  font-size: 13px; font-weight: 500; letter-spacing: -.01em;
+  color: rgba(255,255,255,.92); margin-bottom: 10px;
+  /* Liquid glass, the same recipe as the dock: a tint, a lit top edge and a rim, rather
+     than a flat wash. The old pill had no material at all - it read as loose text. */
+  background:
+    linear-gradient(160deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,0) 42%),
+    linear-gradient(180deg, rgba(58,58,64,.52), rgba(30,30,34,.58));
+  box-shadow: inset 0 0 0 .5px rgba(255,255,255,.20),
+              inset 0 1px 0 rgba(255,255,255,.26),
+              0 4px 14px rgba(0,0,0,.30);
+  transition: transform .16s var(--snap), box-shadow .16s ease; }
+.searchpill:active { transform: scale(.94); }
+.searchpill svg { width: 13px; height: 13px; opacity: .85; }
 
 /* ══ Control centre, laid out the way iOS lays it out ═════════ */
 .ccrow { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
@@ -1413,3 +1424,18 @@ input { font: inherit; }
 .pages .tile { min-height: 0; }
 .pages .tile .nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   max-width: 100%; }
+
+/* ── The island reacts: a glance ─────────────────────────────────
+   Locking and unlocking pinch the pill around a padlock and let it go, which is what
+   makes the black cutout feel like part of the phone rather than a painted shape. */
+.island.glance { width: 132px; height: 40px; margin-left: -66px; border-radius: 22px; }
+.island.glance .inotif { opacity: 1; transform: none; justify-content: center; padding: 0; }
+.island.glance .icontent { visibility: hidden; }
+.island.glance::after { opacity: 0; }
+.island .iglyph { display: flex; align-items: center; justify-content: center; }
+.island .iglyph svg { width: 19px; height: 19px; animation: ph-glance .5s var(--spring); }
+@keyframes ph-glance {
+  0%   { transform: scale(.4); opacity: 0; }
+  60%  { transform: scale(1.12); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
