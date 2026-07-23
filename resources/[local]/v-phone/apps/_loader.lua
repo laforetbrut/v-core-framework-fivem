@@ -33,6 +33,12 @@ PhoneApps = PhoneApps or {}
 ---         icon     = 'note',          -- any key from PhoneUI.icons
 ---         category = 'utilities',
 ---         desc     = 'One line for its FruitStore page.',
+---         developer = 'My Studio',
+---         version  = '1.0.0',
+---         accent   = '#0A84FF',
+---         permissions = { 'storage', 'contacts', 'photos', 'location' },
+---         features = { 'Fast search', 'Offline favourites' },
+---         keywords = { 'search', 'roleplay' },
 ---         optional = true,            -- absent until downloaded from the store
 ---     }
 function PhoneApp(def)
@@ -50,6 +56,8 @@ function PhoneApp(def)
     def.label = def.label or id
     def.icon = def.icon or 'dot'
     def.category = def.category or 'utilities'
+    def.developer = def.developer or resource
+    def.version = def.version or '1.0.0'
     -- A dropped-in app is a download by nature: nobody wakes up with somebody else's app
     -- already on their phone. A folder that disagrees sets `optional = false`.
     if def.optional == nil then def.optional = true end

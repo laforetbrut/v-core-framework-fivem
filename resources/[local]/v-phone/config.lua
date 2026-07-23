@@ -37,11 +37,32 @@ Config.Hold = {
 -- shape. Los Santos numbers in GTA are 555-xxxx, which is what this ships as.
 Config.NumberFormat = '555-####'
 
+-- ── Required contacts ─────────────────────────────────────────
+-- These entries are injected into every player's Phone and Contacts applications.
+-- They cannot be renamed or deleted by a player. Use real numbers handled by your
+-- server; an empty list simply disables the feature.
+--
+-- Available fields: name, number, favourite, photo, email, address, birthday, note.
+Config.RequiredContacts = {
+    -- { name = 'Police', number = '911', favourite = true, note = 'Emergency line' },
+    -- { name = 'Medical services', number = '912', favourite = true },
+}
+
 -- ── Messages ───────────────────────────────────────────────────
 Config.Messages = {
     maxLength   = 250,      -- characters
     pageSize    = 40,       -- messages loaded per conversation
     retentionDays = 30,     -- 0 keeps everything for ever
+}
+
+-- ── Cipher ────────────────────────────────────────────────────
+-- Optional end-to-end encrypted roleplay messenger. The server stores routing metadata
+-- and encrypted envelopes, never the clear text or a player's private key.
+Config.Cipher = {
+    maxLength = 700,
+    pageSize = 80,
+    pinAttempts = 5,
+    burnSeconds = { 0, 300, 3600, 86400 },
 }
 
 -- ── Calls ──────────────────────────────────────────────────────
@@ -79,7 +100,7 @@ Config.Apps = {
       required = true, category = 'essentials' },
     { id = 'contacts', label = 'app.contacts', icon = 'contacts', owner = 'v-phone',    slot = 3, dock = true,
       required = true, category = 'essentials' },
-    { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4, dock = true,
+    { id = 'bank',     label = 'app.bank',     icon = 'bank',     owner = 'v-banking',  slot = 4,
       category = 'finance' },
     { id = 'mail',     label = 'app.mail',     icon = 'mail',     owner = 'v-phone',    slot = 5,
       category = 'work' },
@@ -119,11 +140,123 @@ Config.Apps = {
       optional = true, category = 'social' },
     { id = 'hush',     label = 'app.hush',     icon = 'hush',     owner = 'v-social',   slot = 21,
       optional = true, category = 'social' },
+    { id = 'cipher',   label = 'app.cipher',   icon = 'cipher',   owner = 'v-phone',    slot = 22,
+      optional = true, category = 'social', version = '1.0' },
     { id = 'store',    label = 'app.store',    icon = 'store',    owner = 'v-phone',    slot = 22,
       required = true, category = 'essentials' },
-    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 23,
+    { id = 'settings', label = 'app.settings', icon = 'settings', owner = 'v-phone',    slot = 23, dock = true,
       required = true, category = 'essentials' },
 }
+
+-- Rich FruitStore catalogue. These are presentation/search hints, not duplicated game
+-- logic: every feature below is already backed by the app or the module that owns it.
+-- A server may change any wording without touching the renderers.
+Config.AppMetadata = {
+    phone = {
+        features = { 'Clavier et appels', 'Favoris', 'Historique', 'Messagerie vocale', 'Contacts intégrés' },
+        keywords = { 'appel', 'numéro', 'favoris', 'répondeur' },
+    },
+    messages = {
+        features = { 'Conversations privées', 'Groupes', 'Photos et GIF', 'Position', 'Réactions et transfert' },
+        keywords = { 'sms', 'groupe', 'image', 'localisation', 'emoji' },
+    },
+    contacts = {
+        features = { 'Fiches détaillées', 'Favoris', 'Contacts serveur', 'Photos', 'Partage FruitDrop' },
+        keywords = { 'annuaire', 'numéro', 'email', 'adresse', 'anniversaire' },
+    },
+    bank = {
+        features = { 'Solde en direct', 'Comptes', 'Transactions', 'Carte bancaire' },
+        keywords = { 'argent', 'compte', 'carte', 'transaction' },
+    },
+    mail = {
+        features = { 'Adresse personnalisée', 'Boîte de réception', 'Messages enregistrés', 'Envoi multiple' },
+        keywords = { 'email', 'courrier', 'boîte', 'travail' },
+    },
+    maps = {
+        features = { 'Lieux de la ville', 'Filtres', 'Itinéraire GPS', 'Repères instantanés' },
+        keywords = { 'gps', 'garage', 'commerce', 'station', 'itinéraire' },
+    },
+    camera = {
+        features = { 'Capture en jeu', 'Mode paysage', 'Aperçu instantané', 'Accès direct aux Photos' },
+        keywords = { 'photo', 'capture', 'paysage' },
+    },
+    gallery = {
+        features = { 'Albums', 'Filtres photo', 'Fond d’écran', 'FruitDrop', 'Suppression sécurisée' },
+        keywords = { 'photo', 'album', 'filtre', 'partage', 'fond écran' },
+    },
+    music = {
+        features = { 'Bibliothèque', 'Favoris', 'File d’attente', 'Recherche', 'Sorties audio' },
+        keywords = { 'musique', 'radio', 'playlist', 'artiste', 'album' },
+    },
+    garage = {
+        features = { 'Véhicules personnels', 'État en direct', 'Garage actuel', 'Informations du véhicule' },
+        keywords = { 'voiture', 'véhicule', 'plaque', 'garage' },
+    },
+    property = {
+        features = { 'Propriétés', 'Locataires', 'Loyer', 'Paiement à distance' },
+        keywords = { 'maison', 'appartement', 'loyer', 'logement' },
+    },
+    wallet = {
+        features = { 'Identité', 'Permis', 'Licences', 'Documents officiels' },
+        keywords = { 'carte', 'identité', 'permis', 'licence' },
+    },
+    jobs = {
+        features = { 'Emploi actuel', 'Offres disponibles', 'Salaire', 'Échelle des grades' },
+        keywords = { 'travail', 'emploi', 'salaire', 'grade' },
+    },
+    health = {
+        features = { 'Signes vitaux', 'Activité', 'Pas et distance', 'Dossier médical', 'Tendances' },
+        keywords = { 'santé', 'faim', 'soif', 'stress', 'médical' },
+    },
+    notes = {
+        features = { 'Notes persistantes', 'Création rapide', 'Modification', 'Suppression' },
+        keywords = { 'texte', 'mémo', 'brouillon', 'écriture' },
+    },
+    reminders = {
+        features = { 'Listes de rappels', 'Validation rapide', 'Stockage persistant' },
+        keywords = { 'tâche', 'liste', 'rappel', 'todo' },
+    },
+    calc = {
+        features = { 'Calculs rapides', 'Décimales', 'Opérations en chaîne', 'Grand affichage tactile' },
+        keywords = { 'calcul', 'math', 'addition', 'division' },
+    },
+    mdt = {
+        features = { 'Recherche citoyen', 'Dossiers', 'Mandats actifs', 'Accès métier sécurisé' },
+        keywords = { 'police', 'citoyen', 'mandat', 'mdt' },
+    },
+    bleeter = {
+        features = { 'Fil public', 'Publication', 'Photos', 'Mentions J’aime', 'Compte séparé' },
+        keywords = { 'réseau', 'bleet', 'publication', 'social' },
+    },
+    snap = {
+        features = { 'Fil photo', 'Légendes', 'Galerie iFruit', 'Mentions J’aime' },
+        keywords = { 'photo', 'snapmatic', 'publication', 'social' },
+    },
+    hush = {
+        features = { 'Profils privés', 'Découverte', 'Match mutuel', 'Échange protégé du numéro' },
+        keywords = { 'rencontre', 'profil', 'match', 'social' },
+    },
+    cipher = {
+        features = { 'Chiffrement de bout en bout', 'Identité anonyme', 'Messages éphémères', 'Empreinte de sécurité' },
+        keywords = { 'privé', 'chiffré', 'illégal', 'anonyme', 'sécurité' },
+    },
+    store = {
+        features = { 'Catalogue complet', 'Recherche avancée', 'Installation', 'Mises à jour', 'Fiches détaillées' },
+        keywords = { 'application', 'téléchargement', 'installation', 'catalogue' },
+    },
+    settings = {
+        features = { 'Apparence', 'Clear Glass', 'Sécurité', 'Sons', 'Accessibilité', 'Organisation des apps' },
+        keywords = { 'réglages', 'thème', 'face id', 'code', 'fond écran' },
+    },
+}
+
+for _, app in ipairs(Config.Apps) do
+    local metadata = Config.AppMetadata[app.id] or {}
+    app.developer = app.developer or 'iFruit Studio'
+    app.version = app.version or '2.0.0'
+    app.features = app.features or metadata.features or {}
+    app.keywords = app.keywords or metadata.keywords or {}
+end
 
 -- What the store groups by. The order here is the order of the sections.
 Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'duty',
@@ -133,8 +266,8 @@ Config.Categories = { 'social', 'finance', 'utilities', 'travel', 'work', 'duty'
 -- The chrome is the phone's; the accent, panel and radius come from v-ui, so a server that
 -- themes the framework purple gets a purple phone rather than an orange rectangle in a
 -- purple world.
-Config.Wallpapers = { 'aurora', 'lagoon', 'dune', 'grid', 'night', 'ember' }
-Config.DefaultWallpaper = 'aurora'
+Config.Wallpapers = { 'ifruit', 'aurora', 'lagoon', 'dune', 'grid', 'night', 'ember' }
+Config.DefaultWallpaper = 'ifruit'
 
 -- iOS 27's transparency slider, as a starting value: 0 is ultra clear glass, 100 is
 -- fully tinted. Players move it themselves in Settings; this is only where they begin.

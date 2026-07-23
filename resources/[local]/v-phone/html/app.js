@@ -41,6 +41,7 @@ function isViewRead(name, payload) {
   if (name === 'appStorage') return op === 'get';
   if (name === 'mdt') return op === 'lookup' || op === 'warrants';
   if (name === 'social') return ['me', 'feed', 'hushMe', 'hushNext'].includes(op);
+  if (name === 'cipher') return ['me', 'list', 'lookup', 'thread'].includes(op);
   return false;
 }
 
@@ -106,6 +107,12 @@ let available = [];     // what the operator permits; the store lists these
 let editing = false;    // home screen in arrange mode
 let navBackAction = null;
 let activeAppEpoch = 0;
+let appFrameTimer = null;
+let cipherProfile = null;
+let cipherPrivateKey = null;
+let cipherThread = null;
+let cipherDemo = false;
+let cipherBurn = 0;
 
 const L = (k) => S[k] || k;
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US');
@@ -340,6 +347,16 @@ function goHome() {
   if (systemPanel) { hideSystemPanel(systemPanel); return; }
   if (byId('emojipanel').classList.contains('on')) { emojiClose(); return; }
   if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
+  if (byId('switcher').classList.contains('on')) {
+    byId('switcher').classList.remove('on');
+    if (byId('app').classList.contains('on')) closeApp();
+    return;
+  }
+  if (byId('folderview').classList.contains('on')) {
+    byId('folderview').classList.remove('on');
+    return;
+  }
+  if (editing) { exitArrange(); return; }
   if (byId('app').classList.contains('on')) { closeApp(); return; }
   // The Home indicator returns to Home; locking belongs to the power button.
 }
@@ -422,7 +439,7 @@ function renderSetup() {
       '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
         esc(L('ph.continue')) + '</button>';
   } else if (setupStep === 3) {
-    const walls = state.wallpapers || ['aurora'];
+    const walls = state.wallpapers || ['ifruit'];
     host.innerHTML = setupHeader(L('ph.setup_personalise'), L('ph.setup_personalise_hint')) +
       '<div class="setupwalls">' + walls.map((wall) =>
         '<button class="wall-' + esc(wall) + (setupDraft.wallpaper === wall ? ' on' : '') +
@@ -431,8 +448,8 @@ function renderSetup() {
       '<div class="setupglass">' +
         '<div><span>' + esc(L('ph.glass_clear')) + '</span><strong id="setupglassvalue">' +
           Math.round(setupDraft.glass) + '%</strong><span>' + esc(L('ph.glass_tinted')) + '</span></div>' +
-        '<input id="setupglass" type="range" min="0" max="100" step="1" value="' +
-          Math.round(setupDraft.glass) + '">' +
+        '<input id="setupglass" type="range" min="0" max="100" step="1" aria-label="' +
+          esc(L('ph.transparency')) + '" value="' + Math.round(setupDraft.glass) + '">' +
       '</div>' +
       '<button class="setupprimary setupbottom" id="setupnext" type="button">' +
         esc(L('ph.continue')) + '</button>';
@@ -603,7 +620,7 @@ function openSetup(startStep) {
     ownerName,
     deviceName: String(p.deviceName || setupDeviceName(ownerName)).trim(),
     darkMode: p.darkMode || 'auto',
-    wallpaper: p.wallpaper || (state.wallpapers || [])[0] || 'aurora',
+    wallpaper: p.wallpaper || (state.wallpapers || [])[0] || 'ifruit',
     glass: Number.isFinite(Number(p.glass)) ? Number(p.glass) : 28,
     passcode: '',
     passcodeConfirm: '',
@@ -677,8 +694,10 @@ function unreadTotal() {
 function tileHTML(a, i) {
   const badge = a.id === 'messages' ? unreadTotal()
     : a.id === 'phone' ? Number(state.vmUnread || 0)
+    : a.id === 'cipher' ? Number(state.cipherUnread || 0)
     : (a.badge || 0);
-  return `<button class="tile" type="button" data-app="${esc(a.id)}" style="--i:${i}">` +
+  return `<button class="tile" type="button" data-app="${esc(a.id)}" style="--i:${i}" ` +
+    `aria-label="${esc(L(a.label))}">` +
     `<span class="wrap">${UI.appIcon(a.icon)}` +
     (badge > 0 ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '') +
     `</span><span class="nm">${esc(L(a.label))}</span></button>`;
@@ -1101,10 +1120,20 @@ function clearActiveApp() {
   return post('activeApp', { app: '', epoch });
 }
 
+function frameEvent(name, payload, frameWindow) {
+  const frame = byId('appframe');
+  const target = frameWindow || (frame && frame.contentWindow);
+  if (!target) return;
+  target.postMessage({ __phone: 'event', name, payload: payload || {} }, '*');
+}
+
 function clearAppVisualState() {
   const app = byId('app');
+  clearTimeout(appFrameTimer);
+  appFrameTimer = null;
+  byId('appbody').classList.remove('frame-loading');
   app.classList.remove('black', 'camfull');
-  byId('screen').classList.remove('appblack');
+  byId('screen').classList.remove('appblack', 'cipher-open');
   byId('navbar').classList.remove('hidden');
 }
 
@@ -1120,6 +1149,7 @@ function enterApp(a, tile) {
   // Leaving the camera for anywhere else drops its immersive chrome and unrotates.
   clearAppVisualState();
   app.dataset.app = a.id;
+  byId('screen').classList.toggle('cipher-open', a.id === 'cipher');
   if (landscape) setLandscape(false);
   if (tile) {
     const r = tile.getBoundingClientRect();
@@ -1140,19 +1170,41 @@ function enterApp(a, tile) {
       `<iframe class="appframe" id="appframe" sandbox="allow-scripts" ` +
       `title="${esc(L(a.label))}" aria-busy="true"></iframe>`;
     byId('appbody').style.padding = '0';
+    byId('appbody').classList.add('frame-loading');
     byId('navbar').classList.add('hidden');
     const frame = byId('appframe');
+    const frameFailed = () => {
+      if (epoch !== activeAppEpoch || openApp !== a || byId('appframe') !== frame) return;
+      clearTimeout(appFrameTimer);
+      appFrameTimer = null;
+      clearActiveApp();
+      byId('navbar').classList.remove('hidden');
+      byId('appbody').style.padding = '';
+      byId('appbody').classList.remove('frame-loading');
+      body(UI.empty(L('ph.app_load_failed'), a.icon || 'dot'));
+    };
+    frame.addEventListener('load', () => {
+      if (epoch !== activeAppEpoch || openApp !== a || byId('appframe') !== frame) return;
+      // An iframe appended without a source first loads about:blank. Ignore that internal
+      // load: the app is ready only after the authorised URL has actually been assigned.
+      if (frame.dataset.requested !== '1') return;
+      clearTimeout(appFrameTimer);
+      appFrameTimer = null;
+      byId('appbody').classList.remove('frame-loading');
+      frame.setAttribute('aria-busy', 'false');
+      frameEvent('resume', { app: a.id }, frame.contentWindow);
+    });
+    frame.addEventListener('error', frameFailed);
     post('activeApp', { app: a.id, epoch }).then((r) => {
       if (epoch !== activeAppEpoch || openApp !== a || byId('appframe') !== frame) return;
       if (!r || !r.ok) {
-        clearActiveApp();
-        byId('navbar').classList.remove('hidden');
-        byId('appbody').style.padding = '';
-        body(UI.empty(L('ph.err_' + ((r && r.error) || 'x')), a.icon || 'dot'));
+        frameFailed();
         return;
       }
-      frame.setAttribute('aria-busy', 'false');
+      frame.dataset.requested = '1';
       frame.src = String(a.page || '');
+      clearTimeout(appFrameTimer);
+      appFrameTimer = setTimeout(frameFailed, 10000);
     });
     return;
   }
@@ -1166,6 +1218,7 @@ function closeApp(instant) {
   beginView();
   const app = byId('app');
   const wasOpen = app.classList.contains('on');
+  if (wasOpen && openApp && openApp.page) frameEvent('pause', { app: openApp.id });
   resetTransientUI();
   clearActiveApp();
   clearAppVisualState();
@@ -1194,6 +1247,13 @@ function setNav(title, backLabel, action, onBack) {
   byId('navbacktxt').textContent = backText;
   byId('navback').setAttribute('aria-label', backText);
   const act = byId('navact');
+  if (!action && openApp && !openApp.page) {
+    action = {
+      icon: 'more',
+      label: L('ph.app_actions'),
+      onClick: () => appActions(openApp),
+    };
+  }
   if (action) {
     act.classList.remove('hidden');
     act.className = 'navact' + (action.icon ? ' round' : '');
@@ -1207,10 +1267,107 @@ function setNav(title, backLabel, action, onBack) {
   byId('navbar').classList.remove('collapsed');
 }
 
+function appActions(app) {
+  if (!app || !openApp) return;
+  const searchInput = byId('appbody').querySelector(
+    'input[type="search"], .search input, .uisearch input, #q'
+  );
+  const muted = appMuted(app.id);
+  const store = (state.apps || []).find((entry) => entry.id === 'store');
+  const actionRows = [];
+  if (searchInput) {
+    actionRows.push(UI.row({
+      icon: 'search', tint: '#0A84FF', title: L('ph.search_in_app'),
+      data: { tool: 'search' },
+    }));
+  }
+  actionRows.push(
+    UI.row({ icon: 'refresh', tint: '#30B0C7', title: L('ph.refresh_app'), data: { tool: 'refresh' } }),
+    UI.row({
+      icon: 'sparkles', tint: '#AF52DE', title: L('ph.set_action_app'),
+      value: (state.prefs || {}).actionApp === app.id ? L('ph.selected') : '',
+      data: { tool: 'action' },
+    }),
+    UI.row({
+      icon: muted ? 'belloff' : 'bell', tint: muted ? '#8E8E93' : '#FF9500',
+      title: muted ? L('ph.enable_notifications') : L('ph.mute_notifications'),
+      data: { tool: 'notifications' },
+    })
+  );
+  if (store && app.id !== 'store') {
+    actionRows.push(UI.row({
+      icon: 'store', tint: '#0A84FF', title: L('ph.view_in_store'),
+      chevron: true, data: { tool: 'store' },
+    }));
+  }
+
+  sheet(L(app.label), UI.group(actionRows, { footer: L('ph.app_actions_hint') }), () => {
+    [...byId('sheet').querySelectorAll('[data-tool]')].forEach((row) => {
+      row.addEventListener('click', async () => {
+        const tool = row.dataset.tool;
+        closeSheet();
+        if (tool === 'search' && searchInput) {
+          requestAnimationFrame(() => searchInput.focus());
+        } else if (tool === 'refresh') {
+          const render = RENDER[app.id];
+          if (render) render();
+        } else if (tool === 'action') {
+          const response = await post('prefs', { actionApp: app.id });
+          if (response && response.ok) {
+            state.prefs = response.prefs;
+            toast(L('ph.action_app_saved'));
+          }
+        } else if (tool === 'notifications') {
+          await setAppMuted(app.id, !muted);
+          toast(L(muted ? 'ph.notifications_enabled' : 'ph.notifications_muted'));
+        } else if (tool === 'store' && store) {
+          enterApp(store, null);
+          storeDetail(app);
+        }
+      });
+    });
+  }, 'app-actions');
+}
+
+// Apps that already use the top-right button (new contact, new message, call…) keep that
+// fast action. Holding it opens the shared app menu, so the common tools remain available
+// without replacing the action a player reaches for most.
+let navActionHold = 0;
+let navActionHeld = false;
+byId('navact').addEventListener('pointerdown', () => {
+  navActionHeld = false;
+  clearTimeout(navActionHold);
+  if (!openApp || openApp.page) return;
+  navActionHold = setTimeout(() => {
+    navActionHeld = true;
+    appActions(openApp);
+  }, 520);
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach((eventName) => {
+  byId('navact').addEventListener(eventName, () => {
+    clearTimeout(navActionHold);
+    navActionHold = 0;
+  });
+});
+byId('navact').addEventListener('click', (event) => {
+  if (!navActionHeld) return;
+  navActionHeld = false;
+  event.preventDefault();
+  event.stopImmediatePropagation();
+}, true);
+
 const body = (html) => {
   const host = byId('appbody');
+  clearTimeout(appFrameTimer);
+  appFrameTimer = null;
+  host.classList.remove('frame-loading');
   host.classList.remove('view-enter');
   host.innerHTML = html;
+  // Chromium may scroll an overflow-hidden ancestor when a focused control near the
+  // bottom disappears during navigation. Pinning the screen prevents the mysterious
+  // wallpaper/black strip that otherwise appears below an app after such a transition.
+  byId('screen').scrollTop = 0;
+  byId('screen').scrollLeft = 0;
   // Restart a short native transition for view-to-view navigation. A forced layout is
   // intentional here: without it, two renders in the same frame collapse into one state.
   void host.offsetWidth;
@@ -1233,6 +1390,46 @@ const pushAnim = () => {
 // The large title collapses into the bar on scroll, as it does on iOS.
 byId('appbody').addEventListener('scroll', (e) => {
   byId('navbar').classList.toggle('collapsed', e.target.scrollTop > 22);
+});
+
+// Pull to refresh on every native app. The renderer remains the owner of its data; this
+// gesture simply asks it to read again, exactly like the Refresh action in the nav menu.
+let appPull = null;
+byId('appbody').addEventListener('pointerdown', (event) => {
+  if (!openApp || openApp.page || byId('appbody').scrollTop > 0 ||
+      (event.target.closest && event.target.closest('input,textarea,button,select'))) {
+    appPull = null;
+    return;
+  }
+  appPull = { y: event.clientY, x: event.clientX, pointerId: event.pointerId };
+});
+byId('appbody').addEventListener('pointermove', (event) => {
+  if (!appPull || appPull.pointerId !== event.pointerId) return;
+  const dy = event.clientY - appPull.y;
+  const dx = Math.abs(event.clientX - appPull.x);
+  byId('appbody').classList.toggle('pull-ready', dy > 68 && dx < 45);
+});
+byId('appbody').addEventListener('pointerup', (event) => {
+  if (!appPull || appPull.pointerId !== event.pointerId) return;
+  const dy = event.clientY - appPull.y;
+  const dx = Math.abs(event.clientX - appPull.x);
+  appPull = null;
+  byId('appbody').classList.remove('pull-ready');
+  if (dy <= 68 || dx >= 45 || !openApp || openApp.page) return;
+  const render = RENDER[openApp.id];
+  if (!render) return;
+  byId('appbody').classList.add('refreshing');
+  render();
+  setTimeout(() => byId('appbody').classList.remove('refreshing'), 620);
+});
+byId('appbody').addEventListener('pointercancel', () => {
+  appPull = null;
+  byId('appbody').classList.remove('pull-ready');
+});
+byId('screen').addEventListener('scroll', (event) => {
+  if (!event.currentTarget.scrollTop && !event.currentTarget.scrollLeft) return;
+  event.currentTarget.scrollTop = 0;
+  event.currentTarget.scrollLeft = 0;
 });
 
 // ══ Built-in apps ══════════════════════════════════════════════
@@ -1307,11 +1504,11 @@ RENDER.phone = () => {
     `<div class="dialed" id="dialed">${esc(dialed)}</div>` +
     `<div class="dialsub" id="dialsub">${esc(known ? known.name : '')}</div>` +
     `<div class="keypad">${KEYS.map(([k, l]) =>
-      `<button class="key" data-k="${k}" type="button"><b>${k}</b><i>${l}</i></button>`).join('')}</div>` +
+      `<button class="key" data-k="${k}" type="button" aria-label="${k}"><b>${k}</b><i>${l}</i></button>`).join('')}</div>` +
     `<div class="dialrow">` +
       `<span class="dialspace"></span>` +
-      `<button class="callbtn" id="dial" type="button">${svg('answer')}</button>` +
-      `<button class="delbtn ${dialed ? '' : 'hidden'}" id="delkey" type="button">${svg('del')}</button>` +
+      `<button class="callbtn" id="dial" type="button" aria-label="${esc(L('ph.call'))}">${svg('answer')}</button>` +
+      `<button class="delbtn ${dialed ? '' : 'hidden'}" id="delkey" type="button" aria-label="${esc(L('ph.delete_digit'))}">${svg('del')}</button>` +
     `</div>`
   );
   const paint = () => {
@@ -1811,7 +2008,7 @@ async function openGroup(id, name) {
   paintThread(res.messages || []);
 }
 
-async function openThread(number) {
+async function openThread(number, draft) {
   if (!openApp || openApp.id !== 'messages') return;
   beginView();
   thread = number;
@@ -1827,6 +2024,7 @@ async function openThread(number) {
   const res = await post('conversation', { number });
   if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
   paintThread(res.messages || []);
+  if (draft && byId('msg')) byId('msg').value = String(draft).slice(0, 250);
   pushAnim();
   const c = (state.conversations || []).find((x) => x.number === number);
   if (c) c.unread = 0;
@@ -1905,10 +2103,10 @@ function paintThread(messages) {
     });
   });
   foot(`<div class="compose">` +
-    `<button class="attach" id="attach" type="button">+</button>` +
-    `<button class="emoji" id="msgemoji" type="button">😊</button>` +
+    `<button class="attach" id="attach" type="button" aria-label="${esc(L('ph.attach'))}">+</button>` +
+    `<button class="emoji" id="msgemoji" type="button" aria-label="${esc(L('ph.emoji'))}">😊</button>` +
     UI.field('msg', L('ph.write'), '', 'maxlength="250"') +
-    `<button class="sendbtn" id="sendmsg" type="button">${svg('send')}</button></div>`);
+    `<button class="sendbtn" id="sendmsg" type="button" aria-label="${esc(L('ph.send'))}">${svg('send')}</button></div>`);
   byId('attach').addEventListener('click', () => attachSheet());
   byId('msgemoji').addEventListener('click', () => emojiOpen('msg'));
   byId('msg').addEventListener('focus', emojiClose);
@@ -2027,6 +2225,7 @@ RENDER.contacts = () => {
     byId('clist').innerHTML = list.length
       ? UI.group(list.map((c) => UI.row({
           avatar: c.name, title: c.name, subtitle: c.number, chevron: true,
+          value: c.system ? L('ph.required_contact') : '',
           data: { id: c.id, n: c.number },
         })))
       : UI.empty(L('ph.no_contacts'), 'contacts');
@@ -2047,6 +2246,31 @@ RENDER.contacts = () => {
 };
 
 function contactSheet(c) {
+  if (c.system) {
+    const details = [
+      UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.number'), value: c.number }),
+      c.email ? UI.row({ icon: 'mail', tint: '#0A84FF', title: L('ph.c_email'), value: c.email }) : '',
+      c.address ? UI.row({ icon: 'map', tint: '#FF9500', title: L('ph.c_address'), subtitle: c.address }) : '',
+      c.note ? UI.row({ icon: 'note', tint: '#8E8E93', title: L('ph.c_note'), subtitle: c.note }) : '',
+    ].filter(Boolean);
+    sheet(c.name,
+      '<div class="requiredcontact">' +
+        '<span class="requiredavatar">' + esc(String(c.name || '?').trim().charAt(0).toUpperCase()) + '</span>' +
+        '<strong>' + esc(c.name) + '</strong>' +
+        '<small>' + svg('lockshut') + esc(L('ph.required_contact_hint')) + '</small>' +
+      '</div>' +
+      UI.group(details) +
+      UI.button(L('ph.call'), 'ccall', 'tinted') +
+      UI.button(L('ph.message'), 'cmsg', 'plain') +
+      UI.button(L('ph.airdrop_share'), 'cshare', 'plain'),
+      () => {
+        byId('ccall').addEventListener('click', () => { closeSheet(); post('call', { number: c.number }); });
+        byId('cmsg').addEventListener('click', () => { closeSheet(); openThread(c.number); });
+        byId('cshare').addEventListener('click', () =>
+          airdropShare('contact', { name: c.name, number: c.number }));
+      });
+    return;
+  }
   const isNew = !c.id;
   sheet(isNew ? L('ph.new_contact') : c.name,
     // The card, not just a name and a number: a face, a way to write, where they are,
@@ -2269,7 +2493,8 @@ RENDER.settings = () => {
     '<div class="grouphead">' + esc(L('ph.device')) + '</div>' +
     '<div class="sliderow">' +
       '<div class="sl"><span>' + esc(L('ph.size')) + '</span><span>' + Math.round((p.size || 1) * 100) + '%</span></div>' +
-      '<input type="range" id="dsize" min="75" max="115" step="1" value="' + Math.round((p.size || 1) * 100) + '" />' +
+      '<input type="range" id="dsize" min="75" max="115" step="1" aria-label="' +
+        esc(L('ph.size')) + '" value="' + Math.round((p.size || 1) * 100) + '" />' +
       '<div class="seg" style="margin-top:12px">' +
         '<button class="' + (p.side !== 'left' ? 'on' : '') + '" data-side="right">' + esc(L('ph.side_right')) + '</button>' +
         '<button class="' + (p.side === 'left' ? 'on' : '') + '" data-side="left">' + esc(L('ph.side_left')) + '</button>' +
@@ -2283,7 +2508,8 @@ RENDER.settings = () => {
     '<div class="sliderow">' +
       '<div class="sl"><span>' + esc(L('ph.glass_clear')) + '</span>' +
       '<span>' + esc(L('ph.glass_tinted')) + '</span></div>' +
-      '<input type="range" id="glass" min="0" max="100" step="1" value="' + (p.glass ?? 55) + '" />' +
+      '<input type="range" id="glass" min="0" max="100" step="1" aria-label="' +
+        esc(L('ph.transparency')) + '" value="' + (p.glass ?? 55) + '" />' +
     '</div>' +
     '<div class="groupfoot">' + esc(L('ph.glass_hint')) + '</div>' +
     UI.group((state.apps || []).map((a) => UI.row({
@@ -2495,8 +2721,12 @@ function applyGlass(v) {
 
 function applyWallpaper() {
   const w = byId('wallpaper');
+  const screen = byId('screen');
   const p = state.prefs || {};
-  (state.wallpapers || []).forEach((x) => w.classList.remove('wall-' + x));
+  (state.wallpapers || []).forEach((x) => {
+    w.classList.remove('wall-' + x);
+    screen.classList.remove('wall-' + x);
+  });
   if (p.wallpaperUrl) {
     // A linked image replaces the gradient rather than sitting on top of it, so the
     // class list cannot leave a stripe of the old one showing at the edges.
@@ -2505,11 +2735,23 @@ function applyWallpaper() {
     w.style.backgroundPosition = 'center';
     w.style.backgroundRepeat = 'no-repeat';
     w.style.backgroundColor = '#000';
+    screen.style.backgroundImage = 'url("' + p.wallpaperUrl + '")';
+    screen.style.backgroundSize = (p.wallFit === 'contain') ? 'contain' : 'cover';
+    screen.style.backgroundPosition = 'center';
+    screen.style.backgroundRepeat = 'no-repeat';
+    screen.style.backgroundColor = '#000';
   } else {
     w.style.backgroundImage = '';
     w.style.backgroundSize = '';
     w.style.backgroundColor = '';
-    w.classList.add('wall-' + (p.wallpaper || 'aurora'));
+    screen.style.backgroundImage = '';
+    screen.style.backgroundSize = '';
+    screen.style.backgroundColor = '';
+    const selected = p.wallpaper || 'ifruit';
+    w.classList.add('wall-' + selected);
+    // The screen itself carries the same material. During app/setup transforms this
+    // prevents its old black fallback from flashing as a strip along the bottom edge.
+    screen.classList.add('wall-' + selected);
   }
 }
 
@@ -2574,7 +2816,9 @@ function darkNow() {
 }
 
 function applyTheme() {
-  byId('screen').classList.toggle('dark', darkNow());
+  const dark = darkNow();
+  byId('screen').classList.toggle('dark', dark);
+  if (openApp && openApp.page) frameEvent('theme', { dark, mode: (state.prefs || {}).darkMode || 'auto' });
 }
 
 let landscape = false;
@@ -2646,127 +2890,608 @@ RENDER.maps = async () => {
 };
 
 // -- Music ------------------------------------------------------
-// v-music owns every source and decides who may touch which one; this lists what it
-// answered and sends the same actions its own UI does.
-// A library of your own, kept on the phone, plus whatever is already playing around you.
-// A track is a link - YouTube or any host the operator allows - and playing it on the
-// phone speaker puts a short-range source at your feet, so the people you are standing
-// with hear it and nobody across the street does.
-let musicTab = 'library';
+// v-music remains the authority for audible sources. The phone supplies the personal
+// library, queue, favourites and listening history around those real controls.
+let musicTab = 'listen';
+let musicPlayerOpen = false;
+let musicOutput = 'headphones';
+let musicNow = null;
+let musicQueue = [];
+let musicQueueIndex = -1;
+let musicSearch = '';
+
+const MUSIC_TABS = [
+  { id: 'listen', icon: 'play', label: 'ph.music_home' },
+  { id: 'browse', icon: 'sparkles', label: 'ph.music_new' },
+  { id: 'radio', icon: 'speaker', label: 'ph.music_radio' },
+  { id: 'library', icon: 'music', label: 'ph.library' },
+  { id: 'search', icon: 'search', label: 'ph.search' },
+];
+const MUSIC_PALETTES = [
+  ['#ff4365', '#811848'], ['#ae63ff', '#45238c'], ['#ff9c45', '#a72841'],
+  ['#4fc7ff', '#2450a4'], ['#54d8a0', '#126b68'], ['#f3d45b', '#bf4864'],
+];
+
+function musicNormalise(track, index) {
+  const row = track && typeof track === 'object' ? track : {};
+  return {
+    title: String(row.title || L('ph.untitled')).slice(0, 80),
+    artist: String(row.artist || L('ph.unknown_artist')).slice(0, 60),
+    album: String(row.album || L('ph.single')).slice(0, 60),
+    url: String(row.url || '').slice(0, 400),
+    art: String(row.art || '').slice(0, 400),
+    favorite: row.favorite === true,
+    id: row.id,
+    kind: row.kind,
+    paused: row.paused === true,
+    volume: Math.max(0, Math.min(1, Number(row.volume == null ? .65 : row.volume))),
+    _libraryIndex: row._libraryIndex == null ? index : row._libraryIndex,
+  };
+}
+
+function musicSeed(track) {
+  const value = String((track && (track.title || track.url || track.id)) || 'music');
+  let hash = 0;
+  for (let i = 0; i < value.length; i += 1) hash = ((hash << 5) - hash + value.charCodeAt(i)) | 0;
+  return Math.abs(hash) % MUSIC_PALETTES.length;
+}
+
+function musicArt(track, cls) {
+  const palette = MUSIC_PALETTES[musicSeed(track)];
+  const image = track && track.art ? inlineBackground(track.art) + ';' : '';
+  return '<span class="musicart ' + esc(cls || '') + '" style="' + image +
+    '--ma:' + palette[0] + ';--mb:' + palette[1] + '">' +
+    '<i></i>' + svg('music') + '</span>';
+}
+
+async function musicStorage(key, fallback) {
+  const r = await post('appStorage', { app: 'music', op: 'get', key });
+  try {
+    const value = JSON.parse((r && r.value) || '');
+    return value == null ? fallback : value;
+  } catch { return fallback; }
+}
 
 async function musicLibrary() {
-  const r = await post('appStorage', { app: 'music', op: 'get', key: 'library' });
-  let lib = [];
-  try { lib = JSON.parse((r && r.value) || '[]'); } catch { lib = []; }
-  return Array.isArray(lib) ? lib : [];
-}
-async function musicSaveLibrary(lib) {
-  return post('appStorage', { app: 'music', op: 'set', key: 'library', value: JSON.stringify(lib.slice(0, 60)) });
+  const manifest = await musicStorage('library_manifest', null);
+  if (manifest && manifest.v === 2 && Number(manifest.chunks) > 0) {
+    const parts = await Promise.all([...Array(Math.min(30, Number(manifest.chunks)))].map((_, i) =>
+      musicStorage('library_' + i, [])));
+    return parts.flat().filter((row) => row && row.url).slice(0, 120).map(musicNormalise);
+  }
+  const legacy = await musicStorage('library', []);
+  return (Array.isArray(legacy) ? legacy : []).filter((row) => row && row.url).map(musicNormalise);
 }
 
-RENDER.music = async () => {
-  setNav(L('app.music'), null, { icon: 'add', onClick: () => musicAdd() });
-  tabbar([
-    { id: 'library', icon: 'music', label: 'ph.library' },
-    { id: 'around', icon: 'speaker', label: 'ph.playing_around' },
-  ], musicTab, (t) => { musicTab = t; RENDER.music(); });
+async function musicSaveLibrary(library) {
+  const clean = library.slice(0, 120).map((row) => {
+    const track = musicNormalise(row);
+    return {
+      title: track.title, artist: track.artist, album: track.album, url: track.url,
+      art: track.art, favorite: track.favorite,
+    };
+  });
+  const chunks = [];
+  let current = [];
+  clean.forEach((track) => {
+    const next = current.concat(track);
+    if (current.length && JSON.stringify(next).length > 3400) {
+      chunks.push(current);
+      current = [track];
+    } else current = next;
+  });
+  if (current.length || !chunks.length) chunks.push(current);
+  for (let i = 0; i < chunks.length; i += 1) {
+    const r = await post('appStorage', {
+      app: 'music', op: 'set', key: 'library_' + i, value: JSON.stringify(chunks[i]),
+    });
+    if (!r || r.error) return r || { error: 'x' };
+  }
+  return post('appStorage', {
+    app: 'music', op: 'set', key: 'library_manifest',
+    value: JSON.stringify({ v: 2, chunks: chunks.length }),
+  });
+}
 
-  if (musicTab === 'library') {
-    const lib = await musicLibrary();
-    if (!lib.length) { body(UI.empty(L('ph.library_empty'), 'music')); return; }
-    body(UI.group(lib.map((t, i) => UI.row({
-      icon: 'music', tint: '#FA2D48', title: t.title || L('ph.untitled'),
-      subtitle: t.url, chevron: true, data: { i },
-    })), { header: L('ph.library'), footer: L('ph.library_hint') }));
-    rows('.row[data-i]', (el) => el.addEventListener('click', () => musicTrack(lib[Number(el.dataset.i)], Number(el.dataset.i))));
+async function musicRemember(track) {
+  if (!track || !track.url) return;
+  const recent = await musicStorage('recent', []);
+  const keys = [track.url].concat((Array.isArray(recent) ? recent : []).filter((url) => url !== track.url)).slice(0, 18);
+  await post('appStorage', { app: 'music', op: 'set', key: 'recent', value: JSON.stringify(keys) });
+}
+
+function musicKind(kind) {
+  const key = 'ph.music_' + String(kind || 'headphones');
+  return L(key) === key ? L('ph.music_device') : L(key);
+}
+
+async function musicModel() {
+  const [library, service, recentKeys] = await Promise.all([
+    musicLibrary(),
+    post('app', { app: 'music' }),
+    musicStorage('recent', []),
+  ]);
+  const sources = ((service && service.sources) || []).map((source, index) => {
+    const saved = library.find((track) => track.url && track.url === source.url);
+    return musicNormalise(Object.assign({}, saved || {}, source, {
+      artist: (saved && saved.artist) || musicKind(source.kind),
+      album: (saved && saved.album) || L('ph.music_live_source'),
+      _libraryIndex: saved ? saved._libraryIndex : null,
+    }), library.length + index);
+  });
+  const recent = (Array.isArray(recentKeys) ? recentKeys : [])
+    .map((url) => library.find((track) => track.url === url)).filter(Boolean);
+  let current = null;
+  if (musicNow) current = sources.find((source) => source.id === musicNow.id || (source.url && source.url === musicNow.url));
+  current = current || sources.find((source) => !source.paused) || sources[0] || musicNow;
+  if (current) musicNow = Object.assign({}, musicNow || {}, current);
+  return {
+    library, sources, recent,
+    current: current ? musicNormalise(current) : null,
+    enabled: !service || (!service.error && service.enabled !== false),
+  };
+}
+
+function musicSection(title, action) {
+  return '<div class="musicsection"><h2>' + esc(title) + '</h2>' +
+    (action ? '<button type="button" data-msection="' + esc(action.id) + '">' + esc(action.label) + '</button>' : '') +
+    '</div>';
+}
+
+function musicCard(track, index, wide) {
+  return '<button class="musiccard' + (wide ? ' wide' : '') + '" data-mtrack="' + index + '" type="button">' +
+    musicArt(track, 'cardart') +
+    '<span class="musiccardcopy"><b>' + esc(track.title) + '</b><small>' + esc(track.artist) + '</small></span></button>';
+}
+
+function musicTrackRow(track, index, live) {
+  return '<div class="musictrackrow' + (live && !track.paused ? ' live' : '') + '">' +
+    '<button class="musictrackmain" data-mtrack="' + index + '" type="button">' +
+      musicArt(track, 'rowart') +
+      '<span><b>' + esc(track.title) + '</b><small>' +
+        esc(live ? musicKind(track.kind) : track.artist + ' · ' + track.album) + '</small></span>' +
+      (live ? '<em>' + esc(track.paused ? L('ph.paused') : L('ph.live')) + '</em>' : '') +
+    '</button>' +
+    '<button class="musicmore" data-maction="' + index + '" type="button" aria-label="' + esc(L('ph.more')) + '">' +
+      '<i></i><i></i><i></i></button></div>';
+}
+
+function musicHero(track) {
+  if (!track) {
+    return '<div class="musichero emptyhero"><div class="musicorbits">' + svg('music') + '</div>' +
+      '<span>' + esc(L('ph.music_welcome')) + '</span><h2>' + esc(L('ph.music_yours')) + '</h2>' +
+      '<p>' + esc(L('ph.music_welcome_hint')) + '</p>' +
+      '<button id="musicemptyadd" type="button">' + svg('add') + esc(L('ph.track_add')) + '</button></div>';
+  }
+  return '<div class="musichero" style="--hero-a:' + MUSIC_PALETTES[musicSeed(track)][0] +
+    ';--hero-b:' + MUSIC_PALETTES[musicSeed(track)][1] + '">' +
+    '<div class="musicheroart">' + musicArt(track, 'heroart') + '</div>' +
+    '<div class="musicherocopy"><span>' + esc(L('ph.music_top_pick')) + '</span>' +
+      '<h2>' + esc(track.title) + '</h2><p>' + esc(track.artist + ' · ' + track.album) + '</p>' +
+      '<div><button id="musicheroplay" type="button">' + svg('play') + esc(L('ph.play')) + '</button>' +
+      '<button id="musicheromore" type="button" aria-label="' + esc(L('ph.more')) + '">•••</button></div></div></div>';
+}
+
+function musicTabHTML(current) {
+  return '<div class="tabbar musictabs">' + MUSIC_TABS.map((tab) =>
+    '<button class="' + (tab.id === current ? 'on' : '') + '" data-mtab="' + tab.id + '" type="button" ' +
+      'aria-current="' + (tab.id === current ? 'page' : 'false') + '">' +
+      svg(tab.icon) + '<span>' + esc(L(tab.label)) + '</span></button>').join('') + '</div>';
+}
+
+function musicMiniHTML(current) {
+  if (!current) return '';
+  return '<div class="musicmini">' +
+    '<button class="musicminiopen" id="musicminiopen" type="button">' + musicArt(current, 'miniart') +
+      '<span><b>' + esc(current.title) + '</b><small>' + esc(current.artist || musicKind(current.kind)) + '</small></span></button>' +
+    '<button id="musicminiplay" type="button" aria-label="' + esc(current.paused ? L('ph.resume') : L('ph.pause')) + '">' +
+      svg(current.paused ? 'play' : 'pause') + '</button>' +
+    '<button id="musicmininext" type="button" aria-label="' + esc(L('ph.next')) + '">' + svg('chevron') + '</button></div>';
+}
+
+function musicFoot(model) {
+  foot('<div class="musicfoot">' + musicMiniHTML(model.current) + musicTabHTML(musicTab) + '</div>');
+  [...byId('appfoot').querySelectorAll('[data-mtab]')].forEach((button) =>
+    button.addEventListener('click', () => {
+      musicTab = button.dataset.mtab;
+      musicPlayerOpen = false;
+      musicSearch = '';
+      RENDER.music();
+    }));
+  const open = byId('musicminiopen');
+  if (open) open.addEventListener('click', () => { musicPlayerOpen = true; RENDER.music(); });
+  const toggle = byId('musicminiplay');
+  if (toggle) toggle.addEventListener('click', () => musicToggle(model.current));
+  const next = byId('musicmininext');
+  if (next) next.addEventListener('click', () => musicStep(1));
+}
+
+function musicWireTracks(tracks, queue) {
+  rows('[data-mtrack]', (button) => button.addEventListener('click', () => {
+    const index = Number(button.dataset.mtrack);
+    musicPlay(tracks[index], queue || tracks);
+  }));
+  rows('[data-maction]', (button) => button.addEventListener('click', () => {
+    const track = tracks[Number(button.dataset.maction)];
+    musicTrackSheet(track, track && track._libraryIndex);
+  }));
+}
+
+async function musicPlay(track, queue, output) {
+  if (!track || !track.url) { toast(L('ph.track_nourl')); return; }
+  const kind = output || musicOutput;
+  const result = await post('music', {
+    action: 'play', kind, url: track.url, title: track.title, volume: track.volume || .65,
+  });
+  if (!result || !result.ok) {
+    toast(L('ph.err_' + ((result && result.error) || 'x')));
     return;
   }
+  musicOutput = kind;
+  musicQueue = (queue && queue.length ? queue : [track]).map(musicNormalise);
+  musicQueueIndex = Math.max(0, musicQueue.findIndex((row) => row.url === track.url));
+  musicNow = Object.assign({}, musicNormalise(track), {
+    id: result.id, kind, paused: false, volume: track.volume || .65,
+  });
+  await musicRemember(track);
+  toast(kind === 'headphones' ? L('ph.playing_ear') : L('ph.playing'));
+  if (openApp && openApp.id === 'music') RENDER.music();
+}
 
-  loading();
-  const d = await post('app', { app: 'music' });
-  if (!d || d.error || d.enabled === false) { body(UI.empty(L('ph.err_off'), 'music')); return; }
-  const list = d.sources || [];
-  if (!list.length) { body(UI.empty(L('ph.no_music'), 'music')); return; }
-  body(UI.group(list.map((m, i) => UI.row({
-    icon: 'music', tint: '#FA2D48', title: m.title || L('ph.untitled'),
-    subtitle: L('ph.music_' + (m.kind || 'boombox')),
-    value: m.paused ? L('ph.paused') : L('ph.playing'),
-    tone: m.paused ? '' : 'pos', chevron: true, data: { i },
-  })), { header: L('ph.music_sources') }));
-  rows('.row[data-i]', (r) => r.addEventListener('click', () => musicSheet(list[Number(r.dataset.i)])));
-};
+async function musicToggle(track) {
+  const current = track || musicNow;
+  if (!current) return;
+  if (!current.id) { await musicPlay(current, musicQueue.length ? musicQueue : [current]); return; }
+  const action = current.paused ? 'resume' : 'pause';
+  const result = await post('music', { id: current.id, action });
+  if (!result || result.error) { toast(L('ph.err_' + ((result && result.error) || 'x'))); return; }
+  if (musicNow) musicNow.paused = action === 'pause';
+  RENDER.music();
+}
+
+async function musicStep(direction) {
+  if (!musicQueue.length) return;
+  musicQueueIndex = (musicQueueIndex + direction + musicQueue.length) % musicQueue.length;
+  await musicPlay(musicQueue[musicQueueIndex], musicQueue, musicOutput);
+}
+
+async function musicFavourite(track) {
+  if (!track || !track.url) return;
+  const library = await musicLibrary();
+  let index = library.findIndex((row) => row.url === track.url);
+  if (index < 0) {
+    library.unshift(Object.assign({}, musicNormalise(track), { favorite: true }));
+  } else {
+    library[index].favorite = !library[index].favorite;
+  }
+  await musicSaveLibrary(library);
+  toast(L(index < 0 || library[index].favorite ? 'ph.music_favorited' : 'ph.music_unfavorited'));
+  RENDER.music();
+}
 
 function musicAdd(existing, index) {
-  sheet(L(existing ? 'ph.track_edit' : 'ph.track_add'),
-    UI.field('mtitle', L('ph.track_title'), (existing && existing.title) || '', 'maxlength="80"') +
-    UI.field('murl', L('ph.track_url'), (existing && existing.url) || '', 'maxlength="400"') +
+  const track = existing ? musicNormalise(existing) : null;
+  sheet(L(track ? 'ph.track_edit' : 'ph.track_add'),
+    '<div class="musicedithead">' + musicArt(track || { title: L('ph.new_track') }, 'editart') +
+      '<div><b>' + esc(track ? track.title : L('ph.new_track')) + '</b><small>' + esc(L('ph.music_metadata')) + '</small></div></div>' +
+    UI.field('mtitle', L('ph.track_title'), (track && track.title) || '', 'maxlength="80"') +
+    UI.field('martist', L('ph.track_artist'), (track && track.artist) || '', 'maxlength="60"') +
+    UI.field('malbum', L('ph.track_album'), (track && track.album) || '', 'maxlength="60"') +
+    UI.field('murl', L('ph.track_url'), (track && track.url) || '', 'maxlength="400"') +
+    UI.field('mart', L('ph.track_art'), (track && track.art) || '', 'maxlength="400"') +
     UI.button(L('ph.save'), 'mtsave', 'tinted') +
     '<div class="groupfoot">' + esc(L('ph.track_hint')) + '</div>',
     () => byId('mtsave').addEventListener('click', async () => {
       const url = byId('murl').value.trim();
       if (!url) { toast(L('ph.track_nourl')); return; }
-      const title = byId('mtitle').value.trim() || url;
       const epoch = sheetEpoch;
-      const lib = await musicLibrary();
+      const library = await musicLibrary();
       if (epoch !== sheetEpoch) return;
-      const t = { title, url };
-      if (index != null) lib[index] = t; else lib.unshift(t);
-      await musicSaveLibrary(lib);
+      const next = musicNormalise({
+        title: byId('mtitle').value.trim() || L('ph.untitled'),
+        artist: byId('martist').value.trim() || L('ph.unknown_artist'),
+        album: byId('malbum').value.trim() || L('ph.single'),
+        url, art: byId('mart').value.trim(),
+        favorite: track && track.favorite,
+      });
+      if (index != null && library[index]) library[index] = next; else library.unshift(next);
+      const result = await musicSaveLibrary(library);
+      if (!result || result.error) { toast(L('ph.err_' + ((result && result.error) || 'x'))); return; }
       if (closeSheet(false, epoch)) RENDER.music();
-    }));
+    }), 'music-edit');
 }
 
-function musicTrack(t, i) {
-  sheet(t.title || L('ph.untitled'),
-    '<div class="mailmeta">' + esc(t.url) + '</div>' +
-    UI.button(L('ph.play_ear'), 'mear', 'tinted') +
-    UI.button(L('ph.play_speaker'), 'mplay', 'plain') +
-    UI.button(L('ph.track_edit'), 'medit', 'plain') +
-    UI.button(L('ph.delete'), 'mdelt', 'destructive'),
+function musicTrackSheet(track, index) {
+  if (!track) return;
+  const saved = index != null;
+  sheet(track.title,
+    '<div class="musictrackdetail">' + musicArt(track, 'sheetart') +
+      '<div><h2>' + esc(track.title) + '</h2><p>' + esc(track.artist + ' · ' + track.album) + '</p></div></div>' +
+    '<div class="musicquickactions">' +
+      '<button id="mquickplay" type="button">' + svg('play') + '<span>' + esc(L('ph.play')) + '</span></button>' +
+      '<button id="mquickfav" type="button">' + svg(track.favorite ? 'heart' : 'star') + '<span>' +
+        esc(track.favorite ? L('ph.favorited') : L('ph.favorite')) + '</span></button>' +
+      '<button id="mquickqueue" type="button">' + svg('add') + '<span>' + esc(L('ph.add_queue')) + '</span></button></div>' +
+    UI.button(L('ph.choose_output'), 'moutput', 'plain') +
+    (saved ? UI.button(L('ph.track_edit'), 'medit', 'plain') : '') +
+    (saved ? UI.button(L('ph.delete'), 'mdelt', 'destructive') : ''),
     () => {
-      // Headphones: a private source only this player's client will play.
-      byId('mear').addEventListener('click', async () => {
-        const epoch = sheetEpoch;
-        const r = await post('music', { action: 'play', kind: 'headphones', url: t.url, title: t.title });
-        if (!closeSheet(false, epoch)) return;
-        toast(r && r.ok ? L('ph.playing_ear') : L('ph.err_' + ((r && r.error) || 'x')));
+      byId('mquickplay').addEventListener('click', () => { closeSheet(); musicPlay(track, musicQueue.length ? musicQueue : [track]); });
+      byId('mquickfav').addEventListener('click', () => { closeSheet(); musicFavourite(track); });
+      byId('mquickqueue').addEventListener('click', () => {
+        if (!musicQueue.some((row) => row.url === track.url)) musicQueue.push(musicNormalise(track));
+        closeSheet(); toast(L('ph.added_queue'));
       });
-      byId('mplay').addEventListener('click', async () => {
-        // kind 'phone' is a short-range source that follows the player: a phone on
-        // speaker, not a boombox.
+      byId('moutput').addEventListener('click', () => musicOutputSheet(track));
+      if (saved) byId('medit').addEventListener('click', () => { closeSheet(); musicAdd(track, index); });
+      if (saved) byId('mdelt').addEventListener('click', async () => {
         const epoch = sheetEpoch;
-        const r = await post('music', { action: 'play', kind: 'phone', url: t.url, title: t.title });
-        if (!closeSheet(false, epoch)) return;
-        toast(r && r.ok ? L('ph.playing') : L('ph.err_' + ((r && r.error) || 'x')));
-      });
-      byId('medit').addEventListener('click', () => { closeSheet(); musicAdd(t, i); });
-      byId('mdelt').addEventListener('click', async () => {
-        const epoch = sheetEpoch;
-        const lib = await musicLibrary();
+        const library = await musicLibrary();
         if (epoch !== sheetEpoch) return;
-        lib.splice(i, 1);
-        await musicSaveLibrary(lib);
+        library.splice(index, 1);
+        await musicSaveLibrary(library);
         if (closeSheet(false, epoch)) RENDER.music();
       });
-    });
+    }, 'music-actions');
 }
 
-function musicSheet(m) {
-  const act = async (action) => {
-    const epoch = sheetEpoch;
-    const res = await post('music', { id: m.id, action });
-    if (!closeSheet(false, epoch)) return;
-    if (!res || res.error) toast(L('ph.err_' + ((res && res.error) || 'x')));
-    else RENDER.music();
-  };
-  sheet(m.title || L('ph.untitled'),
-    UI.button(L(m.paused ? 'ph.resume' : 'ph.pause'), 'mpause') +
-    UI.button(L('ph.stop'), 'mstop', 'destructive'),
-    () => {
-      byId('mpause').addEventListener('click', () => act(m.paused ? 'resume' : 'pause'));
-      byId('mstop').addEventListener('click', () => act('stop'));
-    });
+function musicOutputSheet(track) {
+  const source = track || musicNow;
+  const returnToTrack = byId('sheet').classList.contains('on');
+  const outputs = [
+    { id: 'headphones', icon: 'bt', label: L('ph.music_headphones'), hint: L('ph.output_private') },
+    { id: 'phone', icon: 'speaker', label: L('ph.music_phone'), hint: L('ph.output_nearby') },
+    { id: 'vehicle', icon: 'garage', label: L('ph.music_vehicle'), hint: L('ph.output_vehicle') },
+  ];
+  sheet(L('ph.choose_output'),
+    '<div class="musicoutputs">' + outputs.map((output) =>
+      '<button data-moutput="' + output.id + '" type="button"><span>' + svg(output.icon) + '</span><div><b>' +
+        esc(output.label) + '</b><small>' + esc(output.hint) + '</small></div>' +
+        (musicOutput === output.id ? svg('check') : '') + '</button>').join('') + '</div>',
+    () => [...byId('sheet').querySelectorAll('[data-moutput]')].forEach((button) =>
+      button.addEventListener('click', () => {
+        musicOutput = button.dataset.moutput;
+        closeSheet(true);
+        if (source && source.url) musicPlay(source, musicQueue.length ? musicQueue : [source], musicOutput);
+      })), 'music-output');
+  if (returnToTrack) sheetReturn = () => musicTrackSheet(source, source && source._libraryIndex);
 }
+
+function musicQueueSheet() {
+  sheet(L('ph.up_next'),
+    musicQueue.length
+      ? '<div class="musicqueue">' + musicQueue.map((track, index) =>
+        '<button data-mqueue="' + index + '" type="button">' + musicArt(track, 'queueart') +
+          '<span><b>' + esc(track.title) + '</b><small>' + esc(track.artist) + '</small></span>' +
+          (index === musicQueueIndex ? '<em>' + svg('speaker') + '</em>' : '<i>≡</i>') + '</button>').join('') + '</div>' +
+        UI.button(L('ph.clear_queue'), 'mclearqueue', 'destructive')
+      : UI.empty(L('ph.queue_empty'), 'music'),
+    () => {
+      [...byId('sheet').querySelectorAll('[data-mqueue]')].forEach((button) =>
+        button.addEventListener('click', () => {
+          musicQueueIndex = Number(button.dataset.mqueue);
+          closeSheet(); musicPlay(musicQueue[musicQueueIndex], musicQueue);
+        }));
+      const clear = byId('mclearqueue');
+      if (clear) clear.addEventListener('click', () => { musicQueue = []; musicQueueIndex = -1; closeSheet(); });
+    }, 'music-queue');
+}
+
+function musicRenderPlayer(model) {
+  const current = model.current || musicNow;
+  if (!current) { musicPlayerOpen = false; RENDER.music(); return; }
+  setNav(L('ph.nowplaying'), L('app.music'), null, () => {
+    musicPlayerOpen = false;
+    RENDER.music();
+  });
+  foot('');
+  body('<div class="musicplayer" style="--player-a:' + MUSIC_PALETTES[musicSeed(current)][0] +
+      ';--player-b:' + MUSIC_PALETTES[musicSeed(current)][1] + '">' +
+    '<div class="musicplayerglow"></div>' +
+    '<div class="musicplayerhead">' + musicArt(current, 'playerart') + '</div>' +
+    '<div class="musicplayercopy"><span>' + esc(musicKind(current.kind || musicOutput)) + '</span>' +
+      '<h1>' + esc(current.title) + '</h1><p>' + esc(current.artist) + '</p></div>' +
+    '<div class="musicactivity"><span><i></i><i></i><i></i><i></i><i></i></span><em>' +
+      esc(current.paused ? L('ph.paused') : L('ph.music_synced')) + '</em></div>' +
+    '<div class="musiccontrols">' +
+      '<button id="mprevious" type="button" aria-label="' + esc(L('ph.previous')) + '">' +
+        '<span class="musicprevicon">' + svg('play') + '</span></button>' +
+      '<button class="musicplaymain" id="mplaymain" type="button" aria-label="' +
+        esc(current.paused ? L('ph.resume') : L('ph.pause')) + '">' + svg(current.paused ? 'play' : 'pause') + '</button>' +
+      '<button id="mnext" type="button" aria-label="' + esc(L('ph.next')) + '">' + svg('play') + '</button></div>' +
+    '<div class="musicvolume">' + svg('speaker') +
+      '<input id="mvolume" type="range" min="0" max="100" value="' + Math.round(current.volume * 100) +
+        '" aria-label="' + esc(L('ph.volume')) + '" />' + svg('speaker') + '</div>' +
+    '<div class="musicplayeractions">' +
+      '<button id="mplayerfav" type="button">' + svg(current.favorite ? 'heart' : 'star') + '<span>' + esc(L('ph.favorite')) + '</span></button>' +
+      '<button id="mplayerout" type="button">' + svg('airdrop') + '<span>' + esc(L('ph.output')) + '</span></button>' +
+      '<button id="mplayerqueue" type="button">' + svg('note') + '<span>' + esc(L('ph.queue')) + '</span></button></div></div>');
+  byId('mplaymain').addEventListener('click', () => musicToggle(current));
+  byId('mprevious').addEventListener('click', () => musicStep(-1));
+  byId('mnext').addEventListener('click', () => musicStep(1));
+  byId('mplayerfav').addEventListener('click', () => musicFavourite(current));
+  byId('mplayerout').addEventListener('click', () => musicOutputSheet(current));
+  byId('mplayerqueue').addEventListener('click', musicQueueSheet);
+  const slider = byId('mvolume');
+  slider.addEventListener('input', () => slider.style.setProperty('--volume', slider.value + '%'));
+  slider.addEventListener('change', async () => {
+    const value = Number(slider.value) / 100;
+    if (musicNow) musicNow.volume = value;
+    if (current.id) await post('music', { id: current.id, action: 'volume', volume: value });
+  });
+  let swipe = null;
+  const player = byId('appbody').querySelector('.musicplayer');
+  player.addEventListener('pointerdown', (event) => {
+    if (event.target.closest('button,input')) return;
+    swipe = { y: event.clientY, id: event.pointerId };
+    player.setPointerCapture(event.pointerId);
+  });
+  player.addEventListener('pointermove', (event) => {
+    if (!swipe || event.pointerId !== swipe.id) return;
+    const dy = Math.max(0, event.clientY - swipe.y);
+    player.style.setProperty('--player-y', Math.min(120, dy) + 'px');
+  });
+  player.addEventListener('pointerup', (event) => {
+    if (!swipe || event.pointerId !== swipe.id) return;
+    const dy = Math.max(0, event.clientY - swipe.y);
+    swipe = null;
+    player.style.removeProperty('--player-y');
+    if (dy > 74) { musicPlayerOpen = false; RENDER.music(); }
+  });
+}
+
+function musicRenderSearch(model) {
+  const draw = () => {
+    const query = musicSearch.trim().toLowerCase();
+    const all = model.library.concat(model.sources.filter((source) =>
+      !model.library.some((track) => track.url && track.url === source.url)));
+    const shown = query ? all.filter((track) =>
+      [track.title, track.artist, track.album].some((value) => String(value || '').toLowerCase().includes(query))) : model.recent;
+    const host = byId('musicsearchresults');
+    if (!host) return;
+    host.innerHTML = shown.length
+      ? musicSection(query ? L('ph.results') : L('ph.recently_played')) +
+        '<div class="musictracklist">' + shown.map((track, index) => musicTrackRow(track, index, !!track.id)).join('') + '</div>'
+      : '<div class="musicsearchempty">' + svg('search') + '<b>' +
+        esc(query ? L('ph.no_results') : L('ph.music_search_hint')) + '</b><span>' +
+        esc(query ? L('ph.music_try_search') : L('ph.music_search_everything')) + '</span></div>';
+    musicWireTracks(shown, model.library);
+  };
+  body('<div class="musicsearchbox">' + svg('search') +
+    '<input id="musicq" value="' + esc(musicSearch) + '" placeholder="' + esc(L('ph.music_search_placeholder')) +
+      '" autocomplete="off" /><button id="musicqclear" type="button" aria-label="' + esc(L('ph.clear')) + '">' +
+      svg('xmark') + '</button></div><div id="musicsearchresults"></div>');
+  draw();
+  const input = byId('musicq');
+  input.addEventListener('input', () => {
+    musicSearch = input.value;
+    byId('musicqclear').classList.toggle('visible', !!musicSearch);
+    draw();
+  });
+  byId('musicqclear').classList.toggle('visible', !!musicSearch);
+  byId('musicqclear').addEventListener('click', () => {
+    musicSearch = ''; input.value = ''; input.focus();
+    byId('musicqclear').classList.remove('visible'); draw();
+  });
+}
+
+RENDER.music = async () => {
+  setNav(L('app.music'), null, musicTab === 'library'
+    ? { icon: 'add', label: L('ph.track_add'), onClick: () => musicAdd() } : null);
+  loading();
+  const model = await musicModel();
+  if (!model.enabled) { foot(''); body(UI.empty(L('ph.err_off'), 'music')); return; }
+  if (musicPlayerOpen) { musicRenderPlayer(model); return; }
+  musicFoot(model);
+
+  if (musicTab === 'listen') {
+    const pick = model.current || model.recent[0] || model.library[0];
+    const recent = model.recent.length ? model.recent : model.library.slice(0, 8);
+    const favourites = model.library.filter((track) => track.favorite);
+    body(musicHero(pick) +
+      (recent.length ? musicSection(L('ph.recently_played'), { id: 'library', label: L('ph.see_all') }) +
+        '<div class="musiccarousel">' + recent.slice(0, 8).map((track, index) => musicCard(track, index)).join('') + '</div>' : '') +
+      (favourites.length ? musicSection(L('ph.made_for_you')) +
+        '<div class="musicmix"><div class="musicmixart">' + favourites.slice(0, 4).map((track) => musicArt(track, 'mixart')).join('') +
+        '</div><div><span>' + esc(L('ph.personal_mix')) + '</span><b>' + esc(L('ph.favorites_mix')) +
+        '</b><small>' + esc(L('ph.favorites_mix_hint')) + '</small><button id="musicmixplay" type="button">' +
+        svg('play') + esc(L('ph.play')) + '</button></div></div>' : ''));
+    if (pick) {
+      byId('musicheroplay').addEventListener('click', () => musicPlay(pick, model.library.length ? model.library : [pick]));
+      byId('musicheromore').addEventListener('click', () => musicTrackSheet(pick, pick._libraryIndex));
+    } else byId('musicemptyadd').addEventListener('click', () => musicAdd());
+    const section = byId('appbody').querySelector('[data-msection="library"]');
+    if (section) section.addEventListener('click', () => { musicTab = 'library'; RENDER.music(); });
+    musicWireTracks(recent, model.library);
+    const mix = byId('musicmixplay');
+    if (mix) mix.addEventListener('click', () => musicPlay(favourites[0], favourites));
+    return;
+  }
+
+  if (musicTab === 'browse') {
+    const albums = [];
+    model.library.forEach((track) => {
+      if (!albums.some((row) => row.album === track.album)) albums.push(track);
+    });
+    const picks = model.library.slice().reverse();
+    body('<div class="musicfeature"><span>' + esc(L('ph.music_featured')) + '</span><h2>' +
+      esc(L('ph.los_santos_sound')) + '</h2><p>' + esc(L('ph.music_featured_hint')) + '</p>' +
+      '<div class="musicfeaturewaves"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>' +
+      musicSection(L('ph.new_releases')) +
+      (picks.length ? '<div class="musiccarousel">' + picks.slice(0, 8).map((track, index) => musicCard(track, index)).join('') + '</div>'
+        : UI.empty(L('ph.library_empty'), 'music')) +
+      (albums.length ? musicSection(L('ph.albums')) + '<div class="musicalbums">' +
+        albums.slice(0, 6).map((track) => musicCard(track, picks.indexOf(track), true)).join('') + '</div>' : '') +
+      '<div class="musicgenres">' + musicSection(L('ph.browse_categories')) +
+        ['urban', 'electronic', 'rock', 'chill'].map((genre, index) =>
+          '<button type="button" style="--genre:' + index + '"><span>' + esc(L('ph.genre_' + genre)) +
+          '</span>' + svg('chevron') + '</button>').join('') + '</div>');
+    musicWireTracks(picks, model.library);
+    return;
+  }
+
+  if (musicTab === 'radio') {
+    body('<div class="musicradiohero"><span class="musiclivepill"><i></i>' + esc(L('ph.live')) + '</span>' +
+      '<div>' + svg('speaker') + '</div><h2>' + esc(L('ph.music_radio_title')) + '</h2><p>' +
+      esc(L('ph.music_radio_hint')) + '</p></div>' +
+      musicSection(L('ph.on_air')) +
+      (model.sources.length ? '<div class="musictracklist">' +
+        model.sources.map((track, index) => musicTrackRow(track, index, true)).join('') + '</div>'
+        : '<div class="musicairglass">' + svg('speaker') + '<div><b>' + esc(L('ph.no_music')) +
+          '</b><span>' + esc(L('ph.music_air_hint')) + '</span></div></div>') +
+      (model.library.length ? musicSection(L('ph.start_station')) +
+        '<div class="musicstationcards">' + model.library.slice(0, 3).map((track, index) =>
+          '<button data-mstation="' + index + '" type="button">' + musicArt(track, 'stationart') +
+          '<span><b>' + esc(track.artist) + '</b><small>' + esc(L('ph.artist_station')) + '</small></span>' +
+          svg('play') + '</button>').join('') + '</div>' : ''));
+    musicWireTracks(model.sources, model.library);
+    rows('[data-mstation]', (button) => button.addEventListener('click', () => {
+      const track = model.library[Number(button.dataset.mstation)];
+      const station = model.library.filter((row) => row.artist === track.artist);
+      musicPlay(track, station.length ? station : model.library);
+    }));
+    return;
+  }
+
+  if (musicTab === 'search') {
+    musicRenderSearch(model);
+    return;
+  }
+
+  const favourites = model.library.filter((track) => track.favorite);
+  body('<div class="musiclibrarytiles">' +
+    '<button id="mlibfav" type="button"><span>' + svg('heart') + '</span><div><b>' + esc(L('ph.favourites')) +
+      '</b><small>' + esc(String(favourites.length)) + '</small></div>' + svg('chevron') + '</button>' +
+    '<button id="mlibalbums" type="button"><span>' + svg('music') + '</span><div><b>' + esc(L('ph.albums')) +
+      '</b><small>' + esc(String(new Set(model.library.map((track) => track.album)).size)) + '</small></div>' + svg('chevron') + '</button></div>' +
+    musicSection(L('ph.songs'), { id: 'add', label: L('ph.add') }) +
+    (model.library.length ? '<div class="musictracklist">' +
+      model.library.map((track, index) => musicTrackRow(track, index)).join('') + '</div>'
+      : '<div class="musiclibraryempty">' + musicArt({ title: 'iFruit Music' }, 'emptyart') +
+        '<h2>' + esc(L('ph.library_empty')) + '</h2><p>' + esc(L('ph.library_hint')) + '</p>' +
+        '<button id="mlibemptyadd" type="button">' + svg('add') + esc(L('ph.track_add')) + '</button></div>'));
+  musicWireTracks(model.library, model.library);
+  const add = byId('appbody').querySelector('[data-msection="add"]');
+  if (add) add.addEventListener('click', () => musicAdd());
+  const emptyAdd = byId('mlibemptyadd');
+  if (emptyAdd) emptyAdd.addEventListener('click', () => musicAdd());
+  byId('mlibfav').addEventListener('click', () => {
+    body(musicSection(L('ph.favourites')) +
+      (favourites.length ? '<div class="musictracklist">' +
+        favourites.map((track, index) => musicTrackRow(track, index)).join('') + '</div>'
+        : UI.empty(L('ph.no_favorites'), 'heart')));
+    musicWireTracks(favourites, favourites);
+  });
+  byId('mlibalbums').addEventListener('click', () => {
+    const albums = [];
+    model.library.forEach((track) => {
+      if (!albums.some((row) => row.album === track.album)) albums.push(track);
+    });
+    body(musicSection(L('ph.albums')) + '<div class="musicalbums">' +
+      albums.map((track, index) => musicCard(track, index, true)).join('') + '</div>');
+    musicWireTracks(albums, model.library);
+  });
+};
 
 // -- Property ---------------------------------------------------
 // A failed rent locks a door rather than deleting a property, so the one thing this app
@@ -2898,6 +3623,8 @@ const EDGE = 34;          // how deep the bottom edge zone reaches
 const EDGE_TOP = 56;      // the top zone is the whole status bar, or a drag that
                           // starts on the clock would not count as from the top
 const SWIPE = 46;         // travel before a drag counts as a swipe
+const PANEL_DISMISS_ZONE = 142;
+const SWITCHER_TRAVEL = 155;
 
 let g = null;
 
@@ -2907,7 +3634,13 @@ function screenPoint(e) {
 }
 
 function anyOverlayOpen() {
-  return ['cc', 'shade', 'switcher', 'sheet'].some((id) => byId(id).classList.contains('on'));
+  return ['cc', 'shade', 'switcher', 'sheet', 'auth', 'folderview', 'emojipanel']
+    .some((id) => byId(id).classList.contains('on'));
+}
+
+function modalOverlayOpen() {
+  return ['switcher', 'sheet', 'auth', 'folderview', 'emojipanel']
+    .some((id) => byId(id).classList.contains('on'));
 }
 
 const SYSTEM_PANELS = ['shade', 'cc'];
@@ -2942,9 +3675,15 @@ function closeOverlays() {
   hideSystemPanels();
   byId('switcher').classList.remove('on');
   closeSheet(true);
+  emojiClose();
+  hideAuth();
+  byId('folderview').classList.remove('on');
+  if (editing) exitArrange();
 }
 
 function resetTransientUI() {
+  g = null;
+  appPull = null;
   hideAuth();
   hideSystemPanels(true);
   byId('switcher').classList.remove('on');
@@ -2978,11 +3717,17 @@ byId('screen').addEventListener('pointerdown', (e) => {
   }
   const p = screenPoint(e);
   const systemPanel = activeSystemPanel();
+  const interactive = !!(e.target.closest && e.target.closest(
+    'button,input,textarea,select,[role="slider"],.ccslider,.ncard,.row'
+  ));
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
          fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18,
-         insideOverlay: !!(e.target.closest && e.target.closest('#sheet,#shade,#cc,#switcher')),
+         insideOverlay: !!(e.target.closest && e.target.closest(
+           '#sheet,#shade,#cc,#switcher,#auth,#folderview,#emojipanel,#setup'
+         )),
          previewPanel: null,
-         dismissPanel: systemPanel && p.y > p.h - EDGE ? systemPanel : null };
+         dismissPanel: systemPanel && !interactive && p.y > p.h - PANEL_DISMISS_ZONE
+           ? systemPanel : null };
   if ((g.fromTop || g.fromBottom) && e.currentTarget.setPointerCapture) {
     try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
   }
@@ -3024,8 +3769,7 @@ byId('screen').addEventListener('pointermove', (e) => {
     return;
   }
 
-  if (g.fromTop && dy > 4 && !g.insideOverlay
-      && !byId('sheet').classList.contains('on') && !byId('switcher').classList.contains('on')) {
+  if (g.fromTop && dy > 4 && !g.insideOverlay && !modalOverlayOpen()) {
     if (!g.previewPanel) {
       g.previewPanel = g.x0 < g.w / 2 ? 'shade' : 'cc';
       if (g.previewPanel === 'shade') prepareShade();
@@ -3087,13 +3831,17 @@ byId('screen').addEventListener('pointerup', (e) => {
   // Bottom edge, upwards: home. Held for a moment first: the app switcher. That pause is
   // the whole difference between the two gestures on a real phone.
   if (gg.fromBottom && dy < -SWIPE) {
-    if (held > 320) openSwitcher(); else { closeOverlays(); goHome(); }
+    // A short flick goes home. A deliberate long pull (or a brief hold) exposes
+    // multitasking, which remains usable with both a mouse and a real touch screen.
+    if (held > 300 || -dy > SWITCHER_TRAVEL) openSwitcher();
+    else { closeOverlays(); goHome(); }
     return;
   }
 
   // Top edge, downwards: left half is the notification shade, right half the control
   // centre. Same split iOS uses, and it means neither one needs a button.
   if (gg.fromTop && dy > SWIPE) {
+    if (modalOverlayOpen()) return;
     if (gg.x0 < gg.w / 2) openShade(); else openCC();
     return;
   }
@@ -3226,7 +3974,8 @@ function renderShade() {
         '<span class="nbody"><span class="nt">' + esc(n.title) + '</span>' +
         '<span class="nb">' + esc(n.body) + '</span></span>' +
         '<span class="nw">' + esc(relTime(n.at)) + '</span>' +
-        '<button class="nx" data-x="' + n.id + '">' + svg('xmark') + '</button></div>').join('');
+        '<button class="nx" data-x="' + n.id + '" type="button" aria-label="' +
+          esc(L('ph.close')) + '">' + svg('xmark') + '</button></div>').join('');
     return '<div class="ngroup">' + head + cards + '</div>';
   }).join('');
 
@@ -3367,8 +4116,32 @@ function storeFacts(a) {
   };
 }
 
+function storePermissionLabel(permission) {
+  const key = 'ph.permission_' + permission;
+  const translated = L(key);
+  return translated === key
+    ? String(permission || '').replace(/[-_]/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase())
+    : translated;
+}
+
 function storePreview(a, index) {
   const name = esc(L(a.label));
+  if (a.id === 'cipher') {
+    const scenes = [
+      '<div class="stcipherseal">' + svg('lockshut') + '<span><b>' +
+        esc(L('ph.cipher_e2e')) + '</b><small>' + esc(L('ph.cipher_active')) + '</small></span></div>' +
+        '<div class="stcipherpeople"><i>R</i><span></span><i>Z</i></div>',
+      '<div class="stcipherchat"><i>' + esc(L('ph.cipher_packet')) + '</i><i></i><i></i>' +
+        '<b>' + svg('lockshut') + esc(L('ph.cipher_secure_session')) + '</b></div>',
+      '<div class="stcipherprint">' + svg('shield') + '<b>' + esc(L('ph.cipher_safety_number')) +
+        '</b><i>71 2B DC 90<br>44 18 AF 2E</i><small>' + esc(L('ph.cipher_verified')) + '</small></div>',
+    ];
+    return '<div class="stshot cipherstore">' +
+      '<div class="stshotbar"><span>9:41</span><i></i><i></i></div>' +
+      '<div class="stshotapp">' + UI.appIcon('cipher') + '<b>' + name + '</b></div>' +
+      scenes[index % scenes.length] +
+      '<div class="stcipherglow"></div></div>';
+  }
   const variant = ['feed', 'cards', 'dashboard'][index % 3];
   return '<div class="stshot ' + variant + '">' +
     '<div class="stshotbar"><span>9:41</span><i></i><i></i></div>' +
@@ -3388,10 +4161,13 @@ function storeDetail(a) {
   setNav(L('app.store'), L('app.store'), null, () => {
     RENDER.store();
   });
+  const features = (a.features || []).slice(0, 8);
+  const permissions = (a.permissions || []).slice(0, 10);
+  const detailStyle = a.accent ? ' style="--app-tint:' + esc(a.accent) + '"' : '';
   body(
-    '<div class="stdetailhero"><div class="storb"></div><div class="sthead">' + UI.appIcon(a.icon) +
+    '<div class="stdetail"' + detailStyle + '><div class="stdetailhero"><div class="storb"></div><div class="sthead">' + UI.appIcon(a.icon) +
       '<div class="stinfo"><div class="stbig">' + esc(L(a.label)) + '</div>' +
-      '<div class="stcat">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div>' +
+      '<div class="stcat">' + esc(a.developer || (a.owner === 'v-phone' ? 'iFruit Studio' : (a.owner || 'iFruit'))) + '</div>' +
       '<div class="stact">' +
         (a.required
           ? '<span class="stget have">' + esc(L('ph.store_required')) + '</span>'
@@ -3410,21 +4186,33 @@ function storeDetail(a) {
       [0, 1, 2].map((index) => storePreview(a, index)).join('') + '</div>' +
     '<div class="grouphead">' + esc(L('ph.about')) + '</div>' +
     '<div class="storedesc">' + esc(descOf(a)) + '</div>' +
+    (features.length
+      ? '<div class="grouphead">' + esc(L('ph.store_features')) + '</div>' +
+        '<div class="stfeatures">' + features.map((feature) =>
+          '<span>' + svg('check') + esc(feature) + '</span>').join('') + '</div>'
+      : '') +
     '<div class="stsectioncard"><div><span class="stcardicon">' + svg('sparkles') + '</span>' +
       '<span><b>' + esc(L('ph.store_whats_new')) + '</b><small>' +
         esc(L('ph.store_whats_new_body')) + '</small></span></div><em>v' + esc(facts.version) + '</em></div>' +
     '<div class="stprivacy"><div class="stprivacyicon">' + svg('lockshut') + '</div>' +
       '<div><b>' + esc(L('ph.store_privacy')) + '</b><span>' +
-        esc(L('ph.store_privacy_body')) + '</span></div>' + svg('chevron') + '</div>' +
+        esc(a.id === 'cipher' ? L('ph.cipher_server_blind') : L('ph.store_privacy_body')) +
+        '</span></div>' + svg('chevron') + '</div>' +
+    (permissions.length
+      ? '<div class="grouphead">' + esc(L('ph.store_permissions')) + '</div>' +
+        '<div class="stpermissions">' + permissions.map((permission) =>
+          UI.chip(storePermissionLabel(permission), 'permission')).join('') + '</div>'
+      : '') +
     '<div class="grouphead">' + esc(L('ph.store_information')) + '</div>' +
     '<div class="group stinfoRows">' +
-      UI.row({ title: L('ph.store_dev'), value: a.owner || 'iFruit' }) +
+      UI.row({ title: L('ph.store_dev'), value: a.developer || (a.owner === 'v-phone' ? 'iFruit Studio' : (a.owner || 'iFruit')) }) +
       UI.row({ title: L('ph.store_cat'), value: L('ph.cat_' + (a.category || 'utilities')) }) +
       UI.row({ title: L('ph.store_version'), value: facts.version }) +
       UI.row({ title: L('ph.store_compatibility'), value: L('ph.store_phone_ready') }) +
-    '</div>'
+    '</div></div>'
   );
   pushAnim();
+  byId('appbody').scrollTop = 0;
 
   const so = byId('stopen');
   if (so) so.addEventListener('click', () => {
@@ -3535,7 +4323,10 @@ RENDER.store = () => {
 
   const paint = (q) => {
     const shown = storeCat === 'all' ? all : all.filter((a) => (a.category || 'utilities') === storeCat);
-    const list = q ? all.filter((a) => L(a.label).toLowerCase().includes(q)) : shown;
+    const list = q ? all.filter((a) => [
+      L(a.label), descOf(a), a.developer, a.owner, a.category,
+      ...(a.keywords || []), ...(a.features || []),
+    ].filter(Boolean).join(' ').toLowerCase().includes(q)) : shown;
     let html = '';
 
     // Recomputed on every paint, never captured once: installing the featured app used to
@@ -3920,12 +4711,711 @@ function onSearch(fn) {
 // ══ Tab bar ════════════════════════════════════════════════════
 function tabbar(tabs, current, onPick) {
   foot('<div class="tabbar">' + tabs.map((t) =>
-    '<button class="' + (t.id === current ? 'on' : '') + '" data-t="' + esc(t.id) + '" type="button">' +
+    '<button class="' + (t.id === current ? 'on' : '') + '" data-t="' + esc(t.id) + '" type="button" ' +
+    'aria-current="' + (t.id === current ? 'page' : 'false') + '">' +
     svg(t.icon) + '<span>' + esc(L(t.label)) + '</span></button>').join('') + '</div>');
   [...byId('appfoot').querySelectorAll('button')].forEach((b) =>
     b.addEventListener('click', () => onPick(b.dataset.t)));
 }
 
+
+// ══ Cipher ═════════════════════════════════════════════════════
+// Cipher is different from the ordinary Messages app: the browser creates the key pair,
+// stores only an encrypted private key locally and gives Lua the public half. Every body
+// reaches the server as an AES-GCM envelope, so notification previews intentionally say
+// only that a packet arrived.
+const CIPHER_TEXT = new TextEncoder();
+const CIPHER_VAULT_VERSION = 1;
+
+const cipherActive = () => !!openApp && openApp.id === 'cipher';
+const cipherVaultName = () => 'vphone:cipher:v1:' + String(state.number || 'unknown');
+
+function cipherToB64(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary);
+}
+
+function cipherFromB64(value) {
+  const binary = atob(String(value || ''));
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
+
+function cipherVaultRead() {
+  try {
+    const value = localStorage.getItem(cipherVaultName());
+    return value ? JSON.parse(value) : null;
+  } catch {
+    return null;
+  }
+}
+
+function cipherVaultWrite(value) {
+  try {
+    localStorage.setItem(cipherVaultName(), JSON.stringify(value));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function cipherVaultRemove() {
+  try { localStorage.removeItem(cipherVaultName()); } catch { /* local vault unavailable */ }
+}
+
+async function cipherPinKey(pin, salt) {
+  const base = await crypto.subtle.importKey(
+    'raw', CIPHER_TEXT.encode(String(pin)), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({
+    name: 'PBKDF2',
+    salt,
+    iterations: 180000,
+    hash: 'SHA-256',
+  }, base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+async function cipherNewKeys(pin, handle) {
+  if (!globalThis.crypto || !globalThis.crypto.subtle) throw new Error('unsupported');
+  const pair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+  const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+  const privateJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
+  const publicKey = JSON.stringify(publicJwk);
+  const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', CIPHER_TEXT.encode(publicKey)));
+  const fingerprint = Array.from(
+    digest.slice(0, 16),
+    (byte) => byte.toString(16).padStart(2, '0').toUpperCase()
+  ).join(':');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const wrappingKey = await cipherPinKey(pin, salt);
+  const wrapped = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, wrappingKey, CIPHER_TEXT.encode(JSON.stringify(privateJwk)));
+  return {
+    privateKey: pair.privateKey,
+    publicKey,
+    fingerprint,
+    vault: {
+      v: CIPHER_VAULT_VERSION,
+      handle,
+      salt: cipherToB64(salt),
+      iv: cipherToB64(iv),
+      data: cipherToB64(wrapped),
+    },
+  };
+}
+
+async function cipherOpenVault(pin, expectedHandle) {
+  const vault = cipherVaultRead();
+  if (!vault || Number(vault.v) !== CIPHER_VAULT_VERSION) throw new Error('nokey');
+  if (expectedHandle && vault.handle !== expectedHandle) throw new Error('wrongkey');
+  const key = await cipherPinKey(pin, cipherFromB64(vault.salt));
+  const clear = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: cipherFromB64(vault.iv) }, key, cipherFromB64(vault.data));
+  const jwk = JSON.parse(new TextDecoder().decode(clear));
+  return crypto.subtle.importKey(
+    'jwk', jwk, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+}
+
+async function cipherConversationKey(peer) {
+  const publicJwk = JSON.parse(peer.publicKey);
+  const publicKey = await crypto.subtle.importKey(
+    'jwk', publicJwk, { name: 'ECDH', namedCurve: 'P-256' }, false, []);
+  const shared = await crypto.subtle.deriveBits(
+    { name: 'ECDH', public: publicKey }, cipherPrivateKey, 256);
+  const material = await crypto.subtle.importKey('raw', shared, 'HKDF', false, ['deriveKey']);
+  const fingerprints = [cipherProfile.fingerprint, peer.fingerprint].sort().join('|');
+  return crypto.subtle.deriveKey({
+    name: 'HKDF',
+    hash: 'SHA-256',
+    salt: CIPHER_TEXT.encode('iFruit Cipher v1'),
+    info: CIPHER_TEXT.encode(fingerprints),
+  }, material, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+
+async function cipherEncrypt(peer, text) {
+  if (cipherDemo) return JSON.stringify({ v: 1, iv: 'demo', data: 'demo', plain: text });
+  const key = await cipherConversationKey(peer);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const payload = JSON.stringify({ text, sentAt: Date.now() });
+  const data = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv }, key, CIPHER_TEXT.encode(payload));
+  return JSON.stringify({ v: 1, iv: cipherToB64(iv), data: cipherToB64(data) });
+}
+
+async function cipherDecrypt(peer, envelope) {
+  try {
+    const packed = typeof envelope === 'string' ? JSON.parse(envelope) : envelope;
+    if (cipherDemo && typeof packed.plain === 'string') return packed.plain;
+    if (!packed || Number(packed.v) !== 1) throw new Error('version');
+    const key = await cipherConversationKey(peer);
+    const clear = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: cipherFromB64(packed.iv) }, key, cipherFromB64(packed.data));
+    const payload = JSON.parse(new TextDecoder().decode(clear));
+    return String(payload.text || '');
+  } catch {
+    return L('ph.cipher_unreadable');
+  }
+}
+
+function cipherError(result) {
+  const code = String((result && result.error) || 'x');
+  const specific = L('ph.cipher_err_' + code);
+  return specific !== 'ph.cipher_err_' + code ? specific : L('ph.err_' + code);
+}
+
+function cipherTime(value) {
+  if (!value) return '';
+  const parsed = new Date(String(value).replace(' ', 'T'));
+  if (Number.isNaN(parsed.getTime())) return String(value).slice(11, 16);
+  return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function cipherInitial(peer) {
+  return esc(String(peer.displayName || peer.handle || '?').trim().charAt(0).toUpperCase());
+}
+
+function cipherBurnLabel(seconds) {
+  if (Number(seconds) === 300) return L('ph.cipher_burn_5m');
+  if (Number(seconds) === 3600) return L('ph.cipher_burn_1h');
+  if (Number(seconds) === 86400) return L('ph.cipher_burn_1d');
+  return L('ph.cipher_burn_off');
+}
+
+function cipherWelcome() {
+  setNav(L('app.cipher'), null);
+  foot('');
+  body(
+    '<section class="cipherwelcome">' +
+      '<div class="ciphermark">' + UI.appIcon('cipher') + '<i></i></div>' +
+      '<div class="cipherkicker">' + esc(L('ph.cipher_private_network')) + '</div>' +
+      '<h1>' + esc(L('ph.cipher_welcome')) + '</h1>' +
+      '<p>' + esc(L('ph.cipher_welcome_hint')) + '</p>' +
+      '<div class="cipherproof"><span>' + svg('lockshut') + '</span><div><b>' +
+        esc(L('ph.cipher_e2e')) + '</b><small>' + esc(L('ph.cipher_e2e_hint')) +
+      '</small></div></div>' +
+    '</section>' +
+    '<div class="cipherform">' +
+      UI.field('cipherhandle', L('ph.cipher_handle'), '', 'maxlength="20" autocapitalize="none" spellcheck="false"') +
+      UI.field('ciphername', L('ph.cipher_codename'), '', 'maxlength="32"') +
+      UI.field('cipherpin', L('ph.cipher_pin'), '', 'type="password" maxlength="6" inputmode="numeric" autocomplete="new-password"') +
+      UI.field('cipherpin2', L('ph.cipher_pin_confirm'), '', 'type="password" maxlength="6" inputmode="numeric" autocomplete="new-password"') +
+      UI.button(L('ph.cipher_create'), 'ciphercreate') +
+      '<div class="cipherfine">' + esc(L('ph.cipher_pin_hint')) + '</div>' +
+    '</div>'
+  );
+  byId('ciphercreate').addEventListener('click', async () => {
+    const handle = byId('cipherhandle').value.trim().toLowerCase().replace(/^@/, '');
+    const displayName = byId('ciphername').value.trim();
+    const pin = byId('cipherpin').value;
+    if (!/^[a-z0-9_]{3,20}$/.test(handle)) { toast(L('ph.cipher_err_handle')); return; }
+    if (!displayName) { toast(L('ph.cipher_err_fields')); return; }
+    if (!/^\d{6}$/.test(pin)) { toast(L('ph.cipher_err_pin')); return; }
+    if (pin !== byId('cipherpin2').value) { toast(L('ph.cipher_pin_mismatch')); return; }
+    const button = byId('ciphercreate');
+    button.disabled = true;
+    button.textContent = L('ph.cipher_generating');
+    try {
+      const keys = await cipherNewKeys(pin, handle);
+      const result = await post('cipher', {
+        op: 'create',
+        handle,
+        displayName,
+        pin,
+        publicKey: keys.publicKey,
+        fingerprint: keys.fingerprint,
+      });
+      if (!cipherActive()) return;
+      if (!result || !result.ok) {
+        button.disabled = false;
+        button.textContent = L('ph.cipher_create');
+        toast(cipherError(result));
+        return;
+      }
+      if (!cipherVaultWrite(keys.vault)) {
+        button.disabled = false;
+        button.textContent = L('ph.cipher_create');
+        toast(L('ph.cipher_err_storage'));
+        return;
+      }
+      cipherPrivateKey = keys.privateKey;
+      cipherProfile = result.profile;
+      cipherDemo = result.demo === true;
+      toast(L('ph.cipher_identity_ready'));
+      cipherMain();
+    } catch {
+      button.disabled = false;
+      button.textContent = L('ph.cipher_create');
+      toast(L('ph.cipher_err_crypto'));
+    }
+  });
+}
+
+function cipherLockScreen(profile) {
+  setNav(L('app.cipher'), null);
+  foot('');
+  const storedVault = cipherVaultRead();
+  const hasVault = !!storedVault && storedVault.handle === profile.handle;
+  body(
+    '<section class="cipherunlock">' +
+      '<div class="cipherring"><span>' + svg('lockshut') + '</span><i></i></div>' +
+      '<div class="cipherkicker">@' + esc(profile.handle) + '</div>' +
+      '<h1>' + esc(L('ph.cipher_locked')) + '</h1>' +
+      '<p>' + esc(hasVault ? L('ph.cipher_unlock_hint') : L('ph.cipher_key_missing')) + '</p>' +
+    '</section>' +
+    (hasVault
+      ? '<div class="cipherform">' +
+          UI.field('cipherunlockpin', L('ph.cipher_pin'), '', 'type="password" maxlength="6" inputmode="numeric" autocomplete="current-password"') +
+          UI.button(L('ph.cipher_unlock'), 'cipherunlock') +
+          '<button class="cipherlink" id="cipherrecover" type="button">' +
+            esc(L('ph.cipher_recover')) + '</button></div>'
+      : '<div class="cipherform">' +
+          UI.button(L('ph.cipher_recover'), 'cipherrecover', 'tinted') +
+          '<div class="cipherfine">' + esc(L('ph.cipher_recover_hint')) + '</div></div>')
+  );
+  const unlock = byId('cipherunlock');
+  if (unlock) {
+    byId('cipherunlockpin').focus();
+    unlock.addEventListener('click', async () => {
+      const pin = byId('cipherunlockpin').value;
+      unlock.disabled = true;
+      try {
+        const privateKey = await cipherOpenVault(pin, profile.handle);
+        const result = await post('cipher', { op: 'unlock', pin });
+        if (!cipherActive()) return;
+        if (!result || !result.ok) {
+          unlock.disabled = false;
+          toast(cipherError(result));
+          return;
+        }
+        cipherPrivateKey = privateKey;
+        cipherProfile = result.profile;
+        cipherDemo = result.demo === true;
+        cipherMain();
+      } catch {
+        unlock.disabled = false;
+        toast(L('ph.cipher_err_badpin'));
+      }
+    });
+  }
+  byId('cipherrecover').addEventListener('click', () => cipherRecovery(profile));
+}
+
+function cipherRecovery(profile) {
+  setNav(L('ph.cipher_recover_title'), L('app.cipher'), null, () => cipherLockScreen(profile));
+  foot('');
+  body(
+    '<section class="cipherdangerintro">' +
+      '<span>' + svg('shield') + '</span><h1>' + esc(L('ph.cipher_new_key')) + '</h1>' +
+      '<p>' + esc(L('ph.cipher_new_key_hint')) + '</p>' +
+    '</section>' +
+    '<div class="cipherform">' +
+      UI.field('cipherrotatepin', L('ph.cipher_pin'), '', 'type="password" maxlength="6" inputmode="numeric"') +
+      UI.button(L('ph.cipher_replace_key'), 'cipherrotate', 'destructive') +
+    '</div>'
+  );
+  byId('cipherrotate').addEventListener('click', async () => {
+    const pin = byId('cipherrotatepin').value;
+    if (!/^\d{6}$/.test(pin)) { toast(L('ph.cipher_err_pin')); return; }
+    const button = byId('cipherrotate');
+    button.disabled = true;
+    try {
+      const keys = await cipherNewKeys(pin, profile.handle);
+      const result = await post('cipher', {
+        op: 'rotate',
+        pin,
+        publicKey: keys.publicKey,
+        fingerprint: keys.fingerprint,
+      });
+      if (!cipherActive()) return;
+      if (!result || !result.ok) {
+        button.disabled = false;
+        toast(cipherError(result));
+        return;
+      }
+      if (!cipherVaultWrite(keys.vault)) {
+        button.disabled = false;
+        toast(L('ph.cipher_err_storage'));
+        return;
+      }
+      cipherPrivateKey = keys.privateKey;
+      cipherProfile = result.profile;
+      cipherDemo = result.demo === true;
+      toast(L('ph.cipher_key_replaced'));
+      cipherMain();
+    } catch {
+      button.disabled = false;
+      toast(L('ph.cipher_err_crypto'));
+    }
+  });
+}
+
+function cipherConversationRow(conversation, preview) {
+  const peer = conversation.peer;
+  return '<button class="cipherrow" data-handle="' + esc(peer.handle) + '" type="button">' +
+    '<span class="cipheravatar">' + cipherInitial(peer) + '<i></i></span>' +
+    '<span class="cipherrowmain"><span><b>' + esc(peer.displayName || peer.handle) + '</b>' +
+      '<time>' + esc(cipherTime(conversation.at)) + '</time></span>' +
+      '<small>' + svg('lockshut') + esc(preview) + '</small></span>' +
+    (Number(conversation.unread) > 0
+      ? '<span class="cipherbadge">' + Math.min(99, Number(conversation.unread)) + '</span>' : '') +
+  '</button>';
+}
+
+async function cipherMain() {
+  if (!cipherActive() || !cipherProfile || !cipherPrivateKey) return;
+  const epoch = viewEpoch;
+  cipherThread = null;
+  foot('');
+  setNav(L('app.cipher'), null, { icon: 'add', label: L('ph.cipher_new_chat'), onClick: cipherNewChat });
+  loading();
+  const result = await post('cipher', { op: 'list' });
+  if (!cipherActive() || epoch !== viewEpoch) return;
+  if (!result || !result.ok) { body(UI.empty(cipherError(result), 'cipher')); return; }
+  state.cipherUnread = Number(result.unread || 0);
+  const conversations = result.conversations || [];
+  const previews = await Promise.all(conversations.map((conversation) =>
+    cipherDecrypt(conversation.peer, conversation.envelope)));
+  if (!cipherActive() || epoch !== viewEpoch) return;
+  body(
+    '<section class="cipherhomehero">' +
+      '<div class="cipherorb"><span>' + svg('cipher') + '</span><i></i></div>' +
+      '<div><div class="cipheronline"><i></i>' + esc(L('ph.cipher_network_live')) + '</div>' +
+        '<h1>' + esc(cipherProfile.displayName || cipherProfile.handle) + '</h1>' +
+        '<small>@' + esc(cipherProfile.handle) + '</small></div>' +
+      '<button id="ciphersettings" type="button" aria-label="' + esc(L('ph.cipher_security')) + '">' +
+        svg('settings') + '</button>' +
+    '</section>' +
+    '<div class="cipherseal">' + svg('lockshut') + '<span><b>' + esc(L('ph.cipher_e2e')) +
+      '</b><small>' + esc(L('ph.cipher_server_blind')) + '</small></span><i>' +
+      esc(L('ph.cipher_active')) + '</i></div>' +
+    (conversations.length
+      ? '<div class="ciphersectiontitle">' + esc(L('ph.cipher_chats')) + '</div>' +
+        '<div class="cipherlist">' + conversations.map((conversation, index) =>
+          cipherConversationRow(conversation, previews[index])).join('') + '</div>'
+      : '<div class="cipherempty">' + svg('cipher') + '<h2>' + esc(L('ph.cipher_no_chats')) +
+        '</h2><p>' + esc(L('ph.cipher_no_chats_hint')) + '</p>' +
+        '<button id="cipherfirst" type="button">' + esc(L('ph.cipher_start')) + '</button></div>')
+  );
+  byId('ciphersettings').addEventListener('click', cipherSettings);
+  const first = byId('cipherfirst');
+  if (first) first.addEventListener('click', cipherNewChat);
+  rows('.cipherrow', (row) => row.addEventListener('click', () => {
+    const conversation = conversations.find((item) => item.peer.handle === row.dataset.handle);
+    if (conversation) cipherOpenThread(conversation.peer);
+  }));
+}
+
+function cipherNewChat() {
+  sheet(L('ph.cipher_new_chat'),
+    '<div class="ciphersearchhead"><span>' + svg('search') + '</span>' +
+      UI.field('cipherquery', L('ph.cipher_find_handle'), '', 'maxlength="20" autocapitalize="none" spellcheck="false"') +
+    '</div><div class="cipherresults" id="cipherresults">' +
+      '<div class="ciphersearchhint">' + esc(L('ph.cipher_find_hint')) + '</div></div>',
+    () => {
+      let timer = 0;
+      const input = byId('cipherquery');
+      const search = async () => {
+        const query = input.value.trim().toLowerCase().replace(/^@/, '');
+        if (query.length < 2) {
+          byId('cipherresults').innerHTML =
+            '<div class="ciphersearchhint">' + esc(L('ph.cipher_find_hint')) + '</div>';
+          return;
+        }
+        const result = await post('cipher', { op: 'lookup', query });
+        if (!result || !result.ok || !byId('cipherresults')) return;
+        const list = result.results || [];
+        byId('cipherresults').innerHTML = list.length
+          ? list.map((peer) => '<button class="cipherresult" data-handle="' + esc(peer.handle) +
+              '" type="button"><span>' + cipherInitial(peer) + '</span><div><b>' +
+              esc(peer.displayName || peer.handle) + '</b><small>@' + esc(peer.handle) +
+              '</small></div>' + svg('chevron') + '</button>').join('')
+          : '<div class="ciphersearchhint">' + esc(L('ph.cipher_no_user')) + '</div>';
+        [...byId('cipherresults').querySelectorAll('.cipherresult')].forEach((button) =>
+          button.addEventListener('click', () => {
+            const peer = list.find((item) => item.handle === button.dataset.handle);
+            if (!peer) return;
+            closeSheet();
+            cipherOpenThread(peer);
+          }));
+      };
+      input.addEventListener('input', () => {
+        clearTimeout(timer);
+        timer = setTimeout(search, 230);
+      });
+      input.focus();
+    });
+}
+
+function cipherMessageHtml(message) {
+  return '<button class="cipherbubble ' + (message.mine ? 'mine' : 'theirs') +
+    '" data-id="' + esc(message.id || '') + '" type="button"><span>' +
+      esc(message.text || L('ph.cipher_unreadable')) + '</span><small>' +
+      svg('lockshut') + esc(cipherTime(message.at)) +
+      (Number(message.burn) > 0 ? ' · ' + esc(cipherBurnLabel(message.burn)) : '') +
+    '</small></button>';
+}
+
+async function cipherOpenThread(peer) {
+  if (!cipherActive()) return;
+  beginView();
+  const epoch = viewEpoch;
+  cipherThread = peer;
+  setNav(peer.displayName || peer.handle, L('app.cipher'), {
+    icon: 'shield',
+    label: L('ph.cipher_verify'),
+    onClick: () => cipherPeerInfo(peer),
+  }, () => {
+    cipherThread = null;
+    cipherMain();
+  });
+  foot('');
+  loading();
+  const result = await post('cipher', { op: 'thread', handle: peer.handle });
+  if (!cipherActive() || epoch !== viewEpoch) return;
+  if (!result || !result.ok) { body(UI.empty(cipherError(result), 'cipher')); return; }
+  peer = result.peer || peer;
+  cipherThread = peer;
+  state.cipherUnread = Number(result.unread || 0);
+  const messages = await Promise.all((result.messages || []).map(async (message) =>
+    Object.assign({}, message, { text: await cipherDecrypt(peer, message.envelope) })));
+  if (!cipherActive() || epoch !== viewEpoch) return;
+  body(
+    '<div class="cipherhandshake"><span>' + svg('lockshut') + '</span><div><b>' +
+      esc(L('ph.cipher_secure_session')) + '</b><small>' +
+      esc(L('ph.cipher_secure_session_hint')) + '</small></div></div>' +
+    '<div class="cipherthread" id="cipherthread">' +
+      (messages.length
+        ? messages.map(cipherMessageHtml).join('')
+        : '<div class="cipherthreadempty">' + esc(L('ph.cipher_first_message')) + '</div>') +
+    '</div>'
+  );
+  foot(
+    '<div class="ciphercompose">' +
+      '<button class="cipherburn ' + (cipherBurn ? 'on' : '') + '" id="cipherburn" type="button">' +
+        svg('timer') + '<span>' + esc(cipherBurnLabel(cipherBurn)) + '</span></button>' +
+      UI.field('ciphermessage', L('ph.cipher_write'), '', 'maxlength="700" autocomplete="off"') +
+      '<button class="ciphersend" id="ciphersend" type="button" aria-label="' +
+        esc(L('ph.send')) + '">' + svg('send') + '</button>' +
+    '</div>'
+  );
+  const threadHost = byId('cipherthread');
+  byId('appbody').scrollTop = byId('appbody').scrollHeight;
+  byId('cipherburn').addEventListener('click', () => cipherBurnSheet(() => cipherOpenThread(peer)));
+  const send = async () => {
+    const input = byId('ciphermessage');
+    const text = input.value.trim();
+    if (!text) return;
+    const button = byId('ciphersend');
+    button.disabled = true;
+    try {
+      const envelope = await cipherEncrypt(peer, text);
+      const sent = await post('cipher', { op: 'send', handle: peer.handle, envelope, burn: cipherBurn });
+      if (!cipherActive() || cipherThread?.handle !== peer.handle) return;
+      button.disabled = false;
+      if (!sent || !sent.ok) { toast(cipherError(sent)); return; }
+      input.value = '';
+      const message = Object.assign({}, sent.message || {}, { mine: true, text, burn: cipherBurn });
+      const empty = threadHost.querySelector('.cipherthreadempty');
+      if (empty) empty.remove();
+      threadHost.insertAdjacentHTML('beforeend', cipherMessageHtml(message));
+      byId('appbody').scrollTop = byId('appbody').scrollHeight;
+      wireCipherMessageInfo(peer);
+    } catch {
+      button.disabled = false;
+      toast(L('ph.cipher_err_crypto'));
+    }
+  };
+  byId('ciphersend').addEventListener('click', send);
+  byId('ciphermessage').addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); send(); }
+  });
+  wireCipherMessageInfo(peer);
+}
+
+function wireCipherMessageInfo(peer) {
+  rows('.cipherbubble', (bubble) => {
+    bubble.onclick = () => sheet(L('ph.cipher_message_info'),
+      '<div class="ciphermessageinfo"><span>' + svg('lockshut') + '</span><b>' +
+        esc(L('ph.cipher_encrypted')) + '</b><p>' + esc(L('ph.cipher_encrypted_hint')) +
+      '</p></div>' +
+      UI.group([
+        UI.row({ title: L('ph.cipher_recipient'), value: '@' + peer.handle }),
+        UI.row({ title: L('ph.cipher_delivery'), value: L('ph.cipher_delivered') }),
+      ]));
+  });
+}
+
+function cipherBurnSheet(done) {
+  const options = [0, 300, 3600, 86400];
+  sheet(L('ph.cipher_disappearing'),
+    '<div class="cipherburnoptions">' + options.map((seconds) =>
+      '<button class="' + (cipherBurn === seconds ? 'on' : '') + '" data-seconds="' + seconds +
+      '" type="button"><span>' + svg(seconds ? 'timer' : 'xmark') + '</span><div><b>' +
+      esc(cipherBurnLabel(seconds)) + '</b><small>' +
+      esc(seconds ? L('ph.cipher_burn_hint') : L('ph.cipher_burn_keep')) +
+      '</small></div>' + (cipherBurn === seconds ? svg('check') : '') + '</button>').join('') +
+    '</div>',
+    () => {
+      [...byId('sheet').querySelectorAll('[data-seconds]')].forEach((button) =>
+        button.addEventListener('click', () => {
+          cipherBurn = Number(button.dataset.seconds);
+          closeSheet();
+          if (done) done();
+        }));
+    });
+}
+
+function cipherPeerInfo(peer) {
+  sheet(L('ph.cipher_verify'),
+    '<div class="cipherverify">' +
+      '<div class="cipheravatar large">' + cipherInitial(peer) + '<i></i></div>' +
+      '<h2>' + esc(peer.displayName || peer.handle) + '</h2><small>@' + esc(peer.handle) + '</small>' +
+      '<div class="cipherverified">' + svg('check') + esc(L('ph.cipher_verified')) + '</div>' +
+    '</div>' +
+    '<div class="grouphead">' + esc(L('ph.cipher_safety_number')) + '</div>' +
+    '<div class="cipherfingerprint">' + esc(peer.fingerprint || '') + '</div>' +
+    '<div class="groupfoot">' + esc(L('ph.cipher_verify_hint')) + '</div>' +
+    UI.button(L('ph.cipher_clear_chat'), 'cipherclear', 'destructive'),
+    () => {
+      byId('cipherclear').addEventListener('click', async () => {
+        const result = await post('cipher', { op: 'clear', handle: peer.handle });
+        if (result && result.ok) {
+          closeSheet();
+          cipherOpenThread(peer);
+          toast(L('ph.cipher_cleared'));
+        } else toast(cipherError(result));
+      });
+    });
+}
+
+function cipherSettings() {
+  sheet(L('ph.cipher_security'),
+    '<div class="cipherprofile">' +
+      '<div class="cipheravatar large">' + cipherInitial(cipherProfile) + '<i></i></div>' +
+      '<h2>' + esc(cipherProfile.displayName || cipherProfile.handle) + '</h2>' +
+      '<small>@' + esc(cipherProfile.handle) + '</small></div>' +
+    UI.field('cipherdisplay', L('ph.cipher_codename'), cipherProfile.displayName || '', 'maxlength="32"') +
+    UI.button(L('ph.save'), 'ciphersave', 'tinted') +
+    '<div class="grouphead">' + esc(L('ph.cipher_your_fingerprint')) + '</div>' +
+    '<div class="cipherfingerprint">' + esc(cipherProfile.fingerprint || '') + '</div>' +
+    '<div class="ciphersecurityactions">' +
+      '<button id="cipherlock" type="button">' + svg('lockshut') + '<span><b>' +
+        esc(L('ph.cipher_lock_now')) + '</b><small>' + esc(L('ph.cipher_lock_now_hint')) +
+      '</small></span>' + svg('chevron') + '</button>' +
+      '<button class="danger" id="cipherdestroy" type="button">' + svg('trash') + '<span><b>' +
+        esc(L('ph.cipher_destroy')) + '</b><small>' + esc(L('ph.cipher_destroy_hint')) +
+      '</small></span>' + svg('chevron') + '</button>' +
+    '</div>',
+    () => {
+      byId('ciphersave').addEventListener('click', async () => {
+        const result = await post('cipher', { op: 'profile', displayName: byId('cipherdisplay').value.trim() });
+        if (result && result.ok) {
+          cipherProfile = result.profile;
+          closeSheet();
+          cipherMain();
+        } else toast(cipherError(result));
+      });
+      byId('cipherlock').addEventListener('click', async () => {
+        await post('cipher', { op: 'logout' });
+        cipherPrivateKey = null;
+        closeSheet();
+        cipherLockScreen(cipherProfile);
+      });
+      byId('cipherdestroy').addEventListener('click', cipherDestroy);
+    });
+}
+
+function cipherDestroy() {
+  const priorReturn = sheetReturn;
+  sheet(L('ph.cipher_destroy'),
+    '<div class="cipherdangerintro compact"><span>' + svg('trash') + '</span><h1>' +
+      esc(L('ph.cipher_destroy_confirm')) + '</h1><p>' +
+      esc(L('ph.cipher_destroy_confirm_hint')) + '</p></div>' +
+    UI.field('cipherdestroypin', L('ph.cipher_pin'), '', 'type="password" maxlength="6" inputmode="numeric"') +
+    UI.button(L('ph.cipher_destroy_action'), 'cipherdestroygo', 'destructive'),
+    () => {
+      sheetReturn = priorReturn;
+      byId('cipherdestroygo').addEventListener('click', async () => {
+        const result = await post('cipher', { op: 'destroy', pin: byId('cipherdestroypin').value });
+        if (!result || !result.ok) { toast(cipherError(result)); return; }
+        cipherVaultRemove();
+        cipherPrivateKey = null;
+        cipherProfile = null;
+        cipherDemo = false;
+        closeSheet();
+        cipherWelcome();
+      });
+    });
+}
+
+async function cipherReceive(packet) {
+  if (!(state.apps || []).some((app) => app.id === 'cipher')) return;
+  state.cipherUnread = Number(state.cipherUnread || 0) + 1;
+  const sender = packet && packet.from;
+  if (cipherActive() && cipherPrivateKey && sender && cipherThread?.handle === sender.handle) {
+    const text = await cipherDecrypt(sender, packet.envelope);
+    if (!cipherActive() || cipherThread?.handle !== sender.handle) return;
+    const host = byId('cipherthread');
+    if (host) {
+      const empty = host.querySelector('.cipherthreadempty');
+      if (empty) empty.remove();
+      host.insertAdjacentHTML('beforeend', cipherMessageHtml({
+        id: packet.id,
+        mine: false,
+        text,
+        burn: packet.burn,
+        at: packet.at,
+      }));
+      byId('appbody').scrollTop = byId('appbody').scrollHeight;
+      wireCipherMessageInfo(sender);
+    }
+    return;
+  }
+  banner({
+    app: 'cipher',
+    icon: 'cipher',
+    title: sender?.displayName || sender?.handle || L('app.cipher'),
+    body: L('ph.cipher_packet'),
+    onClick: () => {
+      const app = (state.apps || []).find((item) => item.id === 'cipher');
+      if (!app) return;
+      enterApp(app, null);
+    },
+  });
+  if (!openApp) renderHome();
+}
+
+RENDER.cipher = async () => {
+  setNav(L('app.cipher'), null);
+  foot('');
+  loading();
+  const result = await post('cipher', { op: 'me' });
+  if (!cipherActive()) return;
+  if (!result || result.error) { body(UI.empty(cipherError(result), 'cipher')); return; }
+  cipherDemo = result.demo === true;
+  if (!result.exists || !result.profile) {
+    cipherProfile = null;
+    cipherPrivateKey = null;
+    cipherWelcome();
+    return;
+  }
+  cipherProfile = result.profile;
+  if (cipherDemo) {
+    cipherPrivateKey = { demo: true };
+    cipherMain();
+    return;
+  }
+  if (result.unlocked && cipherPrivateKey) {
+    cipherMain();
+    return;
+  }
+  cipherPrivateKey = null;
+  cipherLockScreen(result.profile);
+};
 
 // ══ Social ═════════════════════════════════════════════════════
 // Three views over v-social. The account gate is shared: none of them work without a
@@ -4195,8 +5685,10 @@ async function hushMain() {
       (pf.bio ? '<div class="hbio">' + esc(pf.bio) + '</div>' : '') +
     '</div>' +
     '<div class="hushrow">' +
-      '<button class="hushbtn no" id="hno" type="button">' + svg('del') + '</button>' +
-      '<button class="hushbtn yes" id="hyes" type="button">' + svg('heart') + '</button>' +
+      '<button class="hushbtn no" id="hno" type="button" aria-label="' +
+        esc(L('ph.pass')) + '">' + svg('del') + '</button>' +
+      '<button class="hushbtn yes" id="hyes" type="button" aria-label="' +
+        esc(L('ph.like')) + '">' + svg('heart') + '</button>' +
     '</div>'
   );
   pushAnim();
@@ -4466,10 +5958,14 @@ byId('emojipanel').addEventListener('pointerup', (e) => {
   if (emojiDragY != null && e.clientY - emojiDragY > 38) emojiClose();
   emojiDragY = null;
 });
+byId('emojipanel').addEventListener('pointercancel', () => {
+  emojiDragY = null;
+});
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 let sheetReturn = null;
 let sheetEpoch = 0;
+let sheetCancel = null;
 const promptQueue = [];
 let activePrompt = false;
 let promptExpiryTimer = null;
@@ -4506,6 +6002,11 @@ function enqueuePrompt(show, ttlMs) {
 }
 
 function sheet(title, html, after, variant) {
+  if (sheetCancel) {
+    const cancel = sheetCancel;
+    sheetCancel = null;
+    cancel();
+  }
   sheetEpoch += 1;
   sheetReturn = null;
   byId('sheet').dataset.variant = variant || '';
@@ -4523,6 +6024,11 @@ function closeSheet(force, expectedEpoch) {
     sheetReturn = null;
     restore();
     return true;
+  }
+  if (sheetCancel) {
+    const cancel = sheetCancel;
+    sheetCancel = null;
+    cancel();
   }
   sheetReturn = null;
   const sheetHost = byId('sheet');
@@ -4601,6 +6107,9 @@ function banner(b) {
   notifs = notifs.slice(0, 40);
   paintNotifs();
   if (byId('shade').classList.contains('on')) renderShade();
+  // First-run setup is intentionally distraction-free. Keep the notification in the
+  // centre so it is not lost, but do not cover the assistant or play its alert.
+  if (byId('setup').classList.contains('on')) return;
   // Focus keeps a quiet history in Notification Centre without lighting the island.
   if ((state.prefs || {}).dnd) return;
   playAlert();
@@ -4652,7 +6161,7 @@ function paintNotifs() {
       `<span class="lic">${UI.appIcon(n.icon)}</span>` +
       `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
       `<span class="lb">${esc(n.body || '')}</span></span>` +
-      `<button class="lx" data-x="${n.id}" type="button">${svg('xmark')}</button></div>`).join('');
+      `<button class="lx" data-x="${n.id}" type="button" aria-label="${esc(L('ph.close'))}">${svg('xmark')}</button></div>`).join('');
 
   // Clear one, or clear the stack. A notification you have read is one you should be able
   // to get rid of without unlocking the phone first.
@@ -4742,8 +6251,8 @@ function renderCall() {
   }
 
   byId('callbtns').innerHTML =
-    (call.state === 'in' ? `<button class="cbtn ok" id="cans" type="button">${svg('answer')}</button>` : '') +
-    `<button class="cbtn no" id="chang" type="button">${svg('hangup')}</button>`;
+    (call.state === 'in' ? `<button class="cbtn ok" id="cans" type="button" aria-label="${esc(L('ph.answer'))}">${svg('answer')}</button>` : '') +
+    `<button class="cbtn no" id="chang" type="button" aria-label="${esc(L('ph.hangup'))}">${svg('hangup')}</button>`;
   const ans = byId('cans');
   if (ans) ans.addEventListener('click', () => post('answer'));
   byId('chang').addEventListener('click', () => post('hangup'));
@@ -4774,10 +6283,10 @@ function renderCC() {
   const p = state.prefs || {};
 
   byId('ccconn').innerHTML =
-    `<button class="ccbtn air ${p.airplane ? 'on' : ''}" data-t="airplane" type="button" aria-label="${esc(L('ph.airplane'))}">${svg('airplane')}</button>` +
-    `<button class="ccbtn cel ${p.cellular !== false && !p.airplane ? 'on' : ''}" data-t="cellular" type="button" aria-label="${esc(L('ph.cellular'))}">${svg('cell')}</button>` +
-    `<button class="ccbtn wif ${p.wifi !== false ? 'on' : ''}" data-t="wifi" type="button" aria-label="${esc(L('ph.wifi'))}">${svg('wifi')}</button>` +
-    `<button class="ccbtn blu ${p.bluetooth ? 'on' : ''}" data-t="bluetooth" type="button" aria-label="${esc(L('ph.bluetooth'))}">${svg('bt')}</button>`;
+    `<button class="ccbtn air ${p.airplane ? 'on' : ''}" data-t="airplane" type="button" aria-label="${esc(L('ph.airplane'))}" aria-pressed="${p.airplane ? 'true' : 'false'}">${svg('airplane')}</button>` +
+    `<button class="ccbtn cel ${p.cellular !== false && !p.airplane ? 'on' : ''}" data-t="cellular" type="button" aria-label="${esc(L('ph.cellular'))}" aria-pressed="${p.cellular !== false && !p.airplane ? 'true' : 'false'}">${svg('cell')}</button>` +
+    `<button class="ccbtn wif ${p.wifi !== false ? 'on' : ''}" data-t="wifi" type="button" aria-label="${esc(L('ph.wifi'))}" aria-pressed="${p.wifi !== false ? 'true' : 'false'}">${svg('wifi')}</button>` +
+    `<button class="ccbtn blu ${p.bluetooth ? 'on' : ''}" data-t="bluetooth" type="button" aria-label="${esc(L('ph.bluetooth'))}" aria-pressed="${p.bluetooth ? 'true' : 'false'}">${svg('bt')}</button>`;
   qrows('ccconn', '.ccbtn', (b) => b.addEventListener('click', () => toggleCC(b.dataset.t)));
 
   const m = ccNow;
@@ -4787,11 +6296,11 @@ function renderCC() {
       ? `<div class="nowmid"><span class="nowart">${svg('music')}</span>` +
           `<span style="min-width:0"><span class="nowt">${esc(m.title || L('ph.untitled'))}</span>` +
           `<span class="nows">${esc(L('ph.music_' + (m.kind || 'boombox')))}</span></span></div>` +
-        `<div class="nowbtns"><button data-n="toggle">${svg(m.paused ? 'play' : 'pause')}</button></div>`
+        `<div class="nowbtns"><button data-n="toggle" type="button" aria-label="${esc(L(m.paused ? 'ph.resume' : 'ph.pause'))}">${svg(m.paused ? 'play' : 'pause')}</button></div>`
       : `<div class="nowmid"><span class="nowart">${svg('music')}</span>` +
           `<span class="nows">${esc(L('ph.nothing_playing'))}</span></div>`);
   if (m) byId('ccnow').querySelector('[data-n="toggle"]').addEventListener('click', async () => {
-    await post('music', { id: m.id, action: m.paused ? 'play' : 'pause' });
+    await post('music', { id: m.id, action: m.paused ? 'resume' : 'pause' });
     m.paused = !m.paused; renderCC();
   });
 
@@ -4802,13 +6311,24 @@ function renderCC() {
     `<div class="fill" style="height:${Math.round(volume * 100)}%"></div><div class="gl">${svg('speaker')}</div>`;
   byId('ccbright').dataset.label = L('ph.brightness');
   byId('ccbright').setAttribute('aria-label', L('ph.brightness'));
+  byId('ccbright').setAttribute('role', 'slider');
+  byId('ccbright').setAttribute('tabindex', '0');
+  byId('ccbright').setAttribute('aria-valuemin', '35');
+  byId('ccbright').setAttribute('aria-valuemax', '100');
+  byId('ccbright').setAttribute('aria-valuenow', String(Math.round(bright * 100)));
   byId('ccvol').dataset.label = L('ph.volume');
   byId('ccvol').setAttribute('aria-label', L('ph.volume'));
+  byId('ccvol').setAttribute('role', 'slider');
+  byId('ccvol').setAttribute('tabindex', '0');
+  byId('ccvol').setAttribute('aria-valuemin', '0');
+  byId('ccvol').setAttribute('aria-valuemax', '100');
+  byId('ccvol').setAttribute('aria-valuenow', String(Math.round(volume * 100)));
   wireSlab('ccbright', (v) => {
     const brightness = 0.35 + v * 0.65;
     state.prefs = Object.assign({}, state.prefs || {}, { brightness });
     applyBrightness();
     byId('ccbright').querySelector('.fill').style.height = Math.round(brightness * 100) + '%';
+    byId('ccbright').setAttribute('aria-valuenow', String(Math.round(brightness * 100)));
   }, async (v) => {
     const commit = ++brightnessCommit;
     const r = await post('prefs', { brightness: 0.35 + v * 0.65 });
@@ -4817,15 +6337,16 @@ function renderCC() {
   wireSlab('ccvol', (v) => {
     volume = v;
     byId('ccvol').querySelector('.fill').style.height = Math.round(v * 100) + '%';
+    byId('ccvol').setAttribute('aria-valuenow', String(Math.round(v * 100)));
   }, async (v) => {
     if (ccNow) await post('music', { id: ccNow.id, action: 'volume', volume: v });
   });
 
   byId('cctoggles').innerHTML =
-    `<button class="ccpill focus ${p.dnd ? 'on' : ''}" data-c="dnd" type="button">${svg('focus')}</button>` +
-    `<button class="ccpill torch ${ccTorch ? 'on' : ''}" data-c="torch" type="button">${svg('torch')}</button>` +
-    `<button class="ccpill" data-c="wall" type="button">${svg('wall')}</button>` +
-    `<button class="ccpill" data-c="camera" type="button">${svg('camera')}</button>`;
+    `<button class="ccpill focus ${p.dnd ? 'on' : ''}" data-c="dnd" type="button" aria-label="${esc(L('ph.focus'))}" aria-pressed="${p.dnd ? 'true' : 'false'}">${svg('focus')}</button>` +
+    `<button class="ccpill torch ${ccTorch ? 'on' : ''}" data-c="torch" type="button" aria-label="${esc(L('ph.torch'))}" aria-pressed="${ccTorch ? 'true' : 'false'}">${svg('torch')}</button>` +
+    `<button class="ccpill" data-c="wall" type="button" aria-label="${esc(L('ph.wallpaper'))}">${svg('wall')}</button>` +
+    `<button class="ccpill" data-c="camera" type="button" aria-label="${esc(L('app.camera'))}">${svg('camera')}</button>`;
   qrows('cctoggles', '.ccpill', (b) => b.addEventListener('click', () => ccToggle(b.dataset.c)));
 }
 
@@ -4908,6 +6429,23 @@ function wireSlab(id, onChange, onCommit) {
     down = false;
     el.classList.remove('adjusting');
   });
+  el.addEventListener('keydown', (e) => {
+    const min = Number(el.getAttribute('aria-valuemin') || 0);
+    const max = Number(el.getAttribute('aria-valuemax') || 100);
+    let current = Number(el.getAttribute('aria-valuenow') || min);
+    if (e.key === 'ArrowUp' || e.key === 'ArrowRight') current += 5;
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') current -= 5;
+    else if (e.key === 'Home') current = min;
+    else if (e.key === 'End') current = max;
+    else return;
+    e.preventDefault();
+    current = Math.max(min, Math.min(max, current));
+    const normalized = (current - min) / Math.max(1, max - min);
+    const fn = slabCallbacks.get(el);
+    const commit = slabCommits.get(el);
+    if (fn) fn(normalized);
+    if (commit) commit(normalized);
+  });
 }
 
 // The control centre's media tile reads from v-music, refreshed each time it opens.
@@ -4920,12 +6458,224 @@ async function primeNowPlaying() {
 // ══ Third-party app bridge ═════════════════════════════════════
 // sdk.js inside an app frame posts here. Everything it can ask for is listed once, so
 // what an app is allowed to do is readable in one place rather than inferred.
+function sdkHasPermission(app, permission) {
+  const declared = app && Array.isArray(app.permissions) ? app.permissions : [];
+  // Empty is the backwards-compatible legacy profile. Once an app declares a list, it
+  // becomes an allow-list and the FruitStore can state exactly what the app may use.
+  return !declared.length || declared.includes(permission);
+}
+
+const SDK_PERMISSION = {
+  storage: 'storage',
+  contacts: 'contacts',
+  photos: 'photos',
+  location: 'location',
+  waypoint: 'location',
+  message: 'messages',
+  call: 'calls',
+  notify: 'notifications',
+  badge: 'notifications',
+  open: 'apps',
+  share: 'sharing',
+};
+
+function sdkContactPicker(settle, options) {
+  const query = String((options && options.query) || '').trim().toLowerCase();
+  const contacts = (state.contacts || []).filter((contact) =>
+    !query || (contact.name + ' ' + contact.number).toLowerCase().includes(query));
+  if (!contacts.length) {
+    settle({ error: 'empty', cancelled: true });
+    toast(L('ph.no_contacts'));
+    return;
+  }
+  sheet(L('ph.pick_contact'), UI.group(contacts.map((contact) => UI.row({
+    avatar: contact.name,
+    title: contact.name,
+    subtitle: contact.number,
+    chevron: true,
+    data: { 'sdk-contact': contact.number },
+  }))), () => {
+    sheetCancel = () => settle({ ok: false, cancelled: true });
+    [...byId('sheet').querySelectorAll('[data-sdk-contact]')].forEach((row) => {
+      row.addEventListener('click', () => {
+        const contact = contacts.find((entry) => entry.number === row.dataset.sdkContact);
+        sheetCancel = null;
+        closeSheet();
+        settle({ ok: true, contact });
+      });
+    });
+  }, 'sdk-picker');
+}
+
+function sdkPhotoPicker(settle) {
+  const photos = (state.photos || []).map(photoRow).filter((photo) => photo.url);
+  if (!photos.length) {
+    settle({ error: 'empty', cancelled: true });
+    toast(L('ph.no_photos'));
+    return;
+  }
+  sheet(L('ph.pick_photo'),
+    '<div class="shots sdkphotos">' + photos.map((photo, index) =>
+      '<button class="shot" type="button" data-sdk-photo="' + index +
+        '" style="' + photoStyle(photo) + '" aria-label="' + esc(L('ph.photo')) + '"></button>'
+    ).join('') + '</div>',
+    () => {
+      sheetCancel = () => settle({ ok: false, cancelled: true });
+      [...byId('sheet').querySelectorAll('[data-sdk-photo]')].forEach((photo) => {
+        photo.addEventListener('click', () => {
+          const selected = photos[Number(photo.dataset.sdkPhoto)];
+          sheetCancel = null;
+          closeSheet();
+          settle({ ok: true, photo: selected, url: selected.url });
+        });
+      });
+    }, 'sdk-picker');
+}
+
+function sdkActionSheet(settle, options, confirmation) {
+  const choices = (options.actions || []).slice(0, 8);
+  const rowHtml = choices.map((choice) => UI.row({
+    icon: choice.icon || (choice.destructive ? 'trash' : 'chevron'),
+    tint: choice.destructive ? '#FF3B30' : (choice.tint || '#0A84FF'),
+    title: choice.label || choice.title || choice.id,
+    value: choice.value,
+    data: { 'sdk-action': choice.id },
+  }));
+  if (confirmation) {
+    rowHtml.push(UI.row({
+      icon: 'xmark', tint: '#8E8E93',
+      title: options.cancelLabel || L('ph.cancel'),
+      data: { 'sdk-action': '__cancel' },
+    }));
+  }
+  sheet(options.title || (confirmation ? L('ph.confirm') : L('ph.app_actions')),
+    (options.message ? '<div class="sheethint">' + esc(options.message) + '</div>' : '') +
+      UI.group(rowHtml),
+    () => {
+      sheetCancel = () => settle({ ok: false, cancelled: true });
+      [...byId('sheet').querySelectorAll('[data-sdk-action]')].forEach((row) => {
+        row.addEventListener('click', () => {
+          const id = row.dataset.sdkAction;
+          sheetCancel = null;
+          closeSheet();
+          settle(id === '__cancel'
+            ? { ok: false, cancelled: true }
+            : { ok: true, id, confirmed: confirmation ? true : undefined });
+        });
+      });
+    }, confirmation ? 'sdk-confirm' : 'sdk-actions');
+}
+
+function copySdkText(value) {
+  const text = String(value || '');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+  }
+  const field = document.createElement('textarea');
+  field.value = text;
+  field.style.position = 'fixed';
+  field.style.opacity = '0';
+  document.body.appendChild(field);
+  field.select();
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch {}
+  field.remove();
+  return Promise.resolve(copied);
+}
+
+function sdkShare(settle, payload) {
+  const kind = ['photo', 'contact', 'number'].includes(payload.kind) ? payload.kind : 'text';
+  const text = String(payload.text || payload.body || payload.url ||
+    (payload.contact && (payload.contact.name + ' ' + payload.contact.number)) || '').slice(0, 1200);
+  const actions = [
+    UI.row({ icon: 'messages', tint: '#34C759', title: L('ph.share_messages'), data: { 'sdk-share': 'messages' } }),
+    UI.row({ icon: 'copy', tint: '#8E8E93', title: L('ph.copy'), data: { 'sdk-share': 'copy' } }),
+  ];
+  if (kind !== 'text') {
+    actions.unshift(UI.row({
+      icon: 'airdrop', tint: '#0A84FF', title: L('ph.airdrop'),
+      data: { 'sdk-share': 'airdrop' },
+    }));
+  }
+  sheet(payload.title || L('ph.share'), UI.group(actions), () => {
+    sheetCancel = () => settle({ ok: false, cancelled: true });
+    [...byId('sheet').querySelectorAll('[data-sdk-share]')].forEach((row) => {
+      row.addEventListener('click', async () => {
+        const channel = row.dataset.sdkShare;
+        sheetCancel = null;
+        closeSheet();
+        if (channel === 'copy') {
+          const copied = await copySdkText(text);
+          toast(copied ? L('ph.copied') : L('ph.err_x'));
+          settle({ ok: copied, channel });
+          return;
+        }
+        if (channel === 'airdrop') {
+          const airPayload = kind === 'photo'
+            ? { url: String(payload.url || '') }
+            : (payload.contact || { name: payload.name || '', number: payload.number || state.number });
+          airdropShare(kind, airPayload);
+          settle({ ok: true, channel });
+          return;
+        }
+        sdkContactPicker((result) => {
+          if (!result || !result.ok) { settle(result || { cancelled: true }); return; }
+          const messages = (state.apps || []).find((app) => app.id === 'messages');
+          if (!messages) { settle({ error: 'notinstalled' }); return; }
+          settle({ ok: true, channel: 'messages', contact: result.contact });
+          setTimeout(() => {
+            enterApp(messages, null);
+            openThread(result.contact.number, text);
+          }, 40);
+        }, {});
+      });
+    });
+  }, 'sdk-share');
+}
+
+function sdkOpenApp(settle, data) {
+  const target = (state.apps || []).find((app) => app.id === String(data.app || ''));
+  if (!target) { settle({ error: 'notinstalled' }); return; }
+  settle({ ok: true, app: target.id });
+  setTimeout(() => {
+    enterApp(target, null);
+    if (target.id === 'messages' && data.data && data.data.number) {
+      openThread(String(data.data.number), data.data.draft || '');
+    } else if (target.id === 'maps' && data.data && Number.isFinite(Number(data.data.x))) {
+      post('waypoint', data.data);
+    } else if (target.page) {
+      const frame = byId('appframe');
+      if (frame) frame.addEventListener(
+        'load',
+        () => frameEvent('launch', data.data || {}, frame.contentWindow),
+        { once: true }
+      );
+    }
+  }, 40);
+}
+
 const SDK_ALLOWED = {
   request:  (d) => post('sdkRequest', d),         // <appId>:<method>, composed by Lua
   emit:     (d) => post('sdkEmit', d),            // <appId>:<event>, composed by Lua
   storage:  (d) => post('sdkStorage', d),         // per app, per character
   contacts: () => Promise.resolve({ ok: true, contacts: state.contacts || [] }),
-  me:       () => Promise.resolve({ ok: true, number: state.number, apps: state.apps }),
+  photos:   () => Promise.resolve({ ok: true, photos: state.photos || [] }),
+  location: () => post('sdkLocation'),
+  waypoint: (d) => post('waypoint', d),
+  haptic:   (d) => post('sdkHaptic', d),
+  me:       () => Promise.resolve({
+    ok: true,
+    number: state.number,
+    apps: (state.apps || []).map((app) => ({ id: app.id, label: L(app.label), icon: app.icon })),
+    app: openApp ? {
+      id: openApp.id, label: L(openApp.label), icon: openApp.icon,
+      version: openApp.version, developer: openApp.developer,
+    } : null,
+    permissions: (openApp && openApp.permissions) || [],
+    dark: darkNow(),
+    locale: document.documentElement.lang || 'fr',
+    deviceName: (state.prefs || {}).deviceName || 'iFruit',
+  }),
   message:  (d) => post('send', d),
   call:     (d) => post('call', d),
 };
@@ -4945,7 +6695,30 @@ window.addEventListener('message', async (e) => {
     if (source) source.postMessage({ __phone: 'reply', id: d.id, payload }, '*');
   };
 
+  const pickerPermission = d.op === 'picker'
+    ? ((d.data && d.data.kind) === 'photo' ? 'photos' : 'contacts')
+    : null;
+  const requiredPermission = pickerPermission || SDK_PERMISSION[d.op];
+  if (requiredPermission && !sdkHasPermission(openApp, requiredPermission)) {
+    return reply({ error: 'permission', permission: requiredPermission });
+  }
+
   if (d.op === 'title') { setNav(d.data && d.data.title, null); byId('navbar').classList.remove('hidden'); return reply({ ok: true }); }
+  if (d.op === 'navAction') {
+    const data = d.data || {};
+    if (!data.label && !data.icon) {
+      setNav(byId('navtitle').textContent || L(openApp.label), null);
+      return reply({ ok: true });
+    }
+    const icon = UI.icons[data.icon] ? data.icon : null;
+    setNav(byId('navtitle').textContent || L(openApp.label), null, {
+      icon,
+      label: String(data.label || L('ph.app_actions')).slice(0, 40),
+      onClick: () => frameEvent('navigation', { id: 'primary' }, source),
+    });
+    byId('navbar').classList.remove('hidden');
+    return reply({ ok: true });
+  }
   if (d.op === 'close') { reply({ ok: true }); closeApp(); return; }
   if (d.op === 'toast') { toast((d.data && d.data.text) || ''); return reply({ ok: true }); }
   if (d.op === 'notify') {
@@ -4963,6 +6736,29 @@ window.addEventListener('message', async (e) => {
     }
     return reply({ ok: true });
   }
+  if (d.op === 'picker') {
+    if (d.data && d.data.kind === 'photo') sdkPhotoPicker(reply);
+    else sdkContactPicker(reply, (d.data && d.data.options) || {});
+    return;
+  }
+  if (d.op === 'confirm') {
+    const data = d.data || {};
+    sdkActionSheet(reply, {
+      title: data.title,
+      message: data.message,
+      cancelLabel: data.cancelLabel,
+      actions: [{
+        id: 'confirm',
+        label: data.confirmLabel || L('ph.confirm'),
+        icon: data.destructive ? 'trash' : 'check',
+        destructive: data.destructive === true,
+      }],
+    }, true);
+    return;
+  }
+  if (d.op === 'actions') { sdkActionSheet(reply, d.data || {}, false); return; }
+  if (d.op === 'share') { sdkShare(reply, d.data || {}); return; }
+  if (d.op === 'open') { sdkOpenApp(reply, d.data || {}); return; }
   const fn = SDK_ALLOWED[d.op];
   if (!fn) return reply({ error: 'forbidden' });
   // The app id is stamped LAST, so a page cannot claim to be a different app by
@@ -4981,7 +6777,20 @@ async function refresh() {
 
 // ══ Wiring ═════════════════════════════════════════════════════
 byId('lock').addEventListener('click', unlock);
-byId('homebar').addEventListener('click', goHome);
+byId('homebar').addEventListener('click', (e) => {
+  e.currentTarget.blur();
+  goHome();
+});
+
+// Chromium can expose its desktop focus ring after a touch in some CEF builds. Keep
+// focus visible for keyboard users, but never leave that coloured rectangle behind
+// after a phone gesture.
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Tab') document.documentElement.classList.add('keyboard-nav');
+}, true);
+document.addEventListener('pointerdown', () => {
+  document.documentElement.classList.remove('keyboard-nav');
+}, true);
 
 // Spotlight: the pill above the dock finds an app by name and launches it. It exists
 // because a sixth page of icons is where apps go to be forgotten.
@@ -5144,6 +6953,10 @@ window.addEventListener('message', (e) => {
   } else if (d.action === 'close') {
     torchCommit += 1;
     torchPending = false;
+    if (cipherPrivateKey && !cipherDemo) post('cipher', { op: 'logout' });
+    cipherPrivateKey = null;
+    cipherThread = null;
+    cipherDemo = false;
     resetTransientUI();
     closeApp(true);
     ccTorch = false;
@@ -5181,6 +6994,8 @@ window.addEventListener('message', (e) => {
         } });
       refresh().then(() => { if (!openApp) renderHome(); });
     }
+  } else if (d.action === 'cipher') {
+    cipherReceive(d.packet || {});
   } else if (d.action === 'power') {
     applyPower(d.power);
   } else if (d.action === 'banner') {

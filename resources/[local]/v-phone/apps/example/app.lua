@@ -11,5 +11,11 @@ PhoneApp {
     icon     = 'note',          -- any key from PhoneUI.icons
     category = 'utilities',     -- where it sits in the FruitStore
     desc     = 'The worked example: a folder dropped into apps/ and nothing else.',
+    developer = 'iFruit SDK',
+    version  = '2.0.0',
+    accent   = '#0A84FF',
+    permissions = { 'storage', 'contacts', 'photos', 'location', 'notifications' },
+    features = { 'Persistent data', 'Native pickers', 'Quick actions', 'Live lifecycle' },
+    keywords = { 'example', 'sdk', 'developer' },
     optional = true,            -- absent until downloaded from the store, like any app
 }
