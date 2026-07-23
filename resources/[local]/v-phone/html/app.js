@@ -149,9 +149,11 @@ function slideTrack() {
   if (t) t.style.transform = 'translateX(' + (-page * 100) + '%)';
 }
 function paintPages(items) {
-  const CAP = 16;
-  const pageCount = Math.max(1, Math.ceil(items.length / CAP));
-  arrPerPage = Math.max(1, Math.ceil(items.length / pageCount));
+  // A FIXED page size, not a balanced one. Balancing spread the icons evenly across
+  // however many pages were needed, which meant installing a single app re-flowed every
+  // page and threw away an arrangement the player had made. A page holds what a page
+  // holds; anything past that starts a new one, and the pages before it never move.
+  arrPerPage = 16;
   const pages = [];
   for (let i = 0; i < items.length; i += arrPerPage) pages.push(items.slice(i, i + arrPerPage));
   if (!pages.length) pages.push([]);
@@ -2230,10 +2232,27 @@ function storeCats(all) {
 }
 
 async function storeInstall(id, install) {
+  // The arrangement you already have is yours. Without this the new app landed wherever
+  // its slot said, shoving every icon after it along and spilling the last one onto a new
+  // page - which is not what installing one app should do to a home screen.
+  const before = layoutItems();
+
   const r = await post('install', { app: id, install });
   if (!r || r.error) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return false; }
   await refresh();
   available = state.available || available;
+
+  // Keep the old order exactly, drop anything that left, and put anything new on the end -
+  // so it fills the gap on the last page, or starts a new one when there is no room.
+  const live = new Set((state.apps || []).filter((a) => !a.dock).map((a) => a.id));
+  const kept = before.filter((it) => it.t === 'folder'
+    ? (it.apps || []).some((x) => live.has(x))
+    : live.has(it.id));
+  const seen = new Set();
+  kept.forEach((it) => { if (it.t === 'folder') (it.apps || []).forEach((x) => seen.add(x)); else seen.add(it.id); });
+  const added = [...live].filter((x) => !seen.has(x)).map((x) => ({ t: 'app', id: x }));
+  if (added.length || kept.length !== before.length) await saveLayout(kept.concat(added));
+
   renderHome();
   toast(L(install ? 'ph.store_added' : 'ph.store_removed'));
   return true;
