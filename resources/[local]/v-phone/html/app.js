@@ -45,6 +45,12 @@ function isViewRead(name, payload) {
 }
 
 const post = (n, b) => {
+  // The local visual harness can provide deterministic NUI replies. This hook never
+  // exists in FiveM, so production traffic still follows the exact same secure path.
+  if (typeof window.__VPHONE_PREVIEW_POST__ === 'function') {
+    return Promise.resolve().then(() => window.__VPHONE_PREVIEW_POST__(n, b || {}))
+      .catch(() => ({ error: 'x' }));
+  }
   const options = {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -111,6 +117,8 @@ function tick() {
   const mm = String(d.getMinutes()).padStart(2, '0');
   byId('clock').textContent = `${hh}:${mm}`;
   byId('lockclock').textContent = `${hh}:${mm}`;
+  const ccClock = byId('ccclock');
+  if (ccClock) ccClock.textContent = `${hh}:${mm}`;
   byId('lockdate').textContent = d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
 }
 setInterval(tick, 10000);
@@ -160,7 +168,9 @@ function lockScreen() {
 }
 
 function goHome() {
-  if (byId('cc').classList.contains('on')) { byId('cc').classList.remove('on'); return; }
+  const systemPanel = activeSystemPanel();
+  if (systemPanel) { hideSystemPanel(systemPanel); return; }
+  if (byId('emojipanel').classList.contains('on')) { emojiClose(); return; }
   if (byId('sheet').classList.contains('on')) { closeSheet(); return; }
   if (byId('app').classList.contains('on')) { closeApp(); return; }
   // The Home indicator returns to Home; locking belongs to the power button.
@@ -704,7 +714,15 @@ function setNav(title, backLabel, action, onBack) {
   byId('navbar').classList.remove('collapsed');
 }
 
-const body = (html) => { byId('appbody').innerHTML = html; };
+const body = (html) => {
+  const host = byId('appbody');
+  host.classList.remove('view-enter');
+  host.innerHTML = html;
+  // Restart a short native transition for view-to-view navigation. A forced layout is
+  // intentional here: without it, two renders in the same frame collapse into one state.
+  void host.offsetWidth;
+  host.classList.add('view-enter');
+};
 const foot = (html) => { byId('appfoot').innerHTML = html || ''; };
 const loading = () => body(UI.empty(L('ph.loading')));
 const rows = (sel, fn) => [...byId('appbody').querySelectorAll(sel)].forEach(fn);
@@ -1173,6 +1191,28 @@ function forwardSms(m) {
     });
 }
 
+function messageActions(m) {
+  const value = String((m && (m.body || m.attachment)) || '');
+  sheet(L('ph.message_actions'),
+    '<div class="msgactionpreview">' + bubbleHtml(Object.assign({}, m, { mine: false })) + '</div>' +
+    '<div class="msgactiongrid">' +
+      UI.button(L('ph.copy'), 'msgcopy', 'plain') +
+      UI.button(L('ph.forward'), 'msgforward', 'tinted') +
+    '</div>' +
+    '<div class="sheethint">' + esc(L('ph.message_actions_hint')) + '</div>',
+    () => {
+      byId('msgcopy').addEventListener('click', () => {
+        closeSheet();
+        if (value) copyText(value);
+      });
+      byId('msgforward').addEventListener('click', () => {
+        closeSheet();
+        requestAnimationFrame(() => forwardSms(m));
+      });
+    },
+    'message-actions');
+}
+
 // ── Voicemail ──────────────────────────────────────────────────
 // A missed call leaves a written message rather than a recording: nothing here can hold
 // audio, and a note you can actually read beats a fake tape.
@@ -1328,12 +1368,47 @@ function wireLocButtons() {
 function paintThread(messages) {
   body(`<div class="thread" id="thread">${messages.map(bubbleHtml).join('')}</div>`);
   wireLocButtons();
-  // A message you can act on: forwarding is the one thing people always want from one.
+  // A tap remains a tap. Message actions use the familiar mobile long-press gesture,
+  // with a short horizontal swipe as a faster alternative.
   [...byId('thread').querySelectorAll('.bub')].forEach((b, i) => {
-    b.addEventListener('click', (e) => {
+    let hold = 0, sx = 0, sy = 0, active = false, opened = false;
+    const cancelHold = () => { if (hold) clearTimeout(hold); hold = 0; };
+    b.addEventListener('pointerdown', (e) => {
       if (e.target.closest('button') || e.target.closest('.locbtn')) return;
-      const m = messages[i];
-      if (m) forwardSms(m);
+      sx = e.clientX;
+      sy = e.clientY;
+      active = true;
+      opened = false;
+      b.classList.add('pressing');
+      hold = setTimeout(() => {
+        if (!active) return;
+        opened = true;
+        b.classList.remove('pressing');
+        messageActions(messages[i]);
+      }, 440);
+    });
+    b.addEventListener('pointermove', (e) => {
+      if (!active) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      b.style.setProperty('--msg-drag', Math.max(-8, Math.min(34, dx * .26)) + 'px');
+      if (Math.abs(dx) > 11 || Math.abs(dy) > 11) cancelHold();
+    });
+    b.addEventListener('pointerup', (e) => {
+      if (!active) return;
+      const dx = e.clientX - sx;
+      const dy = e.clientY - sy;
+      active = false;
+      cancelHold();
+      b.classList.remove('pressing');
+      b.style.removeProperty('--msg-drag');
+      if (!opened && dx > 52 && Math.abs(dy) < 28) messageActions(messages[i]);
+    });
+    b.addEventListener('pointercancel', () => {
+      active = false;
+      cancelHold();
+      b.classList.remove('pressing');
+      b.style.removeProperty('--msg-drag');
     });
   });
   foot(`<div class="compose">` +
@@ -2326,13 +2401,43 @@ function anyOverlayOpen() {
   return ['cc', 'shade', 'switcher', 'sheet'].some((id) => byId(id).classList.contains('on'));
 }
 
+const SYSTEM_PANELS = ['shade', 'cc'];
+
+function activeSystemPanel() {
+  const id = SYSTEM_PANELS.find((name) => byId(name).classList.contains('on'));
+  return id || null;
+}
+
+function resetPanelMotion(el) {
+  if (!el) return;
+  el.classList.remove('tracking');
+  el.style.removeProperty('--panel-y');
+  el.style.removeProperty('--panel-opacity');
+}
+
+function hideSystemPanel(id, instant) {
+  const el = byId(id);
+  if (!el) return;
+  resetPanelMotion(el);
+  el.classList.toggle('instant', instant === true);
+  el.classList.remove('on');
+  el.setAttribute('aria-hidden', 'true');
+  if (instant) requestAnimationFrame(() => el.classList.remove('instant'));
+}
+
+function hideSystemPanels(instant) {
+  SYSTEM_PANELS.forEach((id) => hideSystemPanel(id, instant));
+}
+
 function closeOverlays() {
-  ['cc', 'shade', 'switcher'].forEach((id) => byId(id).classList.remove('on'));
+  hideSystemPanels();
+  byId('switcher').classList.remove('on');
   closeSheet(true);
 }
 
 function resetTransientUI() {
-  ['cc', 'shade', 'switcher'].forEach((id) => byId(id).classList.remove('on'));
+  hideSystemPanels(true);
+  byId('switcher').classList.remove('on');
   shadeManage = false;
   closeSheet(true);
   emojiClose();
@@ -2358,9 +2463,15 @@ function resetTransientUI() {
 
 byId('screen').addEventListener('pointerdown', (e) => {
   const p = screenPoint(e);
+  const systemPanel = activeSystemPanel();
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
-        fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18,
-        insideOverlay: !!(e.target.closest && e.target.closest('#sheet,#shade,#cc,#switcher')) };
+         fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18,
+         insideOverlay: !!(e.target.closest && e.target.closest('#sheet,#shade,#cc,#switcher')),
+         previewPanel: null,
+         dismissPanel: systemPanel && p.y > p.h - EDGE ? systemPanel : null };
+  if ((g.fromTop || g.fromBottom) && e.currentTarget.setPointerCapture) {
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch {}
+  }
 });
 
 let glassFrame = 0;
@@ -2383,7 +2494,38 @@ function trackGlassPointer(e) {
   });
 }
 
-byId('screen').addEventListener('pointermove', trackGlassPointer, { passive: true });
+byId('screen').addEventListener('pointermove', (e) => {
+  trackGlassPointer(e);
+  if (!g) return;
+  const p = screenPoint(e);
+  const dy = p.y - g.y0;
+
+  // The system surfaces follow the finger before they settle. This keeps the app below
+  // completely intact and removes the web-page feeling of a panel simply appearing.
+  if (g.dismissPanel && dy < 0) {
+    const el = byId(g.dismissPanel);
+    el.classList.add('tracking');
+    el.style.setProperty('--panel-y', Math.max(-p.h, dy) + 'px');
+    el.style.setProperty('--panel-opacity', String(Math.max(0, 1 + dy / (p.h * .72))));
+    return;
+  }
+
+  if (g.fromTop && dy > 4 && !g.insideOverlay
+      && !byId('sheet').classList.contains('on') && !byId('switcher').classList.contains('on')) {
+    if (!g.previewPanel) {
+      g.previewPanel = g.x0 < g.w / 2 ? 'shade' : 'cc';
+      if (g.previewPanel === 'shade') prepareShade();
+      else prepareCC();
+      SYSTEM_PANELS.forEach((id) => { if (id !== g.previewPanel) hideSystemPanel(id, true); });
+      byId(g.previewPanel).classList.add('on', 'tracking');
+      byId(g.previewPanel).setAttribute('aria-hidden', 'false');
+    }
+    const el = byId(g.previewPanel);
+    const travel = Math.min(p.h, dy);
+    el.style.setProperty('--panel-y', Math.min(0, -p.h + travel * 1.18) + 'px');
+    el.style.setProperty('--panel-opacity', String(Math.min(1, travel / 150)));
+  }
+}, { passive: true });
 byId('screen').addEventListener('pointerdown', (e) => {
   trackGlassPointer(e);
   const target = e.target.closest && e.target.closest(
@@ -2407,6 +2549,24 @@ byId('screen').addEventListener('pointerup', (e) => {
   const dx = p.x - g.x0, dy = p.y - g.y0;
   const held = Date.now() - g.t0;
   const gg = g; g = null;
+
+  if (gg.dismissPanel) {
+    const el = byId(gg.dismissPanel);
+    if (dy < -SWIPE) hideSystemPanel(gg.dismissPanel);
+    else resetPanelMotion(el);
+    return;
+  }
+
+  if (gg.previewPanel) {
+    const el = byId(gg.previewPanel);
+    if (dy > SWIPE) {
+      resetPanelMotion(el);
+      el.classList.add('on');
+    } else {
+      hideSystemPanel(gg.previewPanel);
+    }
+    return;
+  }
 
   if (Math.abs(dx) < SWIPE && Math.abs(dy) < SWIPE) return;   // a tap, not a swipe
 
@@ -2447,6 +2607,13 @@ byId('screen').addEventListener('pointerup', (e) => {
 
   // On the lock screen, up unlocks.
   if (!byId('lock').classList.contains('out') && dy < -SWIPE) unlock();
+});
+
+byId('screen').addEventListener('pointercancel', () => {
+  if (!g) return;
+  if (g.previewPanel) hideSystemPanel(g.previewPanel);
+  if (g.dismissPanel) resetPanelMotion(byId(g.dismissPanel));
+  g = null;
 });
 
 // ══ App switcher ═══════════════════════════════════════════════
@@ -2491,7 +2658,7 @@ function openSwitcher() {
 }
 
 // ══ Notification shade ═════════════════════════════════════════
-function openShade() {
+function prepareShade() {
   const d = new Date();
   byId('shadeclock').textContent =
     String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
@@ -2499,7 +2666,16 @@ function openShade() {
     d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' });
   shadeManage = false;
   renderShade();
+  byId('shadeclose').setAttribute('aria-label', L('ph.close'));
+  byId('shadehome').setAttribute('aria-label', L('ph.close'));
+}
+
+function openShade() {
+  prepareShade();
+  hideSystemPanel('cc', true);
+  resetPanelMotion(byId('shade'));
   byId('shade').classList.add('on');
+  byId('shade').setAttribute('aria-hidden', 'false');
 }
 
 // The app a notification belongs to, resolved to something printable.
@@ -2560,10 +2736,32 @@ function renderShade() {
   }));
 }
 
-function openCC() { byId('cc').classList.add('on'); renderCC(); primeNowPlaying().then(() => { if (byId('cc').classList.contains('on')) renderCC(); }); }
+function prepareCC() {
+  renderCC();
+  const p = state._power || {};
+  const battery = Number.isFinite(Number(p.battery)) ? Math.round(Number(p.battery)) + '%' : '';
+  byId('ccdevice').textContent = [state.number || '', battery].filter(Boolean).join('  ·  ');
+  byId('ccclose').setAttribute('aria-label', L('ph.close'));
+  byId('cchome').setAttribute('aria-label', L('ph.close'));
+  primeNowPlaying().then(() => {
+    if (byId('cc').classList.contains('on')) renderCC();
+  });
+}
+
+function openCC() {
+  prepareCC();
+  hideSystemPanel('shade', true);
+  resetPanelMotion(byId('cc'));
+  byId('cc').classList.add('on');
+  byId('cc').setAttribute('aria-hidden', 'false');
+}
 
 byId('shmanage').addEventListener('click', () => { shadeManage = !shadeManage; renderShade(); });
 byId('shclear').addEventListener('click', () => { notifs = []; paintNotifs(); renderShade(); });
+['shadeclose', 'shadehome'].forEach((id) =>
+  byId(id).addEventListener('click', () => hideSystemPanel('shade')));
+['ccclose', 'cchome'].forEach((id) =>
+  byId(id).addEventListener('click', () => hideSystemPanel('cc')));
 
 // ══ Side buttons ═══════════════════════════════════════════════
 // Real controls, not decoration. Volume moves the volume of whatever v-music says this
@@ -2572,8 +2770,13 @@ let hudTimer = null;
 
 function hud(icon, label, pct) {
   const el = byId('hud');
-  el.innerHTML = svg(icon) + '<span>' + esc(label) + '</span>' +
-    (pct === undefined ? '' : '<span class="bar"><i style="width:' + Math.round(pct * 100) + '%"></i></span>');
+  const hasLevel = pct !== undefined;
+  el.className = 'hud ' + (hasLevel ? 'levelhud' : 'noticehud');
+  el.innerHTML = hasLevel
+    ? '<span class="hudlabel">' + esc(label) + '</span>' +
+      '<span class="hudtrack"><i style="height:' + Math.round(pct * 100) + '%"></i>' +
+        '<span class="hudglyph">' + svg(icon) + '</span></span>'
+    : '<span class="hudnoticeicon">' + svg(icon) + '</span><span>' + esc(label) + '</span>';
   el.classList.add('on');
   clearTimeout(hudTimer);
   hudTimer = setTimeout(() => el.classList.remove('on'), 1400);
@@ -2627,15 +2830,41 @@ function descOf(a) {
   return L('ph.desc_generic');
 }
 
+function storeFacts(a) {
+  let seed = 0;
+  String(a.id || '').split('').forEach((char) => { seed = (seed * 31 + char.charCodeAt(0)) % 997; });
+  return {
+    rating: (4.5 + (seed % 5) / 10).toFixed(1),
+    reviews: 120 + (seed * 37) % 4800,
+    age: (a.category === 'social' || a.category === 'finance') ? '12+' : '4+',
+    version: String(a.version || '1.0'),
+    size: (18 + seed % 64) + ' MB',
+  };
+}
+
+function storePreview(a, index) {
+  const name = esc(L(a.label));
+  const variant = ['feed', 'cards', 'dashboard'][index % 3];
+  return '<div class="stshot ' + variant + '">' +
+    '<div class="stshotbar"><span>9:41</span><i></i><i></i></div>' +
+    '<div class="stshotapp">' + UI.appIcon(a.icon) + '<b>' + name + '</b></div>' +
+    '<div class="stmockhero"><span></span><strong>' + name + '</strong><small>' +
+      esc(L('ph.store_preview_' + (index + 1))) + '</small></div>' +
+    '<div class="stmockrows"><i></i><i></i><i></i></div>' +
+    '<div class="stmockdock"><i></i><i></i><i></i></div>' +
+  '</div>';
+}
+
 function storeDetail(a) {
   if (!openApp || openApp.id !== 'store') return;
   beginView();
   const has = isInstalled(a.id);
+  const facts = storeFacts(a);
   setNav(L('app.store'), L('app.store'), null, () => {
     RENDER.store();
   });
   body(
-    '<div class="sthead">' + UI.appIcon(a.icon) +
+    '<div class="stdetailhero"><div class="storb"></div><div class="sthead">' + UI.appIcon(a.icon) +
       '<div class="stinfo"><div class="stbig">' + esc(L(a.label)) + '</div>' +
       '<div class="stcat">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div>' +
       '<div class="stact">' +
@@ -2645,17 +2874,30 @@ function storeDetail(a) {
               ? '<button class="stget have" id="stopen" type="button">' + esc(L('ph.store_open')) + '</button>' +
                 '<button class="stdel" id="stdel" type="button">' + esc(L('ph.store_delete')) + '</button>'
               : '<button class="stget" id="stget" type="button">' + esc(L('ph.store_install')) + '</button>')) +
-      '</div></div></div>' +
-    '<div class="group"><div class="stmeta">' +
-      '<div><div class="mk">' + esc(L('ph.store_dev')) + '</div>' +
-        '<div class="mv">' + esc(a.owner || 'iFruit') + '</div></div>' +
-      '<div><div class="mk">' + esc(L('ph.store_cat')) + '</div>' +
-        '<div class="mv">' + esc(L('ph.cat_' + (a.category || 'utilities'))) + '</div></div>' +
-      '<div><div class="mk">' + esc(L('ph.store_state')) + '</div>' +
-        '<div class="mv">' + esc(has ? L('ph.store_installed') : L('ph.store_get')) + '</div></div>' +
-    '</div></div>' +
+      '</div></div></div></div>' +
+    '<div class="stmeta">' +
+      '<div><div class="mv">' + facts.rating + ' ★</div><div class="mk">' +
+        esc(Number(facts.reviews).toLocaleString()) + ' ' + esc(L('ph.store_ratings')) + '</div></div>' +
+      '<div><div class="mv">' + facts.age + '</div><div class="mk">' + esc(L('ph.store_age')) + '</div></div>' +
+      '<div><div class="mv">' + facts.size + '</div><div class="mk">' + esc(L('ph.store_size')) + '</div></div>' +
+    '</div>' +
+    '<div class="stscreens" aria-label="' + esc(L('ph.store_previews')) + '">' +
+      [0, 1, 2].map((index) => storePreview(a, index)).join('') + '</div>' +
     '<div class="grouphead">' + esc(L('ph.about')) + '</div>' +
-    '<div class="storedesc">' + esc(descOf(a)) + '</div>'
+    '<div class="storedesc">' + esc(descOf(a)) + '</div>' +
+    '<div class="stsectioncard"><div><span class="stcardicon">' + svg('sparkles') + '</span>' +
+      '<span><b>' + esc(L('ph.store_whats_new')) + '</b><small>' +
+        esc(L('ph.store_whats_new_body')) + '</small></span></div><em>v' + esc(facts.version) + '</em></div>' +
+    '<div class="stprivacy"><div class="stprivacyicon">' + svg('lockshut') + '</div>' +
+      '<div><b>' + esc(L('ph.store_privacy')) + '</b><span>' +
+        esc(L('ph.store_privacy_body')) + '</span></div>' + svg('chevron') + '</div>' +
+    '<div class="grouphead">' + esc(L('ph.store_information')) + '</div>' +
+    '<div class="group stinfoRows">' +
+      UI.row({ title: L('ph.store_dev'), value: a.owner || 'iFruit' }) +
+      UI.row({ title: L('ph.store_cat'), value: L('ph.cat_' + (a.category || 'utilities')) }) +
+      UI.row({ title: L('ph.store_version'), value: facts.version }) +
+      UI.row({ title: L('ph.store_compatibility'), value: L('ph.store_phone_ready') }) +
+    '</div>'
   );
   pushAnim();
 
@@ -3624,16 +3866,38 @@ const EMOJI = {
   hearts: ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','♥️'],
   things: ['🔥','⭐','🌟','✨','💫','🎉','🎊','💯','✅','❌','❓','❗','💤','💢','💥','💦','💨','🕳️','💣','💬','🗨️','👑','💎','🔔','🎵','🎶','🚗','🏠','💰','💵','💊','🍺','🍻','🥂','🍔','🍕','☕','⚽','🎧','📱','💻','⏰','📅','☀️','🌧️','⛈️','❄️','🌙','⚡','🌈','🎁'],
 };
-const EMOJI_TABS = [['faces','😀'],['gestures','👍'],['hearts','❤️'],['things','🔥']];
+const EMOJI_TABS = [['recent','🕘'],['faces','😀'],['gestures','👍'],['hearts','❤️'],['things','🔥']];
 let emojiTarget = null, emojiCat = 'faces';
+let emojiRecent = [];
 
 function paintEmoji() {
   const pan = byId('emojipanel');
+  const list = emojiCat === 'recent' ? emojiRecent : (EMOJI[emojiCat] || []);
   pan.innerHTML =
-    '<div class="emojitabs">' + EMOJI_TABS.map(([k, g]) =>
-      '<button data-c="' + k + '" class="' + (emojiCat === k ? 'on' : '') + '" type="button">' + g + '</button>').join('') + '</div>' +
-    '<div class="emojigrid">' + (EMOJI[emojiCat] || []).map((e) =>
-      '<button data-e="' + e + '" type="button">' + e + '</button>').join('') + '</div>';
+    '<div class="emojihead"><span>' + esc(L('ph.emoji')) + '</span>' +
+      '<button class="emojidone" id="emojidone" type="button">' + esc(L('ph.done')) + '</button></div>' +
+    '<div class="emojitabs">' + EMOJI_TABS.map(([k, glyph]) =>
+      '<button data-c="' + k + '" class="' + (emojiCat === k ? 'on' : '') +
+        '" type="button" aria-label="' + esc(L('ph.emoji_' + k)) + '">' + glyph + '</button>').join('') + '</div>' +
+    '<div class="emojigrid">' + (list.length ? list.map((emoji) =>
+      '<button data-e="' + emoji + '" type="button">' + emoji + '</button>').join('')
+      : '<div class="emojiempty">' + esc(L('ph.emoji_recent_empty')) + '</div>') + '</div>' +
+    '<div class="emojifoot"><button id="emojiback" type="button" aria-label="' +
+      esc(L('ph.delete')) + '">⌫</button><span>' + esc(L('ph.emoji_hint')) + '</span></div>';
+
+  byId('emojidone').addEventListener('click', emojiClose);
+  byId('emojiback').addEventListener('click', () => {
+    const inp = byId(emojiTarget);
+    if (!inp) return;
+    const end = inp.selectionStart != null ? inp.selectionStart : inp.value.length;
+    if (end <= 0) return;
+    const chars = Array.from(inp.value.slice(0, end));
+    chars.pop();
+    const left = chars.join('');
+    inp.value = left + inp.value.slice(end);
+    try { inp.setSelectionRange(left.length, left.length); } catch {}
+    inp.focus();
+  });
   [...pan.querySelectorAll('.emojitabs button')].forEach((b) =>
     b.addEventListener('click', () => { emojiCat = b.dataset.c; paintEmoji(); }));
   [...pan.querySelectorAll('.emojigrid button')].forEach((b) =>
@@ -3644,6 +3908,7 @@ function paintEmoji() {
       const at = (inp.selectionStart != null) ? inp.selectionStart : inp.value.length;
       inp.value = inp.value.slice(0, at) + b.dataset.e + inp.value.slice(at);
       const pos = at + b.dataset.e.length;
+      emojiRecent = [b.dataset.e].concat(emojiRecent.filter((emoji) => emoji !== b.dataset.e)).slice(0, 28);
       try { inp.setSelectionRange(pos, pos); } catch {}
       inp.focus();
     }));
@@ -3651,9 +3916,25 @@ function paintEmoji() {
 function emojiOpen(inputId) {
   if (emojiTarget === inputId && byId('emojipanel').classList.contains('on')) { emojiClose(); return; }
   emojiTarget = inputId; emojiCat = 'faces'; paintEmoji();
+  byId('emojiscrim').classList.add('on');
   byId('emojipanel').classList.add('on');
 }
-function emojiClose() { byId('emojipanel').classList.remove('on'); emojiTarget = null; }
+function emojiClose() {
+  byId('emojipanel').classList.remove('on');
+  byId('emojiscrim').classList.remove('on');
+  emojiTarget = null;
+}
+byId('emojiscrim').addEventListener('click', emojiClose);
+
+let emojiDragY = null;
+byId('emojipanel').addEventListener('pointerdown', (e) => {
+  const r = byId('emojipanel').getBoundingClientRect();
+  emojiDragY = e.clientY < r.top + 60 ? e.clientY : null;
+});
+byId('emojipanel').addEventListener('pointerup', (e) => {
+  if (emojiDragY != null && e.clientY - emojiDragY > 38) emojiClose();
+  emojiDragY = null;
+});
 
 // ══ Sheet, toast, banner ═══════════════════════════════════════
 let sheetReturn = null;
@@ -3693,9 +3974,10 @@ function enqueuePrompt(show, ttlMs) {
   pumpPrompts();
 }
 
-function sheet(title, html, after) {
+function sheet(title, html, after, variant) {
   sheetEpoch += 1;
   sheetReturn = null;
+  byId('sheet').dataset.variant = variant || '';
   byId('sheet').innerHTML = `<div class="grab"></div><div class="sh">${esc(title)}</div>${html}`;
   byId('sheet').classList.add('on');
   byId('scrim').classList.add('on');
@@ -3712,8 +3994,13 @@ function closeSheet(force, expectedEpoch) {
     return true;
   }
   sheetReturn = null;
+  byId('sheet').dataset.variant = '';
   clearTimeout(promptExpiryTimer);
   promptExpiryTimer = null;
+  sheetDrag = null;
+  byId('sheet').classList.remove('dragging');
+  byId('sheet').style.removeProperty('transform');
+  byId('sheet').style.removeProperty('opacity');
   byId('sheet').classList.remove('on');
   byId('scrim').classList.remove('on');
   activePrompt = false;
@@ -3722,6 +4009,40 @@ function closeSheet(force, expectedEpoch) {
   return true;
 }
 byId('scrim').addEventListener('click', () => closeSheet());
+
+let sheetDrag = null;
+byId('sheet').addEventListener('pointerdown', (e) => {
+  const host = byId('sheet');
+  const r = host.getBoundingClientRect();
+  if (e.clientY > r.top + 58) return;
+  sheetDrag = { y: e.clientY, pointerId: e.pointerId };
+  host.classList.add('dragging');
+  if (host.setPointerCapture) {
+    try { host.setPointerCapture(e.pointerId); } catch {}
+  }
+});
+byId('sheet').addEventListener('pointermove', (e) => {
+  if (!sheetDrag || sheetDrag.pointerId !== e.pointerId) return;
+  const dy = Math.max(0, e.clientY - sheetDrag.y);
+  byId('sheet').style.transform = 'translateY(' + dy + 'px)';
+  byId('sheet').style.opacity = String(Math.max(.35, 1 - dy / 360));
+});
+byId('sheet').addEventListener('pointerup', (e) => {
+  if (!sheetDrag || sheetDrag.pointerId !== e.pointerId) return;
+  const dy = Math.max(0, e.clientY - sheetDrag.y);
+  sheetDrag = null;
+  const host = byId('sheet');
+  host.classList.remove('dragging');
+  host.style.removeProperty('transform');
+  host.style.removeProperty('opacity');
+  if (dy > 70) closeSheet();
+});
+byId('sheet').addEventListener('pointercancel', () => {
+  sheetDrag = null;
+  byId('sheet').classList.remove('dragging');
+  byId('sheet').style.removeProperty('transform');
+  byId('sheet').style.removeProperty('opacity');
+});
 
 let toastTimer = null;
 function toast(text) {
@@ -3918,10 +4239,10 @@ function renderCC() {
   const p = state.prefs || {};
 
   byId('ccconn').innerHTML =
-    `<button class="ccbtn air ${p.airplane ? 'on' : ''}" data-t="airplane" type="button">${svg('airplane')}</button>` +
-    `<button class="ccbtn cel ${p.cellular !== false && !p.airplane ? 'on' : ''}" data-t="cellular" type="button">${svg('cell')}</button>` +
-    `<button class="ccbtn wif ${p.wifi !== false ? 'on' : ''}" data-t="wifi" type="button">${svg('wifi')}</button>` +
-    `<button class="ccbtn blu ${p.bluetooth ? 'on' : ''}" data-t="bluetooth" type="button">${svg('bt')}</button>`;
+    `<button class="ccbtn air ${p.airplane ? 'on' : ''}" data-t="airplane" type="button" aria-label="${esc(L('ph.airplane'))}">${svg('airplane')}</button>` +
+    `<button class="ccbtn cel ${p.cellular !== false && !p.airplane ? 'on' : ''}" data-t="cellular" type="button" aria-label="${esc(L('ph.cellular'))}">${svg('cell')}</button>` +
+    `<button class="ccbtn wif ${p.wifi !== false ? 'on' : ''}" data-t="wifi" type="button" aria-label="${esc(L('ph.wifi'))}">${svg('wifi')}</button>` +
+    `<button class="ccbtn blu ${p.bluetooth ? 'on' : ''}" data-t="bluetooth" type="button" aria-label="${esc(L('ph.bluetooth'))}">${svg('bt')}</button>`;
   qrows('ccconn', '.ccbtn', (b) => b.addEventListener('click', () => toggleCC(b.dataset.t)));
 
   const m = ccNow;
@@ -3944,6 +4265,10 @@ function renderCC() {
     `<div class="fill" style="height:${Math.round(bright * 100)}%"></div><div class="gl">${svg('sun')}</div>`;
   byId('ccvol').innerHTML =
     `<div class="fill" style="height:${Math.round(volume * 100)}%"></div><div class="gl">${svg('speaker')}</div>`;
+  byId('ccbright').dataset.label = L('ph.brightness');
+  byId('ccbright').setAttribute('aria-label', L('ph.brightness'));
+  byId('ccvol').dataset.label = L('ph.volume');
+  byId('ccvol').setAttribute('aria-label', L('ph.volume'));
   wireSlab('ccbright', (v) => {
     const brightness = 0.35 + v * 0.65;
     state.prefs = Object.assign({}, state.prefs || {}, { brightness });
@@ -4031,6 +4356,7 @@ function wireSlab(id, onChange, onCommit) {
   let down = false, value = 0;
   el.addEventListener('pointerdown', (e) => {
     down = true;
+    el.classList.add('adjusting');
     el.setPointerCapture(e.pointerId);
     value = emit(e);
   });
@@ -4039,10 +4365,14 @@ function wireSlab(id, onChange, onCommit) {
     if (!down) return;
     value = emit(e);
     down = false;
+    el.classList.remove('adjusting');
     const commit = slabCommits.get(el);
     if (commit) commit(value);
   });
-  el.addEventListener('pointercancel', () => { down = false; });
+  el.addEventListener('pointercancel', () => {
+    down = false;
+    el.classList.remove('adjusting');
+  });
 }
 
 // The control centre's media tile reads from v-music, refreshed each time it opens.
@@ -4122,22 +4452,44 @@ byId('homebar').addEventListener('click', goHome);
 // because a sixth page of icons is where apps go to be forgotten.
 byId('spill').addEventListener('click', () => {
   sheet(L('ph.search'),
-    UI.field('appq', L('ph.search_apps')) + '<div id="appres"></div>',
+    '<div class="spotsearch">' + svg('search') +
+      '<input id="appq" placeholder="' + esc(L('ph.search_apps')) +
+        '" autocomplete="off" aria-label="' + esc(L('ph.search_apps')) + '" />' +
+      '<button id="appqclear" type="button" aria-label="' + esc(L('ph.clear')) + '">' +
+        svg('xmark') + '</button></div>' +
+    '<div class="spotsuggest" id="spotsuggest"></div><div id="appres"></div>',
     () => {
       const draw = (q) => {
         const list = (state.apps || []).filter((a) => !q || L(a.label).toLowerCase().includes(q));
+        const recentApps = recents.slice(0, 4).map((id) => (state.apps || []).find((a) => a.id === id)).filter(Boolean);
+        byId('spotsuggest').innerHTML = q || !recentApps.length ? '' :
+          '<div class="spotlabel">' + esc(L('ph.recent')) + '</div><div class="spoticons">' +
+            recentApps.map((a) => '<button data-app="' + esc(a.id) + '" type="button">' +
+              UI.appIcon(a.icon) + '<span>' + esc(L(a.label)) + '</span></button>').join('') + '</div>';
         byId('appres').innerHTML = list.length
-          ? UI.group(list.map((a) => UI.row({ appicon: a.icon, title: L(a.label), chevron: true, data: { app: a.id } })))
+          ? '<div class="spotlabel">' + esc(q ? L('ph.results') : L('ph.all_apps')) + '</div>' +
+            UI.group(list.map((a) => UI.row({
+              appicon: a.icon, title: L(a.label),
+              subtitle: L('ph.cat_' + (a.category || 'utilities')),
+              chevron: true, data: { app: a.id },
+            })))
           : UI.empty(L('ph.no_app'));
-        [...byId('appres').querySelectorAll('.row')].forEach((r) => r.addEventListener('click', () => {
+        [...byId('sheet').querySelectorAll('[data-app]')].forEach((r) => r.addEventListener('click', () => {
           const a = (state.apps || []).find((x) => x.id === r.dataset.app);
           closeSheet();
           if (a) enterApp(a, null);
         }));
+        byId('appqclear').classList.toggle('visible', !!q);
       };
       draw('');
       byId('appq').addEventListener('input', () => draw(byId('appq').value.trim().toLowerCase()));
-    });
+      byId('appqclear').addEventListener('click', () => {
+        byId('appq').value = '';
+        draw('');
+        byId('appq').focus();
+      });
+      requestAnimationFrame(() => byId('appq').focus());
+    }, 'spotlight');
 });
 byId('island').addEventListener('click', () => { if (call) renderCall(); });
 // The status bar takes pointer events so a drag can START on it, but a tap does
