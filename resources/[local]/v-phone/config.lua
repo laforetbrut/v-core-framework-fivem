@@ -252,12 +252,84 @@ Config.AppMetadata = {
     },
 }
 
-for _, app in ipairs(Config.Apps) do
-    local metadata = Config.AppMetadata[app.id] or {}
-    app.developer = app.developer or 'iFruit Studio'
-    app.version = app.version or '2.0.0'
-    app.features = app.features or metadata.features or {}
-    app.keywords = app.keywords or metadata.keywords or {}
+-- ── The home screen, in one place ──────────────────────────────
+-- `Config.Apps` above is the CATALOGUE: everything that exists. This is the LAYOUT: what
+-- a phone opened for the first time actually has, and in what order. It is separate
+-- because the two questions are separate, and because an operator changing their mind
+-- about the default home screen should not have to edit twenty entries to do it.
+--
+-- Whatever is written here wins over the `slot`, `dock`, `optional` and `required` fields
+-- of the catalogue, so this table is the single answer to "what does a new phone look
+-- like". A player who rearranges their apps overrides it in turn; it is only the start.
+Config.Home = {
+    -- The dock, left to right. Four fits comfortably; five is tight; more is a mess.
+    -- These are always installed, whatever `installed` below says.
+    dock = { 'phone', 'messages', 'contacts', 'settings' },
+
+    -- Installed on a new phone, in this order, filling the grid after the dock.
+    -- **Anything in the catalogue and NOT listed here has to be downloaded from the
+    -- FruitStore.** That is how the store is made to mean something: remove a line to
+    -- turn an app into a download, add one to ship it.
+    --
+    -- Bleeter, Snapmatic, Hush and Cipher are deliberately absent: a social account is
+    -- something a character chooses to open, not something their phone arrives with.
+    installed = {
+        'bank', 'mail', 'maps', 'camera', 'gallery', 'music',
+        'garage', 'property', 'wallet', 'jobs', 'health',
+        'notes', 'reminders', 'calc',
+        'mdt',        -- gated to the police by `job` in the catalogue; absent for everyone else
+        'store',
+    },
+
+    -- Cannot be removed by the player. A phone with no Phone app is a brick, and a phone
+    -- with no store can never get anything back.
+    required = { 'phone', 'messages', 'contacts', 'store', 'settings' },
+
+    -- Not offered at all: not on the home screen, not in the store, not searchable.
+    -- Use this to switch an app off entirely rather than deleting its catalogue entry,
+    -- which would lose its metadata and its translations.
+    hidden = {},
+}
+
+-- Apply the layout to the catalogue. Order of business: drop what is hidden, then let
+-- `dock` and `installed` decide slots, and let anything they do not mention become a
+-- download. Written as a loop rather than by hand so the two tables cannot drift.
+do
+    local hidden, required, dock, order = {}, {}, {}, {}
+    for _, id in ipairs(Config.Home.hidden or {}) do hidden[id] = true end
+    for _, id in ipairs(Config.Home.required or {}) do required[id] = true end
+    for i, id in ipairs(Config.Home.dock or {}) do dock[id] = i end
+    for i, id in ipairs(Config.Home.installed or {}) do order[id] = i end
+
+    local kept = {}
+    for _, app in ipairs(Config.Apps) do
+        if not hidden[app.id] then
+            local metadata = Config.AppMetadata[app.id] or {}
+            app.developer = app.developer or 'iFruit Studio'
+            app.version = app.version or '2.0.0'
+            app.features = app.features or metadata.features or {}
+            app.keywords = app.keywords or metadata.keywords or {}
+
+            app.required = required[app.id] or false
+            if dock[app.id] then
+                -- The dock comes first and is never a download.
+                app.dock = true
+                app.optional = false
+                app.slot = dock[app.id]
+            else
+                app.dock = false
+                -- Listed means shipped; unlisted means the store has it.
+                app.optional = order[app.id] == nil
+                -- Dock slots are 1..n, so the grid starts after them and a download
+                -- lands past everything shipped rather than in the middle of it.
+                app.slot = order[app.id]
+                    and (#(Config.Home.dock or {}) + order[app.id])
+                    or (100 + #kept)
+            end
+            kept[#kept + 1] = app
+        end
+    end
+    Config.Apps = kept
 end
 
 -- What the store groups by. The order here is the order of the sections.
