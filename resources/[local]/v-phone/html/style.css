@@ -2266,8 +2266,15 @@ input { font: inherit; }
 .appbody {
   padding-left: 15px;
   padding-right: 15px;
+  /* iOS leaves the large title room to breathe before the first card. Without it the
+     card butts against the title and every app reads as cramped at the top. */
+  padding-top: 14px;
   scroll-behavior: smooth;
 }
+
+/* A drop-in app owns its whole surface, so it takes the padding back off. CEF has no
+   :has(), so the frame cancels the inset itself rather than the body suppressing it. */
+.appframe { margin: -14px -15px -34px; width: calc(100% + 30px); height: calc(100% + 48px); }
 
 .appbody::before {
   content: '';
