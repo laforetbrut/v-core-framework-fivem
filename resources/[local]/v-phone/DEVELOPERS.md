@@ -360,6 +360,45 @@ Dans la page HTML de cette ressource, charger le kit avec les URLs NUI absolues 
 Le propriétaire est mémorisé automatiquement. Si sa ressource est arrêtée, l’application
 n’est pas proposée au joueur.
 
+## Choisir l'écran d'accueil par défaut (administrateurs)
+
+`Config.Apps` est le **catalogue** : tout ce qui existe. `Config.Home` est la
+**disposition** : ce qu'un téléphone ouvert pour la première fois contient réellement, et
+dans quel ordre. Les deux questions sont séparées, et `Config.Home` gagne toujours sur les
+champs `slot`, `dock`, `optional` et `required` du catalogue.
+
+```lua
+Config.Home = {
+    -- Le dock, de gauche à droite. Toujours installées.
+    dock = { 'phone', 'messages', 'contacts', 'settings' },
+
+    -- Installées sur un téléphone neuf, dans cet ordre.
+    -- Tout ce qui est dans le catalogue et ABSENT d'ici doit être téléchargé
+    -- depuis le FruitStore.
+    installed = { 'bank', 'mail', 'maps', 'camera', 'gallery', 'music', 'store' },
+
+    -- Ne peuvent pas être supprimées par le joueur.
+    required = { 'phone', 'messages', 'contacts', 'store', 'settings' },
+
+    -- Jamais proposées : ni écran d'accueil, ni magasin, ni recherche.
+    hidden = {},
+}
+```
+
+Trois gestes couvrent presque tous les besoins :
+
+- **Retirer une ligne de `installed`** transforme l'application en téléchargement.
+- **Ajouter une ligne à `installed`** la livre avec le téléphone.
+- **Ajouter un identifiant à `hidden`** la supprime entièrement sans perdre ses
+  traductions ni ses métadonnées de magasin.
+
+Bleeter, Snapmatic, Hush et Cipher sont volontairement absents de `installed` : un compte
+sur un réseau social est quelque chose qu'un personnage choisit d'ouvrir, pas quelque
+chose que son téléphone contient à la sortie du carton.
+
+L'ordre de `installed` est l'ordre de l'écran d'accueil, après le dock. Un joueur qui
+réorganise ses applications remplace cette disposition ; elle n'est que le point de départ.
+
 ## Règles de qualité
 
 - Garder la source de vérité dans le module qui possède réellement la donnée.
