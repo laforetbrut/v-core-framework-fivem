@@ -1228,7 +1228,13 @@ RENDER.settings = () => {
     UI.group((state.apps || []).map((a) => UI.row({
       appicon: a.icon, title: L(a.label),
       value: p.actionApp === a.id ? L('ph.on') : '', data: { act: a.id },
-    })), { header: L('ph.action_button'), footer: L('ph.action_hint') })
+    })), { header: L('ph.action_button'), footer: L('ph.action_hint') }) +
+    // About, where a phone puts it: the last thing in Settings.
+    UI.group([
+      UI.row({ icon: 'phone', tint: '#8E8E93', title: L('ph.about_device'), value: 'iFruit' }),
+      UI.row({ icon: 'settings', tint: '#8E8E93', title: L('ph.about_framework'), value: 'v-core' }),
+      UI.row({ icon: 'id', tint: '#8E8E93', title: L('ph.about_dev'), value: 'vyrriox' }),
+    ], { header: L('ph.about_title'), footer: L('ph.about_foot') })
   );
   const wa = byId('wapply');
   if (wa) wa.addEventListener('click', async () => {

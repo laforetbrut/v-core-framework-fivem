@@ -1710,6 +1710,21 @@ CreateThread(function()
     end
     loadWorldApps()
 
+    -- The shipped order changed, and a database seeded under the old one would keep it for
+    -- ever because the operator's row wins. Re-apply the seed slots exactly once, marked
+    -- so an operator who reorders afterwards is never overwritten again.
+    local seeded = MySQL.scalar.await(
+        "SELECT v FROM phone_app_data WHERE citizenid = '__system' AND app = 'v-phone' AND k = 'slotseed'")
+    if seeded ~= 'v2' then
+        for _, a in ipairs(Config.Apps) do
+            MySQL.update.await('UPDATE world_apps SET slot = ? WHERE id = ?', { a.slot or 99, a.id })
+        end
+        MySQL.query.await([[INSERT INTO phone_app_data (citizenid, app, k, v) VALUES ('__system','v-phone','slotseed','v2')
+            ON DUPLICATE KEY UPDATE v = VALUES(v)]])
+        loadWorldApps()
+        print('[v-phone] home screen order re-seeded')
+    end
+
     -- Retention, once at boot. A prune on a timer would be a second thing to reason about
     -- for a table that only grows while people are talking.
     local days = math.floor(num(S('retentionDays', Config.Messages.retentionDays), 30))
