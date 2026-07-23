@@ -496,9 +496,17 @@ input { font: inherit; }
 .compose .sendbtn:active { transform: scale(.88); }
 
 /* ══ Keypad ═══════════════════════════════════════════════════ */
+/* The reserved height is the height of a digit, not a guess under it: at 44px the empty
+   display was shorter than a filled one, so the whole keypad hopped the moment the first
+   number was typed. */
 .dialed { text-align: center; font-family: var(--ios-num); font-size: 34px; font-weight: 400;
-  letter-spacing: .01em; min-height: 44px; padding: 6px 0 2px; color: var(--app-label); }
-.dialsub { text-align: center; font-size: 13px; color: var(--app-label2); min-height: 18px; }
+  letter-spacing: .01em; height: 54px; min-height: 54px; padding: 6px 0 2px;
+  display: flex; align-items: center; justify-content: center; color: var(--app-label); }
+/* One line, always. A contact name long enough to wrap moved the keypad down as soon as
+   the number resolved, which is the same hop from the other direction. */
+.dialsub { text-align: center; font-size: 13px; color: var(--app-label2);
+  height: 18px; min-height: 18px; padding: 0 16px; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
 .keypad { display: grid; grid-template-columns: repeat(3, 74px); gap: 14px 22px;
   justify-content: center; padding: 14px 0 6px; }
 .key { width: 74px; height: 74px; border-radius: 50%; display: flex; flex-direction: column;
