@@ -112,15 +112,30 @@ RegisterKeyMapping('+vvoice_radio', 'Voice: talk on the radio', 'keyboard', Conf
 -- ── Phone submix ───────────────────────────────────────────────
 -- Exposed for v-phone: a call joins its own channel so it carries across the map and is
 -- inaudible to somebody standing next to you.
-exports('PhoneCallStart', function()
-    MumbleAddVoiceChannelListen(phoneCh)
-    MumbleSetVoiceChannel(phoneCh)
+-- One channel per call rather than one for every call at once. A shared channel meant
+-- that anyone put on speaker would have heard every other conversation on the server,
+-- which is why speaker could not exist before.
+local function callChannel(callId)
+    return phoneCh + (math.floor(tonumber(callId) or 0) % 24)
+end
+
+exports('PhoneCallStart', function(callId)
+    local ch = callChannel(callId)
+    MumbleAddVoiceChannelListen(ch)
+    MumbleSetVoiceChannel(ch)
 end)
 
-exports('PhoneCallEnd', function()
+exports('PhoneCallEnd', function(callId)
     MumbleClearVoiceChannel()
-    MumbleRemoveVoiceChannelListen(phoneCh)
+    MumbleRemoveVoiceChannelListen(callChannel(callId))
     applyRange()
+end)
+
+--- Listen in on somebody else's call without joining it: the phone is on speaker and you
+--- are standing next to it. Listening only - it never lets you transmit into the call.
+exports('SpeakerListen', function(callId, on)
+    local ch = callChannel(callId)
+    if on then MumbleAddVoiceChannelListen(ch) else MumbleRemoveVoiceChannelListen(ch) end
 end)
 
 -- ── State for the HUD ──────────────────────────────────────────

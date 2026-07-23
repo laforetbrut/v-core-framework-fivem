@@ -254,6 +254,45 @@ end)
 RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
 RegisterNUICallback('mail',          relay('v-phone:mail'))
 RegisterNUICallback('notes',         relay('v-phone:notes'))
+RegisterNUICallback('health',        relay('v-phone:health'))
+RegisterNUICallback('speaker',       relay('v-phone:speaker'))
+
+--- Somebody near you put their phone on speaker, so you hear their call. Listening only:
+--- the export never lets you transmit into a conversation you are not part of.
+RegisterNetEvent('v-phone:client:speaker', function(d)
+    if not voice() then return end
+    exports['v-voice']:SpeakerListen(d and d.id, d and d.on == true)
+end)
+
+-- ── Steps ──────────────────────────────────────────────────────
+-- A step count the game can actually justify: distance covered on foot, converted at a
+-- normal stride. Reported in batches rather than every frame, because a health app does
+-- not need to know about each footfall.
+CreateThread(function()
+    local last = nil
+    local pending = 0.0
+    while true do
+        Wait(2000)
+        local ped = PlayerPedId()
+        if ped and ped ~= 0 and not IsPedInAnyVehicle(ped, false) then
+            local at = GetEntityCoords(ped)
+            if last and IsPedOnFoot(ped) then
+                local d = #(at - last)
+                -- Ignore teleports and spawns; a person does not cover 50 m in two seconds.
+                if d > 0.2 and d < 50.0 then pending = pending + d end
+            end
+            last = at
+        else
+            last = nil
+        end
+        -- 0.75 m to a stride, sent once it is worth sending.
+        if pending >= 40.0 then
+            local steps = math.floor(pending / 0.75)
+            pending = 0.0
+            V.Request('v-phone:health', function() end, { op = 'steps', steps = steps })
+        end
+    end
+end)
 RegisterNUICallback('lookup',        relay('v-phone:lookup'))
 
 RegisterNUICallback('close', function(_, cb) closePhone(); cb('ok') end)
@@ -310,7 +349,9 @@ end)
 
 RegisterNUICallback('music', function(data, cb)
     if GetResourceState('v-music') ~= 'started' then cb({ error = 'off' }) return end
-    V.Request('v-music:control', function(res) cb(res or { error = 'x' }) end, data)
+    -- Starting a track and controlling one already playing are two different calls.
+    local cbName = (data and data.action == 'play') and 'v-music:play' or 'v-music:control'
+    V.Request(cbName, function(res) cb(res or { error = 'x' }) end, data)
 end)
 
 RegisterNUICallback('payRent', function(data, cb)
@@ -453,11 +494,11 @@ end)
 -- ══════════════════════════════════════════════════════════════
 -- The audio is v-voice's; these four handlers only start and stop it at the right moments.
 local function joinCallAudio()
-    if voice() then exports['v-voice']:PhoneCallStart() end
+    if voice() then exports['v-voice']:PhoneCallStart(call and call.id) end
 end
 
 local function leaveCallAudio()
-    if voice() then exports['v-voice']:PhoneCallEnd() end
+    if voice() then exports['v-voice']:PhoneCallEnd(call and call.id) end
 end
 
 RegisterNUICallback('call', function(data, cb)

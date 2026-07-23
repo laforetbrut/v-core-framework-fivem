@@ -548,6 +548,7 @@ end
 local function endCall(id, reason)
     local c = Calls[id]
     if not c then return end
+    speakerOff(id)
     -- Log it once, as it ends, from the state it reached: active means it connected.
     logCall(c, c.state == 'active')
     -- Nobody picked up: offer the caller the voicemail, which is the whole point of one.
@@ -768,7 +769,8 @@ V.Callback('v-phone:open', function(src, resolve)
         available = available,
         prefs    = prefsOf(p),
         contacts = MySQL.query.await(
-            'SELECT id, name, number, favourite FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name',
+            [[SELECT id, name, number, favourite, photo, email, address, birthday, note
+              FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name]],
             { p.citizenid }) or {},
         conversations = conversations(p.citizenid),
         groups = MySQL.query.await([[SELECT g.id, g.name FROM phone_groups g
@@ -880,18 +882,28 @@ V.Callback('v-phone:contactSave', function(src, resolve, data)
     local number = tostring((data and data.number) or ''):sub(1, 20)
     if name == '' or number == '' then resolve({ error = 'fields' }) return end
     local fav = (data and data.favourite) and 1 or 0
+    -- The rest of the card. A photo is a URL other clients will fetch, so it goes through
+    -- the same host gate as a wallpaper.
+    local photo = tostring((data and data.photo) or ''):sub(1, 400)
+    if photo ~= '' and not wallpaperAllowed(photo) then resolve({ error = 'badhost' }) return end
+    local email = tostring((data and data.email) or ''):sub(1, 64)
+    local address = tostring((data and data.address) or ''):sub(1, 120)
+    local birthday = tostring((data and data.birthday) or ''):sub(1, 20)
+    local note = tostring((data and data.note) or ''):sub(1, 300)
 
     local id = tonumber(data and data.id)
     if id then
         -- Scoped to the owner in SQL, not checked afterwards: an UPDATE that trusted the
         -- id alone would let a client rewrite somebody else's contact list.
-        MySQL.update.await(
-            'UPDATE phone_contacts SET name = ?, number = ?, favourite = ? WHERE id = ? AND citizenid = ?',
-            { name, number, fav, id, p.citizenid })
+        MySQL.update.await([[UPDATE phone_contacts SET name = ?, number = ?, favourite = ?,
+            photo = ?, email = ?, address = ?, birthday = ?, note = ?
+            WHERE id = ? AND citizenid = ?]],
+            { name, number, fav, photo, email, address, birthday, note, id, p.citizenid })
     else
-        id = MySQL.insert.await(
-            'INSERT INTO phone_contacts (citizenid, name, number, favourite) VALUES (?, ?, ?, ?)',
-            { p.citizenid, name, number, fav })
+        id = MySQL.insert.await([[INSERT INTO phone_contacts
+            (citizenid, name, number, favourite, photo, email, address, birthday, note)
+            VALUES (?,?,?,?,?,?,?,?,?)]],
+            { p.citizenid, name, number, fav, photo, email, address, birthday, note })
     end
     resolve({ ok = true, id = id })
 end)
@@ -1566,6 +1578,121 @@ V.Callback('v-phone:voicemail', function(src, resolve, data)
     resolve({ error = 'x' })
 end)
 
+-- ══════════════════════════════════════════════════════════════
+-- Health record
+-- ══════════════════════════════════════════════════════════════
+-- What a real Health app keeps and the game cannot work out for itself: blood type,
+-- allergies, conditions, an emergency contact. Stored on the character, so it is the same
+-- record whatever happens to the handset. Steps come from the client, which is the only
+-- side that knows how far somebody actually walked.
+V.Callback('v-phone:health', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local rec = p.GetMetadata('healthrec')
+    if type(rec) ~= 'table' then rec = {} end
+
+    local op = tostring((data and data.op) or 'get')
+    if op == 'set' then
+        if data.blood    ~= nil then rec.blood    = tostring(data.blood):sub(1, 6) end
+        if data.allergies ~= nil then rec.allergies = tostring(data.allergies):sub(1, 300) end
+        if data.conditions ~= nil then rec.conditions = tostring(data.conditions):sub(1, 300) end
+        if data.meds     ~= nil then rec.meds     = tostring(data.meds):sub(1, 300) end
+        if data.donor    ~= nil then rec.donor    = data.donor == true end
+        if data.ice      ~= nil then rec.ice      = tostring(data.ice):sub(1, 60) end
+        p.SetMetadata('healthrec', rec)
+    elseif op == 'steps' then
+        -- The client reports distance walked; the record keeps the day's total.
+        local add = math.max(0, math.floor(num(data and data.steps, 0)))
+        local day = os.date('%Y-%m-%d')
+        if rec.stepDay ~= day then rec.stepDay = day rec.steps = 0 end
+        rec.steps = math.min(200000, (tonumber(rec.steps) or 0) + add)
+        p.SetMetadata('healthrec', rec)
+    end
+
+    local day = os.date('%Y-%m-%d')
+    if rec.stepDay ~= day then rec.steps = 0 end
+    resolve({ ok = true, record = rec })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Speaker
+-- ══════════════════════════════════════════════════════════════
+-- The phone is on speaker, so the people standing next to you hear the call. Each call has
+-- its own voice channel, so putting one on speaker never leaks any other conversation.
+local Speaker = {}      -- [callId] = { on = true, heard = { [src] = true } }
+
+local function speakerRange()
+    return num(Config.Calls.speakerRange, 8.0)
+end
+
+--- Re-work out who is close enough, and add or drop them.
+local function speakerSync(id)
+    local st = Speaker[id]
+    local c = Calls[id]
+    if not st or not c or c.state ~= 'active' then return end
+
+    local near = {}
+    for _, holder in ipairs({ c.a, c.b }) do
+        local ped = holder and GetPlayerPed(holder)
+        local at = ped and ped ~= 0 and GetEntityCoords(ped) or nil
+        if at then
+            for _, sid in ipairs(GetPlayers()) do
+                local t = tonumber(sid)
+                if t and t ~= c.a and t ~= c.b then
+                    local tp = GetPlayerPed(t)
+                    if tp and tp ~= 0 and #(GetEntityCoords(tp) - at) <= speakerRange() then
+                        near[t] = true
+                    end
+                end
+            end
+        end
+    end
+
+    for t in pairs(near) do
+        if not st.heard[t] then
+            st.heard[t] = true
+            TriggerClientEvent('v-phone:client:speaker', t, { id = id, on = true })
+        end
+    end
+    for t in pairs(st.heard) do
+        if not near[t] then
+            st.heard[t] = nil
+            TriggerClientEvent('v-phone:client:speaker', t, { id = id, on = false })
+        end
+    end
+end
+
+local function speakerOff(id)
+    local st = Speaker[id]
+    if not st then return end
+    for t in pairs(st.heard) do
+        TriggerClientEvent('v-phone:client:speaker', t, { id = id, on = false })
+    end
+    Speaker[id] = nil
+end
+
+V.Callback('v-phone:speaker', function(src, resolve, data)
+    local id = CallOf[src]
+    local c = id and Calls[id]
+    if not c or c.state ~= 'active' then resolve({ error = 'nocall' }) return end
+    local on = data and data.on == true
+
+    if not on then speakerOff(id) resolve({ ok = true, on = false }) return end
+
+    Speaker[id] = Speaker[id] or { heard = {} }
+    speakerSync(id)
+    -- People walk. Re-checked while it is on, so somebody who wanders over hears it and
+    -- somebody who wanders off stops.
+    CreateThread(function()
+        while Speaker[id] and Calls[id] and Calls[id].state == 'active' do
+            speakerSync(id)
+            Wait(2500)
+        end
+        speakerOff(id)
+    end)
+    resolve({ ok = true, on = true })
+end)
+
 V.Callback('v-phone:calls', function(src, resolve)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -1710,6 +1837,21 @@ CreateThread(function()
         `citizenid` VARCHAR(16) NOT NULL,
         PRIMARY KEY (`group_id`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- The contact card grew. Added idempotently so an existing database upgrades without
+    -- a migration step nobody would run.
+    for col, ddl in pairs({
+        photo    = "ADD COLUMN `photo` VARCHAR(400) NOT NULL DEFAULT ''",
+        email    = "ADD COLUMN `email` VARCHAR(64) NOT NULL DEFAULT ''",
+        address  = "ADD COLUMN `address` VARCHAR(120) NOT NULL DEFAULT ''",
+        birthday = "ADD COLUMN `birthday` VARCHAR(20) NOT NULL DEFAULT ''",
+        note     = "ADD COLUMN `note` VARCHAR(300) NOT NULL DEFAULT ''",
+    }) do
+        local has = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'phone_contacts'
+              AND COLUMN_NAME = ? LIMIT 1]], { col })
+        if not has then MySQL.query.await('ALTER TABLE `phone_contacts` ' .. ddl) end
+    end
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_notes` (
         `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,

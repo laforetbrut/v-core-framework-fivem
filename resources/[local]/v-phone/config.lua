@@ -51,6 +51,9 @@ Config.Messages = {
 Config.Calls = {
     ringSeconds = 30,       -- unanswered calls give up after this
     maxMinutes  = 30,       -- hard ceiling on one call, so a forgotten call is not for ever
+    -- On speaker, how far the call carries to the people around you. Short: it is a
+    -- phone in a hand, not a PA system.
+    speakerRange = 8.0,
 }
 
 -- ── Apps ───────────────────────────────────────────────────────
