@@ -3730,7 +3730,9 @@ input { font: inherit; }
   box-shadow: 0 8px 18px rgba(0, 0, 0, .28);
 }
 
-.spoticons span {
+/* The icon tile is a span too, and a blanket `display: block` here dropped it out of
+   flex centring, leaving every glyph riding ten pixels high in its tile. */
+.spoticons span:not(.ic) {
   display: block;
   overflow: hidden;
   color: rgba(255, 255, 255, .82);
@@ -5406,7 +5408,16 @@ input { font: inherit; }
   grid-template-columns: repeat(3, 1fr);
   gap: 9px;
   margin-top: 15px;
+  /* Two rows, then the grid scrolls. The step has a button pinned to the bottom of
+     the screen, so a catalogue that grows has to grow inside itself: with seven
+     wallpapers the third row pushed the transparency slider under that button and
+     off the bottom edge. */
+  max-height: 273px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
+
+.setupwalls::-webkit-scrollbar { width: 0; }
 
 .setupwalls button {
   position: relative;
