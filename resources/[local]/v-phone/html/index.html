@@ -67,6 +67,18 @@
           </button>
         </div>
 
+        <!-- Secure unlock. Face ID is bound to the active character; the six-digit
+             fallback is verified by the server and is never kept in this page. -->
+        <section class="auth" id="auth" role="dialog" aria-modal="true" aria-label="Secure unlock">
+          <div class="authstage" id="authstage"></div>
+        </section>
+
+        <!-- First-run setup. It lives below the real status bar and Dynamic Island,
+             so the device keeps its physical identity throughout activation. -->
+        <section class="setup" id="setup" role="dialog" aria-modal="true" aria-label="Phone setup" aria-hidden="true">
+          <div class="setupstage" id="setupstage"></div>
+        </section>
+
         <!-- Home screen -->
         <section class="home behind" id="home" aria-label="Home screen">
           <div class="widgets" id="widgets"></div>
@@ -115,9 +127,8 @@
         <!-- Notification shade: swipe down from the top left. -->
         <section class="shade" id="shade" aria-label="Notifications">
           <div class="paneltop">
-            <span class="panelgrab" aria-hidden="true"></span>
             <button class="panelclose" id="shadeclose" type="button" aria-label="Close notifications">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>
             </button>
           </div>
           <div class="shadeclock" id="shadeclock"></div>
@@ -130,7 +141,6 @@
             </span>
           </div>
           <div class="shadelist" id="shadelist"></div>
-          <button class="panelhome" id="shadehome" type="button" aria-label="Close notifications"></button>
         </section>
 
         <!-- An opened folder -->
@@ -142,11 +152,10 @@
         <!-- Control centre -->
         <section class="cc" id="cc" aria-label="Control centre">
           <div class="paneltop ccstatus">
-            <span class="panelgrab" aria-hidden="true"></span>
             <span class="ccclock" id="ccclock">00:00</span>
             <span class="ccdevice" id="ccdevice"></span>
             <button class="panelclose" id="ccclose" type="button" aria-label="Close control centre">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 15l6-6 6 6"/></svg>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>
             </button>
           </div>
           <div class="cctop">
@@ -158,7 +167,6 @@
             <div class="ccslab" id="ccvol"></div>
             <div class="cctoggles" id="cctoggles"></div>
           </div>
-          <button class="panelhome" id="cchome" type="button" aria-label="Close control centre"></button>
         </section>
 
         <div class="scrim" id="scrim"></div>

@@ -390,6 +390,7 @@ RegisterNUICallback('calls',         relay('v-phone:calls'))
 RegisterNUICallback('airdropScan',    relay('v-phone:airdropScan'))
 RegisterNUICallback('airdropSend',    relay('v-phone:airdropSend'))
 RegisterNUICallback('airdropRespond', relay('v-phone:airdropRespond'))
+RegisterNUICallback('unlock',         relay('v-phone:unlock'))
 
 --- Share where you are. The coordinates come from the PED, not from the page: a page
 --- that could name a position could claim to be anywhere.
