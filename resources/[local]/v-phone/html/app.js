@@ -1778,10 +1778,17 @@ function musicAdd(existing, index) {
 function musicTrack(t, i) {
   sheet(t.title || L('ph.untitled'),
     '<div class="mailmeta">' + esc(t.url) + '</div>' +
-    UI.button(L('ph.play_speaker'), 'mplay', 'tinted') +
+    UI.button(L('ph.play_ear'), 'mear', 'tinted') +
+    UI.button(L('ph.play_speaker'), 'mplay', 'plain') +
     UI.button(L('ph.track_edit'), 'medit', 'plain') +
     UI.button(L('ph.delete'), 'mdelt', 'destructive'),
     () => {
+      // Headphones: a private source only this player's client will play.
+      byId('mear').addEventListener('click', async () => {
+        const r = await post('music', { action: 'play', kind: 'headphones', url: t.url, title: t.title });
+        closeSheet();
+        toast(r && r.ok ? L('ph.playing_ear') : L('ph.err_' + ((r && r.error) || 'x')));
+      });
       byId('mplay').addEventListener('click', async () => {
         // kind 'phone' is a short-range source that follows the player: a phone on
         // speaker, not a boombox.
