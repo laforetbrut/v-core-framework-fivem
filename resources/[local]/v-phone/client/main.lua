@@ -410,6 +410,7 @@ end)
 RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
 RegisterNUICallback('mail',          relay('v-phone:mail'))
 RegisterNUICallback('notes',         relay('v-phone:notes'))
+RegisterNUICallback('cipher',        relay('v-phone:cipher'))
 RegisterNUICallback('speaker',       relay('v-phone:speaker'))
 
 --- Somebody near you put their phone on speaker, so you hear their call. Listening only:
@@ -756,6 +757,35 @@ RegisterNUICallback('sdkStorage', function(data, cb)
     appStorage(app, data, cb)
 end)
 
+-- Device capabilities exposed to a sandboxed app. The coordinates are read here from
+-- the player's ped, never accepted from the iframe, and only while that app is active.
+RegisterNUICallback('sdkLocation', function(_, cb)
+    if not sdkApp() then cb({ error = 'forbidden' }) return end
+    local coords = GetEntityCoords(PlayerPedId())
+    cb({
+        ok = true,
+        x = math.floor(coords.x * 10 + 0.5) / 10,
+        y = math.floor(coords.y * 10 + 0.5) / 10,
+        z = math.floor(coords.z * 10 + 0.5) / 10,
+        heading = math.floor(GetEntityHeading(PlayerPedId()) * 10 + 0.5) / 10,
+    })
+end)
+
+RegisterNUICallback('sdkHaptic', function(data, cb)
+    if not sdkApp() then cb({ error = 'forbidden' }) return end
+    local style = tostring((data and data.style) or 'light')
+    local sounds = {
+        light = { 'NAV_UP_DOWN', 'HUD_FRONTEND_DEFAULT_SOUNDSET' },
+        medium = { 'SELECT', 'HUD_FRONTEND_DEFAULT_SOUNDSET' },
+        success = { 'CHECKPOINT_PERFECT', 'HUD_MINI_GAME_SOUNDSET' },
+        warning = { 'ERROR', 'HUD_AMMO_SHOP_SOUNDSET' },
+        error = { 'CHECKPOINT_MISSED', 'HUD_MINI_GAME_SOUNDSET' },
+    }
+    local sound = sounds[style] or sounds.light
+    PlaySoundFrontend(-1, sound[1], sound[2], true)
+    cb({ ok = true })
+end)
+
 -- ══════════════════════════════════════════════════════════════
 -- Calls
 -- ══════════════════════════════════════════════════════════════
@@ -909,6 +939,21 @@ RegisterNetEvent('v-phone:client:message', function(msg)
         if not notificationMuted('message', msg) then buzz(false) end
     else
         peek('message', msg)
+    end
+end)
+
+RegisterNetEvent('v-phone:client:cipher', function(packet)
+    if isOpen then
+        SendNUIMessage({ action = 'cipher', packet = packet })
+        if not notificationMuted('banner', { app = 'cipher' }) then buzz(false) end
+    else
+        local profile = type(packet) == 'table' and packet.from or {}
+        peek('banner', {
+            app = 'cipher',
+            icon = 'cipher',
+            title = tostring(profile.displayName or profile.handle or L('app.cipher')),
+            body = L('ph.cipher_packet'),
+        })
     end
 end)
 

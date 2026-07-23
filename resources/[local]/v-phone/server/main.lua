@@ -24,6 +24,9 @@ local WorldApps = {}     -- [id]        = the operator's row from v-world
 local callSeq  = 0
 local MessageLastSend = {}
 local MessageBusy = {}
+local CipherUnlocked = {}
+local CipherAttempts = {}
+local CipherLastSend = {}
 
 -- Forward declarations used by helpers defined before their implementation blocks.
 -- Without these locals Lua resolves the earlier references as globals, even though a
@@ -191,6 +194,28 @@ local function registerApp(id, info, owner)
         print(('[v-phone] rejected invalid app id %q from %s'):format(id, tostring(owner or 'config')))
         return false
     end
+    local permissions = {}
+    local permissionSeen = {}
+    for _, value in ipairs(type(info.permissions) == 'table' and info.permissions or {}) do
+        local permission = tostring(value or ''):lower():gsub('[^%w_-]', ''):sub(1, 32)
+        if permission ~= '' and not permissionSeen[permission] then
+            permissionSeen[permission] = true
+            permissions[#permissions + 1] = permission
+        end
+    end
+
+    local features = {}
+    for _, value in ipairs(type(info.features) == 'table' and info.features or {}) do
+        local feature = tostring(value or ''):gsub('[%c]', ''):sub(1, 60)
+        if feature ~= '' and #features < 8 then features[#features + 1] = feature end
+    end
+
+    local keywords = {}
+    for _, value in ipairs(type(info.keywords) == 'table' and info.keywords or {}) do
+        local keyword = tostring(value or ''):gsub('[%c]', ''):sub(1, 30)
+        if keyword ~= '' and #keywords < 12 then keywords[#keywords + 1] = keyword end
+    end
+
     Apps[id] = {
         id    = id,
         label = tostring(info.label or id),
@@ -207,6 +232,12 @@ local function registerApp(id, info, owner)
         -- Not installed until it is downloaded. The store is the only way in.
         optional = info.optional == true,
         category = info.category and tostring(info.category) or 'utilities',
+        version = info.version and tostring(info.version):sub(1, 16) or nil,
+        developer = info.developer and tostring(info.developer):gsub('[%c]', ''):sub(1, 60) or nil,
+        accent = info.accent and tostring(info.accent):match('^#%x%x%x%x%x%x$') or nil,
+        permissions = permissions,
+        features = features,
+        keywords = keywords,
         -- One sentence for the store page. Optional, because forcing an empty string on
         -- every app would just fill the store with empty strings.
         desc  = info.desc and tostring(info.desc):sub(1, 300) or nil,
@@ -271,7 +302,9 @@ local function appsFor(src, p)
                 slot = (w and num(w.slot, a.slot)) or a.slot,
                 required = a.required or nil,
                 optional = a.optional or nil, category = a.category,
-                desc = a.desc, owner = a.owner,
+                desc = a.desc, owner = a.owner, version = a.version,
+                developer = a.developer, accent = a.accent,
+                permissions = a.permissions, features = a.features, keywords = a.keywords,
             }
         end
     end
@@ -452,6 +485,45 @@ local function prefsOf(p, includeSecrets)
     return prefs
 end
 
+local function contactsOf(p)
+    local required, requiredNumbers = {}, {}
+    for index, raw in ipairs(Config.RequiredContacts or {}) do
+        if type(raw) == 'table' then
+            local name = tostring(raw.name or ''):gsub('[%c]', ''):sub(1, 40)
+            local number = tostring(raw.number or ''):gsub('[%c]', ''):sub(1, 20)
+            if name ~= '' and number ~= '' and not requiredNumbers[number] then
+                requiredNumbers[number] = true
+                required[#required + 1] = {
+                    id = 'required:' .. index,
+                    name = name,
+                    number = number,
+                    favourite = raw.favourite == false and 0 or 1,
+                    photo = tostring(raw.photo or ''):sub(1, 400),
+                    email = tostring(raw.email or ''):sub(1, 64),
+                    address = tostring(raw.address or ''):sub(1, 120),
+                    birthday = tostring(raw.birthday or ''):sub(1, 20),
+                    note = tostring(raw.note or ''):sub(1, 300),
+                    system = true,
+                    required = true,
+                }
+            end
+        end
+    end
+
+    local personal = MySQL.query.await(
+        [[SELECT id, name, number, favourite, photo, email, address, birthday, note
+          FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name]],
+        { p.citizenid }) or {}
+    for _, contact in ipairs(personal) do
+        -- The configured version wins, otherwise the same service would be shown twice
+        -- and one of the duplicates would misleadingly appear editable.
+        if not requiredNumbers[tostring(contact.number or '')] then
+            required[#required + 1] = contact
+        end
+    end
+    return required
+end
+
 --- Two lists, because they answer two different questions. `available` is what the
 --- OPERATOR permits this player to have; `installed` is what the PLAYER has chosen to
 --- keep. The store shows the first, the home screen shows the second.
@@ -479,14 +551,26 @@ end
 --- Conversations, newest first: for each counterpart, the last message and how many are
 --- unread. Filtered to this citizen id in SQL, so a client cannot ask for somebody else's.
 local function conversations(cid)
-    -- Three plain queries rather than one with window functions: MariaDB only grew those
-    -- in 10.2, and a phone that works on the operator's database matters more than a
-    -- clever statement.
+    -- One grouped read fetches both the last message and the counterpart's number.
+    -- This avoids the former N+1 pattern (one extra SELECT per conversation) while
+    -- staying compatible with MariaDB versions that predate window functions.
     local last = MySQL.query.await([[
-        SELECT IF(from_cid = ?, to_cid, from_cid) AS other, MAX(id) AS last_id
-        FROM phone_messages WHERE (from_cid = ? OR to_cid = ?) AND group_id IS NULL
-        GROUP BY other
-    ]], { cid, cid, cid }) or {}
+        SELECT m.id AS last_id, m.body, m.at,
+               IF(m.from_cid = ?, m.to_cid, m.from_cid) AS other,
+               c.phone AS number
+        FROM phone_messages m
+        INNER JOIN (
+            SELECT MAX(id) AS id
+            FROM phone_messages
+            WHERE (from_cid = ? OR to_cid = ?) AND group_id IS NULL
+            GROUP BY IF(from_cid = ?, to_cid, from_cid)
+            ORDER BY id DESC
+            LIMIT 100
+        ) latest ON latest.id = m.id
+        LEFT JOIN characters c
+          ON c.citizenid = IF(m.from_cid = ?, m.to_cid, m.from_cid)
+        ORDER BY m.id DESC
+    ]], { cid, cid, cid, cid, cid }) or {}
     if #last == 0 then return {} end
 
     local unread = {}
@@ -498,12 +582,12 @@ local function conversations(cid)
 
     local out = {}
     for _, r in ipairs(last) do
-        local m = MySQL.single.await('SELECT body, at FROM phone_messages WHERE id = ?', { r.last_id })
+        if r.number and r.number ~= '' then Numbers[r.other] = r.number end
         out[#out + 1] = {
             other  = r.other,
-            number = numberOfCid(r.other) or r.other,
-            body   = m and m.body or '',
-            at     = m and m.at or nil,
+            number = r.number or r.other,
+            body   = r.body or '',
+            at     = r.at,
             unread = unread[r.other] or 0,
             lastId = r.last_id,
         }
@@ -907,6 +991,124 @@ phoneReachable = function(src)
     return hasBars(src)
 end
 
+-- ══ Cipher ═════════════════════════════════════════════════════
+-- Cipher deliberately keeps cryptography out of Lua. The NUI generates an ECDH key pair,
+-- keeps the encrypted private key in the player's local CEF storage and sends only its
+-- public half here. This server can route an envelope, but it has no material with which
+-- to open it.
+local function cipherHasApp(src, p)
+    local _, installed = appsFrom(src, p)
+    for _, app in ipairs(installed) do
+        if app.id == 'cipher' then return true end
+    end
+    return false
+end
+
+local function cipherProfile(cid)
+    local row = MySQL.single.await([[SELECT handle, displayname, public_key, fingerprint, created_at
+        FROM phone_cipher_profiles WHERE citizenid = ?]], { cid })
+    if not row then return nil end
+    return {
+        handle = row.handle,
+        displayName = row.displayname,
+        publicKey = row.public_key,
+        fingerprint = row.fingerprint,
+        createdAt = row.created_at,
+    }
+end
+
+local function cipherUnreadOf(cid)
+    return tonumber(MySQL.scalar.await([[SELECT COUNT(*) FROM phone_cipher_messages m
+        LEFT JOIN phone_cipher_clears c
+          ON c.citizenid = ? AND c.other_cid = m.from_cid
+        WHERE m.to_cid = ? AND m.seen = 0
+          AND (m.expires_at IS NULL OR m.expires_at > NOW())
+          AND m.id > COALESCE(c.before_id, 0)]], { cid, cid })) or 0
+end
+
+local function cipherPinHash(cid, pin)
+    return MySQL.scalar.await("SELECT SHA2(CONCAT(?, ':cipher:', ?), 256)", { cid, pin })
+end
+
+local function cipherCleanHandle(raw)
+    return tostring(raw or ''):lower():gsub('^@', ''):sub(1, 20)
+end
+
+local function cipherPublicMaterial(data)
+    local publicKey = tostring((data and data.publicKey) or '')
+    local fingerprint = tostring((data and data.fingerprint) or ''):upper()
+    if #publicKey < 80 or #publicKey > 1800 or #fingerprint < 20 or #fingerprint > 95 then
+        return nil
+    end
+    local ok, key = pcall(json.decode, publicKey)
+    if not ok or type(key) ~= 'table' or key.kty ~= 'EC' or key.crv ~= 'P-256'
+        or type(key.x) ~= 'string' or type(key.y) ~= 'string' then
+        return nil
+    end
+    if not fingerprint:match('^[A-F0-9:]+$') then return nil end
+    return publicKey, fingerprint
+end
+
+local function cipherUnlocked(src, p)
+    return CipherUnlocked[src] == p.citizenid
+end
+
+local function cipherRequireSession(src, p, resolve)
+    if not cipherHasApp(src, p) then resolve({ error = 'notinstalled' }) return false end
+    if not cipherUnlocked(src, p) then resolve({ error = 'locked' }) return false end
+    return true
+end
+
+local function cipherVerifyPin(src, p, pin)
+    local attempt = CipherAttempts[src]
+    local now = GetGameTimer()
+    if attempt and attempt.untilAt and now < attempt.untilAt then
+        return false, 'lockedout', math.ceil((attempt.untilAt - now) / 1000)
+    end
+    pin = tostring(pin or '')
+    if not pin:match('^%d%d%d%d%d%d$') then return false, 'badpin', 0 end
+    local stored = MySQL.scalar.await(
+        'SELECT pin_hash FROM phone_cipher_profiles WHERE citizenid = ?', { p.citizenid })
+    if stored and stored == cipherPinHash(p.citizenid, pin) then
+        CipherAttempts[src] = nil
+        CipherUnlocked[src] = p.citizenid
+        return true
+    end
+    local tries = (attempt and attempt.tries or 0) + 1
+    local maximum = math.max(3, math.floor(num((Config.Cipher or {}).pinAttempts, 5)))
+    if tries >= maximum then
+        CipherAttempts[src] = { tries = 0, untilAt = now + 30000 }
+        return false, 'lockedout', 30
+    end
+    CipherAttempts[src] = { tries = tries }
+    return false, 'badpin', maximum - tries
+end
+
+local function cipherResolvePeer(handle, selfCid)
+    handle = cipherCleanHandle(handle)
+    if not handle:match('^[a-z0-9_][a-z0-9_][a-z0-9_]+$') then return nil end
+    return MySQL.single.await([[SELECT citizenid, handle, displayname, public_key, fingerprint
+        FROM phone_cipher_profiles WHERE handle = ? AND citizenid <> ?]], { handle, selfCid })
+end
+
+local function cipherPeerPayload(row)
+    if not row then return nil end
+    return {
+        handle = row.handle,
+        displayName = row.displayname,
+        publicKey = row.public_key,
+        fingerprint = row.fingerprint,
+    }
+end
+
+local function cipherAllowedBurn(raw)
+    local value = math.max(0, math.floor(num(raw, 0)))
+    for _, seconds in ipairs((Config.Cipher or {}).burnSeconds or { 0, 300, 3600, 86400 }) do
+        if value == math.floor(num(seconds, 0)) then return value end
+    end
+    return 0
+end
+
 V.Callback('v-phone:open', function(src, resolve)
     if not V.SettingBool('enabled', true) then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
@@ -927,11 +1129,9 @@ V.Callback('v-phone:open', function(src, resolve)
         apps      = installed,
         available = available,
         prefs    = prefsOf(p),
-        contacts = MySQL.query.await(
-            [[SELECT id, name, number, favourite, photo, email, address, birthday, note
-              FROM phone_contacts WHERE citizenid = ? ORDER BY favourite DESC, name]],
-            { p.citizenid }) or {},
+        contacts = contactsOf(p),
         conversations = conversations(p.citizenid),
+        cipherUnread = cipherUnreadOf(p.citizenid),
         groups = MySQL.query.await([[SELECT g.id, g.name FROM phone_groups g
             JOIN phone_group_members m ON m.group_id = g.id
             WHERE m.citizenid = ? ORDER BY g.id DESC]], { p.citizenid }) or {},
@@ -959,6 +1159,290 @@ V.Callback('v-phone:open', function(src, resolve)
     })
 end)
 
+V.Callback('v-phone:cipher', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve({ error = 'x' }) return end
+    if not cipherHasApp(src, p) then resolve({ error = 'notinstalled' }) return end
+    local op = tostring((data and data.op) or 'me')
+
+    if op == 'me' then
+        local profile = cipherProfile(p.citizenid)
+        resolve({
+            ok = true,
+            exists = profile ~= nil,
+            unlocked = cipherUnlocked(src, p),
+            profile = profile,
+        })
+        return
+    end
+
+    if op == 'create' then
+        if cipherProfile(p.citizenid) then resolve({ error = 'exists' }) return end
+        local handle = cipherCleanHandle(data and data.handle)
+        local displayName = tostring((data and data.displayName) or ''):gsub('[%c]', ''):sub(1, 32)
+        local pin = tostring((data and data.pin) or '')
+        local publicKey, fingerprint = cipherPublicMaterial(data)
+        if not handle:match('^[a-z0-9_][a-z0-9_][a-z0-9_]+$') then
+            resolve({ error = 'handle' }) return
+        end
+        if displayName == '' then displayName = handle end
+        if not pin:match('^%d%d%d%d%d%d$') then resolve({ error = 'pin' }) return end
+        if not publicKey then resolve({ error = 'key' }) return end
+        if MySQL.scalar.await('SELECT 1 FROM phone_cipher_profiles WHERE handle = ?', { handle }) then
+            resolve({ error = 'taken' }) return
+        end
+        local id = MySQL.insert.await([[INSERT INTO phone_cipher_profiles
+            (citizenid, handle, displayname, public_key, fingerprint, pin_hash)
+            VALUES (?,?,?,?,?,?)]], {
+            p.citizenid, handle, displayName, publicKey, fingerprint,
+            cipherPinHash(p.citizenid, pin),
+        })
+        if not id then resolve({ error = 'x' }) return end
+        CipherUnlocked[src] = p.citizenid
+        resolve({ ok = true, profile = cipherProfile(p.citizenid) })
+        return
+    end
+
+    if op == 'unlock' then
+        local ok, err, remaining = cipherVerifyPin(src, p, data and data.pin)
+        if not ok then
+            resolve({ error = err, remaining = remaining })
+            return
+        end
+        resolve({ ok = true, profile = cipherProfile(p.citizenid) })
+        return
+    end
+
+    if op == 'rotate' then
+        local ok, err, remaining = cipherVerifyPin(src, p, data and data.pin)
+        if not ok then resolve({ error = err, remaining = remaining }) return end
+        local publicKey, fingerprint = cipherPublicMaterial(data)
+        if not publicKey then resolve({ error = 'key' }) return end
+        -- A replaced private key cannot open old envelopes. Purging them is safer than
+        -- presenting undecryptable history as if it were still recoverable.
+        MySQL.update.await([[DELETE FROM phone_cipher_messages
+            WHERE from_cid = ? OR to_cid = ?]], { p.citizenid, p.citizenid })
+        MySQL.update.await([[UPDATE phone_cipher_profiles SET public_key = ?, fingerprint = ?
+            WHERE citizenid = ?]], { publicKey, fingerprint, p.citizenid })
+        resolve({ ok = true, profile = cipherProfile(p.citizenid) })
+        return
+    end
+
+    if not cipherRequireSession(src, p, resolve) then return end
+
+    if op == 'list' then
+        MySQL.update.await([[DELETE FROM phone_cipher_messages
+            WHERE expires_at IS NOT NULL AND expires_at <= NOW()]])
+        local clearRows = MySQL.query.await([[SELECT other_cid, before_id
+            FROM phone_cipher_clears WHERE citizenid = ?]], { p.citizenid }) or {}
+        local clears = {}
+        for _, row in ipairs(clearRows) do clears[row.other_cid] = tonumber(row.before_id) or 0 end
+        local rows = MySQL.query.await([[SELECT id, from_cid, to_cid, envelope, burn, seen, at
+            FROM phone_cipher_messages
+            WHERE from_cid = ? OR to_cid = ?
+            ORDER BY id DESC LIMIT 240]], { p.citizenid, p.citizenid }) or {}
+        local conversationsByCid, order = {}, {}
+        for _, row in ipairs(rows) do
+            local other = row.from_cid == p.citizenid and row.to_cid or row.from_cid
+            if tonumber(row.id) > (clears[other] or 0) then
+                local conv = conversationsByCid[other]
+                if not conv then
+                    conv = {
+                        otherCid = other,
+                        envelope = row.envelope,
+                        at = row.at,
+                        burn = tonumber(row.burn) or 0,
+                        unread = 0,
+                    }
+                    conversationsByCid[other] = conv
+                    order[#order + 1] = other
+                end
+                if row.to_cid == p.citizenid and tonumber(row.seen) == 0 then
+                    conv.unread = conv.unread + 1
+                end
+            end
+        end
+        -- Fetch every peer profile in one bounded read. The previous loop issued one
+        -- query per conversation, which became noticeably expensive on active servers.
+        local peers = {}
+        if #order > 0 then
+            local placeholders = {}
+            for index, cid in ipairs(order) do
+                placeholders[index] = '?'
+                peers[index] = cid
+            end
+            local peerRows = MySQL.query.await(
+                ('SELECT citizenid, handle, displayname, public_key, fingerprint ' ..
+                 'FROM phone_cipher_profiles WHERE citizenid IN (%s)'):format(
+                    table.concat(placeholders, ',')),
+                peers) or {}
+            peers = {}
+            for _, row in ipairs(peerRows) do peers[row.citizenid] = row end
+        end
+        local out = {}
+        for _, cid in ipairs(order) do
+            local conv = conversationsByCid[cid]
+            local peer = peers[cid]
+            if peer then
+                conv.peer = cipherPeerPayload(peer)
+                conv.otherCid = nil
+                out[#out + 1] = conv
+            end
+        end
+        resolve({ ok = true, conversations = out, unread = cipherUnreadOf(p.citizenid) })
+        return
+    end
+
+    if op == 'lookup' then
+        local query = cipherCleanHandle(data and data.query)
+        if #query < 2 then resolve({ ok = true, results = {} }) return end
+        local rows = MySQL.query.await([[SELECT handle, displayname, public_key, fingerprint
+            FROM phone_cipher_profiles
+            WHERE citizenid <> ? AND handle LIKE CONCAT(?, '%')
+            ORDER BY handle LIMIT 10]], { p.citizenid, query }) or {}
+        local out = {}
+        for _, row in ipairs(rows) do out[#out + 1] = cipherPeerPayload(row) end
+        resolve({ ok = true, results = out })
+        return
+    end
+
+    local peer = cipherResolvePeer(data and data.handle, p.citizenid)
+    if (op == 'thread' or op == 'send' or op == 'clear') and not peer then
+        resolve({ error = 'nouser' })
+        return
+    end
+
+    if op == 'thread' then
+        MySQL.update.await([[DELETE FROM phone_cipher_messages
+            WHERE expires_at IS NOT NULL AND expires_at <= NOW()]])
+        local before = tonumber(MySQL.scalar.await([[SELECT before_id FROM phone_cipher_clears
+            WHERE citizenid = ? AND other_cid = ?]], { p.citizenid, peer.citizenid })) or 0
+        local rows = MySQL.query.await([[SELECT id, from_cid, envelope, burn, seen, at, expires_at
+            FROM phone_cipher_messages
+            WHERE ((from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?))
+              AND id > ? AND (expires_at IS NULL OR expires_at > NOW())
+            ORDER BY id DESC LIMIT ?]], {
+            p.citizenid, peer.citizenid, peer.citizenid, p.citizenid,
+            before, math.max(20, math.floor(num((Config.Cipher or {}).pageSize, 80))),
+        }) or {}
+        local out = {}
+        for index = #rows, 1, -1 do
+            local row = rows[index]
+            out[#out + 1] = {
+                id = row.id,
+                mine = row.from_cid == p.citizenid,
+                envelope = row.envelope,
+                burn = tonumber(row.burn) or 0,
+                at = row.at,
+                expiresAt = row.expires_at,
+            }
+        end
+        MySQL.update.await([[UPDATE phone_cipher_messages SET seen = 1
+            WHERE from_cid = ? AND to_cid = ? AND seen = 0]], { peer.citizenid, p.citizenid })
+        resolve({
+            ok = true,
+            peer = cipherPeerPayload(peer),
+            messages = out,
+            unread = cipherUnreadOf(p.citizenid),
+        })
+        return
+    end
+
+    if op == 'send' then
+        if not requireItem(src) then resolve({ error = 'nophone' }) return end
+        if V.SettingBool('battery', true) and batteryOf(src) <= 0 then
+            resolve({ error = 'flat' }) return
+        end
+        if not hasBars(src) then resolve({ error = 'nosignal' }) return end
+        local now = GetGameTimer()
+        if CipherLastSend[src] and now - CipherLastSend[src] < 650 then
+            resolve({ error = 'rate' }) return
+        end
+        CipherLastSend[src] = now
+        local envelope = tostring((data and data.envelope) or '')
+        if #envelope < 32 or #envelope > 6000 then resolve({ error = 'length' }) return end
+        local ok, decoded = pcall(json.decode, envelope)
+        if not ok or type(decoded) ~= 'table' or tonumber(decoded.v) ~= 1
+            or type(decoded.iv) ~= 'string' or type(decoded.data) ~= 'string' then
+            resolve({ error = 'key' }) return
+        end
+        local burn = cipherAllowedBurn(data and data.burn)
+        local expires = burn > 0 and (os.time() + burn) or 0
+        local id = MySQL.insert.await([[INSERT INTO phone_cipher_messages
+            (from_cid, to_cid, envelope, burn, expires_at)
+            VALUES (?,?,?,?,IF(? > 0, FROM_UNIXTIME(?), NULL))]], {
+            p.citizenid, peer.citizenid, envelope, burn, expires, expires,
+        })
+        local message = {
+            id = id,
+            mine = true,
+            envelope = envelope,
+            burn = burn,
+            at = os.date('%Y-%m-%d %H:%M:%S'),
+            peer = cipherPeerPayload(peer),
+        }
+        local targetNumber = numberOfCid(peer.citizenid)
+        local target = targetNumber and Online[targetNumber]
+        if target then
+            TriggerClientEvent('v-phone:client:cipher', target, {
+                id = id,
+                from = cipherProfile(p.citizenid),
+                envelope = envelope,
+                burn = burn,
+                at = message.at,
+            })
+        end
+        resolve({ ok = true, message = message })
+        return
+    end
+
+    if op == 'clear' then
+        local last = tonumber(MySQL.scalar.await([[SELECT MAX(id) FROM phone_cipher_messages
+            WHERE (from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?)]], {
+            p.citizenid, peer.citizenid, peer.citizenid, p.citizenid,
+        })) or 0
+        MySQL.query.await([[INSERT INTO phone_cipher_clears (citizenid, other_cid, before_id)
+            VALUES (?,?,?) ON DUPLICATE KEY UPDATE before_id = GREATEST(before_id, VALUES(before_id))]],
+            { p.citizenid, peer.citizenid, last })
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'profile' then
+        local displayName = tostring((data and data.displayName) or ''):gsub('[%c]', ''):sub(1, 32)
+        if displayName == '' then resolve({ error = 'fields' }) return end
+        MySQL.update.await('UPDATE phone_cipher_profiles SET displayname = ? WHERE citizenid = ?',
+            { displayName, p.citizenid })
+        resolve({ ok = true, profile = cipherProfile(p.citizenid) })
+        return
+    end
+
+    if op == 'logout' then
+        CipherUnlocked[src] = nil
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'destroy' then
+        local pin = tostring((data and data.pin) or '')
+        local stored = MySQL.scalar.await(
+            'SELECT pin_hash FROM phone_cipher_profiles WHERE citizenid = ?', { p.citizenid })
+        if not stored or stored ~= cipherPinHash(p.citizenid, pin) then
+            resolve({ error = 'badpin' }) return
+        end
+        MySQL.update.await('DELETE FROM phone_cipher_messages WHERE from_cid = ? OR to_cid = ?',
+            { p.citizenid, p.citizenid })
+        MySQL.update.await('DELETE FROM phone_cipher_clears WHERE citizenid = ? OR other_cid = ?',
+            { p.citizenid, p.citizenid })
+        MySQL.update.await('DELETE FROM phone_cipher_profiles WHERE citizenid = ?', { p.citizenid })
+        CipherUnlocked[src], CipherAttempts[src] = nil, nil
+        resolve({ ok = true })
+        return
+    end
+
+    resolve({ error = 'forbidden' })
+end)
+
 V.Callback('v-phone:conversation', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -968,8 +1452,11 @@ V.Callback('v-phone:conversation', function(src, resolve, data)
         groupId = math.floor(groupId)
         if not isMember(groupId, p.citizenid) then resolve({ error = 'x' }) return end
         local rows = MySQL.query.await([[
-            SELECT id, from_cid, body, kind, attachment, at FROM phone_messages
-            WHERE group_id = ? ORDER BY at DESC, id DESC LIMIT ?
+            SELECT m.id, m.from_cid, m.body, m.kind, m.attachment, m.at,
+                   c.phone AS from_num
+            FROM phone_messages m
+            LEFT JOIN characters c ON c.citizenid = m.from_cid
+            WHERE m.group_id = ? ORDER BY m.at DESC, m.id DESC LIMIT ?
         ]], { groupId, Config.Messages.pageSize }) or {}
         local out = {}
         for i = #rows, 1, -1 do
@@ -977,8 +1464,9 @@ V.Callback('v-phone:conversation', function(src, resolve, data)
             out[#out + 1] = {
                 id = r.id, mine = (r.from_cid == p.citizenid), body = r.body,
                 kind = r.kind, attachment = r.attachment, at = r.at,
-                from = numberOfCid(r.from_cid),
+                from = r.from_num or r.from_cid,
             }
+            if r.from_num and r.from_num ~= '' then Numbers[r.from_cid] = r.from_num end
         end
         resolve({ ok = true, messages = out })
         return
@@ -1049,6 +1537,10 @@ end)
 V.Callback('v-phone:contactSave', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
+    if type(data and data.id) == 'string' and data.id:match('^required:') then
+        resolve({ error = 'required' })
+        return
+    end
     local name   = tostring((data and data.name) or ''):sub(1, 40)
     local number = tostring((data and data.number) or ''):sub(1, 20)
     if name == '' or number == '' then resolve({ error = 'fields' }) return end
@@ -1082,6 +1574,10 @@ end)
 V.Callback('v-phone:contactDelete', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
+    if type(data and data.id) == 'string' and data.id:match('^required:') then
+        resolve({ error = 'required' })
+        return
+    end
     MySQL.update.await('DELETE FROM phone_contacts WHERE id = ? AND citizenid = ?',
         { tonumber(data and data.id) or 0, p.citizenid })
     resolve({ ok = true })
@@ -1321,8 +1817,22 @@ V.Callback('v-phone:storage', function(src, resolve, data)
         return
     end
 
+    if op == 'clear' then
+        MySQL.update.await('DELETE FROM phone_app_data WHERE citizenid = ? AND app = ?',
+            { p.citizenid, app })
+        resolve({ ok = true })
+        return
+    end
+
     local key = tostring((data and data.key) or ''):sub(1, 60)
     if key == '' then resolve({ error = 'key' }) return end
+
+    if op == 'remove' then
+        MySQL.update.await('DELETE FROM phone_app_data WHERE citizenid = ? AND app = ? AND k = ?',
+            { p.citizenid, app, key })
+        resolve({ ok = true })
+        return
+    end
 
     if op == 'set' then
         local value = data.value
@@ -2129,6 +2639,7 @@ end)
 
 RegisterNetEvent('v-phone:server:screen', function(on)
     Open[source] = on and true or nil
+    if not on then CipherUnlocked[source] = nil end
 end)
 
 V.Callback('v-phone:callState', function(src, resolve)
@@ -2165,6 +2676,7 @@ AddEventHandler('playerDropped', function()
     if p and Battery[src] then p.SetMetadata('battery', math.floor(Battery[src])) end
     Battery[src], Signal[src], Charging[src], Open[src] = nil, nil, nil, nil
     MessageLastSend[src], MessageBusy[src] = nil, nil
+    CipherUnlocked[src], CipherAttempts[src], CipherLastSend[src] = nil, nil, nil
     AirLastSend[src] = nil
     UnlockAttempts[src] = nil
     for offerId, offer in pairs(AirOffers) do
@@ -2222,6 +2734,40 @@ CreateThread(function()
         `k`         VARCHAR(60) NOT NULL,
         `v`         TEXT,
         PRIMARY KEY (`citizenid`, `app`, `k`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_cipher_profiles` (
+        `citizenid`  VARCHAR(16)  NOT NULL,
+        `handle`     VARCHAR(20)  NOT NULL,
+        `displayname` VARCHAR(32) NOT NULL,
+        `public_key` TEXT         NOT NULL,
+        `fingerprint` VARCHAR(95) NOT NULL,
+        `pin_hash`   CHAR(64)     NOT NULL,
+        `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`citizenid`),
+        UNIQUE KEY `handle` (`handle`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_cipher_messages` (
+        `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `from_cid`   VARCHAR(16) NOT NULL,
+        `to_cid`     VARCHAR(16) NOT NULL,
+        `envelope`   TEXT        NOT NULL,
+        `burn`       INT UNSIGNED NOT NULL DEFAULT 0,
+        `seen`       TINYINT(1)  NOT NULL DEFAULT 0,
+        `at`         TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        `expires_at` TIMESTAMP   NULL DEFAULT NULL,
+        PRIMARY KEY (`id`),
+        KEY `cipher_from` (`from_cid`, `id`),
+        KEY `cipher_to` (`to_cid`, `seen`, `id`),
+        KEY `cipher_expiry` (`expires_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_cipher_clears` (
+        `citizenid` VARCHAR(16) NOT NULL,
+        `other_cid` VARCHAR(16) NOT NULL,
+        `before_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        PRIMARY KEY (`citizenid`, `other_cid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_groups` (
@@ -2310,9 +2856,6 @@ CreateThread(function()
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`), KEY `owner_idx` (`citizenid`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
-    -- A call log is history, not an archive: keep the last while, then let it go.
-    MySQL.query('DELETE FROM phone_calls WHERE at < DATE_SUB(NOW(), INTERVAL 30 DAY)')
-
     -- Messages grew a kind, an attachment and a group. Idempotent, so an existing
     -- database upgrades without a migration step nobody would run.
     local hasKind = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
@@ -2325,6 +2868,32 @@ CreateThread(function()
         MySQL.query.await("ALTER TABLE `phone_messages` ADD KEY `group_idx` (`group_id`, `id`)")
         print('[v-phone] messages migrated: kind, attachment, groups')
     end
+
+    -- Composite indexes mirror the actual hot paths: inbox unread counts, two-person
+    -- threads, group membership, saved mail and retention cleanup. Existing servers
+    -- receive them once; later boots only perform the inexpensive metadata checks.
+    local function ensureIndex(tableName, indexName, columns)
+        local has = MySQL.scalar.await([[SELECT 1 FROM information_schema.STATISTICS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?
+              AND INDEX_NAME = ? LIMIT 1]], { tableName, indexName })
+        if has then return end
+        MySQL.query.await(('ALTER TABLE `%s` ADD KEY `%s` (%s)'):format(
+            tableName, indexName, columns))
+    end
+    ensureIndex('phone_messages', 'msg_inbox_idx',
+        '`to_cid`,`seen`,`group_id`,`from_cid`,`id`')
+    ensureIndex('phone_messages', 'msg_from_idx',
+        '`from_cid`,`to_cid`,`group_id`,`id`')
+    ensureIndex('phone_group_members', 'member_cid_idx',
+        '`citizenid`,`group_id`')
+    ensureIndex('phone_mail_box', 'mail_saved_idx',
+        '`address`,`saved`,`id`')
+    ensureIndex('phone_voicemail', 'voicemail_unread_idx',
+        '`citizenid`,`seen`,`id`')
+    ensureIndex('phone_calls', 'calls_at_idx', '`at`')
+
+    -- A call log is history, not an archive: keep the last while, then let it go.
+    MySQL.query('DELETE FROM phone_calls WHERE at < DATE_SUB(NOW(), INTERVAL 30 DAY)')
 
     -- The number lives on the character, not in a table of its own: it identifies the
     -- character the same way their name does. Added idempotently so an existing database
@@ -2398,4 +2967,6 @@ CreateThread(function()
         local n = MySQL.update.await('DELETE FROM phone_messages WHERE at < DATE_SUB(NOW(), INTERVAL ? DAY)', { days })
         if n and n > 0 then print(('[v-phone] pruned %d message(s) older than %d days'):format(n, days)) end
     end
+    MySQL.update.await([[DELETE FROM phone_cipher_messages
+        WHERE expires_at IS NOT NULL AND expires_at <= NOW()]])
 end)

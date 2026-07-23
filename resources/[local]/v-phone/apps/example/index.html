@@ -17,39 +17,89 @@
   </style>
 </head>
 <body>
-  <div class="wrap" id="app"></div>
+  <main class="wrap" id="app"></main>
 
   <script>
     const UI = PhoneUI;
-    const el = document.getElementById('app');
 
-    // Phone.storage is persisted by the phone, per app and per character. An app that
-    // only keeps a little state needs no table, no migration and no callback.
-    async function draw() {
-      // Every Phone.* call resolves to the server's reply, so the value is on `.value`.
-      const saved = await Phone.storage.get('count');
-      const count = Number((saved && saved.value) || 0);
+    // AppKit is optional: plain Phone.ready() still works. Phone.mount() removes the
+    // repetitive state/render/loading/event wiring for apps that want it.
+    Phone.mount({
+      host: 'app',
+      title: 'AppKit Lab',
+      state: { count: 0, contact: null, location: null },
 
-      el.innerHTML =
-        UI.hero({ appicon: 'check', eyebrow: 'Example', value: String(count), subtitle: 'Taps stored for this character' }) +
+      async load() {
+        Phone.navigation.action('Add', 'add', () => {
+          document.querySelector('[data-action="increment"]')?.click();
+        });
+        return { count: Number(await Phone.storage.getJSON('count', 0)) };
+      },
+
+      render({ state, context, busy }) {
+        return UI.hero({
+          appicon: 'check',
+          eyebrow: 'iFruit AppKit 2',
+          title: context.deviceName,
+          value: String(state.count),
+          subtitle: busy ? 'Saving…' : 'State persisted for this character',
+        }) +
+        UI.grid([
+          UI.tile({ icon: 'contacts', title: 'Contact', value: state.contact ? state.contact.name : 'Pick', data: { action: 'contact' } }),
+          UI.tile({ icon: 'location', title: 'Position', value: state.location ? 'Ready' : 'Locate', data: { action: 'location' } }),
+          UI.tile({ icon: 'add', title: 'Counter', value: state.count, data: { action: 'increment' } }),
+          UI.tile({ icon: 'share', title: 'System', value: 'Share', data: { action: 'share' } }),
+        ]) +
+        UI.notice({
+          icon: 'sparkles',
+          tone: 'success',
+          title: 'Native by default',
+          body: 'Pickers, sheets, notifications, storage and navigation belong to iFruit.',
+        }) +
+        UI.progress(state.count % 11, 10, 'Example progress') +
         UI.group([
-          UI.row({ icon: 'check', tint: '#34C759', title: 'Tap me', chevron: true, data: { a: 'tap' } }),
-          UI.row({ icon: 'trash', tint: '#FF3B30', title: 'Reset', data: { a: 'reset' } }),
-        ], { header: 'Example', footer: 'Stored per character by the phone.' }) +
-        UI.button('Say hello', 'hello');
+          UI.row({ icon: 'images', tint: '#AF52DE', title: 'Pick a photo', chevron: true, data: { action: 'photo' } }),
+          UI.row({ icon: 'messages', tint: '#34C759', title: 'Open Messages', chevron: true, data: { action: 'messages' } }),
+          UI.row({ icon: 'trash', tint: '#FF3B30', title: 'Reset app data', data: { action: 'reset' } }),
+        ], { header: 'System actions' });
+      },
 
-      [...el.querySelectorAll('.row')].forEach((r) => r.addEventListener('click', async () => {
-        await Phone.storage.set('count', r.dataset.a === 'reset' ? 0 : count + 1);
-        draw();
-      }));
-      document.getElementById('hello').addEventListener('click', () => {
-        // A toast on the phone, not in the page: the phone owns its own chrome.
-        Phone.toast('Hello from apps/example');
-      });
-    }
-
-    // Phone.ready fires once the phone has handed the app its context.
-    Phone.ready(() => { Phone.title('Example'); draw(); });
+      actions: {
+        increment: async ({ app, state }) => {
+          const count = state.count + 1;
+          await app.run(() => Phone.storage.setJSON('count', count));
+          app.setState({ count });
+          Phone.haptic('light');
+        },
+        contact: async ({ app }) => {
+          const result = await Phone.pick.contact();
+          if (result && result.ok) app.setState({ contact: result.contact });
+        },
+        photo: async () => {
+          const result = await Phone.pick.photo();
+          if (result && result.ok) Phone.toast('Photo selected');
+        },
+        location: async ({ app }) => {
+          const result = await Phone.location();
+          if (result && result.ok) app.setState({ location: result });
+        },
+        share: () => Phone.share({ title: 'AppKit Lab', text: 'Sent from an iFruit app.' }),
+        messages: () => Phone.open('messages', { draft: 'Hello from AppKit Lab' }),
+        reset: async ({ app }) => {
+          const result = await Phone.confirm({
+            title: 'Reset AppKit Lab?',
+            message: 'The data stored by this app will be removed.',
+            confirmLabel: 'Reset',
+            destructive: true,
+          });
+          if (result && result.confirmed) {
+            await Phone.storage.clear();
+            app.setState({ count: 0, contact: null, location: null });
+            Phone.haptic('success');
+          }
+        },
+      },
+    });
   </script>
 </body>
 </html>
