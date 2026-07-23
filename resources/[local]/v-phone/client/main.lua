@@ -24,6 +24,54 @@ local function L(k) return strings()[k] or k end
 local function voice() return GetResourceState('v-voice') == 'started' end
 
 -- ══════════════════════════════════════════════════════════════
+-- Ring, buzz, and the peek out of the pocket
+-- ══════════════════════════════════════════════════════════════
+-- A phone that never made a sound was a phone you had to remember to look at. It rings
+-- while a call comes in, buzzes for a message, and - when it is in your pocket rather than
+-- in your hand - lifts the top of the handset into view to show you the notification.
+local ringing = false
+local prefsCache = { vibrate = true, ringVolume = 0.7, ringtone = 'default' }
+
+local function buzz(strong)
+    if prefsCache.vibrate == false then return end
+    -- The handset shakes on screen; the pad rumbles if there is one.
+    SendNUIMessage({ action = 'buzz' })
+    SetPadShake(0, strong and 260 or 130, strong and 90 or 55)
+end
+
+local function ringOnce()
+    -- The base game's own phone ring, so it sits in the world's sound world.
+    PlaySoundFrontend(-1, 'Remote_Ring', 'Phone_SoundSet_Michael', true)
+end
+
+local function startRinging()
+    if ringing then return end
+    ringing = true
+    CreateThread(function()
+        while ringing do
+            if prefsCache.ringVolume > 0 then ringOnce() end
+            buzz(true)
+            Wait(1400)
+        end
+    end)
+end
+
+local function stopRinging()
+    ringing = false
+    StopSound(-1)
+end
+
+-- The peek: the phone is in a pocket, so the top of it rises into view with the
+-- notification on it and slides back down. It never takes focus - you are being shown
+-- something, not asked to do anything.
+local function peek(kind, data)
+    if isOpen then return end
+    if data and data.hasItem == false then return end   -- no phone on them, nothing to peek
+    SendNUIMessage({ action = 'peek', kind = kind, data = data or {}, strings = strings() })
+    buzz(false)
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- In hand: a prop and an animation, while you keep walking and driving
 -- ══════════════════════════════════════════════════════════════
 -- The phone is a real object in the world now. Opening it puts the prop in the right hand
@@ -115,6 +163,10 @@ local function openPhone()
         exports['v-core']:MenuOpened('v-phone')
         -- The screen is what drains a phone, so the server has to know it is on.
         TriggerServerEvent('v-phone:server:screen', true)
+        local pf = state.prefs or {}
+        prefsCache.vibrate = pf.vibrate ~= false
+        prefsCache.ringVolume = tonumber(pf.ringVolume) or 0.7
+        prefsCache.ringtone = pf.ringtone or 'default'
         state.action  = 'open'
         state.strings = strings()
         state.call    = call
@@ -126,6 +178,7 @@ end
 local function closePhone()
     if not isOpen then return end
     isOpen = false
+    if not call then stopRinging() end
     SetNuiFocusKeepInput(false)
     SetNuiFocus(false, false)
     clearHand()
@@ -186,7 +239,19 @@ RegisterNUICallback('sendloc', function(data, cb)
     if data and data.group then payload.group = data.group else payload.number = data and data.number end
     V.Request('v-phone:send', function(res) cb(res or { error = 'x' }) end, payload)
 end)
-RegisterNUICallback('prefs',         relay('v-phone:prefs'))
+RegisterNUICallback('prefs', function(data, cb)
+    V.Request('v-phone:prefs', function(res)
+        -- Keep the sound layer in step with what the player just changed.
+        local pf = res and res.prefs
+        if pf then
+            prefsCache.vibrate = pf.vibrate ~= false
+            prefsCache.ringVolume = tonumber(pf.ringVolume) or 0.7
+            prefsCache.ringtone = pf.ringtone or 'default'
+        end
+        cb(res or { error = 'x' })
+    end, data)
+end)
+RegisterNUICallback('voicemail',     relay('v-phone:voicemail'))
 RegisterNUICallback('lookup',        relay('v-phone:lookup'))
 
 RegisterNUICallback('close', function(_, cb) closePhone(); cb('ok') end)
@@ -417,6 +482,7 @@ end)
 
 RegisterNetEvent('v-phone:client:callIn', function(data)
     call = { id = data.id, state = 'in', number = data.number }
+    startRinging()
     -- An incoming call opens the phone if it is closed: a ringing phone the player cannot
     -- see is a missed call they never had the chance to take.
     SendNUIMessage({ action = 'call', call = call })
@@ -425,6 +491,7 @@ end)
 
 RegisterNetEvent('v-phone:client:callActive', function(data)
     call = { id = data.id, state = 'active', number = call and call.number or nil }
+    stopRinging()
     joinCallAudio()
     refreshPose()
     SendNUIMessage({ action = 'call', call = call })
@@ -434,6 +501,7 @@ RegisterNetEvent('v-phone:client:callEnd', function(reason)
     -- Leave the voice channel even if the UI never got the start: an end that does not
     -- release the channel leaves the player audible to strangers across the map.
     leaveCallAudio()
+    stopRinging()
     call = nil
     refreshPose()
     SendNUIMessage({ action = 'call', call = nil })
@@ -473,14 +541,27 @@ end)
 RegisterNetEvent('v-phone:client:message', function(msg)
     if isOpen then
         SendNUIMessage({ action = 'message', message = msg })
+        buzz(false)
     else
-        V.Notify((L('ph.new_message')):format(msg.from or '?'), 'info')
+        peek('message', msg)
     end
 end)
 
 RegisterNetEvent('v-phone:client:banner', function(b)
-    if isOpen then SendNUIMessage({ action = 'banner', banner = b })
-    else V.Notify((b.title or '') .. ' ' .. (b.body or ''), 'info') end
+    if isOpen then
+        SendNUIMessage({ action = 'banner', banner = b })
+        buzz(false)
+    else
+        peek('banner', b)
+    end
+end)
+
+-- Nobody picked up. Offer to leave a voicemail, on the phone, where it belongs.
+RegisterNetEvent('v-phone:client:voicemailOffer', function(d)
+    if not isOpen then openPhone() end
+    SetTimeout(400, function()
+        SendNUIMessage({ action = 'voicemailOffer', number = (d and d.number) or '' })
+    end)
 end)
 
 -- ══════════════════════════════════════════════════════════════
