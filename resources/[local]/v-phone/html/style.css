@@ -1311,3 +1311,30 @@ input { font: inherit; }
 .post .pdn { font-size: 14px; font-weight: 700; color: var(--app-label);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .post .pnames .ph { font-size: 12.5px; color: var(--app-label2); }
+
+/* ── Buzz, peek, voicemail ─────────────────────────────────────── */
+/* The handset shakes for a notification. Short, small and off the main thread of
+   attention - a phone buzzing is a nudge, not an event. */
+@keyframes ph-buzz {
+  0%, 100% { transform: translate(0, 0); }
+  15% { transform: translate(-2px, 1px) rotate(-.4deg); }
+  30% { transform: translate(2px, -1px) rotate(.4deg); }
+  45% { transform: translate(-2px, -1px) rotate(-.3deg); }
+  60% { transform: translate(2px, 1px) rotate(.3deg); }
+  80% { transform: translate(-1px, 0) rotate(-.15deg); }
+}
+.device.buzz .bezel { animation: ph-buzz .55s ease-in-out; }
+
+/* The peek: the phone is in a pocket, so only the top of it rises into view. It is
+   pointer-transparent because it is not something you interact with. */
+.device.peeking { pointer-events: none; }
+.device.peeking .bezel { animation: ph-peek .42s var(--spring) both; }
+@keyframes ph-peek {
+  from { transform: translateY(88%); }
+  to   { transform: translateY(72%); }
+}
+.device.peeking .screen > *:not(.status):not(.island):not(.wallpaper) { visibility: hidden; }
+
+/* Voicemail */
+.vmbody { font-size: 15px; line-height: 1.45; color: var(--app-label); padding: 6px 2px 10px; }
+.vmwhen { font-size: 12.5px; color: var(--app-label2); padding-bottom: 12px; }

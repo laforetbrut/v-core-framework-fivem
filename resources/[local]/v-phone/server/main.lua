@@ -78,6 +78,23 @@ V.Module({
           default = 45, min = 5, max = 100, step = 5,
           hint = 'How much of the battery one power bank restores before it is used up.' },
 
+        { key = 'autoDark', label = 'Automatic dark mode', type = 'bool', default = true,
+          hint = 'Lets a player set the phone to follow the in-game clock. They still choose Light, Dark or Automatic; this only decides whether Automatic is offered at all.' },
+
+        { key = 'darkFrom', label = 'Dark mode starts at (hour)', type = 'number', default = 20,
+          min = 0, max = 23, step = 1,
+          hint = 'In-game hour the screen turns dark when a player is on Automatic.' },
+
+        { key = 'darkTo', label = 'Dark mode ends at (hour)', type = 'number', default = 6,
+          min = 0, max = 23, step = 1,
+          hint = 'In-game hour it goes light again. A start later than the end wraps over midnight, which is the normal case.' },
+
+        { key = 'voicemail', label = 'Voicemail', type = 'bool', default = true,
+          hint = 'A missed call lets the caller leave a written message. Off, a missed call is only a missed call.' },
+
+        { key = 'voicemailMax', label = 'Voicemail length limit', type = 'number', default = 200,
+          min = 40, max = 500, step = 10 },
+
         { key = 'anonymous', label = 'Allow withholding your number', type = 'bool', default = false,
           hint = 'On, a caller may hide their number. It is off by default because an anonymous call is a harassment tool before it is a roleplay tool.' },
 
@@ -300,6 +317,12 @@ local function prefsOf(p)
         -- surface values and nothing else.
         dark      = m.dark == true,
         ringtone  = tostring(m.ringtone or 'default'),
+        -- Light, dark, or follow the in-game clock. `dark` stays as the resolved value so
+        -- an older client that only knows the boolean keeps working.
+        darkMode  = (m.darkMode == 'dark' or m.darkMode == 'light' or m.darkMode == 'auto')
+                    and m.darkMode or (m.dark == true and 'dark' or 'light'),
+        vibrate   = (m.vibrate == nil) and true or (m.vibrate == true),
+        ringVolume = math.max(0, math.min(1, tonumber(m.ringVolume) or 0.7)),
         glass     = math.max(0, math.min(100, math.floor(glass or Config.DefaultGlass))),
         -- What the player REMOVED, not what they installed. Storing the removals
         -- means a new app an operator adds later is there without every existing
@@ -447,7 +470,7 @@ local function sendMessage(fromCid, toNumber, body, kind, attachment)
     if target then
         TriggerClientEvent('v-phone:client:message', target, {
             from = numberOfCid(fromCid), fromCid = fromCid, body = body, id = id,
-            kind = kind, attachment = attachment,
+            kind = kind, attachment = attachment, hasItem = requireItem(target),
         })
     end
     return { id = id, body = body, kind = kind, attachment = attachment }, nil
@@ -522,6 +545,10 @@ local function endCall(id, reason)
     if not c then return end
     -- Log it once, as it ends, from the state it reached: active means it connected.
     logCall(c, c.state == 'active')
+    -- Nobody picked up: offer the caller the voicemail, which is the whole point of one.
+    if c.state ~= 'active' and reason == 'noanswer' and c.a and V.SettingBool('voicemail', true) then
+        TriggerClientEvent('v-phone:client:voicemailOffer', c.a, { number = c.bNum })
+    end
     Calls[id] = nil
     for _, s in ipairs({ c.a, c.b }) do
         if s and CallOf[s] == id then
@@ -743,6 +770,17 @@ V.Callback('v-phone:open', function(src, resolve)
             JOIN phone_group_members m ON m.group_id = g.id
             WHERE m.citizenid = ? ORDER BY g.id DESC]], { p.citizenid }) or {},
         wallpapers = Config.Wallpapers,
+        -- The operator's automatic-dark policy, so the page can resolve 'auto' itself
+        -- against the in-game clock rather than asking on every tick.
+        theme = {
+            auto = V.SettingBool('autoDark', true),
+            from = math.floor(num(S('darkFrom', 20), 20)),
+            to   = math.floor(num(S('darkTo', 6), 6)),
+        },
+        voicemail = V.SettingBool('voicemail', true),
+        -- Unread voicemail, so the Phone icon can carry a badge like Messages does.
+        vmUnread = tonumber(MySQL.scalar.await(
+            'SELECT COUNT(*) FROM phone_voicemail WHERE citizenid = ? AND seen = 0', { p.citizenid })) or 0,
         photos     = (function()
             local ph = p.GetMetadata('photos')
             return (type(ph) == 'table') and ph or {}
@@ -867,6 +905,14 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
     if data then
         if data.wallpaper then prefs.wallpaper = tostring(data.wallpaper) end
         if data.ringtone  then prefs.ringtone  = tostring(data.ringtone) end
+        if data.darkMode ~= nil then
+            local m = tostring(data.darkMode)
+            prefs.darkMode = (m == 'dark' or m == 'light' or m == 'auto') and m or 'light'
+            -- Keep the boolean in step so nothing that reads `dark` goes stale.
+            if prefs.darkMode ~= 'auto' then prefs.dark = (prefs.darkMode == 'dark') end
+        end
+        if data.vibrate ~= nil then prefs.vibrate = data.vibrate == true end
+        if data.ringVolume ~= nil then prefs.ringVolume = math.max(0, math.min(1, num(data.ringVolume, 0.7))) end
         if data.dnd ~= nil then prefs.dnd = data.dnd == true end
         if data.airplane  ~= nil then prefs.airplane  = data.airplane == true end
         if data.cellular  ~= nil then prefs.cellular  = data.cellular == true end
@@ -1182,6 +1228,63 @@ end)
 
 -- The player's recent calls, newest first, capped. The number comes back raw; the app
 -- resolves it to a contact name the same way every other screen does.
+-- ══════════════════════════════════════════════════════════════
+-- Voicemail
+-- ══════════════════════════════════════════════════════════════
+-- A missed call is an invitation to leave a message. It is written rather than recorded,
+-- which is the only honest way to do it here: nothing on the server can hold audio, and a
+-- note the other person can actually read beats a fake tape.
+V.Callback('v-phone:voicemail', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local op = tostring((data and data.op) or 'list')
+
+    if op == 'list' then
+        local rows = MySQL.query.await([[SELECT id, from_num AS number, body, seen, at
+            FROM phone_voicemail WHERE citizenid = ? ORDER BY id DESC LIMIT 40]], { p.citizenid }) or {}
+        resolve({ ok = true, voicemail = rows })
+        return
+    end
+
+    if op == 'seen' then
+        MySQL.update('UPDATE phone_voicemail SET seen = 1 WHERE citizenid = ? AND seen = 0', { p.citizenid })
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'del' then
+        MySQL.update('DELETE FROM phone_voicemail WHERE id = ? AND citizenid = ?',
+            { math.floor(num(data and data.id, 0)), p.citizenid })
+        resolve({ ok = true })
+        return
+    end
+
+    if op == 'leave' then
+        if not V.SettingBool('voicemail', true) then resolve({ error = 'off' }) return end
+        local toNumber = tostring((data and data.number) or '')
+        local toCid = cidOfNumber(toNumber)
+        if not toCid then resolve({ error = 'nonumber' }) return end
+        local body = tostring((data and data.body) or ''):sub(1, math.floor(num(S('voicemailMax', 200), 200)))
+        if body == '' then resolve({ error = 'empty' }) return end
+
+        MySQL.insert.await('INSERT INTO phone_voicemail (citizenid, from_num, body) VALUES (?,?,?)',
+            { toCid, numberOfCid(p.citizenid) or '', body })
+
+        -- Tell them now if they are on; otherwise it is waiting when they next look.
+        local target = Online[toNumber]
+        if target then
+            TriggerClientEvent('v-phone:client:banner', target, {
+                app = 'phone', title = L(target, 'ph.vm_new'),
+                body = (numberOfCid(p.citizenid) or ''), hasItem = requireItem(target),
+            })
+        end
+        resolve({ ok = true })
+        return
+    end
+
+    resolve({ error = 'x' })
+end)
+
 V.Callback('v-phone:calls', function(src, resolve)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -1227,6 +1330,7 @@ exports('Notify', function(src, app, title, body)
     if not Core.GetPlayer(src) then return false end
     TriggerClientEvent('v-phone:client:banner', src, {
         app = tostring(app or ''), title = tostring(title or ''), body = tostring(body or ''),
+        hasItem = requireItem(src),
     })
     return true
 end)
@@ -1324,6 +1428,16 @@ CreateThread(function()
         `group_id`  INT UNSIGNED NOT NULL,
         `citizenid` VARCHAR(16) NOT NULL,
         PRIMARY KEY (`group_id`, `citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_voicemail` (
+        `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `citizenid` VARCHAR(16) NOT NULL,
+        `from_num`  VARCHAR(20) NOT NULL DEFAULT '',
+        `body`      VARCHAR(500) NOT NULL DEFAULT '',
+        `seen`      TINYINT(1) NOT NULL DEFAULT 0,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`), KEY `owner_idx` (`citizenid`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
     MySQL.query.await([[CREATE TABLE IF NOT EXISTS `phone_calls` (

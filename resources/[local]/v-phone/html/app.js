@@ -99,7 +99,9 @@ function unreadTotal() {
 }
 
 function tileHTML(a, i) {
-  const badge = a.id === 'messages' ? unreadTotal() : (a.badge || 0);
+  const badge = a.id === 'messages' ? unreadTotal()
+    : a.id === 'phone' ? Number(state.vmUnread || 0)
+    : (a.badge || 0);
   return `<button class="tile" type="button" data-app="${esc(a.id)}" style="--i:${i}">` +
     `<span class="wrap">${UI.appIcon(a.icon)}` +
     (badge > 0 ? `<span class="badge">${badge > 99 ? '99+' : badge}</span>` : '') +
@@ -443,6 +445,8 @@ async function renderWidgets() {
   if (!host) return;
   const d = await post('ambient');
   if (!d || !d.ok) { host.innerHTML = ''; return; }
+  gameHour = Number(d.hours);
+  applyTheme();
   const w = String(d.weather || 'CLEAR').toUpperCase();
   const icon = WEATHER_ICON[w] || 'sun';
   const hh = String(d.hours).padStart(2, '0') + ':' + String(d.minutes).padStart(2, '0');
@@ -559,9 +563,12 @@ RENDER.phone = () => {
   tabbar([
     { id: 'favourites', icon: 'star', label: 'ph.favourites' },
     { id: 'recents', icon: 'phone', label: 'ph.recents' },
+    { id: 'voicemail', icon: 'voicemail', label: 'ph.voicemail' },
     { id: 'contacts', icon: 'contacts', label: 'app.contacts' },
     { id: 'keypad', icon: 'keypad', label: 'ph.keypad_tab' },
   ], phoneTab, (t) => { phoneTab = t; RENDER.phone(); });
+
+  if (phoneTab === 'voicemail') { renderVoicemail(); return; }
 
   if (phoneTab === 'recents') {
     body('<div id="recents">' + UI.empty(L('ph.loading'), 'phone') + '</div>');
@@ -625,6 +632,66 @@ RENDER.phone = () => {
   byId('delkey').addEventListener('click', () => { dialed = dialed.slice(0, -1); paint(); });
   byId('dial').addEventListener('click', () => { if (dialed) post('call', { number: dialed }); });
 };
+
+// ── Voicemail ──────────────────────────────────────────────────
+// A missed call leaves a written message rather than a recording: nothing here can hold
+// audio, and a note you can actually read beats a fake tape.
+function renderVoicemail() {
+  body('<div id="vmlist">' + UI.empty(L('ph.loading'), 'phone') + '</div>');
+  post('voicemail', { op: 'list' }).then((r) => {
+    const host = byId('vmlist');
+    if (!host) return;
+    const list = (r && r.voicemail) || [];
+    if (!list.length) { host.innerHTML = UI.empty(L('ph.no_voicemail'), 'phone'); return; }
+    host.innerHTML = UI.group(list.map((v) => UI.row({
+      icon: 'voicemail', tint: Number(v.seen) ? '#8E8E93' : '#0A84FF',
+      title: v.number ? nameOfNumber(v.number) : L('ph.unknown'),
+      subtitle: String(v.at || '').slice(5, 16),
+      badge: Number(v.seen) ? undefined : L('ph.vm_new_short'),
+      chevron: true, data: { id: v.id },
+    })));
+    qrows('vmlist', '.row', (el) => el.addEventListener('click', () => {
+      const v = list.find((x) => String(x.id) === el.dataset.id);
+      if (v) voicemailSheet(v);
+    }));
+    // Opening the list is hearing them: the unread mark is gone from here on.
+    if (list.some((v) => !Number(v.seen))) {
+      post('voicemail', { op: 'seen' }).then(() => { state.vmUnread = 0; });
+    }
+  });
+}
+
+function voicemailSheet(v) {
+  const who = v.number ? nameOfNumber(v.number) : L('ph.unknown');
+  sheet(who,
+    '<div class="vmbody">' + esc(v.body || '') + '</div>' +
+    '<div class="vmwhen">' + esc(String(v.at || '').slice(0, 16)) + '</div>' +
+    (v.number ? UI.button(L('ph.call'), 'vmcall', 'tinted') : '') +
+    UI.button(L('ph.delete'), 'vmdel', 'destructive'),
+    () => {
+      const c = byId('vmcall');
+      if (c) c.addEventListener('click', () => { closeSheet(); post('call', { number: v.number }); });
+      byId('vmdel').addEventListener('click', async () => {
+        await post('voicemail', { op: 'del', id: v.id });
+        closeSheet(); renderVoicemail();
+      });
+    });
+}
+
+// Offered to the CALLER when nobody picked up.
+function voicemailOffer(number) {
+  sheet(L('ph.vm_leave'),
+    '<div class="groupfoot">' + esc(L('ph.vm_leave_hint')) + ' ' + esc(nameOfNumber(number)) + '</div>' +
+    UI.field('vmtext', L('ph.vm_placeholder'), '', 'maxlength="200"') +
+    UI.button(L('ph.vm_send'), 'vmgo', 'tinted'),
+    () => byId('vmgo').addEventListener('click', async () => {
+      const txt = byId('vmtext').value.trim();
+      if (!txt) return;
+      const r = await post('voicemail', { op: 'leave', number, body: txt });
+      closeSheet();
+      toast(r && r.ok ? L('ph.vm_sent') : L('ph.err_' + ((r && r.error) || 'x')));
+    }));
+}
 
 // ── Messages ───────────────────────────────────────────────────
 function nameOfNumber(number) {
@@ -956,7 +1023,11 @@ RENDER.settings = () => {
     UI.group([
       UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.my_number'), value: state.number || '',
                data: { copy: state.number || '' } }),
-      UI.row({ icon: 'moon', tint: '#5856D6', title: L('ph.dark_mode'), toggle: !!p.dark, data: { t: 'dark' } }),
+      UI.row({ icon: 'moon', tint: '#5856D6', title: L('ph.dark_mode'),
+        value: L('ph.theme_' + (p.darkMode || (p.dark ? 'dark' : 'light'))), chevron: true, data: { t: 'theme' } }),
+      UI.row({ icon: 'phone', tint: '#34C759', title: L('ph.vibrate'), toggle: p.vibrate !== false, data: { t: 'vibrate' } }),
+      UI.row({ icon: 'speaker', tint: '#FF9500', title: L('ph.ringer'),
+        value: Math.round((p.ringVolume ?? 0.7) * 100) + '%', chevron: true, data: { t: 'ringer' } }),
     ]) +
     (p.wallpaperUrl ? '<div class="wallpreview" style="background-image:url(' + esc(p.wallpaperUrl) + ')"></div>' : '') +
     (state.customWallpaper === false ? '' :
@@ -1055,6 +1126,36 @@ RENDER.settings = () => {
       if (res && res.ok) { state.prefs = res.prefs; applyWallpaper(); RENDER.settings(); }
     } else if (r.dataset.copy) {
       copyText(r.dataset.copy);
+    } else if (r.dataset.t === 'theme') {
+      const t = state.theme || {};
+      const opts = [['light', 'ph.theme_light'], ['dark', 'ph.theme_dark']];
+      if (t.auto) opts.push(['auto', 'ph.theme_auto']);
+      sheet(L('ph.dark_mode'),
+        UI.group(opts.map(([k, lbl]) => UI.row({
+          title: L(lbl), value: (state.prefs || {}).darkMode === k ? '\u2713' : '', data: { m: k },
+        }))) + (t.auto ? '<div class="groupfoot">' + esc(L('ph.theme_auto_hint')) + '</div>' : ''),
+        () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const res2 = await post('prefs', { darkMode: el.dataset.m });
+          closeSheet();
+          if (res2 && res2.ok) { state.prefs = res2.prefs; applyTheme(); RENDER.settings(); }
+        })));
+      return;
+    } else if (r.dataset.t === 'vibrate') {
+      const res2 = await post('prefs', { vibrate: !((state.prefs || {}).vibrate !== false) });
+      if (res2 && res2.ok) { state.prefs = res2.prefs; RENDER.settings(); }
+      return;
+    } else if (r.dataset.t === 'ringer') {
+      sheet(L('ph.ringer'),
+        UI.group([0, 0.3, 0.7, 1].map((v) => UI.row({
+          title: Math.round(v * 100) + '%', subtitle: v === 0 ? L('ph.ringer_off') : '',
+          value: Math.abs(((state.prefs || {}).ringVolume ?? 0.7) - v) < 0.01 ? '\u2713' : '', data: { v: String(v) },
+        }))),
+        () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const res2 = await post('prefs', { ringVolume: Number(el.dataset.v) });
+          closeSheet();
+          if (res2 && res2.ok) { state.prefs = res2.prefs; RENDER.settings(); }
+        })));
+      return;
     } else if (r.dataset.t === 'dark') {
       const res = await post('prefs', { dark: !(state.prefs || {}).dark });
       if (res && res.ok) { state.prefs = res.prefs; applyTheme(); RENDER.settings(); }
@@ -1141,8 +1242,23 @@ function applyBrightness() {
   byId('screen').style.setProperty('--dim', String(1 - b));
 }
 
+// Light, dark, or follow the in-game clock. Automatic is only offered if the operator
+// left it on; the hours it flips at are theirs to set too.
+let gameHour = null;      // last in-game hour we were told about
+
+function darkNow() {
+  const p = state.prefs || {}, t = state.theme || {};
+  const mode = p.darkMode || (p.dark ? 'dark' : 'light');
+  if (mode !== 'auto' || !t.auto) return mode === 'dark';
+  if (gameHour == null) return p.dark === true;
+  const from = Number(t.from ?? 20), to = Number(t.to ?? 6);
+  // A start later than the end wraps over midnight, which is the normal case.
+  return from <= to ? (gameHour >= from && gameHour < to)
+                    : (gameHour >= from || gameHour < to);
+}
+
 function applyTheme() {
-  byId('screen').classList.toggle('dark', (state.prefs || {}).dark === true);
+  byId('screen').classList.toggle('dark', darkNow());
 }
 
 let landscape = false;
@@ -2275,6 +2391,48 @@ async function hushMain() {
 };
 
 
+// ══ Buzz and peek ══════════════════════════════════════════════
+// The handset shakes for a notification, and - when it is in a pocket rather than in the
+// hand - the top of it rises into view carrying that notification, then slides back. The
+// peek never takes focus: you are being shown something, not asked to do anything.
+let buzzTimer = null, peekTimer = null;
+
+function buzzDevice() {
+  const d = byId('device');
+  d.classList.remove('buzz');
+  void d.offsetWidth;               // restart the animation rather than ignore a re-trigger
+  d.classList.add('buzz');
+  clearTimeout(buzzTimer);
+  buzzTimer = setTimeout(() => d.classList.remove('buzz'), 700);
+}
+
+function showPeek(kind, data) {
+  const d = byId('device');
+  // No phone on them, nothing to lift out of a pocket. The client checks this too; it is
+  // repeated here so the rule holds whoever sends the message.
+  if (data && data.hasItem === false) return;
+  if (!d.classList.contains('hidden') && !d.classList.contains('peeking')) return; // it is open
+  const title = kind === 'message'
+    ? (nameOfNumber(data.from) || L('ph.new_message_t'))
+    : (data.title || L('ph.notification'));
+  const bodyTxt = kind === 'message' ? (data.body || L('ph.attach')) : (data.body || '');
+
+  d.classList.remove('hidden');
+  d.classList.add('peeking');
+  byId('inicon').innerHTML = UI.appIcon(kind === 'message' ? 'messages' : (data.app || data.icon || 'dot'));
+  byId('inTitle').textContent = title;
+  byId('inBody').textContent = bodyTxt;
+  byId('island').classList.add('notif');
+  buzzDevice();
+
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(() => {
+    byId('island').classList.remove('notif');
+    d.classList.remove('peeking');
+    d.classList.add('hidden');
+  }, 4600);
+}
+
 // ══ Emoji ══════════════════════════════════════════════════════
 // A picker any composer can raise - Messages and the social apps both point it at their
 // own input. Emoji are ordinary text, so they travel and store like the rest of a message.
@@ -2740,6 +2898,13 @@ window.addEventListener('message', (e) => {
     applyPower(d.power);
   } else if (d.action === 'banner') {
     banner(d.banner || {});
+  } else if (d.action === 'buzz') {
+    buzzDevice();
+  } else if (d.action === 'peek') {
+    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    showPeek(d.kind, d.data || {});
+  } else if (d.action === 'voicemailOffer') {
+    voicemailOffer(d.number || '');
   } else if (d.action === 'airdrop') {
     airdropOffer(d.offer || {});
   } else if (d.action === 'airdropResult') {
