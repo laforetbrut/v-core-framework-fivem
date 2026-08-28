@@ -53,6 +53,9 @@ client_scripts {
     -- it what is installed.
     'bridge/client/compat.lua',
     'client/settings.lua',
+    -- Translates v-core's client lifecycle (loaded, job, gang) into the qb-shaped events
+    -- settings.lua boots and updates roles on. Without it the HUD never boots in game here.
+    'client/vcore.lua',
     'client/minimap.lua',
     'client/compass.lua',
     'client/vehicle.lua',
