@@ -206,3 +206,24 @@
 **Root cause:** the dispatch had no way for a handler to say "keep it". v-sport's qb registrar had always honoured `Items.use`'s return value (`if Items.use(...) and entry.consume ~= false then RemoveItem`), so the same refusal kept the item on qb-core and lost it here. The v-inventory wiring dropped that return value because the dispatch had nowhere to put it.
 **Fix:** a handler that returns false keeps the item and suppresses the success toast; nil, true or anything else consumes it, so every handler written before this is unaffected. v-sport returns its own decision; the power bank returns false on all three of its exits. Verified in the real runtime: nil -> consume, true -> consume, false -> keep, and `exports['v-sport']:UseItem` on a refusal path returns false.
 **Prevention:** when a dispatcher performs an irreversible action around a callback, the callback needs a way to veto it. Porting a registration from a framework that let the handler own the removal to one that does the removal itself silently changes who decides, and the difference only shows on the refusal path, which is the path nobody tests.
+
+## [2026-08-29 00:15] — A checker read nothing at all inside a `[local]` folder
+**Context:** Running the phone's own validator against the integrated copy for the first time.
+**Error:** It reported `callbacks 44 asked, 0 handled` and named all 44 as unanswered, on a phone that registers 45 of them. Every other scan in the same script returned empty too, silently.
+**Root cause:** the script builds paths with `glob.glob(os.path.join(ROOT, 'client', '*.lua'))`. A FiveM resource lives under `resources/[local]/`, and `glob` reads `[local]` as a CHARACTER CLASS: it looked for a one-character directory named l, o, c or a, found none, and returned an empty list. No error, no warning - just nothing, which then reads as "everything is broken".
+**Fix:** route every scan through a helper that escapes the base with `glob.escape(ROOT)`. Verified afterwards: 44 asked, 45 handled. v-sport's validator was checked for the same flaw and does not have it - it uses `pathlib`, where only the pattern argument is interpreted, and it genuinely sees its 12 client and 9 server files.
+**Prevention:** never interpolate a path into a glob pattern. Escape the base, or use `pathlib.Path(base).glob(pattern)` where the base stays literal. And when a tool reports that everything is broken, suspect the tool before the code.
+
+## [2026-08-29 00:55] — Three checks reported "not found" and then declared themselves passed
+**Context:** Reading the phone validator's output line by line rather than trusting its final verdict.
+**Error:** `app metadata`, `app descriptions` and `prefs round trip` each printed a "not found" note and returned a pass. Two anchored on `Config.StoreApps`, a table this copy of the phone does not have; the third anchored on `prefsOf = function(` where this copy writes `local function prefsOf(`. Three green checks that examined nothing.
+**Root cause:** a check that cannot locate its subject has two honest options - fail, or report that it could not run - and each of these took a third: report, and pass anyway. The summary line then counted them among the checks that succeeded.
+**Fix:** end the apps block at the next top-level `Config.` declaration instead of a hardcoded name, and accept both function declaration forms. Once they ran, the app checks immediately found three apps with no description in either locale, which the store was presenting as third-party apps whose author wrote nothing.
+**Prevention:** "cannot find X" is never a pass. A checker that reports a green light on something nobody looked at is worse than no checker, because it stops anyone looking.
+
+## [2026-08-29 01:05] — A clean boot proves nothing about client scripts
+**Context:** Closing several iterations with "boot test clean" as the verification for edits to client-side Lua.
+**Error:** The claim was weaker than it sounded. Measured directly: a deliberately broken client file produced `Starting resource v-radio`, `Started resource v-radio`, `module registered: v-radio (3 setting(s))` and no error of any kind. The file would simply never have run for a connected player.
+**Root cause:** the server never reads client scripts. It ships them to the client, and a syntax error surfaces only in a player's own console when they connect.
+**Fix:** `tools/lua-syntax.py` compiles all 300 Lua files and discards the result. Its first run reported v-hud's weapon test as a syntax error, which is valid FiveM: `` `WEAPON_UNARMED` `` between backticks is a CitizenFX joaat literal that stock Lua rejects. Those are replaced with a number before parsing, so valid code is not "fixed" into broken code.
+**Prevention:** state what a verification actually covers. A boot test covers server scripts, manifests and resource start-up; client Lua, NUI assets and anything gated behind a connected player need their own check.
