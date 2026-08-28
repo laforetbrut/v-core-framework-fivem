@@ -268,6 +268,22 @@ local function registerOxInventory()
     return true
 end
 
+--[[
+    v-inventory (this framework's inventory).
+
+    It removes the used item ITSELF after the handler returns, so the handler only fires the
+    effect and never removes - which is exactly right here, because every sport item is
+    `consume = true`. The handler shape is function(src, item), matching v-inventory's dispatch.
+]]
+local function registerVInventory(key, entry)
+    if not started('v-inventory') then return false end
+    return pcall(function()
+        exports['v-inventory']:RegisterUsableItem(entry.item, function(source_)
+            Items.use(source_, key)
+        end)
+    end)
+end
+
 CreateThread(function()
     -- Let the framework and the inventory finish starting. Registering a usable item against
     -- a resource that has not booted silently does nothing on every one of them.
@@ -279,7 +295,9 @@ CreateThread(function()
         if type(entry) == 'table' and type(entry.item) == 'string' and entry.item ~= '' then
             oxItems[entry.item] = key
 
-            local ok = registerQb(key, entry)
+            -- v-inventory first: it is the framework's own inventory and the one that answers here.
+            local ok = registerVInventory(key, entry)
+            if not ok then ok = registerQb(key, entry) end
             if not ok then ok = registerEsx(key, entry) end
             if ok then registered = registered + 1 end
         end

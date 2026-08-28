@@ -425,13 +425,18 @@ ADAPTERS.vcore = {
     end,
 
     hasItem = function(_, player, item)
-        -- Same policy as the ox adapter: the one inventory this bridge knows how to read is
-        -- ox_inventory; without it, item gates fail closed. A server on a different inventory
-        -- can widen this, but a gym rarely gates on an item.
         if not player then return false end
-        if not started('ox_inventory') then return false end
-        local count = try(function() return exports.ox_inventory:GetItemCount(player.source, item) end)
-        return type(count) == 'number' and count > 0
+        -- v-inventory is this framework's inventory; ox_inventory stays as the fallback for a
+        -- server that swapped it out. Fails closed if neither is present.
+        if started('v-inventory') then
+            local n = try(function() return exports['v-inventory']:GetItemCount(player.source, item) end)
+            return type(n) == 'number' and n > 0
+        end
+        if started('ox_inventory') then
+            local n = try(function() return exports.ox_inventory:GetItemCount(player.source, item) end)
+            return type(n) == 'number' and n > 0
+        end
+        return false
     end,
 
     isCuffed = function(_, player)
