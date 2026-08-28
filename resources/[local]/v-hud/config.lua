@@ -871,6 +871,9 @@ Config.Compat = {
     -- Each entry is a resource and a boolean export on it. Missing resources and missing
     -- exports are skipped, and the events and the state bag remain as fallbacks.
     seatbeltExports = {
+        -- v-vehicles owns the belt on this framework and exposes it as IsBuckled(); it fires no
+        -- event and sets no state bag, so this export is the only way the tell-tale sees it.
+        { resource = 'v-vehicles', method = 'IsBuckled' },
         { resource = 'qb-smallresources', method = 'HasSeatbeltOn' },
         { resource = 'seatbelt', method = 'HasSeatbeltOn' },
         { resource = 'qb-seatbelt', method = 'HasSeatbeltOn' },
