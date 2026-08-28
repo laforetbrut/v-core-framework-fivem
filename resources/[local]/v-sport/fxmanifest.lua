@@ -74,6 +74,11 @@ client_scripts {
 }
 
 server_scripts {
+    -- v-core's helper library, server side only: server/vcore.lua declares this module's
+    -- settings through it. Not a shared_script, because nothing on the client needs it and
+    -- the client half of this resource stays framework-agnostic.
+    '@v-core/lib/v.lua',
+
     'bridge/server/framework.lua',
     'server/database.lua',
     'server/stats.lua',
@@ -84,6 +89,9 @@ server_scripts {
     -- Charges hunger, thirst and stress to the server's needs resource when a set finishes.
     -- Listens to the event stats.lua fires, so its position here is presentation only.
     'server/needs.lua',
+    -- Declares the gym's server-side tunables to v-core's admin panel and writes an
+    -- operator's values back onto Config. After the files whose defaults it reads.
+    'server/vcore.lua',
     'server/commands.lua',
     -- Owns data/custom.json and authorises every change to it. After commands.lua, which
     -- registers the admin gate this one re-checks.
