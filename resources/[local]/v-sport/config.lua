@@ -559,6 +559,10 @@ Config.Items = {
         description = 'A scoop after training. Your body recovers in a third of the time.',
         weight = 500,
         image = 'whey.png',
+
+        -- Worth as food and drink, honoured by Config.Needs.itemNutrition. A shake is a
+        -- drink you can chew: a little of both. See section 7b for the signs.
+        needs = { hunger = 10.0, thirst = 10.0 },
     },
 
     -- A protein bar: a small immediate refund of spent allowance.
@@ -574,6 +578,9 @@ Config.Items = {
         description = 'Twenty grams of protein and a wrapper. Worth one more set.',
         weight = 150,
         image = 'protein_bar.png',
+
+        -- A bar is food, and close to what the inventory pays for one.
+        needs = { hunger = 25.0 },
     },
 
     -- A pre-workout: gains are worth more for half an hour.
@@ -591,6 +598,10 @@ Config.Items = {
         description = 'Caffeine, beta-alanine and optimism. Half an hour of feeling unstoppable.',
         weight = 200,
         image = 'pre_workout.png',
+
+        -- A drink, and a stimulant: the caffeine winds the character up rather than settling
+        -- them, which is why stress goes UP here where a workout takes it down.
+        needs = { thirst = 10.0, stress = 6.0 },
     },
 
     -- A sports drink: refill the sprint bar. Purely a convenience item.
@@ -606,6 +617,9 @@ Config.Items = {
         description = 'Electrolytes and food colouring. You get your breath back.',
         weight = 400,
         image = 'sports_drink.png',
+
+        -- The one item here that is a drink first and a supplement second.
+        needs = { thirst = 35.0 },
     },
 }
 
@@ -805,6 +819,12 @@ Config.Needs = {
     -- Charge in proportion to how well the set went (0..1, the same number the gains use).
     -- Off charges the full amount for any completed set.
     scaleWithQuality = true,
+
+    -- Give the supplements back their food and drink value. An inventory hands a claimed item
+    -- entirely to whoever registered it, so without this a protein bar feeds nobody. The
+    -- amounts live on each item in section 5c, under `needs`, so one item is described in one
+    -- place; this switch only says whether they are honoured.
+    itemNutrition = true,
 
     -- Never take hunger or thirst below this, so training can leave a character peckish but
     -- never starving. It does NOT apply to stress, where 0 is the calm end and the whole

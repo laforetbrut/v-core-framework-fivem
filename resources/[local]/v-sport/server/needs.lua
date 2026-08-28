@@ -70,6 +70,18 @@ local function charge(name, src, key, delta)
     end
 end
 
+local NEEDS = { 'hunger', 'thirst', 'stress' }
+
+--- Apply a { hunger =, thirst =, stress = } table, each value multiplied by `scale`.
+local function applyNeeds(name, src, amounts, scale)
+    for _, need in ipairs(NEEDS) do
+        local amount = tonumber(amounts[need]) or 0
+        if amount ~= 0 then
+            charge(name, src, need, amount * scale)
+        end
+    end
+end
+
 AddEventHandler('vsport:server:SessionCompleted', function(src, key, gains, quality)
     if not Config.Needs.enabled then return end
 
@@ -83,13 +95,33 @@ AddEventHandler('vsport:server:SessionCompleted', function(src, key, gains, qual
         if scale <= 0 then return end
     end
 
-    for _, need in ipairs({ 'hunger', 'thirst', 'stress' }) do
-        local amount = tonumber(Config.Needs[need]) or 0
-        if amount ~= 0 then
-            charge(name, src, need, amount * scale)
-        end
-    end
+    applyNeeds(name, src, Config.Needs, scale)
 
     Sport.debug(('needs: charged %s for %s at %.2f'):format(
         GetPlayerName(src) or src, tostring(key), scale))
+end)
+
+--[[
+    What a supplement is worth as food and drink.
+
+    A protein bar is still a bar and a sports drink is still a drink, but the inventory hands
+    a claimed item entirely to its owner: the moment v-sport registered a handler for these
+    four, their plain food and drink value went with it. This gives it back, from each item's
+    own `needs` table in section 5c, so one item is described in one place.
+
+    Only fires for a use that actually took effect - v-sport raises this after the effect, not
+    before - so a supplement refused on a cooldown feeds nobody, and now keeps its item too.
+]]
+AddEventHandler('vsport:server:ItemUsed', function(src, key)
+    if not (Config.Needs.enabled and Config.Needs.itemNutrition) then return end
+
+    local entry = Config.Items[key]
+    local amounts = entry and entry.needs
+    if type(amounts) ~= 'table' then return end
+
+    local name = findProvider()
+    if not name then return end
+
+    applyNeeds(name, src, amounts, 1.0)
+    Sport.debug(('needs: %s ate or drank %s'):format(GetPlayerName(src) or src, tostring(key)))
 end)
