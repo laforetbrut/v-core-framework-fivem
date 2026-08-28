@@ -881,6 +881,23 @@ def check_setnav(report):
     return not problems
 
 
+def apps_block(cfg):
+    """
+    The Config.Apps table, whatever declares the next block.
+
+    This used to end the slice at `Config.StoreApps`, a table this framework's copy of the
+    phone does not have - so both app checks below found no block, said so, and returned a
+    pass. A checker that reports "not found" and then calls itself satisfied is worse than no
+    checker: it is a green light for something nobody looked at. The end is now simply the
+    next top-level Config declaration.
+    """
+    start = cfg.find('Config.Apps')
+    if start < 0:
+        return None, None
+    nxt = re.search(r'(?m)^Config\.\w+', cfg[start + 1:])
+    end = (start + 1 + nxt.start()) if nxt else len(cfg)
+    return start, end
+
 def check_app_metadata(report):
     """Every app in the catalogue needs a `Config.AppMetadata` entry.
 
@@ -896,9 +913,8 @@ def check_app_metadata(report):
     Nothing else notices, because the merge falls back to an empty table rather than failing.
     """
     cfg = read(os.path.join(ROOT, 'config.lua'))
-    start = cfg.find('Config.Apps')
-    end = cfg.find('Config.StoreApps')
-    if start < 0 or end < 0:
+    start, end = apps_block(cfg)
+    if start is None:
         report('app metadata', 'Config.Apps not found', [])
         return True
 
@@ -980,9 +996,8 @@ def check_app_descriptions(report):
     every key it is asked for and answers happily.
     """
     cfg = read(os.path.join(ROOT, 'config.lua'))
-    start = cfg.find('Config.Apps')
-    end = cfg.find('Config.StoreApps')
-    if start < 0 or end < 0:
+    start, end = apps_block(cfg)
+    if start is None:
         report('app descriptions', 'Config.Apps not found', [])
         return True
 
