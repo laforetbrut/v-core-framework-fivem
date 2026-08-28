@@ -57,7 +57,7 @@ local function rebuildCategories()
             { c.item, c.label or (c.item:sub(1, 1):upper() .. c.item:sub(2)), 200, 'clothing' })
         if not registered[c.item] then
             registered[c.item] = true
-            exports['v-inventory']:RegisterUsableItem(c.item, function(src, item) equip(src, item) end)
+            exports['v-inventory']:RegisterUsableItem(c.item, function(src, item) return equip(src, item) end)
         end
     end
     TriggerClientEvent('v-clothing:client:categories', -1, Categories)
@@ -172,7 +172,10 @@ end)
 -- ── Equip (clothing item "used" via the inventory) ─────────────
 function equip(source, item)
     local player = Core.GetPlayer(source)
-    if not player or not item or not item.metadata then return end
+    -- Answers whether the garment was actually put on, because the inventory takes the item
+    -- out of the bag on anything but false - and an abort below must not cost the player the
+    -- garment it refused to equip.
+    if not player or not item or not item.metadata then return false end
     local m = item.metadata
     local cat = m.cat
     local def = catByKey(cat) or catByItem(item.name)
@@ -183,7 +186,7 @@ function equip(source, item)
         for _, other in ipairs(sameSlot(def)) do
             if w[other] then
                 if not exports['v-inventory']:AddItem(source, w[other].item, 1, w[other].meta) then
-                    Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return
+                    Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return false
                 end
                 w[other] = nil
             end
@@ -193,13 +196,15 @@ function equip(source, item)
     -- the swap if it can't fit, so the worn piece isn't destroyed by a full inventory
     if w[cat] then
         if not exports['v-inventory']:AddItem(source, w[cat].item, 1, w[cat].meta) then
-            Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return
+            Core.Notify(source, LP(source, 'cl.nospace'), 'error'); return false
         end
     end
     w[cat] = { item = item.name, meta = m }
     player.SetMetadata('worn', w)
     TriggerClientEvent('v-clothing:client:apply', source, m)   -- apply on the ped + persist appearance
     Core.Notify(source, LP(source, 'cl.equipped', LP(source, 'item.' .. item.name)), 'success')
+    -- Worn now, so the inventory is right to take it out of the bag.
+    return true
 end
 
 -- ── Wardrobe: list worn + unequip ──────────────────────────────

@@ -397,6 +397,10 @@ V.Ready(function(core)
             local key = d.key
             inv.RegisterUsableItem(d.seed_item, function(src)
                 TriggerClientEvent('v-drugs:client:startPlant', src, key)
+                -- Using it only opens the planting flow. The seed is taken when the plant
+                -- actually goes into the ground, so answering false is what stops the bag
+                -- from paying twice - and from paying at all when the spot is refused.
+                return false
             end)
         end
         if d.product_item and not registered[d.product_item] then
@@ -404,6 +408,8 @@ V.Ready(function(core)
             local item = d.product_item
             inv.RegisterUsableItem(item, function(src)
                 TriggerClientEvent('v-drugs:client:offer', src, item)
+                -- Same as the seed: the sale takes the dose, not the act of offering one.
+                return false
             end)
         end
     end
@@ -414,6 +420,8 @@ V.Ready(function(core)
             local it = item
             inv.RegisterUsableItem(it, function(src)
                 TriggerClientEvent('v-drugs:client:offer', src, it)
+                -- The refined forms sell through the same path, and pay the same way.
+                return false
             end)
         end
     end
