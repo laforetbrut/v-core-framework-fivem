@@ -202,10 +202,16 @@ the repository, changes nothing, and exits non-zero when it finds something, so 
 step can fail on it. Run them from the repository root:
 
 ```
+python tools/lua-syntax.py        # every Lua file compiles, client ones included
 python tools/privacy-sweep.py     # anything that must never be committed
 python tools/locale-check.py      # keys defined once, on both sides, and all of them used ones exist
 python tools/manifest-check.py    # every asset a NUI page loads is one the resource serves
 ```
+
+`lua-syntax` is the one that answers a question starting the server cannot. A broken CLIENT
+script is never read by the server: the resource reports "Started", registers its settings and
+logs nothing, and the file simply does not run when a player connects. That was measured, not
+assumed - a deliberately broken client file produced a completely clean boot.
 
 Each was written because the thing it looks for had already happened at least once here: a live
 connection string in a tracked file, a key defined twice where the second silently won, and a
@@ -416,10 +422,17 @@ en jeu. Chacun lit le dépôt, ne modifie rien, et sort en code non nul quand il
 chose, pour qu'un hook ou une étape de CI puisse échouer dessus. À lancer depuis la racine :
 
 ```
+python tools/lua-syntax.py        # chaque fichier Lua compile, y compris les fichiers client
 python tools/privacy-sweep.py     # tout ce qui ne doit jamais être commité
 python tools/locale-check.py      # clés définies une fois, des deux côtés, et toutes celles utilisées existent
 python tools/manifest-check.py    # chaque asset chargé par une page NUI est bien servi par la ressource
 ```
+
+`lua-syntax` répond à une question que démarrer le serveur ne peut pas trancher. Un script
+CLIENT cassé n'est jamais lu par le serveur : la ressource annonce « Started », enregistre ses
+réglages et ne journalise rien, et le fichier ne tourne simplement pas quand un joueur se
+connecte. Cela a été mesuré et non supposé : un fichier client volontairement cassé a produit
+un démarrage totalement propre.
 
 Chacun a été écrit parce que ce qu'il cherche s'était déjà produit ici au moins une fois : une
 chaîne de connexion vivante dans un fichier suivi, une clé définie deux fois dont la seconde
