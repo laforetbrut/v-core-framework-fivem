@@ -60,6 +60,9 @@ client_scripts {
     -- but only at runtime, and this file's own loop needs State from client/settings.lua.
     'client/odometer.lua',
     'client/stress.lua',
+    -- Feeds the vitals rings from v-status, the framework's owner of hunger/thirst/stress.
+    -- After client/stress.lua, whose Needs channel it writes into.
+    'client/vstatus.lua',
     'client/main.lua',
     'client/commands.lua',
 }

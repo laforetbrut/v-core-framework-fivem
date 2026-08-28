@@ -605,7 +605,11 @@ Config.Notifications = {
 -- =======================================================================================
 
 Config.Stress = {
-    enabled = true,
+    -- Off on this framework: v-status owns hunger, thirst and stress, including the stress
+    -- gains and the shake/blur screen effects. The HUD only displays the numbers (fed from
+    -- v-status by client/vstatus.lua); running its own stress here would be a second value
+    -- competing with v-status and a second set of screen effects fighting the first.
+    enabled = false,
 
     -- Percentage chance of gaining stress per shot fired. 0.1 is one shot in ten.
     shootingChance = 0.1,
