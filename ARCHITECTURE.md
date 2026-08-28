@@ -194,7 +194,7 @@ v-<module>  → feature resources (hud, banking, inventory, …).
               They consume v-core's API and events.
 ```
 
-Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-jobs → v-spawn → v-status → v-hud → v-banking → v-target → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
+Load order (`server.cfg`): `oxmysql → screenshot-basic → v-loadscreen → v-ui → v-notify → v-core → v-jobs → v-spawn → v-status → v-hud → v-sport → v-banking → v-target → v-inventory → v-shops → v-crafting → v-gathering → v-clothing → v-admin`.
 
 **Rule that is currently violated:** modules are supposed to never touch SQL - only `v-core` may.
 Five modules query the DB directly today. See `## 6. Cross-cutting debt`.
@@ -367,7 +367,7 @@ No SQL, no Lua, no exports.
   from ordinary accented chrome.
 - No `dependencies{}` block: if `v-ui` fails to start, every NUI page renders unstyled **silently**.
 - No cache-busting on the stylesheet URL.
-- `v-loadscreen` cannot link it (loads pre-mount) and mirrors the EMBER tokens locally - they will drift.
+- `v-loadscreen` cannot link it (loads pre-mount); it now carries its own theme in `config.js` rather than mirroring the EMBER tokens, so there is nothing to drift.
 
 ### `v-core` ✅ - framework
 **Done.** Player lifecycle (`playerReady` → `EnsureUser` → load-or-create character → `playerLoaded`,
@@ -403,16 +403,19 @@ click-to-dismiss, glowing countdown bar, `aria-live` region.
 - No de-duplication, no positioning options, no sound, no "clear all".
 
 ### `v-loadscreen` ✅ - boot screen
-**Done.** Native loadscreen, ken-burns video + poster, blueprint grid + grain + vignette, stencil
-title, 16-notch progress gauge with a monotonic clamp, rotating tips, staggered entrance.
+**Done.** The animated loading screen, brought in from a standalone line. `config.js` drives all of
+it: a background slideshow of looping videos and stills, an in-screen music player with generated
+tracks, rotating tips, a keybinds strip, and a live player count read from the server. It holds until
+the character is actually in the world, closing on v-core's own `onPlayerLoaded` signal with a
+failsafe so a stalled session cannot strand anybody, and everything on screen is chosen in one config
+file, fr+en.
 
 **Remaining.**
-- **Status strings are French-only** (`Initialisation…`, `Chargement de la carte…`) and tips crudely
-  alternate FR/EN every 5s. It cannot use the locale system (it loads before `v-core`).
-- The progress bar **fabricates advancement**: an idle-creep interval pushes it to 92% even when no
-  real load event fires.
-- Server name, kicker, signature, tips and asset paths are hardcoded in HTML/JS.
-- Mirrors `theme.css` tokens locally - will drift.
+- It loads before v-core, so it cannot use the shared locale system: its copy and tips live in
+  `config.js` rather than `locales/`.
+- The server name, Discord and site in `config.js` ship as placeholders, because a framework must not
+  carry one server's identity; an operator fills them in.
+- The generated backgrounds and music are ~11 MB of assets, with `tools/` to regenerate them.
 
 ### `v-spawn` ✅ - onboarding
 **Done.** Language pick → identity form → full appearance editor (6 tabs, orbit camera, colour
@@ -462,25 +465,38 @@ Server mutator exports: `Get` / `Set` / `Add` / `SetBleed` / `SetSick` / `Heal`.
 - No HUD of its own (by design - `v-hud` renders it), no locales, no in-game tuning UI.
 
 ### `v-hud` ✅ - overlay
-**Done.** Money readouts, seven always-visible vitals rings, hunger/thirst alerts at 25% with
-hysteresis, scrolling compass, **custom square minimap** (streamed mask, GTA:O health/armour bars
-removed via the scaleform, NUI frame slaved to the native map's true screen rect), drag-to-move and
-resize, F7 settings panel (element toggles, accent, opacity, scale, layout mode), whole-HUD auto-hide
-on pause / fade / player switch / open menu, KVP persistence, fr+en.
+**Done.** The configurable HUD, brought in from a standalone line and re-based on v-core. Five
+themes, ten speedometer styles, twenty-one dashboard tell-tales, a scrolling compass with street
+names, always-visible vitals, money on demand, compact and immersive modes, a per-player in-game
+settings menu, whole-HUD auto-hide on pause / fade / player switch / open menu, KVP persistence,
+fr+en. The framework is read through a `vcore` adapter on each bridge file (`bridge/client/compat.lua`,
+`bridge/server/framework.lua`): the ~16k-line core is untouched and the module reports
+`framework: v-core` at boot. Money comes from v-core, vitals from v-status, notifications through
+v-notify.
 
 **Remaining.**
-- Settings live in **client-side KVP**, so they are per-machine, not per-character, and not
-  server-authoritative.
-- **No exports and no inbound events** - another resource (a cutscene, a phone) cannot cleanly hide
-  or drive the HUD.
-- Everything is hardcoded: poll interval, alert thresholds, oxygen multiplier, danger thresholds,
-  the six accent presets, compass constants. No config, no admin surface.
-- `v-notify` is used but not declared in `dependencies{}`; if absent, the 25% alert silently vanishes.
-- The accent picker offers green/blue/red/amber/purple, which contradicts the one-accent rule in
-  `RULES.md` §3.5. **Open question for the owner:** restrict it to orange variants, or keep it as a
-  player preference outside the design system?
-- Several `aria-label`s and the panel's `HUD` tab label are hardcoded English.
-- Dual source of truth for minimap size (Lua `map.scale` vs JS `settings.minimapSize`).
+- Settings live in **client-side KVP**, so they are per-machine, not per-character.
+- The minimap defaults to the **native round shape**: the community square-mask stream assets
+  (`stream/*.ytd`) are rejected as an asset version mismatch by the default game build, and the
+  framework pins none. A server that pins a build can add the masks back and default to square.
+- The rich config lives in `config.lua` and the in-game menu rather than the v-core admin panel; the
+  module is auto-detected there (the `v_module` manifest marker) but exposes no v-core settings.
+
+### `v-sport` ✅ - training
+**Done.** Physical training. Every sport prop already on the map becomes usable, a rhythm QTE drives
+the workout, and strength, lung capacity and stamina are trained, decay when unused, and can be read
+and pushed by any other resource through its API. A live in-game equipment aligner for staff, and
+seventeen exercises across thirty models. Re-based on v-core through a `vcore` adapter, the ~20k-line
+core untouched: `bridge/server/framework.lua` reads the citizenid as the stats key plus job, gang and
+metadata, `bridge/client/compat.lua` resolves job-gated equipment, and the module reports
+`ready - v-core` at boot. Stats persist through oxmysql in `v_sport_stats` (JSON columns, so a new
+stat is a config change and not a migration), and it still runs in memory when no database is present.
+There is no cash by design: a payout is a stat gain written to its own profile.
+
+**Remaining.**
+- Settings live in `config.lua`, not the v-core admin panel (auto-detected via the `v_module`
+  marker, like v-hud).
+- Item gating reads `ox_inventory` only; a server on another inventory sees item gates fail closed.
 
 ### `v-banking` ⚠️ - Fleeca ATM
 **Done.** ATM proximity (4 prop models) → E → NUI with balances + last 20 transactions. Deposit,
