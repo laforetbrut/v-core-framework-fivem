@@ -831,7 +831,9 @@ Config.Compat = {
 
     -- Inventories the harness check can read. The first one that answers wins; when none do,
     -- the harness ring simply never lights.
-    inventory = { 'qb-inventory', 'ox_inventory', 'qs-inventory', 'ps-inventory', 'origen_inventory', 'codem-inventory', 'core_inventory' },
+    -- v-inventory first: it is this framework's inventory. Its client `HasItem(name)` export
+    -- answers the harness check; the rest are kept for a server that swapped it out.
+    inventory = { 'v-inventory', 'qb-inventory', 'ox_inventory', 'qs-inventory', 'ps-inventory', 'origen_inventory', 'codem-inventory', 'core_inventory' },
     forceInventory = nil,
 
     -- The item whose presence lights the harness ring.
