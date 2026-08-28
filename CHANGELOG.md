@@ -9,6 +9,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 ### Added (English first)
 
 - **v-sport, a physical-training module**. Every sport prop already on the map becomes usable, a rhythm QTE drives the workout, and strength, lung capacity and stamina are trained, decay when unused, and can be pushed around by any other resource through its API. It ships a live in-game equipment aligner for staff and seventeen exercises across thirty models. It runs as a v-core module: a vcore adapter on its bridge reads the framework's player (citizenid as the stats key, job, gang, metadata) and leads the detection order, the ~20k-line core untouched. Stats persist through oxmysql in `v_sport_stats`, and the module still runs in memory when no database is present. There is no cash in it by design: a payout is a stat gain written to its own profile.
+- **The inventory says at boot when an item can be destroyed for nothing**. A usable item whose type carries no effect, and that no resource has claimed a handler for, still leaves the slot on the first click and tells the player it was used. Three items were in that state and each had to be found by hand. The catalogue is now checked once at start-up, late enough that every module has claimed what it owns, and any item in that state is named along with the two ways to fix it. Silent when there is nothing to say.
 
 ### Changed (English first)
 
@@ -43,6 +44,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 ### Ajouts (miroir français)
 
 - **v-sport, un module d'entraînement physique**. Chaque accessoire de sport déjà présent sur la carte devient utilisable, un QTE rythmé mène la séance, et la force, la capacité pulmonaire et l'endurance se travaillent, décroissent sans usage, et peuvent être manipulées par toute autre ressource via son API. Il embarque un aligneur d'équipement en jeu pour le staff et dix-sept exercices sur trente modèles. Il tourne comme module v-core : un adaptateur vcore sur son pont lit le joueur du framework (citizenid comme clé de stats, métier, gang, metadata) et mène l'ordre de détection, le cœur de ~20 000 lignes intact. Les stats persistent via oxmysql dans `v_sport_stats`, et le module tourne quand même en mémoire sans base. Il n'a pas d'argent par conception : un gain est une progression de stat écrite dans son propre profil.
+- **L'inventaire signale au démarrage qu'un item peut être détruit pour rien**. Un item utilisable dont le type ne porte aucun effet, et dont aucune ressource n'a réclamé le handler, quitte quand même le slot au premier clic en annonçant au joueur qu'il a été utilisé. Trois items étaient dans cet état et chacun a dû être trouvé à la main. Le catalogue est désormais contrôlé une fois au démarrage, assez tard pour que chaque module ait réclamé ce qui lui revient, et tout item dans cet état est nommé avec les deux façons de le corriger. Silencieux quand il n'y a rien à dire.
 
 ### Modifications (miroir français)
 

@@ -65,6 +65,42 @@ function loadItemDefs()
     end
 end
 
+--[[
+    Boot check: usable items with nothing behind them.
+
+    An item marked usable whose type carries no effect, and that no resource has claimed,
+    still goes through the use path: it leaves the slot, the player is told it was used, and
+    nothing happens. It costs them the item and there is no error anywhere.
+
+    That has already been true of three items here - a backpack whose whole job is to be
+    carried, a jerry can that can be filled but not yet emptied, and a bottle of water whose
+    stored row predated the drink type. Each was found by hand. This says it at boot instead.
+]]
+local EFFECT_TYPES = { weapon = 1, attachment = 1, ammo = 1, armor = 1,
+                       food = 1, drink = 1, drug = 1, medical = 1 }
+
+CreateThread(function()
+    -- Late enough that every module has had its chance to claim an item: the gym registers
+    -- four seconds in, the phone one and a half, and the rest wait on their own resources.
+    Wait(15000)
+
+    local dead = {}
+    for name, d in pairs(ItemDefs) do
+        -- `cleaning_kit` is answered by name in the use path above, so it is never orphaned.
+        if d.usable == 1 and not EFFECT_TYPES[d.itype]
+           and name ~= 'cleaning_kit' and not UsableItems[name] then
+            dead[#dead + 1] = name
+        end
+    end
+
+    if #dead == 0 then return end
+
+    table.sort(dead)
+    print(('[v-inventory] %d usable item(s) have no effect behind them, and using one destroys it: %s')
+        :format(#dead, table.concat(dead, ', ')))
+    print('[v-inventory] give each a handler, or clear `usable` on it in the admin panel.')
+end)
+
 -- An admin edited the catalogue in the panel -> reload the defs server-side. Clients
 -- receive the refreshed catalogue on their next inventory open (the full state always
 -- carries `defs`), so no extra client event is needed.
