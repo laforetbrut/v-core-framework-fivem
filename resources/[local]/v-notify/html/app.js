@@ -22,13 +22,29 @@ function addToast(data) {
   container.appendChild(el);
 
   // Collapse exactly this row's height + the 10px stack gap so the stack never nudges on exit.
+  let timer = null;
   const remove = () => {
+    if (el.classList.contains('out')) return;   // already leaving: clicked, or trimmed below
+    clearTimeout(timer);
     el.style.setProperty('--collapse', -(el.offsetHeight + 10) + 'px');
     el.classList.add('out');
     setTimeout(() => el.remove(), 300);
   };
-  const timer = setTimeout(remove, duration);
-  el.addEventListener('click', () => { clearTimeout(timer); remove(); });
+  timer = setTimeout(remove, duration);
+  el.addEventListener('click', remove);
+  el._dismiss = remove;
+
+  trimStack(data.maxStack);
+}
+
+// Keep at most `max` toasts on screen, oldest first out. Without this the stack grew for as
+// long as messages arrived, and the operator's "max toasts" setting did nothing at all.
+function trimStack(max) {
+  const cap = Math.max(1, Math.floor(Number(max) || 4));
+  const live = Array.prototype.slice.call(container.querySelectorAll('.toast:not(.out)'));
+  for (let i = 0; i < live.length - cap; i += 1) {
+    if (live[i]._dismiss) live[i]._dismiss();
+  }
 }
 
 window.addEventListener('message', (e) => {
