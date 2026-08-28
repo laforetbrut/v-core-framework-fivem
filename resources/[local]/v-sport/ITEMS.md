@@ -17,7 +17,12 @@ It takes about two minutes. Pick your inventory below and paste the block.
 ```
 
 It detects your inventory and prints the exact block to paste, **generated from `Config.Items`**.
-Pass `qb-core`, `ox_inventory`, `esx` or `all` to get a specific one.
+Pass `v-inventory`, `qb-core`, `ox_inventory`, `esx` or `all` to get a specific one.
+
+On this framework the answer is the `v-inventory` block: a row for `v-inventory/data/items.lua`,
+with the shelf and the fallback type read from the item's own `needs` table. That catalogue is
+seeded once and owned by the admin panel afterwards, so a name already in the database keeps the
+values it has and is edited there instead.
 
 Use it rather than copying from the sections below if you have changed anything: the blocks here are
 written for the shipped names and weights, and the command's output follows your config. Rename

@@ -385,6 +385,40 @@ end
 
 local BLOCKS = {}
 
+--- What an item is, as far as a catalogue is concerned, read from what it restores. An item
+--- that quenches is a drink, one that feeds is food, anything else is just a thing.
+local function shelfOf(entry)
+    local needs = entry.needs
+    if type(needs) == 'table' then
+        if (tonumber(needs.thirst) or 0) > 0 then return 'drinks', 'drink' end
+        if (tonumber(needs.hunger) or 0) > 0 then return 'food', 'food' end
+    end
+    return 'misc', 'misc'
+end
+
+BLOCKS['v-inventory'] = function(lines)
+    lines[#lines + 1] = '-- v-inventory:  v-inventory/data/items.lua'
+    lines[#lines + 1] = '-- Paste inside the InventoryItems table, then restart. The catalogue is'
+    lines[#lines + 1] = '-- seeded once and owned by the admin panel afterwards, so a row that is'
+    lines[#lines + 1] = '-- already in the database keeps the values it has: edit those in the panel.'
+    lines[#lines + 1] = '--'
+    lines[#lines + 1] = '-- `usable` stays 1 and the type is only the fallback: v-sport registers the'
+    lines[#lines + 1] = '-- real effect at boot and claims the item, so the type effect never runs.'
+    lines[#lines + 1] = '-- It still decides which shelf the item sits on, and what it is worth as'
+    lines[#lines + 1] = '-- food or drink comes from the `needs` table in this module\'s own config.'
+    lines[#lines + 1] = ''
+
+    for _, key in ipairs(itemsInOrder()) do
+        local it = Config.Items[key]
+        local category, itype = shelfOf(it)
+        lines[#lines + 1] = ("  { name='%s', label='%s', weight=%d, stackable=1, usable=1, "
+            .. "category='%s', image=nil, itype='%s', rarity='common', desc='%s' },")
+            :format(it.item, luaQuote(it.label or it.item),
+                math.floor(tonumber(it.weight) or 200), category, itype,
+                luaQuote(it.description))
+    end
+end
+
 BLOCKS['qb-core'] = function(lines)
     lines[#lines + 1] = '-- qb-core / qbx_core:  qb-core/shared/items.lua'
     lines[#lines + 1] = '-- Paste inside the QBShared.Items table.'
@@ -446,37 +480,47 @@ end
     operator who wants the answer and not a menu. `all` prints everything, for someone writing
     documentation or migrating between inventories.
 ]]
+--[[
+    Which inventory this server actually runs, in the same order registration uses.
+
+    v-inventory first: it is the framework's own inventory and the one this module registers
+    against. Without it the fall-through handed a v-core server the qb-core block, which does
+    nothing here and reads as if the item had been added.
+]]
+local function detectInventory()
+    if GetResourceState('v-inventory') == 'started' then return 'v-inventory' end
+    -- ox_inventory next, because a server can run it ON TOP of qb-core, in which case ox owns
+    -- the item list.
+    if GetResourceState('ox_inventory') == 'started' then return 'ox_inventory' end
+    -- Bridge.framework() answers the RESOURCE name, which for ESX is 'es_extended' - so a
+    -- search for 'esx' never matched and an ESX server was handed the qb-core block.
+    if Bridge.framework():find('es_extended') or Bridge.framework():find('esx') then
+        return 'esx'
+    end
+    return 'qb-core'
+end
+
 local function printItems(target, which)
     local lines = {}
 
     which = tostring(which or ''):lower()
 
     if which == '' then
-        -- What is actually installed. ox_inventory is checked first because a server can run it
-        -- ON TOP of qb-core, in which case ox owns the item list.
-        if GetResourceState('ox_inventory') == 'started' then
-            which = 'ox_inventory'
-        -- Bridge.framework() answers the RESOURCE name, which for ESX is 'es_extended' - so a
-        -- search for 'esx' never matched and an ESX server was handed the qb-core block.
-        elseif Bridge.framework():find('es_extended') or Bridge.framework():find('esx') then
-            which = 'esx'
-        else
-            which = 'qb-core'
-        end
+        which = detectInventory()
         lines[#lines + 1] = ('-- Detected: %s. Pass a name to this command for another one:'):format(which)
-        lines[#lines + 1] = '--   qb-core | ox_inventory | esx | all'
+        lines[#lines + 1] = '--   v-inventory | qb-core | ox_inventory | esx | all'
         lines[#lines + 1] = ''
     end
 
     if which == 'all' then
-        for _, name in ipairs({ 'qb-core', 'ox_inventory', 'esx' }) do
+        for _, name in ipairs({ 'v-inventory', 'qb-core', 'ox_inventory', 'esx' }) do
             BLOCKS[name](lines)
             lines[#lines + 1] = ''
         end
     elseif BLOCKS[which] then
         BLOCKS[which](lines)
     else
-        lines[#lines + 1] = ('unknown inventory "%s". Known: qb-core, ox_inventory, esx, all')
+        lines[#lines + 1] = ('unknown inventory "%s". Known: v-inventory, qb-core, ox_inventory, esx, all')
             :format(which)
     end
 
@@ -493,11 +537,13 @@ local function printItems(target, which)
     end
 end
 
+--- The block for one inventory, as a list of lines. No argument, or an empty one, answers for
+--- the inventory this server actually runs rather than assuming qb-core.
 exports('GetItemBlocks', function(which)
     local lines = {}
-    if BLOCKS[tostring(which or 'qb-core')] then
-        BLOCKS[tostring(which or 'qb-core')](lines)
-    end
+    local key = tostring(which or ''):lower()
+    if key == '' then key = detectInventory() end
+    if BLOCKS[key] then BLOCKS[key](lines) end
     return lines
 end)
 

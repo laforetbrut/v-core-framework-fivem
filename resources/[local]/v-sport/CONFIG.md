@@ -599,7 +599,7 @@ check script asserts it. Full detail in API.md.
 amount, the duration, the cooldown - and the inventory metadata: `label`, `description`, `weight`
 and `image`. An optional `needs` table says what the item is worth as food and drink, honoured
 when `Config.Needs.itemNutrition` is on (section 7b). The metadata is there so that renaming `whey` to `proteine` is one edit rather than two:
-`/vsportitems` generates the registration block for qb-core, ox_inventory or ESX **from these
+`/vsportitems` generates the registration block for v-inventory, qb-core, ox_inventory or ESX **from these
 values**, so the block can never be out of date with the config. Full detail in ITEMS.md, and the
 icons plus conversion instructions in `images/README.md`.
 
