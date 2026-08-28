@@ -93,12 +93,46 @@ CreateThread(function()
         end
     end
 
-    if #dead == 0 then return end
+    if #dead > 0 then
+        table.sort(dead)
+        print(('[v-inventory] %d usable item(s) have no effect behind them, and using one destroys it: %s')
+            :format(#dead, table.concat(dead, ', ')))
+        print('[v-inventory] give each a handler, or clear `usable` on it in the admin panel.')
+    end
 
-    table.sort(dead)
-    print(('[v-inventory] %d usable item(s) have no effect behind them, and using one destroys it: %s')
-        :format(#dead, table.concat(dead, ', ')))
-    print('[v-inventory] give each a handler, or clear `usable` on it in the admin panel.')
+    --[[
+        The other two ways a use handler and a catalogue can disagree, both of which have
+        happened here and both of which are silent:
+
+          * a handler registered for a name the catalogue does not hold. The gym registered
+            three supplements that were never catalogued, so they could not be held at all
+            and their effect was unreachable.
+
+          * a handler registered for an item the catalogue marks unusable. The mechanic's
+            scanner was in that state, and using it from the bag is the only way to run a
+            scan, so the feature simply did not exist.
+    ]]
+    local ghosts, inert = {}, {}
+    for name in pairs(ClaimedUse) do
+        local d = ItemDefs[name]
+        if not d then
+            ghosts[#ghosts + 1] = name
+        elseif d.usable ~= 1 then
+            inert[#inert + 1] = name
+        end
+    end
+
+    if #ghosts > 0 then
+        table.sort(ghosts)
+        print(('[v-inventory] %d item(s) have a use handler but are not in the catalogue, so nobody can hold one: %s')
+            :format(#ghosts, table.concat(ghosts, ', ')))
+    end
+
+    if #inert > 0 then
+        table.sort(inert)
+        print(('[v-inventory] %d item(s) have a use handler but are marked unusable, so it never runs: %s')
+            :format(#inert, table.concat(inert, ', ')))
+    end
 end)
 
 -- An admin edited the catalogue in the panel -> reload the defs server-side. Clients
