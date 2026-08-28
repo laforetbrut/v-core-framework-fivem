@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>v-loadscreen</title>
+  <link rel="stylesheet" href="web/style.css">
+</head>
+<body>
+
+<!-- Icon sprite. Every `use` in the markup points at one of these. -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-bulb" viewBox="0 0 24 24"><path d="M9 18h6M10 21.5h4M12 2.5a6.5 6.5 0 0 0-3.8 11.8c.5.4.8 1 .8 1.7h6c0-.7.3-1.3.8-1.7A6.5 6.5 0 0 0 12 2.5Z"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 2.5 4.5 5.5v6c0 4.6 3.1 8.7 7.5 10 4.4-1.3 7.5-5.4 7.5-10v-6L12 2.5Z"/><path d="m8.8 11.8 2.3 2.4 4.1-4.6"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M3 13.5h18M5.5 13.5 7 7.6A2 2 0 0 1 8.9 6h6.2a2 2 0 0 1 1.9 1.6l1.5 5.9"/><path d="M4 13.5h16a1 1 0 0 1 1 1V18a1 1 0 0 1-1 1h-1v1.5h-3V19H8v1.5H5V19H4a1 1 0 0 1-1-1v-3.5a1 1 0 0 1 1-1Z"/><path d="M6.5 16.2h1.8M15.7 16.2h1.8"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M10.5 5.6h3M11 18.4h2"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.8 20c0-3.4 2.8-5.6 6.2-5.6s6.2 2.2 6.2 5.6"/><path d="M16.2 5.2a3.2 3.2 0 0 1 0 6.2M17.4 14.9c2.3.6 3.8 2.4 3.8 5.1"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="m9 4.5-6 2.2v13l6-2.2 6 2.2 6-2.2v-13l-6 2.2-6-2.2Z"/><path d="M9 4.5v13M15 6.7v13"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15.5" r="4"/><path d="m11 12.5 8-8M16.5 7l2.2 2.2M14.5 9l2.2 2.2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M20.5 12c0 4-3.8 7.2-8.5 7.2-1 0-2-.2-2.9-.4L4 20.5l1.5-3.6A6.9 6.9 0 0 1 3.5 12C3.5 8 7.3 4.8 12 4.8s8.5 3.2 8.5 7.2Z"/></symbol>
+  <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3.2 2.7 5.6 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1L3.2 9.7l6.1-.9L12 3.2Z"/></symbol>
+  <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="7" y="7" width="10" height="10" rx="2"/><rect x="3.5" y="3.5" width="17" height="17" rx="3.5"/><path d="M9.5 1.5v2M14.5 1.5v2M9.5 20.5v2M14.5 20.5v2M1.5 9.5h2M1.5 14.5h2M20.5 9.5h2M20.5 14.5h2"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.4v.6"/></symbol>
+  <symbol id="i-discord" viewBox="0 0 24 24"><path d="M8.3 5.6a15 15 0 0 1 7.4 0l.7-1.5c1.6.3 3.1.9 4.5 1.7 2 4 2.8 8.3 2.4 12.6a17 17 0 0 1-5.1 2.5l-1.1-1.9c.6-.2 1.2-.5 1.7-.9l-.4-.3a12.6 12.6 0 0 1-11 0l-.4.3c.5.4 1.1.7 1.7.9l-1.1 1.9a17 17 0 0 1-5.1-2.5c-.4-4.3.4-8.6 2.4-12.6 1.4-.8 2.9-1.4 4.5-1.7l.7 1.5Z"/><circle cx="9" cy="13.4" r="1.4"/><circle cx="15" cy="13.4" r="1.4"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3.2 10.4h17.6M3.2 13.6h17.6"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18Z"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M4 9.5h16v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 18.5v-9Z"/><path d="M3 9.5 4.8 4.6A1.5 1.5 0 0 1 6.2 3.5h11.6a1.5 1.5 0 0 1 1.4 1.1L21 9.5"/><path d="M9.5 20v-5h5v5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7.5 4.8 19 12 7.5 19.2V4.8Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6.5" y="5" width="3.6" height="14" rx="1.2"/><rect x="13.9" y="5" width="3.6" height="14" rx="1.2"/></symbol>
+  <symbol id="i-prev" viewBox="0 0 24 24"><path d="M18 5.5 8.5 12 18 18.5v-13Z"/><rect x="4.5" y="5" width="2.6" height="14" rx="1.1"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M6 5.5 15.5 12 6 18.5v-13Z"/><rect x="16.9" y="5" width="2.6" height="14" rx="1.1"/></symbol>
+  <symbol id="i-volume" viewBox="0 0 24 24"><path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="M15.4 9.2a4 4 0 0 1 0 5.6M18 6.6a7.6 7.6 0 0 1 0 10.8"/></symbol>
+  <symbol id="i-mute" viewBox="0 0 24 24"><path d="M4 9.5h3.2L12 5.4v13.2L7.2 14.5H4a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1Z"/><path d="m16 9.5 5 5M21 9.5l-5 5"/></symbol>
+  <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.1"/><path d="M19.6 14.4a1.6 1.6 0 0 0 .3 1.8l.1.1a1.9 1.9 0 1 1-2.7 2.7l-.1-.1a1.6 1.6 0 0 0-2.7 1.1v.3a1.9 1.9 0 1 1-3.8 0v-.2a1.6 1.6 0 0 0-2.8-1.1l-.1.1a1.9 1.9 0 1 1-2.7-2.7l.1-.1a1.6 1.6 0 0 0-1.1-2.7h-.3a1.9 1.9 0 1 1 0-3.8h.2a1.6 1.6 0 0 0 1.1-2.8l-.1-.1a1.9 1.9 0 1 1 2.7-2.7l.1.1a1.6 1.6 0 0 0 1.8.3h.1a1.6 1.6 0 0 0 1-1.5v-.3a1.9 1.9 0 1 1 3.8 0v.2a1.6 1.6 0 0 0 2.7 1.1l.1-.1a1.9 1.9 0 1 1 2.7 2.7l-.1.1a1.6 1.6 0 0 0-.3 1.8v.1a1.6 1.6 0 0 0 1.5 1h.3a1.9 1.9 0 1 1 0 3.8h-.2a1.6 1.6 0 0 0-1.5 1Z"/></symbol>
+  <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.5 6.5 11 11M17.5 6.5l-11 11"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2.5"/><circle cx="8.6" cy="9.8" r="1.7"/><path d="m3.4 17.3 5-4.6 4 3.4 3.4-2.8 4.8 4"/></symbol>
+  <symbol id="i-spark" viewBox="0 0 24 24"><path d="m12 3 1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3Z"/><path d="M18.5 15.5 19.3 18l2.5.8-2.5.8-.8 2.5-.8-2.5-2.5-.8 2.5-.8.8-2.5Z"/></symbol>
+  <symbol id="i-gauge" viewBox="0 0 24 24"><path d="M3.6 17.5a9 9 0 1 1 16.8 0"/><path d="m12 12.8 4.2-4"/><circle cx="12" cy="13.4" r="1.4"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13.3 2.5 4.8 13.4h6L10.7 21.5l8.5-10.9h-6l.1-8.1Z"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6.6V12l3.7 2.3"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M5.6 5.6 18.4 18.4"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20.4s-7.6-4.7-7.6-9.7a4.35 4.35 0 0 1 7.6-2.9 4.35 4.35 0 0 1 7.6 2.9c0 5-7.6 9.7-7.6 9.7Z"/></symbol>
+  <symbol id="i-mask" viewBox="0 0 24 24"><path d="M3.4 9.1c2.9-1 5.7-1.5 8.6-1.5s5.7.5 8.6 1.5c.4 3.4-.6 5.7-3 7-2 1.2-3.9.6-5.6-1.6-1.7 2.2-3.6 2.8-5.6 1.6-2.4-1.3-3.4-3.6-3-7Z"/><path d="M8.2 11.5v.1M15.8 11.5v.1"/></symbol>
+</svg>
+
+<div id="app" class="app is-booting">
+
+  <!-- ── background stack ─────────────────────────────────────────── -->
+  <div class="bg" id="bg" aria-hidden="true"></div>
+  <div class="aurora" id="aurora" aria-hidden="true">
+    <span class="blob blob-a"></span>
+    <span class="blob blob-b"></span>
+    <span class="blob blob-c"></span>
+  </div>
+  <canvas class="fx" id="fx" aria-hidden="true"></canvas>
+  <div class="flash" id="flash" aria-hidden="true"></div>
+  <div class="beam" id="beam" aria-hidden="true"></div>
+  <div class="scrim" id="scrim" aria-hidden="true"></div>
+  <div class="grain" id="grain" aria-hidden="true"></div>
+  <div class="scanlines" id="scanlines" aria-hidden="true"></div>
+  <div class="vignette" id="vignette" aria-hidden="true"></div>
+  <div class="cursor-glow" id="cursorGlow" aria-hidden="true"></div>
+  <div class="frame" id="frame" aria-hidden="true">
+    <span class="fc tl"></span><span class="fc tr"></span>
+    <span class="fc bl"></span><span class="fc br"></span>
+  </div>
+
+  <!-- ── top hud ──────────────────────────────────────────────────── -->
+  <header class="hud hud-top">
+    <div class="pill server-pill" id="serverPill" hidden>
+      <span class="pulse-dot"></span>
+      <span class="pill-name" id="pillName"></span>
+      <span class="pill-sep" id="pillSep" hidden></span>
+      <span class="pill-players" id="pillPlayers" hidden>
+        <b id="playerCount">--</b><span id="playerMax"></span>
+        <i id="playersLabel"></i>
+      </span>
+    </div>
+
+    <div class="top-right">
+      <!-- music player -->
+      <div class="player" id="player" hidden>
+        <button class="icon-btn player-toggle" id="playerToggle" type="button" title="">
+          <svg class="ico"><use href="#i-volume"></use></svg>
+        </button>
+        <div class="player-body" id="playerBody">
+          <div class="spectrum" id="spectrum" aria-hidden="true"></div>
+          <div class="player-meta">
+            <span class="track-title" id="trackTitle">--</span>
+            <span class="track-artist" id="trackArtist"></span>
+          </div>
+          <div class="player-controls">
+            <button class="icon-btn sm" id="btnPrev" type="button" title=""><svg class="ico"><use href="#i-prev"></use></svg></button>
+            <button class="icon-btn sm accent" id="btnPlay" type="button" title=""><svg class="ico"><use href="#i-pause"></use></svg></button>
+            <button class="icon-btn sm" id="btnNext" type="button" title=""><svg class="ico"><use href="#i-next"></use></svg></button>
+            <button class="icon-btn sm" id="btnMute" type="button" title=""><svg class="ico"><use href="#i-volume"></use></svg></button>
+            <div class="slider" id="volSlider" title="">
+              <div class="slider-rail"><div class="slider-fill" id="volFill"></div><div class="slider-knob" id="volKnob"></div></div>
+            </div>
+            <span class="vol-value" id="volValue">35</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="icon-btn settings-btn" id="settingsBtn" type="button" title="" hidden>
+        <svg class="ico"><use href="#i-settings"></use></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ── centre stage ─────────────────────────────────────────────── -->
+  <main class="stage" id="stage">
+    <div class="logo-wrap" id="logoWrap">
+      <span class="halo"></span>
+      <span class="wave"></span>
+      <img class="logo" id="logo" alt="" hidden>
+      <span class="logo-sheen"><i></i></span>
+    </div>
+    <h1 class="server-name" id="serverName" aria-live="polite"></h1>
+    <p class="tagline" id="tagline"></p>
+  </main>
+
+  <!-- ── bottom hud ───────────────────────────────────────────────── -->
+  <footer class="hud hud-bottom">
+    <div class="cards">
+      <section class="card tip-card" id="tipCard" hidden>
+        <div class="tip-icon"><svg class="ico" id="tipIcon"><use href="#i-bulb"></use></svg></div>
+        <div class="tip-body">
+          <div class="tip-head">
+            <span class="tip-label" id="tipLabel"></span>
+            <span class="tip-cat" id="tipCat"></span>
+          </div>
+          <p class="tip-text" id="tipText"></p>
+        </div>
+        <svg class="tip-timer" viewBox="0 0 36 36" aria-hidden="true">
+          <circle class="tip-timer-bg" cx="18" cy="18" r="15.5"></circle>
+          <circle class="tip-timer-fg" id="tipTimer" cx="18" cy="18" r="15.5"></circle>
+        </svg>
+      </section>
+
+      <section class="card keys-card" id="keysCard" hidden>
+        <div class="card-title"><svg class="ico"><use href="#i-bolt"></use></svg><span id="keysTitle"></span></div>
+        <div class="keys" id="keys"></div>
+      </section>
+    </div>
+
+    <div class="progress-block">
+      <div class="progress-head">
+        <span class="stage-label" id="stageLabel"></span>
+        <span class="percent" id="percent"><b id="percentValue">0</b><i>%</i></span>
+      </div>
+      <div class="stage-dots" id="stageDots" hidden></div>
+      <div class="rail">
+        <div class="rail-glow"></div>
+        <div class="fill" id="fill"><span class="comet"></span></div>
+      </div>
+      <div class="progress-foot">
+        <span class="logline" id="logline"></span>
+        <nav class="links" id="links"></nav>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ── settings panel ───────────────────────────────────────────── -->
+  <div class="settings-scrim" id="settingsScrim" hidden></div>
+  <aside class="settings" id="settings" hidden>
+    <div class="settings-head">
+      <h2 id="settingsTitle"></h2>
+      <button class="icon-btn sm" id="settingsClose" type="button" title=""><svg class="ico"><use href="#i-close"></use></svg></button>
+    </div>
+    <div class="settings-body" id="settingsBody"></div>
+  </aside>
+
+  <!-- ── ready overlay ────────────────────────────────────────────── -->
+  <div class="ready" id="ready" hidden>
+    <button class="enter-btn" id="enterBtn" type="button">
+      <span class="enter-glow"></span>
+      <span class="enter-label" id="enterLabel"></span>
+    </button>
+  </div>
+
+  <!-- ── intro curtain ────────────────────────────────────────────── -->
+  <div class="curtain" id="curtain" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span>
+  </div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script src="config.js" charset="utf-8"></script>
+<script src="web/app.js" charset="utf-8"></script>
+</body>
+</html>
