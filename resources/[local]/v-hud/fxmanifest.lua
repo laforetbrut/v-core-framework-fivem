@@ -71,12 +71,19 @@ client_scripts {
 }
 
 server_scripts {
+    -- v-core's helper library, server side only: server/vcore.lua declares this module's
+    -- settings through it. Not shared, because the client half stays framework-agnostic.
+    '@v-core/lib/v.lua',
+
     'bridge/server/framework.lua',
     'server/storage.lua',
     'server/main.lua',
     'server/stress.lua',
     'server/odometer.lua',
     'server/admin.lua',
+    -- Declares the server-side half of the HUD to v-core's admin panel. Last, so the files
+    -- whose defaults it reads have all loaded.
+    'server/vcore.lua',
 }
 
 ui_page 'html/index.html'
