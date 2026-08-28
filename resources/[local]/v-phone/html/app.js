@@ -7559,9 +7559,17 @@ document.addEventListener('focusout', (e) => {
 
 // ══ Lua → page ═════════════════════════════════════════════════
 window.addEventListener('message', (e) => {
-  // CEF host messages have no foreign Window source. An iframe must never be able to
-  // impersonate Lua with an { action: ... } payload.
-  if (e.source && e.source !== window) return;
+  // An app iframe must never impersonate Lua with an { action: ... } payload, but the old
+  // `e.source && e.source !== window` guard assumed a CEF host message always arrives with a
+  // null source. On some FiveM builds it does not: SendNUIMessage carries a non-null source,
+  // and that guard then dropped every one of them at the first line, leaving the phone opening
+  // into nothing with no error to find. Reject only a source that is genuinely one of this
+  // page's own app iframes; accept anything else, whatever the host puts in `source`.
+  if (e.source && e.source !== window) {
+    for (let i = 0; i < window.frames.length; i++) {
+      if (window.frames[i] === e.source) return;
+    }
+  }
   const d = e.data || {};
   if (d.__phone) return;                       // SDK traffic, handled above
   if (d.action === 'open') {
