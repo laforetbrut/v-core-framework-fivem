@@ -4,6 +4,42 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ---
 
+## [Unreleased]
+
+### Added (English first)
+
+- **v-sport, a physical-training module**. Every sport prop already on the map becomes usable, a rhythm QTE drives the workout, and strength, lung capacity and stamina are trained, decay when unused, and can be pushed around by any other resource through its API. It ships a live in-game equipment aligner for staff and seventeen exercises across thirty models. It runs as a v-core module: a vcore adapter on its bridge reads the framework's player (citizenid as the stats key, job, gang, metadata) and leads the detection order, the ~20k-line core untouched. Stats persist through oxmysql in `v_sport_stats`, and the module still runs in memory when no database is present. There is no cash in it by design: a payout is a stat gain written to its own profile.
+
+### Changed (English first)
+
+- **The HUD is the richer configurable one now**. v-hud gains five themes, ten speedometer styles, twenty-one dashboard tell-tales, a compass with street names, compact and immersive modes and a per-player settings menu, re-based onto v-core through a vcore adapter added to each bridge file with the core left intact. The minimap defaults to the native round shape, because the community square-mask stream assets are rejected as an asset version mismatch by the default game build and the framework pins no build.
+- **The loading screen is the richer animated one**. v-loadscreen gains a background slideshow of two looping videos and five stills, an in-screen music player with six generated tracks, rotating tips, a keybinds strip and a live player count. It closes on the framework's own onPlayerLoaded signal rather than a blind timer, holding until the character is in the world, with a failsafe as the net. The resource name and the module marker are kept, so the module registry and server.cfg are untouched.
+
+### Fixed (English first)
+
+- **The phone no longer shows a grey sheet over the whole game**. Its NUI page declared a `color-scheme` meta of "light dark"; on an operating system in dark mode that opts the frame into the browser's dark handling, and the engine paints an opaque canvas beneath the transparent document, present from the moment the resource starts. The meta is gone from both HTML files and the stylesheet pins a normal color-scheme on the root as a second guard.
+- **The phone could open into nothing on some builds**. Its Lua-to-page message handler assumed a host message always arrives with a null source; on builds where it does not, the guard discarded every message and the phone stayed hidden. It now rejects a source only when it is genuinely one of the page's own app iframes.
+- **The spotlight search panel keeps its own shadow in dark mode**. A theme rule at higher specificity had repainted it with a bottom-sheet fill and an upward shadow in dark only. The fill and shadow are now stated per theme so the panel wins on specificity in each.
+- **Two duplicate phone locale keys removed**. `ph.soc_avatar` and `ph.soc_bio` were each defined twice, and the plainer of the two labels silently won; the descriptive "(optional)" originals are kept and the duplicates dropped.
+
+### Ajouts (miroir français)
+
+- **v-sport, un module d'entraînement physique**. Chaque accessoire de sport déjà présent sur la carte devient utilisable, un QTE rythmé mène la séance, et la force, la capacité pulmonaire et l'endurance se travaillent, décroissent sans usage, et peuvent être manipulées par toute autre ressource via son API. Il embarque un aligneur d'équipement en jeu pour le staff et dix-sept exercices sur trente modèles. Il tourne comme module v-core : un adaptateur vcore sur son pont lit le joueur du framework (citizenid comme clé de stats, métier, gang, metadata) et mène l'ordre de détection, le cœur de ~20 000 lignes intact. Les stats persistent via oxmysql dans `v_sport_stats`, et le module tourne quand même en mémoire sans base. Il n'a pas d'argent par conception : un gain est une progression de stat écrite dans son propre profil.
+
+### Modifications (miroir français)
+
+- **Le HUD est désormais la version configurable plus riche**. v-hud gagne cinq thèmes, dix styles de compteur, vingt et un témoins de tableau de bord, une boussole avec noms de rues, des modes compact et immersif et un menu de réglages par joueur, rebasé sur v-core par un adaptateur vcore ajouté à chaque fichier de pont, le cœur intact. La minimap prend par défaut la forme ronde native, car les masques carrés communautaires sont rejetés comme incompatibles par le build de jeu par défaut et le framework n'en fixe aucun.
+- **L'écran de chargement est la version animée plus riche**. v-loadscreen gagne un diaporama de fonds (deux vidéos en boucle et cinq images), un lecteur de musique intégré avec six pistes, des astuces qui défilent, une bande de raccourcis et un compteur de joueurs en direct. Il se ferme sur le signal onPlayerLoaded du framework plutôt que sur un minuteur aveugle, restant affiché jusqu'à ce que le personnage soit dans le monde, avec un filet de sécurité. Le nom de la ressource et le marqueur de module sont conservés.
+
+### Corrections (miroir français)
+
+- **Le téléphone n'affiche plus un voile gris sur tout le jeu**. Sa page NUI déclarait une balise `color-scheme` « light dark » ; sur un système en thème sombre, le moteur peint un fond opaque sous la page transparente dès le démarrage. La balise est retirée des deux fichiers HTML et la feuille de style fixe un color-scheme normal sur la racine en second garde.
+- **Le téléphone pouvait s'ouvrir sur rien sur certains builds**. Son gestionnaire de messages supposait qu'un message hôte arrive toujours avec une source nulle ; il rejette désormais une source seulement si c'est vraiment une iframe d'app de la page.
+- **Le panneau de recherche garde sa propre ombre en thème sombre**. Une règle de thème plus spécifique le repeignait avec une ombre montante en sombre uniquement ; le fond et l'ombre sont maintenant énoncés par thème.
+- **Deux clés de locale du téléphone en double retirées**. `ph.soc_avatar` et `ph.soc_bio` étaient définies deux fois ; les originales descriptives « (facultatif) » sont conservées.
+
+---
+
 ## [0.2.0] - 2026-07-22
 
 ### Added (English first)
