@@ -5861,9 +5861,9 @@ async function socialSearch(appId, query) {
   host.innerHTML = list.length ? UI.group(list.map((a) =>
     '<button class="row lead socfind" data-who="' + esc(a.handle) + '" type="button">' +
       socAvatar(a, 'socav') +
-      '<span class="rowtext"><span class="rowtitle">' +
+      '<span class="rmain"><span class="rt">' +
         esc(a.displayname || a.handle) + socVerified(a) + '</span>' +
-      '<span class="rowsub">@' + esc(a.handle) + ' · ' + a.followers + ' ' +
+      '<span class="rs">@' + esc(a.handle) + ' · ' + a.followers + ' ' +
         esc(L('ph.soc_followers')) + '</span></span>' +
       (a.me ? '' : '<span class="socfollow' + (a.followed ? ' on' : '') + '" data-follow="' +
         esc(a.handle) + '">' + esc(L(a.followed ? 'ph.soc_unfollow' : 'ph.soc_follow')) + '</span>') +
@@ -5989,8 +5989,8 @@ async function socialDmList(appId) {
   body(threads.length ? UI.group(threads.map((t) =>
     '<button class="row lead socdmrow" data-who="' + esc(t.handle) + '" type="button">' +
       socAvatar(t, 'socav') +
-      '<span class="rowtext"><span class="rowtitle">' + esc(t.displayname || t.handle) + '</span>' +
-      '<span class="rowsub">' + esc((t.mine ? L('ph.you') + ' ' : '') + (t.body || L('ph.photo'))) + '</span></span>' +
+      '<span class="rmain"><span class="rt">' + esc(t.displayname || t.handle) + '</span>' +
+      '<span class="rs">' + esc((t.mine ? L('ph.you') + ' ' : '') + (t.body || L('ph.photo'))) + '</span></span>' +
       (t.unread ? '<span class="socunread">' + t.unread + '</span>' : '') +
     '</button>').join('')) : UI.empty(L('ph.soc_no_dm'), 'messages'));
   rows('.socdmrow', (b) => b.addEventListener('click', () => socialDmThread(appId, b.dataset.who)));
@@ -6008,7 +6008,7 @@ async function socialDmThread(appId, handle) {
   setNav('@' + handle, L('app.' + appId), null, () => { SOC.tab[appId] = 'dm'; socialRender(appId); });
   const bubbles = (r.messages || []).map((m) =>
     '<div class="bub ' + (m.mine ? 'me' : 'them') + '">' +
-      (m.image ? '<img class="bubimg" src="' + esc(m.image) + '" alt="" />' : '') +
+      (m.image ? '<img class="mimg" src="' + esc(m.image) + '" alt="" />' : '') +
       (m.body ? '<span>' + esc(m.body) + '</span>' : '') + '</div>').join('');
   body('<div class="bubs" id="socbubs">' + (bubbles || UI.empty(L('ph.soc_dm_start'))) + '</div>');
   foot(
@@ -6253,9 +6253,9 @@ async function hushMatches() {
     '<button class="row lead hushmatch" data-i="' + i + '" type="button">' +
       (m.photo ? '<span class="socav" style="' + inlineBackground(m.photo) + '"></span>'
                : '<span class="socav">' + esc(String(m.name || '?').slice(0, 1)) + '</span>') +
-      '<span class="rowtext"><span class="rowtitle">' +
+      '<span class="rmain"><span class="rt">' +
         esc(m.name || '?') + (m.age ? ', ' + m.age : '') + '</span>' +
-      '<span class="rowsub">' + esc(m.bio || m.number || '') + '</span></span>' +
+      '<span class="rs">' + esc(m.bio || m.number || '') + '</span></span>' +
       svg('chevron') +
     '</button>').join('')) : UI.empty(L('ph.hush_no_matches'), 'hush'));
 

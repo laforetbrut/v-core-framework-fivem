@@ -65,3 +65,7 @@ svadhesive/
 
 # Generated phone preview (rebuilt from source on demand)
 resources/\[local\]/v-phone/preview/
+
+# Python bytecode from the module tools (v-sport/tools, v-hud/tools, ...)
+__pycache__/
+*.pyc
