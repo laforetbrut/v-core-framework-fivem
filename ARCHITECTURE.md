@@ -149,11 +149,19 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab - §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-**36 of 39 modules declare their settings** - every one that has a meaningful tunable.
-Three do not, each for its own reason. `v-admin` is the panel itself. `v-world` owns
-*lists* rather than tunables, which is the settings-vs-content split above working as
-intended. `v-loadscreen` runs before a player is connected and reads its own file off disk
-from the client, so a server-side value would not reach the page in time to matter.
+**36 of the 39 modules register with the core**, and 35 of those carry at least one tunable.
+The exceptions, each for its own reason:
+
+- `v-admin` is the panel itself, and `v-world` owns *lists* rather than tunables - the
+  settings-vs-content split above, working as intended. Neither registers.
+- `v-loadscreen` runs before a player is connected and reads its own file off disk from the
+  client, so a server-side value would not reach the page in time to matter. It does not
+  register either.
+- `v-spawn` registers with an empty list. It had one setting, a post-spawn screen hold that
+  nothing read and that the spawn code deliberately refuses to do - holding there deadlocks
+  into a black screen that never lifts. Registering with nothing keeps the panel listing the
+  module under its own label rather than as a bare manifest flag.
+
 `v-core` itself is listed so an operator sees it running.
 
 A caveat worth stating: a declared setting is only real if something **reads** it. The
