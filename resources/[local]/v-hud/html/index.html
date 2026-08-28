@@ -1,157 +1,186 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css" />
-  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css" />
-  <script src="https://cfx-nui-v-ui/theme.js"></script>
-  <link rel="stylesheet" href="style.css" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>v-hud</title>
+
+    <!--
+        Stylesheets and scripts are written in with a per-load token rather than listed as
+        plain tags.
+
+        FiveM's CEF caches NUI assets by URL and does NOT drop them when the resource
+        restarts. `restart v-hud` after a CSS change therefore reloads the Lua and serves the
+        OLD stylesheet - the change is invisible until the whole game client is restarted,
+        which looks exactly like the change never happened. A token that differs per page load
+        makes every restart fetch the current file.
+
+        document.write is used deliberately: it runs during parsing, so the load order is
+        preserved, which matters because util.js and state.js define what everything else
+        reads. The files are local, so there is nothing to gain from caching them anyway.
+    -->
+    <script>
+        (function () {
+            var token = '?v=' + Date.now();
+            var styles = ['reset', 'themes', 'hud', 'status', 'speedo', 'menu'];
+
+            for (var i = 0; i < styles.length; i += 1) {
+                document.write('<link rel="stylesheet" href="css/' + styles[i] + '.css' + token + '">');
+            }
+
+            // Stashed for the body, so both lists use the same token.
+            window.__vhudToken = token;
+        })();
+    </script>
 </head>
-<body class="v-root">
-  <!-- Minimap frame (our own; wraps the repositionable native radar) -->
-  <div id="minimap" class="minimap-frame" data-group="minimap">
-    <span class="mm-corner tl"></span><span class="mm-corner tr"></span>
-    <span class="mm-corner bl"></span><span class="mm-corner br"></span>
-    <span class="mm-grip"><span class="dot"></span><span data-i18n="el.minimap">Minimap</span></span>
-    <span id="mm-resize" class="mm-resize" title="Resize" role="button" aria-label="Resize minimap"></span>
-  </div>
+<body>
 
-  <!-- Compass (top-center by default) -->
-  <div id="compass" class="compass hidden" data-group="compass">
-    <div class="compass-arrow"></div>
-    <div class="compass-window"><div class="compass-tape" id="compass-tape"></div></div>
-    <span class="compass-deg" id="compass-deg">0°</span>
-  </div>
+<!--
+    Paint servers shared by every instrument.
 
-  <!-- Vitals (bottom-left, near the minimap) -->
-  <div id="vitals" class="vitals" data-group="vitals"></div>
+    speedo.css strokes the chrome bezels with url(#chromeGradient), and an SVG fragment
+    reference resolves against the WHOLE document, not the SVG it sits in. Defining the
+    gradient inside each built face therefore put a dozen identical ids in the page, and
+    whichever one happened to be first won - including one inside a menu preview card that the
+    next tab change deleted, which silently unpainted the live cluster's bezel.
 
-  <!-- Voice: proximity step, and the radio channel when one is joined -->
-  <div id="voice" class="voice hidden" data-group="voice">
-    <span class="voice__ico" id="voice-ico">●</span>
-    <span class="voice__step" id="voice-step"></span>
-    <span class="voice__ch hidden" id="voice-ch"></span>
-  </div>
+    One definition, in a node nothing ever removes, and the reference cannot dangle.
+-->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+    <defs>
+        <linearGradient id="chromeGradient" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#f6f6f4"/>
+            <stop offset="42%" stop-color="#8c8c88"/>
+            <stop offset="58%" stop-color="#dedad2"/>
+            <stop offset="100%" stop-color="#5f5f5c"/>
+        </linearGradient>
+    </defs>
+</svg>
 
-  <!-- Money (bottom-right) -->
-  <div id="money" class="money hidden" data-group="money">
-    <div class="stat" id="stat-cash">
-      <span class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H17a2 2 0 0 1 2 2v1" />
-          <path d="M3 7.5V17a2 2 0 0 0 2 2h13a1 1 0 0 0 1-1v-3" />
-          <path d="M20 11h-4a2 2 0 0 0 0 4h4a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1Z" />
-        </svg>
-      </span>
-      <div class="meta"><span class="lbl" data-i18n="hud.cash">Cash</span><span class="val" id="cash">$0</span></div>
+<!--
+    Three layers, and they are separate on purpose.
+
+    #hud        always mounted, never given pointer events. Everything the player sees while
+                playing lives here.
+    #layout     the drag editor. Sits over the HUD, takes pointer events, and shows a ghost
+                of every element so one can be dragged.
+    #menu       the settings panel. Takes focus; the HUD keeps drawing behind it so a change
+                is visible the moment it is made.
+-->
+
+<div id="hud" class="hud" data-ready="false">
+
+    <!-- Cinematic bars. Transformed rather than resized: a height animation relayouts the
+         page on every frame, a transform does not. -->
+    <div class="cinebar cinebar--top" id="cine-top"></div>
+    <div class="cinebar cinebar--bottom" id="cine-bottom"></div>
+
+    <!-- The minimap border. The map itself is the game's; this is only the frame around it,
+         because the native one cannot be recoloured. -->
+    <div class="minimap-frame" id="minimap-frame" data-shape="square" data-radar="true"></div>
+
+    <div class="hud-el" id="el-status" data-element="status">
+        <div class="status" id="status-list"></div>
     </div>
-    <div class="stat" id="stat-bank">
-      <span class="ic" aria-hidden="true">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M3 9.5 12 4l9 5.5" /><path d="M5 10v7M9 10v7M15 10v7M19 10v7" /><path d="M3 20h18" />
-        </svg>
-      </span>
-      <div class="meta"><span class="lbl" data-i18n="hud.bank">Bank</span><span class="val" id="bank">$0</span></div>
+
+    <div class="hud-el" id="el-speedo" data-element="speedo">
+        <div class="speedo" id="speedo"></div>
     </div>
-  </div>
 
-  <!-- Layout (drag) mode toolbar -->
-  <!-- Vehicle cluster: only ever visible while driving -->
-  <div id="vehicle" class="vehicle hidden" data-group="vehicle">
-    <div class="veh__speed">
-      <span class="veh__num" id="veh-speed">0</span>
-      <span class="veh__unit" id="veh-unit">km/h</span>
-      <span class="veh__gear" id="veh-gear"></span>
+    <div class="hud-el" id="el-compass" data-element="compass">
+        <div class="compass" id="compass"></div>
     </div>
-    <div class="veh__gauges">
-      <div class="gauge" id="g-fuel">
-        <span class="gauge__ico" id="veh-fuel-ico">⛽</span>
-        <div class="v-progress"><div class="v-progress__fill" id="veh-fuel-bar"></div></div>
-        <span class="gauge__val" id="veh-fuel-val">--</span>
-      </div>
-      <div class="gauge" id="g-eng">
-        <span class="gauge__ico">⚙</span>
-        <div class="v-progress"><div class="v-progress__fill" id="veh-eng-bar"></div></div>
-        <span class="gauge__val" id="veh-eng-val">--</span>
-      </div>
+
+    <div class="hud-el" id="el-streets" data-element="streets">
+        <div class="streets" id="streets">
+            <div class="streets__row">
+                <span class="streets__dir" id="street-dir"></span>
+                <span class="streets__name" id="street-name"></span>
+                <span class="streets__cross" id="street-cross"></span>
+            </div>
+            <div class="streets__zone" id="street-zone"></div>
+        </div>
     </div>
-    <div class="veh__odo" id="veh-odo"></div>
-    <div class="veh__belt hidden" id="veh-belt" data-i18n="hud.nobelt">NO BELT</div>
-  </div>
 
-  <div id="layout-bar" class="layout-bar hidden">
-    <span class="dot"></span>
-    <span data-i18n="set.drag_hint">Drag the elements to reposition them</span>
-    <button class="v-btn v-btn--accent" id="btn-layout-done" data-i18n="set.done">Done</button>
-  </div>
 
-  <!-- Settings panel -->
-  <div id="settings" class="overlay hidden">
-    <div class="panel v-panel v-chamfer">
-      <span class="v-tab">HUD</span>
-      <i class="v-brk v-brk--tr" aria-hidden="true"></i>
-      <i class="v-brk v-brk--bl" aria-hidden="true"></i>
-      <div class="panel__head">
-        <div class="brand">
-          <span class="dot"></span>
-          <h1 class="v-title"><span class="v-title__accent" data-i18n="set.title">Settings</span></h1>
+    <div class="hud-el" id="el-voice" data-element="voice">
+        <div class="voice" id="voice">
+            <svg class="voice__icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 3a3 3 0 0 1 3 3v6a3 3 0 0 1-6 0V6a3 3 0 0 1 3-3z"/>
+                <path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
+            </svg>
+            <div class="voice__rings">
+                <i class="voice__ring" data-level="1"></i>
+                <i class="voice__ring" data-level="2"></i>
+                <i class="voice__ring" data-level="3"></i>
+            </div>
+            <span class="voice__radio" id="voice-radio"></span>
         </div>
-        <button class="close" id="btn-close" aria-label="Close">&times;</button>
-      </div>
-
-      <div class="panel__body v-scroll">
-        <div class="group" style="--i:0">
-          <span class="v-label" data-i18n="set.elements">Elements</span>
-          <div class="toggles" id="toggles"></div>
-        </div>
-
-        <div class="group" style="--i:1">
-          <span class="v-label" data-i18n="set.layout">Layout</span>
-          <button class="v-btn v-btn--ghost full" id="btn-move" data-i18n="set.move">Move elements</button>
-        </div>
-
-        <div class="group" style="--i:2">
-          <span class="v-label" data-i18n="set.accent">Accent</span>
-          <div class="swatches" id="swatches"></div>
-          <label class="custom-color">
-            <input type="color" id="accent-custom" value="#FF6A1A" aria-label="Custom accent colour" />
-            <span data-i18n="set.custom">Custom colour</span>
-          </label>
-        </div>
-
-        <div class="group" style="--i:3">
-          <span class="v-label"><span data-i18n="set.opacity">Opacity</span> <em id="opacity-val">100%</em></span>
-          <input type="range" id="opacity" min="30" max="100" value="100" aria-label="HUD opacity" />
-        </div>
-
-        <div class="group" style="--i:4">
-          <span class="v-label"><span data-i18n="set.scale">Scale</span> <em id="scale-val">100%</em></span>
-          <input type="range" id="scale" min="70" max="130" value="100" aria-label="HUD scale" />
-        </div>
-
-        <div class="group row-between" style="--i:5">
-          <span class="v-label" style="margin:0" data-i18n="set.dynamic">Hide vitals when full</span>
-          <button class="switch" id="dynamic" role="switch" aria-label="Hide vitals when full"><span></span></button>
-        </div>
-
-        <div class="group" style="--i:6">
-          <span class="v-label"><span data-i18n="set.mapsize">Minimap size</span> <em id="mmsize-val">100%</em></span>
-          <input type="range" id="mmsize" min="60" max="200" value="100" aria-label="Minimap size" />
-        </div>
-
-        <div class="group row-between" style="--i:7">
-          <span class="v-label" style="margin:0" data-i18n="set.mapvehicle">Minimap only in vehicle</span>
-          <button class="switch" id="mapvehicle" role="switch" aria-label="Minimap only in vehicle"><span></span></button>
-        </div>
-      </div>
-
-      <div class="panel__foot">
-        <button class="v-btn v-btn--ghost" id="btn-reset" data-i18n="set.reset">Reset</button>
-        <button class="v-btn v-btn--accent" id="btn-save" data-i18n="set.save">Save</button>
-      </div>
     </div>
-  </div>
 
-  <script src="app.js"></script>
+    <div class="hud-el" id="el-vehicle" data-element="vehicle">
+        <div class="vext" id="vehicle-extras"></div>
+    </div>
+
+    <div class="toasts" id="toasts"></div>
+</div>
+
+<!-- The drag editor -->
+<div id="layout" class="layout" hidden>
+    <div class="layout__grid" id="layout-grid"></div>
+    <div class="layout__bar">
+        <span class="layout__hint" id="layout-hint"></span>
+        <label class="layout__snap">
+            <input type="checkbox" id="layout-snap" checked>
+            <span id="layout-snap-label"></span>
+        </label>
+        <button class="btn btn--ghost" id="layout-reset"></button>
+        <button class="btn btn--primary" id="layout-done"></button>
+    </div>
+</div>
+
+<!-- The settings menu -->
+<div id="menu" class="menu" hidden>
+    <div class="menu__panel" role="dialog" aria-modal="true">
+
+        <header class="menu__head">
+            <div class="menu__title">
+                <h1 id="menu-title"></h1>
+                <p id="menu-subtitle"></p>
+            </div>
+            <div class="menu__search">
+                <input type="search" id="menu-search" autocomplete="off">
+            </div>
+            <button class="menu__close" id="menu-close" aria-label="close">&#10005;</button>
+        </header>
+
+        <div class="menu__body">
+            <nav class="menu__tabs" id="menu-tabs"></nav>
+            <div class="menu__content" id="menu-content"></div>
+        </div>
+
+        <footer class="menu__foot">
+            <span class="menu__meta" id="menu-meta"></span>
+            <div class="menu__actions">
+                <button class="btn btn--ghost" id="menu-reset"></button>
+                <button class="btn btn--primary" id="menu-done"></button>
+            </div>
+        </footer>
+
+    </div>
+</div>
+
+<!-- Same cache-busting token as the stylesheets. See the note in <head>. -->
+<script>
+    (function () {
+        var token = window.__vhudToken || '';
+        var scripts = ['util', 'state', 'status', 'speedo', 'compass', 'toast', 'sound', 'layout', 'menu', 'app'];
+
+        for (var i = 0; i < scripts.length; i += 1) {
+            document.write('<script src="js/' + scripts[i] + '.js' + token + '"><\/script>');
+        }
+    })();
+</script>
+
 </body>
 </html>
