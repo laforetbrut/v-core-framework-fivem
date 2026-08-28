@@ -149,10 +149,12 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab - §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-**32 of 34 modules declare their settings** - every one that has a meaningful tunable.
-The two that do not (`v-loadscreen`, `v-admin`) are infrastructure with
-nothing an operator would sensibly change at runtime; `v-core` itself is listed so an
-operator sees it running.
+**36 of 39 modules declare their settings** - every one that has a meaningful tunable.
+Three do not, each for its own reason. `v-admin` is the panel itself. `v-world` owns
+*lists* rather than tunables, which is the settings-vs-content split above working as
+intended. `v-loadscreen` runs before a player is connected and reads its own file off disk
+from the client, so a server-side value would not reach the page in time to matter.
+`v-core` itself is listed so an operator sees it running.
 
 A caveat worth stating: a declared setting is only real if something **reads** it. The
 first sweep declared five multipliers (`v-shops` buy/sell, `v-crafting` duration,
@@ -479,8 +481,12 @@ v-notify.
 - The minimap defaults to the **native round shape**: the community square-mask stream assets
   (`stream/*.ytd`) are rejected as an asset version mismatch by the default game build, and the
   framework pins none. A server that pins a build can add the masks back and default to square.
-- The rich config lives in `config.lua` and the in-game menu rather than the v-core admin panel; the
-  module is auto-detected there (the `v_module` manifest marker) but exposes no v-core settings.
+- The rich config lives in `config.lua` and the in-game menu; the admin panel carries the server's
+  half of it (five settings: whether staff may push a look onto a player and whether the player is
+  told, whether players may share a look as a code, and the two write intervals). Only values the
+  server re-reads are offered, because `config.lua` is a shared script and the client holds its own
+  copy - the odometer's own switch is read once behind a latch and is deliberately absent for that
+  reason, and so is the HUD's built-in stress system, which v-status owns here.
 
 ### `v-sport` ✅ - training
 **Done.** Physical training. Every sport prop already on the map becomes usable, a rhythm QTE drives
@@ -494,9 +500,12 @@ stat is a config change and not a migration), and it still runs in memory when n
 There is no cash by design: a payout is a stat gain written to its own profile.
 
 **Remaining.**
-- Settings live in `config.lua`, not the v-core admin panel (auto-detected via the `v_module`
-  marker, like v-hud).
-- Item gating reads `ox_inventory` only; a server on another inventory sees item gates fail closed.
+- The bulk of the config stays in `config.lua`; the admin panel carries the nine tunables the server
+  re-reads at the moment it needs them (what a set costs the body, whether supplements feed and
+  hydrate, the cap on gains per cycle and its size, decay, fatigue). The client-side half - effects,
+  minigame, prop detection - stays in the file, where changing it means a restart anyway.
+- Item gating reads v-inventory first and falls back to `ox_inventory`; the four supplements are in
+  the catalogue and `/vsportitems` writes a v-inventory block for any new one.
 
 ### `v-banking` ⚠️ - Fleeca ATM
 **Done.** ATM proximity (4 prop models) → E → NUI with balances + last 20 transactions. Deposit,
