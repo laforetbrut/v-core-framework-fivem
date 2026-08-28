@@ -53,9 +53,9 @@ in-game** - never by editing Lua on a live server.
   from, corner roundness, density, animation speed (0 disables motion), panel opacity and font scale.
   Changing any of it in **Admin -> Settings -> Interface** restyles **every module at once** - no
   module hardcodes a colour.
-- **Configurable loading screen** - `v-loadscreen/html/config.js`: **7 layouts** (centre, left, right,
-  split, bottom, top, card), the same 6 palettes, video/image/gradient/solid backgrounds, every effect
-  toggleable, and all copy + tips in one place.
+- **Animated loading screen** - `v-loadscreen/config.js`: a background slideshow of looping videos and
+  stills, an in-screen music player, rotating tips, a keybinds strip and a live player count, all in one
+  file. It closes on the framework's own player-loaded signal, with a failsafe so nobody is stranded on it.
 - **In-game content editor** - **30 domains** the admin panel creates, edits and deletes without a
   restart: map blips, store locations, shops, jobs & grades, gangs & ranks, items, craft recipes,
   clothing stores & wearable slots, garages, rental points, fuel stations, mechanic shops, dealerships,
@@ -124,8 +124,9 @@ in-game** - never by editing Lua on a live server.
 - **`v-police`** - cuffs, escort, search, seizure, charges, fines, jail and an MDT (record, warrants,
   licences, vehicles). **Police is a job, not a permission.** The penal code is data - 21 charges with
   fine, jail time and licence points, all editable in-game.
-- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (vitals, money,
-  compass, square minimap and a vehicle cluster with fuel, engine and odometer) · **`v-notify`**
+- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (five themes,
+  ten speedometers, twenty-one dashboard tell-tales, a compass, a round minimap and a per-player settings
+  menu) · **`v-sport`** (gym training: strength, breath and stamina, with a rhythm QTE) · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
 - **`v-music`** (F4) - boomboxes, jukeboxes and the car stereo, positional and synced by
   timestamp so a late arrival joins mid-track. Host allow-list, because arbitrary URL playback
@@ -237,9 +238,10 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
   famille de surbrillance est dérivée, arrondi des angles, densité, vitesse d'animation (0 = aucune),
   opacité des panneaux, échelle de police. Changer l'un d'eux dans **Admin -> Réglages -> Interface**
   restyle **tous les modules d'un coup** - aucun module ne code une couleur en dur.
-- **Écran de chargement configurable** - `v-loadscreen/html/config.js` : **7 dispositions** (centre,
-  gauche, droite, split, bas, haut, carte), les 6 mêmes palettes, fonds vidéo/image/dégradé/uni, chaque
-  effet activable, et tous les textes + astuces au même endroit.
+- **Écran de chargement animé** - `v-loadscreen/config.js` : un diaporama de fonds (vidéos en boucle et
+  images), un lecteur de musique intégré, des astuces qui défilent, une bande de raccourcis et un compteur
+  de joueurs en direct, le tout dans un fichier. Il se ferme sur le signal player-loaded du framework, avec
+  un filet de sécurité pour ne laisser personne bloqué.
 - **Éditeur de contenu en jeu** - **30 domaines** que le menu admin crée, modifie et supprime sans
   redémarrage : blips, boutiques, métiers & grades, gangs & rangs, items, recettes de craft, boutiques de
   vêtements & emplacements, garages, points de location, stations-service, ateliers, concessions,
@@ -308,8 +310,9 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **`v-police`** - menottes, escorte, fouille, saisie, inculpation, amendes, prison et un MDT (casier,
   mandats, permis, véhicules). **La police est un métier, pas une permission.** Le code pénal est une
   donnée : 21 infractions avec amende, prison et points de permis, modifiables en jeu.
-- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (vitales,
-  argent, boussole, minimap carrée et un bloc véhicule avec carburant, moteur et compteur) · **`v-notify`**
+- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (cinq thèmes,
+  dix compteurs, vingt et un témoins de tableau de bord, une boussole, une minimap ronde et un menu de
+  réglages par joueur) · **`v-sport`** (salle de sport : force, souffle et endurance, avec un QTE rythmé) · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
 - **`v-music`** (F4) - enceintes, juke-box et autoradio, positionnels et synchronisés par
   horodatage pour qu'un arrivant tardif tombe en cours de morceau. Liste blanche d'hôtes, parce
