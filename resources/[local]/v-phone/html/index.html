@@ -3,7 +3,11 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="color-scheme" content="light dark">
+  <!-- No `color-scheme` meta. On an OS in dark mode it opts this frame into the
+       browser's dark handling, and CEF then paints an opaque canvas BENEATH the
+       document - a grey sheet over the whole game, from the moment the resource
+       starts. It cannot be undone from CSS, because the paint is below the CSS box.
+       style.css pins `html { color-scheme: normal }` as a second guard. -->
   <title>iFruit</title>
   <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">
   <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css">

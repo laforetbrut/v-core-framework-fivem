@@ -16,6 +16,15 @@
    CEF safe: no color-mix(), no :has(), no nesting, no @import.
    ============================================================ */
 
+/* The grey screen, nailed shut. A `<meta name="color-scheme">` in the NUI page makes
+   CEF paint an opaque canvas beneath a transparent frame - a grey sheet over the whole
+   game, present before any player loads. The meta is gone from both HTML files; this is
+   the second guard. It sits first and names `html` explicitly, so it wins over any
+   theme, any stray tag, or any file copied from an older template that reintroduces one.
+   The paint is below the CSS box, so a transparent `background` cannot stop it - only
+   `color-scheme: normal` can. */
+html { color-scheme: normal; }
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 /* A phone has no text cursor. Dragging across the home screen used to select the app
    labels and leave them highlighted, which no handset does. Fields opt back in below. */

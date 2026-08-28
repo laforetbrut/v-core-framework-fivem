@@ -171,3 +171,10 @@
 **Root cause:** Assuming a section had applied because a LATER check (`node parse`) passed. Parsing proves syntax, not presence.
 **Fix:** Re-ran the section with its own guard (`assert 'bleet:' not in s`), verified with grep before rebuilding the preview.
 **Prevention:** A skipped section must be justified by a grep for its own marker in the target file, never by recalling the run order. Every section of a multi-part patch carries its own idempotence guard so re-running the whole script is always safe.
+
+## [2026-08-28 19:45] — Grey sheet over the whole game: a color-scheme meta in the phone NUI
+**Context:** Porting a fix from an external, more advanced line of the phone (fivem-autres/v-phone) that had already isolated and resolved the same defect.
+**Error:** `v-phone/html/index.html` and `apps/example/index.html` declared `<meta name="color-scheme" content="light dark">`. On a machine whose OS is in dark mode, that opts the frame into the browser's own dark handling, and CEF paints an opaque canvas BENEATH the document. In a transparent NUI page that canvas is a grey sheet over the entire game, present from the moment v-phone starts, before any player loads.
+**Root cause:** The paint happens below the CSS box, so `html, body { background: transparent }` cannot stop it and the file looks correct. Computed styles and DOM audits are both blind to frame-level paint, so the usual checks report nothing.
+**Fix:** Removed the meta from both HTML files (index.html and the drop-in app template that propagates it), and pinned `html { color-scheme: normal; }` as the first rule in style.css so it wins over any theme or stray tag. Boot clean, 48 resources, no v-phone errors.
+**Prevention:** Never conclude "this page cannot paint" from computed styles or the DOM alone. A NUI page must not declare `color-scheme` on the top-level document; if a native control needs a scheme hint, scope it to an opaque element (e.g. `body.inframe`), never the transparent shell.
