@@ -745,6 +745,10 @@ Config.Compat = {
     --
     -- Set `Config.Compat.forceFuel = 'rcore_fuel'` to skip detection entirely.
     fuel = {
+        -- v-fuel keeps the working level in v-vehicles, whose GetFuel returns a true 0-100
+        -- percentage. Detected first: without it the HUD falls back to the native tank, which
+        -- reads 0-65, so a full tank would show as about 65 percent on the gauge.
+        { resource = 'v-vehicles', kind = 'export', percent = 'GetFuel' },
         {
             resource = 'rcore_fuel',
             -- https://documentation.rcore.cz/paid-resources/rcore_fuel/api/client
