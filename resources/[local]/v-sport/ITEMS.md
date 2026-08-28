@@ -324,6 +324,13 @@ local items = exports['v-sport']:GetItems()
 | `decay_pause` | No decay for `duration` | `duration` |
 | `stamina` | Refill the sprint bar by `amount` (0..1) | `amount` |
 
+Any entry may also carry a `needs` table saying what it is worth as food and drink, for example
+`needs = { hunger = 25.0 }`. An inventory gives a claimed item entirely to the resource that
+registered it, so without this an item declared here feeds nobody however it is catalogued.
+Hunger and thirst are how full, so a positive number restores them; stress is how wound up, so a
+stimulant uses a positive number and a calming item a negative one. Honoured when
+`Config.Needs.itemNutrition` is on.
+
 A steroid that grants strength and then costs it back:
 
 ```lua
@@ -450,6 +457,14 @@ on est déjà sur la fenêtre courte.
 `recovery`, `allowance`, `multiplier`, `buff`, `decay_pause`, `stamina`. Voir le tableau de la
 section anglaise et l'exemple des stéroïdes, y compris la descente branchée sur l'événement
 `vsport:server:BuffExpired`.
+
+Une entrée peut aussi porter une table `needs` disant ce qu'elle vaut comme nourriture et
+boisson, par exemple `needs = { hunger = 25.0 }`. Un inventaire confie un item réclamé
+entièrement à la ressource qui l'a enregistré : sans cette table, un item déclaré ici ne
+nourrit personne, quel que soit son catalogage. La faim et la soif expriment un remplissage,
+donc un nombre positif les restaure ; le stress exprime une tension, donc un stimulant prend un
+nombre positif et un calmant un nombre négatif. Pris en compte quand
+`Config.Needs.itemNutrition` est actif.
 
 Les buffs posés par un item portent l'identifiant `item:<clé de config>`, ce qui rend ce test
 possible.
