@@ -442,9 +442,15 @@ ADAPTERS.vcore = {
         return pcall(TriggerClientEvent, 'v-notify:show', src, message, level)
     end,
 
-    isAdmin = function(_, src)
-        -- v-core grants admin through aces, which Bridge.isAdmin already checks before it
-        -- asks the adapter; nothing extra to add here.
+    isAdmin = function(object, src)
+        -- v-core grants admin through its own permission ranks, not aces, so the ace check in
+        -- Bridge.isAdmin never matches on this framework. Ask the core the way v-inventory and
+        -- v-sport do. `object` is v-core itself (GetCore returns the VCore table), and it
+        -- carries HasPermission(source, level).
+        if object.HasPermission then
+            local allowed = try(object.HasPermission, src, 'admin')
+            return allowed == true
+        end
         return false
     end,
 
