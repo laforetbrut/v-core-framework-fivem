@@ -22,6 +22,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **The phone could open into nothing on some builds**. Its Lua-to-page message handler assumed a host message always arrives with a null source; on builds where it does not, the guard discarded every message and the phone stayed hidden. It now rejects a source only when it is genuinely one of the page's own app iframes.
 - **The spotlight search panel keeps its own shadow in dark mode**. A theme rule at higher specificity had repainted it with a bottom-sheet fill and an upward shadow in dark only. The fill and shadow are now stated per theme so the panel wins on specificity in each.
 - **Two duplicate phone locale keys removed**. `ph.soc_avatar` and `ph.soc_bio` were each defined twice, and the plainer of the two labels silently won; the descriptive "(optional)" originals are kept and the duplicates dropped.
+- **The loading screen listed the wrong keybinds to connecting players**. It kept the qb defaults it shipped with (F1 for a radial menu, F2 for the phone, H for a horn), which name keys and actions this framework does not bind. The strip now mirrors the framework's own `RegisterKeyMapping` defaults: the phone is F1, the interaction eye is Left Alt, the engine is K, the seat swap is G and hands-up is X.
 
 ### Ajouts (miroir français)
 
@@ -39,6 +40,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Le téléphone pouvait s'ouvrir sur rien sur certains builds**. Son gestionnaire de messages supposait qu'un message hôte arrive toujours avec une source nulle ; il rejette désormais une source seulement si c'est vraiment une iframe d'app de la page.
 - **Le panneau de recherche garde sa propre ombre en thème sombre**. Une règle de thème plus spécifique le repeignait avec une ombre montante en sombre uniquement ; le fond et l'ombre sont maintenant énoncés par thème.
 - **Deux clés de locale du téléphone en double retirées**. `ph.soc_avatar` et `ph.soc_bio` étaient définies deux fois ; les originales descriptives « (facultatif) » sont conservées.
+- **L'écran de chargement affichait de mauvaises touches aux joueurs qui se connectent**. Il gardait les défauts qb d'origine (F1 pour un menu radial, F2 pour le téléphone, H pour un klaxon), qui nomment des touches et des actions que ce framework ne lie pas. La bande reflète désormais les défauts `RegisterKeyMapping` du framework : le téléphone est F1, l'œil d'interaction Alt gauche, le moteur K, le changement de siège G et les mains en l'air X.
 
 ---
 
