@@ -33,7 +33,7 @@ PhoneApp {
     version   = '1.0.0',
     accent    = '#0A84FF',
     permissions = { 'storage', 'notifications' },
-    features  = { 'Interface Clear Glass', 'Donnees persistantes' },
+    features  = { 'Interface Glass', 'Donnees persistantes' },
     keywords  = { '$Id' },
     optional  = true,
 }
@@ -45,7 +45,6 @@ $page = @"
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="light dark">
   <title>$Label</title>
   <link rel="stylesheet" href="../../html/style.css">
   <script src="../../html/sdk.js"></script>
