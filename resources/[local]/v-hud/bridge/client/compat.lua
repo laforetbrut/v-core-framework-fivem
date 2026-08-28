@@ -649,6 +649,23 @@ end)
 --- Voice range 1-3, whether the player is talking, and the radio channel. Works with no voice
 --- resource at all: range reads 0 and the indicator stays dim.
 function Compat.voice()
+    -- v-voice ships a GetState() export built for exactly this - the proximity step, the radio
+    -- channel and whether the player is talking, in one call - rather than the proximity and
+    -- radioChannel state bags pma-voice publishes. Prefer it whole when it is running, and map
+    -- its whisper/normal/shout step onto the 1-3 index the rings light.
+    if started('v-voice') then
+        local ok, s = pcall(function() return exports['v-voice']:GetState() end)
+        if ok and type(s) == 'table' then
+            return {
+                provider = 'v-voice',
+                range = ({ whisper = 1, normal = 2, shout = 3 })[s.step] or 2,
+                talking = s.talking == true,
+                radio = tonumber(s.channel) or 0,
+                radioActive = s.radio == true,
+            }
+        end
+    end
+
     local provider = resolveVoice()
     local playerId = PlayerId()
     local talking = NetworkIsPlayerTalking(playerId)

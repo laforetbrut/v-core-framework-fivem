@@ -818,7 +818,7 @@ Config.Compat = {
     showRange = true,
 
     -- Voice. Detected, never required. Sets the voice range rings and the talking indicator.
-    voice = { 'pma-voice', 'saltychat', 'mumble-voip' },
+    voice = { 'v-voice', 'pma-voice', 'saltychat', 'mumble-voip' },
     forceVoice = nil,
 
     -- Notifications. The first one started is used; 'native' draws the HUD's own toast.
