@@ -477,7 +477,10 @@ fr+en. The framework is read through a `vcore` adapter on each bridge file (`bri
 v-notify.
 
 **Remaining.**
-- Settings live in **client-side KVP**, so they are per-machine, not per-character.
+- Settings are stored **per character** in `vhud_settings` (`Config.Persistence.scope`, set it to
+  `license` and one HUD follows all of a player's characters). The client also keeps a KVP copy, and
+  on boot the newer of the two wins, so a look chosen while the database was down is not lost; the
+  module still works on KVP alone when there is no database at all.
 - The minimap defaults to the **native round shape**: the community square-mask stream assets
   (`stream/*.ytd`) are rejected as an asset version mismatch by the default game build, and the
   framework pins none. A server that pins a build can add the masks back and default to square.
