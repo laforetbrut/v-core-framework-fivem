@@ -209,16 +209,19 @@ window.DocLoadingConfig = {
     // `label` points at an entry in locales.<lang>.keybinds so the wording
     // follows the chosen language. Emotes live in the radial menu and the radio
     // is handled from the inventory, so neither needs its own key here.
+    // The framework's own default bindings (RegisterKeyMapping); a player who rebinds one in
+    // the game settings sees their own key, this shows the default. Phone is F1, the target
+    // eye is Left Alt, engine is K and the seat swap is G - not the qb defaults this shipped
+    // with, which named the wrong keys.
     items: [
-      { key: 'F1', label: 'menuRadial' },
-      { key: 'F2', label: 'phone' },
-      { key: 'F3', label: 'house' },
+      { key: 'F1', label: 'phone' },
       { key: 'TAB', label: 'inventory' },
       { key: 'ALT', label: 'target' },
       { key: 'B', label: 'seatbelt' },
-      { key: 'G', label: 'engine' },
+      { key: 'K', label: 'engine' },
+      { key: 'G', label: 'seat' },
       { key: 'L', label: 'locks' },
-      { key: 'H', label: 'horn' },
+      { key: 'X', label: 'handsup' },
     ],
   },
 
@@ -371,15 +374,14 @@ window.DocLoadingConfig = {
         { icon: 'car', category: 'Vol de véhicule', text: 'Tout véhicule est verrouillé : il faut du matériel et une scène. Le vol à la volée est interdit.' },
       ],
       keybinds: {
-        menuRadial: 'Menu radial',
         phone: 'Téléphone',
-        house: 'Menu maison',
         inventory: 'Inventaire',
         target: 'Interaction',
         seatbelt: 'Ceinture',
         engine: 'Moteur',
+        seat: 'Changer de siège',
         locks: 'Verrouillage',
-        horn: 'Klaxon',
+        handsup: 'Mains en l\'air',
       },
     },
 
@@ -478,15 +480,14 @@ window.DocLoadingConfig = {
         { icon: 'car', category: 'Car theft', text: 'Every vehicle is locked: you need tools and a scene. Grabbing one on the fly is forbidden.' },
       ],
       keybinds: {
-        menuRadial: 'Radial menu',
         phone: 'Phone',
-        house: 'House menu',
         inventory: 'Inventory',
         target: 'Interaction',
         seatbelt: 'Seatbelt',
         engine: 'Engine',
+        seat: 'Change seat',
         locks: 'Vehicle locks',
-        horn: 'Horn',
+        handsup: 'Hands up',
       },
     },
   },
