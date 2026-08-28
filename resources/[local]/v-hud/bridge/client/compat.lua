@@ -983,6 +983,52 @@ local function requestPartCallback(plate)
     if not ok then partsCache.pending = false end
 end
 
+--[[
+    v-mechanic, this framework's own mechanic.
+
+    Its parts are stored 0-100, which is the scale these tell-tales already expect, and every
+    lamp this HUD draws has a real part behind it - including the two the generic bag list can
+    only guess at: `axle` exists under that name, and `electronics` is the battery.
+
+    THE PLATE HAS TO BE KEYED THE SAME WAY. v-mechanic indexes on the plate with its trailing
+    padding removed; the callback path below passes the raw eight-character string the native
+    returns. Handing that to the export would match nothing, and the lamps would stay dark with
+    no error anywhere - so the trim here is deliberately the same expression v-mechanic uses.
+]]
+local MECHANIC_PARTS = {
+    brakes       = 'brakes',
+    clutch       = 'clutch',
+    radiator     = 'radiator',
+    axle         = 'axle',
+    injector     = 'injectors',
+    transmission = 'transmission',
+    electronics  = 'battery',
+    suspension   = 'suspension',
+}
+
+local function readMechanicParts(vehicle)
+    if not started('v-mechanic') then return nil end
+
+    local raw = GetVehicleNumberPlateText(vehicle)
+    if not raw then return nil end
+    local plate = (raw:gsub('%s+$', ''))
+    if plate == '' then return nil end
+
+    local ok, parts = pcall(function() return exports['v-mechanic']:GetLocalParts(plate) end)
+    if not ok or type(parts) ~= 'table' then return nil end
+
+    local out, any = {}, false
+    for lamp, key in pairs(MECHANIC_PARTS) do
+        local value = normalisePart(parts[key])
+        if value then
+            out[lamp] = value
+            any = true
+        end
+    end
+
+    return any and out or nil
+end
+
 --- Per-part condition for `vehicle`, as percentages, or nil when nothing publishes any.
 function Compat.vehicleParts(vehicle)
     if not Config.Compat.parts or not vehicle or vehicle == 0 then return nil end
@@ -991,6 +1037,12 @@ function Compat.vehicleParts(vehicle)
     -- State bags first: current, free, and no round trip.
     local bags = readPartBags(vehicle)
     if bags then return bags end
+
+    -- Then this framework's mechanic, which answers locally and needs no round trip either.
+    -- After the bags rather than before, so a server publishing them keeps the behaviour it
+    -- had; on this framework nothing does, and the tell-tales had no source at all.
+    local mechanic = readMechanicParts(vehicle)
+    if mechanic then return mechanic end
 
     local plate = GetVehicleNumberPlateText(vehicle)
     if not plate then return nil end
