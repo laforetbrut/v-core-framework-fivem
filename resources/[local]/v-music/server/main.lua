@@ -299,6 +299,9 @@ V.Ready(function(core)
     end
     V.Use('v-inventory').RegisterUsableItem(Config.Boombox.item, function(src)
         TriggerClientEvent('v-music:client:open', src, 'boombox')
+        -- A boombox is a device, not a consumable: using it opens its panel and the item
+        -- stays in the bag. Answering false is what keeps the inventory from eating it.
+        return false
     end)
 end)
 

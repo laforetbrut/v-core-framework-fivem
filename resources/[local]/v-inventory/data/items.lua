@@ -360,5 +360,7 @@ InventoryItems = {
   { name='part_bms', label='Battery Management', weight=1500, stackable=1, usable=0, category='mechanic', image=nil, itype='misc', rarity='rare', desc='EV battery management unit.' },
   { name='part_chargeport', label='Charge Port', weight=1900, stackable=1, usable=0, category='mechanic', image=nil, itype='misc', rarity='uncommon', desc='EV charging port assembly.' },
   { name='part_coolant', label='EV Coolant', weight=4000, stackable=1, usable=0, category='mechanic', image=nil, itype='misc', rarity='common', desc='Battery cooling fluid.' },
-  { name='diagnostic_scanner', label='Diagnostic Scanner', weight=900, stackable=1, usable=0, category='mechanic', image=nil, itype='misc', rarity='rare', desc='Reads a vehicle\'s condition.' },
+  -- usable: v-mechanic registers a handler on this name, and using it from the bag is the
+  -- only way to run a scan. With usable=0 the use path refused before reaching the handler.
+  { name='diagnostic_scanner', label='Diagnostic Scanner', weight=900, stackable=1, usable=1, category='mechanic', image=nil, itype='misc', rarity='rare', desc='Reads a vehicle\'s condition.' },
 }

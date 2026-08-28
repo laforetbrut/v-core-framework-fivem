@@ -279,6 +279,9 @@ CreateThread(function()
     while GetResourceState('v-inventory') ~= 'started' do Wait(200) end
     exports['v-inventory']:RegisterUsableItem(Config.DiagTool, function(src)
         TriggerClientEvent('v-mechanic:client:scan', src)
+        -- A scanner is a tool and survives being used. Without this answer the inventory
+        -- takes it out of the slot, so the first scan would also be the last.
+        return false
     end)
 end)
 
