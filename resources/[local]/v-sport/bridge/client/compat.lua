@@ -183,7 +183,7 @@ end
 
 local targetName
 
---- 'ox_target' | 'qb-target' | 'qtarget' | 'none'. Resolved once.
+--- 'v-target' | 'ox_target' | 'qb-target' | 'qtarget' | 'none'. Resolved once.
 function Compat.target()
     if targetName then return targetName end
 
@@ -198,7 +198,9 @@ function Compat.target()
         return targetName
     end
 
-    for _, resource in ipairs({ 'ox_target', 'qb-target', 'qtarget' }) do
+    -- v-target first: it is this framework's targeting eye, so gym equipment gets an eye
+    -- option like the rest of the world rather than only the key-press prompt.
+    for _, resource in ipairs({ 'v-target', 'ox_target', 'qb-target', 'qtarget' }) do
         if started(resource) then
             targetName = resource
             Sport.debug('target:', resource)
@@ -233,6 +235,26 @@ function Compat.addTargetModels(models, option)
 
     local distance = tonumber(Config.Interaction.target.distance) or 2.0
     local icon = Config.Interaction.target.icon or 'fa-solid fa-dumbbell'
+
+    if resource == 'v-target' then
+        -- v-target invokes `action(data)` where `data.entity` is the prop, and reads the same
+        -- label/icon/distance/canInteract fields. It tracks the owner and clears everything on
+        -- resource stop by itself, so removeTargetModels only has to ask it to.
+        return try(function()
+            exports['v-target']:AddModel(models, { {
+                label = option.label,
+                icon = icon,
+                distance = distance,
+                action = function(data)
+                    option.onSelect(data and data.entity or nil)
+                end,
+                canInteract = function(entity, dist)
+                    return option.canInteract(entity, dist)
+                end,
+            } })
+            return true
+        end) == true
+    end
 
     if resource == 'ox_target' then
         return try(function()
@@ -279,6 +301,12 @@ end
 function Compat.removeTargetModels(models, names)
     local resource = Compat.target()
     if resource == 'none' or #models == 0 then return end
+
+    if resource == 'v-target' then
+        -- Everything this resource added, by owner, in one call.
+        try(function() exports['v-target']:RemoveResource(GetCurrentResourceName()) end)
+        return
+    end
 
     if resource == 'ox_target' then
         try(function() exports.ox_target:removeModel(models, names) end)
