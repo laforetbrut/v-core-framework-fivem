@@ -637,7 +637,13 @@ def check_prefs_round_trip(report):
     src = read(os.path.join(ROOT, 'server', 'main.lua'))
 
     # What prefsOf returns: the keys of the table it hands back.
+    #
+    # Both declaration forms, because they are the same function. Anchoring only on the
+    # assignment form meant this whole check reported "not found" and returned a pass on a
+    # copy that writes `local function prefsOf(...)` - green, and looking at nothing.
     start = src.find('prefsOf = function(')
+    if start < 0:
+        start = src.find('local function prefsOf(')
     if start < 0:
         report('prefs round trip', 'prefsOf not found', [])
         return True
@@ -672,11 +678,19 @@ def check_prefs_round_trip(report):
     SECRET = {'passcodeHash'}
     # Written as the resolved twin of another key rather than as a setting of its own.
     MIRROR = {'dark'}
+    # Kept in the same table but owned by the app store, which writes them when an optional
+    # app is installed or removed - not settings the prefs callback has any business touching.
+    ELSEWHERE = {'added', 'removed'}
 
     problems = []
     for key in sorted(written - returned - SECRET - MIRROR):
         problems.append('prefs.%s is written by v-phone:prefs and never returned by prefsOf - '
                         'it saves and then disappears from the page' % key)
+    # The other half of a round trip, which this check was named for and did not look at: a
+    # key the page is handed and nothing can ever set is a control that does not respond.
+    for key in sorted(returned - written - SECRET - MIRROR - ELSEWHERE):
+        problems.append('prefs.%s is returned by prefsOf and written by nothing - '
+                        'the page can read it and no setting can change it' % key)
 
     report('prefs round trip', '%d written, %d returned' % (len(written), len(returned)),
            problems)
