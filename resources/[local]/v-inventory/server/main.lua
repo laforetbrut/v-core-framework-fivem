@@ -17,6 +17,7 @@ local SearchTarget = {}   -- [searcher src] = target src (frisk/steal target)
 local AdminView    = {}   -- [admin src] = true when opened via admin (no hands-up / proximity gate)
 local StashRef     = {}   -- [src] = open-container context re-validated on every move { kind, netId | coords | id }
 local UsableItems  = {}   -- name -> handler(src, item)
+local ClaimedUse   = {}   -- name -> true when another resource owns the handler (see loadItemDefs)
 local Equipped     = {}   -- [source] = { slot, name }  currently-drawn weapon
 local dropCounter  = 0
 local MONEY        = 'money'
@@ -49,11 +50,15 @@ function loadItemDefs()
         ItemDefs[r.name] = r
     end
     -- (Re)bind the type-driven use handlers straight from the DB catalogue, so an item
-    -- an admin just created is immediately usable. Handlers registered by other
-    -- resources (RegisterUsableItem, e.g. v-clothing) use types outside UseByType and
-    -- are therefore never clobbered here.
+    -- an admin just created is immediately usable.
+    --
+    -- An item another resource has claimed through RegisterUsableItem is left alone. This
+    -- runs again on every admin edit of the catalogue, so without the guard a claimed food
+    -- or drink would silently fall back to plain nutrition the first time somebody touched
+    -- the panel - and stay that way until the next restart. Types outside UseByType (a
+    -- clothing item, say) were never at risk; a supplement catalogued as a drink is.
     for name, d in pairs(ItemDefs) do
-        if d.usable == 1 and UseByType[d.itype] then
+        if d.usable == 1 and UseByType[d.itype] and not ClaimedUse[name] then
             local fn = UseByType[d.itype]
             UsableItems[name] = function(src, item) fn(src, item, ItemDefs[name]) end
         end
@@ -852,7 +857,13 @@ exports('GetItemCount', function(src, name)
     return n
 end)
 
-exports('RegisterUsableItem', function(name, handler) UsableItems[name] = handler end)
+-- The claim is what stops the next catalogue reload from rebinding this name back to its
+-- plain type effect. It is never released: a resource that stops keeps its claim until the
+-- server restarts, which is the same lifetime the handler itself already had.
+exports('RegisterUsableItem', function(name, handler)
+    UsableItems[name] = handler
+    ClaimedUse[name]  = true
+end)
 
 -- Read-only helpers for other modules (e.g. the shop's inventory-view panel).
 exports('GetLimits', function(src)
