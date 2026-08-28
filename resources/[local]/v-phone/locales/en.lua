@@ -857,8 +857,9 @@ local T = {
     ['ph.soc_deleted'] = 'Post deleted',
     ['ph.soc_edit'] = 'Edit profile',
     ['ph.soc_displayname'] = 'Display name',
-    ['ph.soc_avatar'] = 'Avatar link',
-    ['ph.soc_bio'] = 'Bio',
+    -- ph.soc_avatar / ph.soc_bio are defined once, in the account block above, with the
+    -- "(optional)" label both the sign-up and the profile-edit fields want. They were
+    -- redeclared here, which silently overrode the better text; the duplicates are gone.
     ['ph.soc_your_story'] = 'Your story',
     ['ph.soc_you'] = 'You',
     ['ph.soc_story_posted'] = 'Story posted',

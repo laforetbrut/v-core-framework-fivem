@@ -859,8 +859,9 @@ local T = {
     ['ph.soc_deleted'] = 'Publication supprimee',
     ['ph.soc_edit'] = 'Modifier le profil',
     ['ph.soc_displayname'] = 'Nom affiche',
-    ['ph.soc_avatar'] = 'Lien de l avatar',
-    ['ph.soc_bio'] = 'Bio',
+    -- ph.soc_avatar / ph.soc_bio sont definies une seule fois, dans le bloc compte plus
+    -- haut, avec le libelle "(facultatif)" voulu par l'inscription et l'edition de profil.
+    -- Elles etaient redeclarees ici, ce qui ecrasait silencieusement le meilleur texte.
     ['ph.soc_your_story'] = 'Votre story',
     ['ph.soc_you'] = 'Vous',
     ['ph.soc_story_posted'] = 'Story publiee',
