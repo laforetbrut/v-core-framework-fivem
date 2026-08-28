@@ -205,9 +205,12 @@ end)
 -- ── Boot / live reload ─────────────────────────────────────────
 CreateThread(function()
     while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
-    -- the jerry can is an item like any other
+    -- The jerry can is an item like any other, and NOT usable: filling one is implemented
+    -- here, emptying one into a tank is not, and nothing registers a handler for it. Seeded
+    -- usable it was silently destroyed on the first click, taking the fuel that was paid for
+    -- with it. Flip this to 1 in the same breath as adding a pour flow, never before.
     MySQL.insert.await(
-        'INSERT IGNORE INTO items (name, label, weight, stackable, usable, category) VALUES (?,?,?,0,1,?)',
+        'INSERT IGNORE INTO items (name, label, weight, stackable, usable, category) VALUES (?,?,?,0,0,?)',
         { Config.JerryCan.item, 'Jerry Can', 4000, 'tools' })
 
     local tries = 0

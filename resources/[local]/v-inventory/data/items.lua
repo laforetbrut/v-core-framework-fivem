@@ -174,7 +174,10 @@ InventoryItems = {
   { name='house_key', label='House Key', weight=10, stackable=0, usable=0, category='misc', image='misc/key1.png', itype='misc', rarity='common', desc='Key to a property.' },
   { name='envelope', label='Envelope', weight=10, stackable=1, usable=0, category='misc', image='misc/envelope_closed.png', itype='misc', rarity='common', desc='Sealed envelope.' },
   { name='guitar', label='Guitar', weight=2500, stackable=0, usable=0, category='misc', image='misc/guitar.png', itype='misc', rarity='common', desc='Acoustic guitar.' },
-  { name='backpack', label='Backpack', weight=800, stackable=0, usable=1, category='misc', image='misc/backpack1.png', itype='backpack', rarity='common', desc='Carry backpack.' },
+  -- not usable: the backpack works by being CARRIED (see hasBackpack), so there is nothing to
+  -- use. Marked usable it was taken out of the bag on the first click, which cost the player
+  -- both the backpack and the capacity it was granting.
+  { name='backpack', label='Backpack', weight=800, stackable=0, usable=0, category='misc', image='misc/backpack1.png', itype='backpack', rarity='common', desc='Carry backpack.' },
   { name='umbrella', label='Umbrella', weight=400, stackable=0, usable=0, category='misc', image='misc/umbrella.png', itype='misc', rarity='common', desc='Collapsible umbrella.' },
   { name='parachute', label='Parachute', weight=3000, stackable=0, usable=0, category='misc', image='misc/parachute.png', itype='misc', rarity='common', desc='Deployable parachute.' },
   { name='lottery_ticket', label='Lottery Ticket', weight=5, stackable=1, usable=0, category='misc', image='misc/lottery_ticket.png', itype='misc', rarity='common', desc='Chance at the jackpot.' },
