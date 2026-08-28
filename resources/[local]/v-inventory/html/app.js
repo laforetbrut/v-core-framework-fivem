@@ -281,7 +281,12 @@ function onHover(e) {
   const d = def(it.name); const dm = d.metadata || {}; const im = it.metadata || {};
   const rar = rarityOf(d);
   const row = (k, v) => `<div class="row"><span>${k}</span><b>${v}</b></div>`;
-  tt.innerHTML = `<div class="tt-top" style="border-left:3px solid ${RARITY[rar] || 'var(--v-line)'}"><div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
+  // Half the catalogue ships without an image. Without this the frame asked for `images/`
+  // on every hover, so fall back to the same glyph the grid and the drag ghost use.
+  const ttImg = d.image
+    ? `<div class="tt-img" style="background-image:url('images/${esc(d.image)}')"></div>`
+    : `<div class="tt-img">${EQ_IC[CLOTH_ITEM_IC[it.name]] || ITEM_PH}</div>`;
+  tt.innerHTML = `<div class="tt-top" style="border-left:3px solid ${RARITY[rar] || 'var(--v-line)'}">${ttImg}`
     + `<div class="tt-meta"><h4>${esc(itemLabel(it, d))}</h4><div class="sub">${esc(it.name)}</div>`
     + `<em class="rar" style="--rc:${RARITY_LT[rar] || '#A39A8D'}">${t('rar.' + rar)}</em></div></div>`
     + `<div class="tt-body">${row(t('inv.weight'), kg((d.weight || 0) * it.amount))}`
