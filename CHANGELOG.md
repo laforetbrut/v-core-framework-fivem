@@ -23,6 +23,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **The spotlight search panel keeps its own shadow in dark mode**. A theme rule at higher specificity had repainted it with a bottom-sheet fill and an upward shadow in dark only. The fill and shadow are now stated per theme so the panel wins on specificity in each.
 - **Two duplicate phone locale keys removed**. `ph.soc_avatar` and `ph.soc_bio` were each defined twice, and the plainer of the two labels silently won; the descriptive "(optional)" originals are kept and the duplicates dropped.
 - **The loading screen listed the wrong keybinds to connecting players**. It kept the qb defaults it shipped with (F1 for a radial menu, F2 for the phone, H for a horn), which name keys and actions this framework does not bind. The strip now mirrors the framework's own `RegisterKeyMapping` defaults: the phone is F1, the interaction eye is Left Alt, the engine is K, the seat swap is G and hands-up is X.
+- **Three of v-sport's four consumables did not exist as items**. The gym registers `whey`, `protein_bar`, `pre_workout` and `sports_drink` as usable, but only the sports drink was in the inventory catalogue, so the other three could never be held or used and their use effect was unreachable. All four are now catalogued; v-sport still supplies the real effect and v-inventory removes the item once, with no double consume.
 
 ### Ajouts (miroir français)
 
@@ -41,6 +42,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 - **Le panneau de recherche garde sa propre ombre en thème sombre**. Une règle de thème plus spécifique le repeignait avec une ombre montante en sombre uniquement ; le fond et l'ombre sont maintenant énoncés par thème.
 - **Deux clés de locale du téléphone en double retirées**. `ph.soc_avatar` et `ph.soc_bio` étaient définies deux fois ; les originales descriptives « (facultatif) » sont conservées.
 - **L'écran de chargement affichait de mauvaises touches aux joueurs qui se connectent**. Il gardait les défauts qb d'origine (F1 pour un menu radial, F2 pour le téléphone, H pour un klaxon), qui nomment des touches et des actions que ce framework ne lie pas. La bande reflète désormais les défauts `RegisterKeyMapping` du framework : le téléphone est F1, l'œil d'interaction Alt gauche, le moteur K, le changement de siège G et les mains en l'air X.
+- **Trois des quatre consommables de v-sport n'existaient pas comme items**. La salle enregistre `whey`, `protein_bar`, `pre_workout` et `sports_drink` comme utilisables, mais seul le sports drink figurait au catalogue d'inventaire ; les trois autres ne pouvaient jamais être détenus ni utilisés et leur effet restait inatteignable. Les quatre sont désormais au catalogue ; v-sport fournit toujours l'effet réel et v-inventory retire l'item une fois, sans double consommation.
 
 ---
 

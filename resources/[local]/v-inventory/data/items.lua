@@ -212,6 +212,11 @@ InventoryItems = {
   { name='orange_juice', label='Orange Juice', weight=330, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Pulpy orange juice.' },
   { name='milkshake', label='Milkshake', weight=400, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Thick vanilla shake.' },
   { name='sports_drink', label='Sports Drink', weight=500, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Electrolyte refill.' },
+  -- Sport supplements. v-sport registers the real use effect (recovery, allowance, multiplier)
+  -- and overrides the food/drink default; the itype here is only the fallback and the icon group.
+  { name='whey', label='Whey Protein', weight=500, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Protein scoop, speeds workout recovery.' },
+  { name='protein_bar', label='Protein Bar', weight=150, stackable=1, usable=1, category='food', image=nil, itype='food', rarity='common', desc='High-protein bar, refunds a little effort.' },
+  { name='pre_workout', label='Pre-Workout', weight=200, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Caffeine hit, training gains count for more.' },
   { name='whisky', label='Whisky', weight=700, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Bottle of aged whisky.' },
   { name='vodka', label='Vodka', weight=700, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Bottle of clear vodka.' },
   { name='rum', label='Rum', weight=700, stackable=1, usable=1, category='drinks', image=nil, itype='drink', rarity='common', desc='Bottle of dark rum.' },
