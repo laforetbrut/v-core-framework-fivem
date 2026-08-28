@@ -56,12 +56,49 @@ local function fromProvider(vehicle)
     return nil
 end
 
+--[[
+    v-mechanic counts this too, and it is the one that matters.
+
+    It accumulates kilometres per plate with its own teleport guard, stores them on the
+    vehicle's row in `character_vehicles`, and prices a service against that number. Left
+    alone, the HUD would show its own total from `vhud_odometer` while the mechanic charged
+    against a different one, and the two would drift apart for the rest of the car's life.
+
+    TWO THINGS THIS HAS TO GET RIGHT, and both are silent when wrong:
+
+      * UNITS. This resource works in metres; v-mechanic counts kilometres. Reading it
+        straight would show a car with 40 000 km on it as having done 40.
+      * THE PLATE. v-mechanic indexes on the plate with its trailing padding removed, which
+        is not what plateOf() below produces - that one trims both ends. The expression here
+        is deliberately v-mechanic's own.
+
+    A plate it has never seen answers 0, which is not the same as a car that has genuinely
+    done nothing, so 0 falls through to this resource's own total rather than replacing it.
+]]
+local function fromMechanic(vehicle)
+    if GetResourceState('v-mechanic') ~= 'started' then return nil end
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return nil end
+
+    local raw = GetVehicleNumberPlateText(vehicle)
+    if not raw then return nil end
+    local plate = (raw:gsub('%s+$', ''))
+    if plate == '' then return nil end
+
+    local ok, km = pcall(function() return exports['v-mechanic']:GetMileage(plate) end)
+    if not ok then return nil end
+
+    km = tonumber(km)
+    if not km or km <= 0 then return nil end
+
+    return km * 1000.0
+end
+
 --- Metres for `vehicle`, from a provider or from this resource's own total. nil when there is
 --- nothing to show, which is what hides the readout rather than printing a zero.
 function Odometer.metres(vehicle)
     if not Config.Odometer.enabled then return nil end
 
-    local provided = fromProvider(vehicle)
+    local provided = fromProvider(vehicle) or fromMechanic(vehicle)
     if provided then return provided end
 
     if not Config.Odometer.track then return nil end
