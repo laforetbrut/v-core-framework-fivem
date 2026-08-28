@@ -3632,6 +3632,16 @@ input { font: inherit; }
   max-height: calc(100% - 92px);
   border-radius: 31px;
   padding: 11px 14px 22px;
+}
+
+/* The spotlight is the same dark floating card in both themes, so its fill and shadow are
+   stated once here. Two selectors, not one: `.screen.dark .sheet` is (0,3,0) and would
+   otherwise beat a plain `.sheet[data-variant]` (0,2,0) in dark only, repainting the panel
+   with the bottom-sheet fill and its UPWARD shadow - a top-anchored card lit from below.
+   `.screen .sheet[data-variant]` (0,3,0) wins in light, `.screen.dark .sheet[data-variant]`
+   (0,4,0) wins in dark, both on specificity rather than source order. */
+.screen .sheet[data-variant="spotlight"],
+.screen.dark .sheet[data-variant="spotlight"] {
   background:
     radial-gradient(130% 80% at 18% -10%, rgba(255, 255, 255, .20), transparent 59%),
     linear-gradient(150deg, rgba(255, 255, 255, .08), transparent 45%),
