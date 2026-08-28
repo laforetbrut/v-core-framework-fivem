@@ -401,10 +401,10 @@ end
 --- Show `message`. `kind` is 'primary', 'success' or 'error'. Silent when the player has
 --- turned HUD notifications off, except for the ones the caller marks as forced.
 ---
---- On a stock QBCore server the notifications are qb-core's, not this resource's: they go to
---- qb-core's own NUI page and keep its hardcoded look. `Config.Notifications.own` decides
---- whether the messages THIS resource raises are drawn in the player's theme instead, which
---- is the only half of the problem a HUD can fix from the outside.
+--- Most of what a player sees belongs to the server's own notification system, goes to its
+--- page and keeps its look. `Config.Notifications.own` decides whether the messages THIS
+--- resource raises are drawn in the player's theme instead, which is the only half of the
+--- problem a HUD can fix from the outside.
 function Compat.notify(message, kind, forced, duration)
     if not message or message == '' then return end
     if not forced and State and State.settings and not State.settings.advanced.notifications then
