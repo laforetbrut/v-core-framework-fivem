@@ -95,10 +95,11 @@ local function declareSettings()
     Core.RegisterModule('v-gathering', {
         label = 'Gathering', category = 'economy',
         settings = {
-            { key = 'blips',     label = 'Show gathering blips', type = 'bool', default = false, hint = 'Off by default: an unmarked node is one you have to know about.' },
-            { key = 'distance',  label = 'Node reach (m)', type = 'number', default = 2.0, min = 1, max = 10, step = 0.5 },
-            { key = 'respawn',   label = 'Node cooldown (s)', type = 'number', default = 90, min = 5, max = 3600, step = 5 },
-
+            -- Only what applySettings below actually reads. An earlier round declared three
+            -- more - a blip toggle, a second `distance` under another label, and `respawn`
+            -- for the cooldown `cooldown` already covers - and nothing read any of them. The
+            -- duplicate key was the worst of the three: two rows in the panel, two sets of
+            -- bounds, one stored value, so changing either moved the same number.
             { key = 'distance',  label = 'Node range (m)',        type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'cooldown',  label = 'Harvest cooldown (s)',  type = 'number', default = Config.Cooldown, min = 0, max = 120 },
             { key = 'yieldMult', label = 'Yield multiplier',      type = 'number', default = 1.0, min = 0.1, max = 10 },

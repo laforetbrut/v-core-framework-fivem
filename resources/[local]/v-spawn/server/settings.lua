@@ -9,9 +9,11 @@ CreateThread(function()
     local Core = exports['v-core']:GetCore()
     Core.RegisterModule('v-spawn', {
         label = 'Spawn & creation', category = 'gameplay',
-        settings = {
-
-        { key = 'postSpawnHold', label = 'Hold black screen after spawn (ms)', type = 'number', default = 3000, min = 0, max = 15000, step = 1 },
-        },
+        -- No settings. `postSpawnHold` was declared here and read by nothing, and it could
+        -- not have been honoured anyway: client/main.lua holds the screen black only inside
+        -- each flow, because a hold around the first spawn deadlocks it into a black screen
+        -- that never lifts - the note at the top of that file explains why. The module stays
+        -- registered so the panel lists it with its label rather than only as a manifest flag.
+        settings = {},
     })
 end)

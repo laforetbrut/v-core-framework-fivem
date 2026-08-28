@@ -274,9 +274,9 @@ local function declareSettings()
     Core.RegisterModule('v-shops', {
         label = 'Stores', category = 'economy',
         settings = {
-            { key = 'blips',      label = 'Show shop blips', type = 'bool', default = true },
-            { key = 'distance',   label = 'Counter reach (m)', type = 'number', default = 2.0, min = 1, max = 10, step = 0.5 },
-
+            -- Only what applySettings reads. An earlier round left a blip toggle nothing read
+            -- and a second `distance` under another label: one stored value behind two panel
+            -- rows with different bounds, so either row moved the same number.
             { key = 'distance',  label = 'Counter range (m)',    type = 'number', default = Config.Distance, min = 0.5, max = 10 },
             { key = 'priceMult', label = 'Buy price multiplier', type = 'number', default = 1.0, min = 0.1, max = 10 },
             { key = 'sellMult',  label = 'Sell price multiplier',type = 'number', default = 1.0, min = 0.1, max = 10 },

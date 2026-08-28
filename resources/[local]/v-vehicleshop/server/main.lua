@@ -304,13 +304,17 @@ local function declareSettings()
     Core.RegisterModule('v-vehicleshop', {
         label = 'Dealerships', category = 'vehicles',
         settings = {
-            { key = 'blips',      label = 'Show dealership blips', type = 'bool', default = true },
-            { key = 'testSeconds', label = 'Test drive (s)', type = 'number', default = 60, min = 10, max = 600, step = 5 },
+            -- Only what is read. `testSeconds` used to be declared twice, under two labels
+            -- and two defaults but one stored value, so the panel showed two rows that moved
+            -- the same number; the one kept is the one applySettings reads. A blip toggle and
+            -- a global price multiplier were declared here as well and nothing read either.
+            -- The multiplier is not simply wired: it would have to reach the price shown in
+            -- the listing, the price actually charged and the sell-back base together, and a
+            -- version that missed one would quote one figure and take another.
             { key = 'testCooldown', label = 'Wait between test drives (s)', type = 'number', default = 120, min = 0, max = 3600, step = 10 },
             { key = 'sellBackRate', label = 'Sell-back rate (0-1)',   type = 'number', default = Config.SellBackRate, min = 0, max = 1 },
             { key = 'testSeconds',  label = 'Test drive (seconds)',   type = 'number', default = Config.TestDrive.seconds, min = 10, max = 600, step = 1 },
             { key = 'defaultGarage',label = 'Garage a new car goes to', type = 'string', default = Config.DefaultGarage, maxLength = 40 },
-            { key = 'priceMult',    label = 'Global price multiplier', type = 'number', default = 1.0, min = 0.1, max = 10 },
         },
     })
 end
