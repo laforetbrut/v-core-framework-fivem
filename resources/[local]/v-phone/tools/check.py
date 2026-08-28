@@ -1030,6 +1030,45 @@ def check_app_descriptions(report):
     return not problems
 
 
+def check_app_owners(report):
+    """An app owned by another resource has to have a way of reaching it.
+
+    `Config.Apps` lets an entry name an `owner`: the store hides the app when that resource is
+    not running, and the whole point of the field is that the data comes from there. Nine of
+    the twenty-four are owned that way - the bank by v-banking, the MDT by v-police, the map by
+    v-world - and each one is answered somewhere, either by the phone's client bridging a
+    request to the owner or by its server calling the owner's exports.
+
+    An owner nothing ever talks to is an app that installs, opens, and shows an empty screen:
+    the store lists it because the resource is running, and nothing behind it ever answers.
+    """
+    cfg = read(os.path.join(ROOT, 'config.lua'))
+    start, end = apps_block(cfg)
+    if start is None:
+        report('app owners', 'Config.Apps not found', [])
+        return True
+
+    owners = {}
+    for app, owner in re.findall(r"\{ id = '([a-z0-9_]+)'[^}]*?owner = '([a-z-]+)'",
+                                 cfg[start:end], re.S):
+        if owner != 'v-phone':
+            owners[app] = owner
+
+    sources = ''
+    for rel in ('server/main.lua', 'client/main.lua'):
+        path = os.path.join(ROOT, rel)
+        if os.path.exists(path):
+            sources += read(path)
+
+    problems = []
+    for app, owner in sorted(owners.items()):
+        if owner not in sources:
+            problems.append('%s is owned by %s and nothing in the phone ever calls it - '
+                            'the app opens on an empty screen' % (app, owner))
+
+    report('app owners', '%d app(s) owned by another resource' % len(owners), problems)
+    return not problems
+
 CHECKS = [
     ('callbacks', check_callbacks),
     ('social ops', check_social_ops),
@@ -1046,6 +1085,7 @@ CHECKS = [
     ('app descriptions', check_app_descriptions),
     ('zero is true', check_zero_is_true),
     ('app metadata', check_app_metadata),
+    ('app owners', check_app_owners),
     ('setNav shape', check_setnav),
     ('locale duplicates', check_duplicate_locale),
 ]
