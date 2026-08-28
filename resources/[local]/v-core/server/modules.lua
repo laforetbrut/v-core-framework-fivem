@@ -119,11 +119,35 @@ function VCore.RegisterModule(name, info)
     name = tostring(name or '')
     if name == '' or type(info) ~= 'table' then return false end
 
-    local clean = {}
+    --[[
+        Declarations are filtered, and a rejected one now says so.
+
+        Silence here is expensive: a setting dropped for a typo'd type simply never appears
+        in the panel, and the module goes on reading a value nobody can set. A key declared
+        twice is worse, because both rows DO appear while `defOf` resolves to the first: the
+        operator sees two labels with two sets of bounds over one stored value, and moving
+        either moves the same number - so the tighter bounds are walked around through the
+        looser row. Four modules had shipped exactly that.
+
+        The first declaration of a key wins, which is what defOf already resolved to, so
+        nothing that worked changes.
+    ]]
+    local clean, seen = {}, {}
     for _, d in ipairs(info.settings or {}) do
-        if type(d) == 'table' and d.key and TYPES[d.type or 'string'] then
+        local key = (type(d) == 'table' and d.key) and tostring(d.key) or nil
+
+        if not key then
+            print(('[v-core] %s declared a setting with no key; dropped.'):format(name))
+        elseif not TYPES[d.type or 'string'] then
+            print(('[v-core] %s declared `%s` with unknown type `%s`; dropped. Known types: number, bool, string, select, color.')
+                :format(name, key, tostring(d.type)))
+        elseif seen[key] then
+            print(('[v-core] %s declared `%s` twice ("%s" and "%s"); the second was dropped. Two panel rows over one stored value never behaves.')
+                :format(name, key, tostring(seen[key]), tostring(d.label or key)))
+        else
+            seen[key] = d.label or key
             clean[#clean + 1] = {
-                key = tostring(d.key), label = d.label or d.key,
+                key = key, label = d.label or key,
                 type = d.type or 'string', default = d.default,
                 min = d.min, max = d.max, step = d.step,
                 options = d.options, maxLength = d.maxLength,
