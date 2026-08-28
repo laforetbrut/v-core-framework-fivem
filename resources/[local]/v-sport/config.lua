@@ -772,6 +772,47 @@ Config.Effects = {
 }
 
 -- ===========================================================================================
+-- 7b. WHAT A WORKOUT COSTS THE BODY
+-- ===========================================================================================
+--
+--  A finished set makes the character hungry and thirsty, and works the tension off. Sport
+--  keeps its own stats; hunger, thirst and stress belong to the server's needs resource, so
+--  this section only says how much to ask it for.
+--
+--  It is read by server/needs.lua, which does nothing at all when no needs resource is
+--  running - so this is safe to leave on wherever the resource is installed.
+--
+--  SIGNS. Hunger and thirst are "how full", where 100 is full, so eating into them is a
+--  negative number. Stress is "how wound up", where 0 is calm, so relieving it is negative
+--  too. Positive numbers are allowed and do the opposite, if an operator wants a gym that
+--  stresses people out.
+
+Config.Needs = {
+    -- Off leaves hunger, thirst and stress entirely to whatever owns them.
+    enabled = true,
+
+    -- Which resource owns the needs, tried in order; the first one running answers. Each is
+    -- expected to export Add(source, key, delta), which is what v-status offers.
+    providers = { 'v-status' },
+
+    -- Points charged for a PERFECT full set. A sloppy or half-finished set costs less, see
+    -- `scaleWithQuality`. These are deliberately small: a session is one exercise, not an
+    -- afternoon, and the needs resource is already draining on its own clock.
+    hunger = -2.0,
+    thirst = -3.5,
+    stress = -1.5,
+
+    -- Charge in proportion to how well the set went (0..1, the same number the gains use).
+    -- Off charges the full amount for any completed set.
+    scaleWithQuality = true,
+
+    -- Never take hunger or thirst below this, so training can leave a character peckish but
+    -- never starving. It does NOT apply to stress, where 0 is the calm end and the whole
+    -- point of the relief. nil removes the floor and lets the needs resource clamp at zero.
+    floor = 15.0,
+}
+
+-- ===========================================================================================
 -- 8. DETECTION
 -- ===========================================================================================
 --

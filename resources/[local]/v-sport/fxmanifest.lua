@@ -81,6 +81,9 @@ server_scripts {
     'server/api.lua',
     -- After api.lua: the item handlers call the exports it registers.
     'server/items.lua',
+    -- Charges hunger, thirst and stress to the server's needs resource when a set finishes.
+    -- Listens to the event stats.lua fires, so its position here is presentation only.
+    'server/needs.lua',
     'server/commands.lua',
     -- Owns data/custom.json and authorises every change to it. After commands.lua, which
     -- registers the admin gate this one re-checks.
