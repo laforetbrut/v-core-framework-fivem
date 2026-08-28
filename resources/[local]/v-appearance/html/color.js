@@ -1,8 +1,18 @@
 // v-appearance — dominant colour extraction (CEF-103 safe, no external libs).
 // Given an isolated garment's pixels (RGBA), returns up to two NAMED colours by
-// nearest CIELAB ΔE. Used by the catalogue scanner to auto-tag colours — there
+// nearest CIELAB ΔE. Meant for the catalogue scanner to auto-tag colours — there
 // is no GTA native that exposes a garment's colour, so we compute it from the
 // rendered thumbnail.
+//
+// NOT WIRED TO ANYTHING TODAY. html/index.html does not load this file, fxmanifest
+// does not list it, and nothing calls it: the scanner never got the other half, and
+// no garment carries a colour tag anywhere in v-clothing. It is kept because the maths
+// is done and correct, not because it runs.
+//
+// Connecting it takes three things, none of which is in here: list the file in
+// fxmanifest `files{}` and add a <script> to html/index.html so the page can load it,
+// have the scanner call it on each rendered thumbnail, and give the clothing catalogue
+// a column to store the two names in so something can search or filter on them.
 
 (function (global) {
   // sRGB -> CIELAB

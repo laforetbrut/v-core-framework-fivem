@@ -225,9 +225,14 @@ already uses for its licence key: move the line into a gitignored `database.cfg`
 at the cost of one setup step on every new machine. That trade is the operator's to make, which
 is why the checker reports it rather than anything having changed it.
 
-Individual modules carry their own deeper checks - `resources/[local]/v-sport/tools/check.py`
-and the phone's equivalent - which validate balance, locales and manifest against the module's
-own rules.
+Two modules carry their own deeper checks, which validate balance, locales, NUI callbacks and
+manifest against that module's own rules. They find their resource from their own location, so
+they run from the repository root like the rest:
+
+```
+python "resources/[local]/v-sport/tools/check.py"
+python "resources/[local]/v-phone/tools/check.py"
+```
 
 ## Credits
 
@@ -447,9 +452,14 @@ dans un `database.cfg` gitignoré et l'`exec`, au prix d'une étape de configura
 nouvelle machine. Cet arbitrage appartient à l'opérateur : c'est pourquoi le contrôle le signale
 au lieu que quoi que ce soit l'ait modifié.
 
-Certains modules embarquent leurs propres contrôles plus profonds -
-`resources/[local]/v-sport/tools/check.py` et l'équivalent du téléphone - qui valident
-l'équilibrage, les locales et le manifeste selon les règles du module.
+Deux modules embarquent leurs propres contrôles plus profonds, qui valident l'équilibrage, les
+locales, les callbacks NUI et le manifeste selon les règles du module. Ils trouvent leur
+ressource depuis leur propre emplacement, donc ils se lancent depuis la racine comme les autres :
+
+```
+python "resources/[local]/v-sport/tools/check.py"
+python "resources/[local]/v-phone/tools/check.py"
+```
 
 ## Credits
 
