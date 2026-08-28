@@ -195,6 +195,34 @@ Then import **`database/schema.sql`** (24 tables). Migrations run automatically 
   [MariaDB](https://mariadb.org/) · [oxmysql](https://github.com/overextended/oxmysql) ·
   [screenshot-basic](https://github.com/citizenfx/screenshot-basic) - clothing catalogue thumbnails
 
+## Checks
+
+Three scripts under `tools/` answer questions whose wrong answer is silent in game. Each reads
+the repository, changes nothing, and exits non-zero when it finds something, so a hook or a CI
+step can fail on it. Run them from the repository root:
+
+```
+python tools/privacy-sweep.py     # anything that must never be committed
+python tools/locale-check.py      # keys defined once, on both sides, and all of them used ones exist
+python tools/manifest-check.py    # every asset a NUI page loads is one the resource serves
+```
+
+Each was written because the thing it looks for had already happened at least once here: a live
+connection string in a tracked file, a key defined twice where the second silently won, and a
+script the page loaded that the manifest did not list, which 404s and leaves a feature doing
+nothing.
+
+Two of the three are silent today. `privacy-sweep` still reports one line - the database URL in
+`server.cfg`, credentials and all, in a tracked file. It is `root:root` against a local MariaDB
+in a private repository, so the exposure is small, but the fix is the pattern the same file
+already uses for its licence key: move the line into a gitignored `database.cfg` and `exec` it,
+at the cost of one setup step on every new machine. That trade is the operator's to make, which
+is why the checker reports it rather than anything having changed it.
+
+Individual modules carry their own deeper checks - `resources/[local]/v-sport/tools/check.py`
+and the phone's equivalent - which validate balance, locales and manifest against the module's
+own rules.
+
 ## Credits
 
 Author: vyrriox
@@ -380,6 +408,35 @@ Puis importe **`database/schema.sql`** (24 tables). Les migrations s'appliquent 
   [Manuel serveur](https://docs.fivem.net/docs/server-manual/setting-up-a-server/) ·
   [MariaDB](https://mariadb.org/) · [oxmysql](https://github.com/overextended/oxmysql) ·
   [screenshot-basic](https://github.com/citizenfx/screenshot-basic) - miniatures du catalogue de vêtements
+
+## Contrôles
+
+Trois scripts dans `tools/` répondent à des questions dont la mauvaise réponse est silencieuse
+en jeu. Chacun lit le dépôt, ne modifie rien, et sort en code non nul quand il trouve quelque
+chose, pour qu'un hook ou une étape de CI puisse échouer dessus. À lancer depuis la racine :
+
+```
+python tools/privacy-sweep.py     # tout ce qui ne doit jamais être commité
+python tools/locale-check.py      # clés définies une fois, des deux côtés, et toutes celles utilisées existent
+python tools/manifest-check.py    # chaque asset chargé par une page NUI est bien servi par la ressource
+```
+
+Chacun a été écrit parce que ce qu'il cherche s'était déjà produit ici au moins une fois : une
+chaîne de connexion vivante dans un fichier suivi, une clé définie deux fois dont la seconde
+gagnait en silence, et un script chargé par la page que le manifeste ne listait pas, qui répond
+404 et laisse une fonctionnalité inerte.
+
+Deux des trois sont silencieux aujourd'hui. `privacy-sweep` signale encore une ligne : l'URL de
+base de données dans `server.cfg`, identifiants compris, dans un fichier suivi. C'est
+`root:root` contre un MariaDB local dans un dépôt privé, donc l'exposition est faible, mais le
+remède est le motif que ce même fichier applique déjà à sa clé de licence : déplacer la ligne
+dans un `database.cfg` gitignoré et l'`exec`, au prix d'une étape de configuration sur chaque
+nouvelle machine. Cet arbitrage appartient à l'opérateur : c'est pourquoi le contrôle le signale
+au lieu que quoi que ce soit l'ait modifié.
+
+Certains modules embarquent leurs propres contrôles plus profonds -
+`resources/[local]/v-sport/tools/check.py` et l'équivalent du téléphone - qui valident
+l'équilibrage, les locales et le manifeste selon les règles du module.
 
 ## Credits
 

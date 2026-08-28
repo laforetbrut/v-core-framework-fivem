@@ -4,13 +4,18 @@ Check every module's locale pair.
 
     python tools/locale-check.py
 
-Two questions, both of which have a visible answer in game when they go wrong:
+Three questions, each with a visible answer in game when it goes wrong:
 
   PARITY   a key in en.lua and not in fr.lua falls back to English mid-sentence for a French
            player, and the other way round for an English one.
 
   USAGE    a key the Lua asks for and no locale defines is printed raw: the player reads
            `veh.err_nokeys` instead of a sentence.
+
+  DUPLICATES  a key written twice in one file loads twice, and the second silently wins. The
+           phone shipped two of those - `ph.soc_avatar` and `ph.soc_bio` - where the plainer
+           of the two labels was the one that showed. Nothing errors, and the file reads
+           correctly at the first occurrence, which is where anybody would look.
 
 TWO THINGS THIS HAS TO GET RIGHT, both learned by getting them wrong first:
 
@@ -25,6 +30,7 @@ TWO THINGS THIS HAS TO GET RIGHT, both learned by getting them wrong first:
 Exit code is 1 when something is wrong, so a hook or a CI step can fail on it.
 """
 
+import collections
 import io
 import os
 import re
@@ -33,6 +39,8 @@ import sys
 ROOT = os.path.join('resources', '[local]')
 
 KEY_DEF = re.compile(r"\['([^']+)'\]\s*=")
+# Anchored to the start of a line: a definition, not a mention inside a longer expression.
+KEY_LINE = re.compile(r"^\s*\['([^']+)'\]\s*=", re.M)
 
 # A locale call whose first argument is a literal. The trailing group tells a whole key from
 # the prefix of one that is finished at runtime.
@@ -76,6 +84,23 @@ def main():
             continue
         checked += 1
 
+        # A key written twice: the second definition wins and the first is never seen.
+        for locale_path in (en, fr):
+            if not os.path.exists(locale_path):
+                continue
+            text = read(locale_path)
+            counted = collections.Counter(KEY_LINE.findall(text))
+            twice = sorted(k for k, n in counted.items() if n > 1)
+            if twice:
+                problems += 1
+                print('%s: %d key(s) defined twice in %s' %
+                      (name, len(twice), os.path.basename(locale_path)))
+                lines = text.splitlines()
+                for key in twice[:8]:
+                    at = [i + 1 for i, l in enumerate(lines)
+                          if re.match(r"\s*\['" + re.escape(key) + r"'\]\s*=", l)]
+                    print('      %-32s lines %s' % (key, at))
+
         defined_en = set(KEY_DEF.findall(read(en)))
         defined_fr = set(KEY_DEF.findall(read(fr))) if os.path.exists(fr) else None
 
@@ -112,7 +137,7 @@ def main():
     if problems:
         print('\n%d problem(s).' % problems)
         return 1
-    print('every key defined on both sides, and every key asked for exists.')
+    print('every key defined once, on both sides, and every key asked for exists.')
     return 0
 
 
