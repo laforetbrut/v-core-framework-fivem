@@ -279,7 +279,10 @@ local function registerVInventory(key, entry)
     if not started('v-inventory') then return false end
     return pcall(function()
         exports['v-inventory']:RegisterUsableItem(entry.item, function(source_)
-            Items.use(source_, key)
+            -- v-inventory takes the item out itself, unless the handler answers false. So
+            -- a refused use - an effect already running, a cooldown - keeps the item, which
+            -- is what the qb path has always done and what Items.use's return value means.
+            return Items.use(source_, key) and entry.consume ~= false
         end)
     end)
 end

@@ -604,12 +604,30 @@ Core.RegisterCallback('v-inventory:use', function(source, resolve, slot)
         resolve(buildState(source)); return
     end
 
-    -- Default consumable (food / drink / drug / medical / ...).
+    --[[
+        Default consumable (food / drink / drug / medical / ...).
+
+        A handler that returns FALSE keeps the item. Everything else - nil, true, anything -
+        consumes it, so a handler written before this existed behaves exactly as it did.
+
+        Two things need that answer. A handler can refuse the use: the gym turns down a
+        supplement whose effect is already running, and it says so rather than quietly
+        burning the item. And a handler can own the removal itself: the phone's power bank
+        takes its own charge out, so without the answer the slot lost a second one.
+
+        The success toast is on the same side of the branch, because "used" is the wrong
+        thing to tell somebody whose item was refused.
+    ]]
     local handler = UsableItems[it.name]
-    if handler then handler(source, it) end
-    removeFromSlot(Inv[source], slot, 1)
+    local consume = true
+    if handler then consume = handler(source, it) ~= false end
+
+    if consume then
+        removeFromSlot(Inv[source], slot, 1)
+        Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
+    end
+
     syncPlayer(source)
-    Core.Notify(source, LP(source, 'inv.used', d.label), 'success')
     resolve(buildState(source))
 end)
 

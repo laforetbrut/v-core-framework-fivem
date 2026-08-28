@@ -2667,15 +2667,18 @@ end)
 CreateThread(function()
     while GetResourceState('v-inventory') ~= 'started' do Wait(200) end
     Wait(1500)
+    -- Always answers false: this handler takes the charge out itself, so the inventory must
+    -- not take a second one, and a full battery costs nothing at all.
     V.Use('v-inventory').RegisterUsableItem('powerbank', function(src)
         local amount = math.floor(tonumber(V.Setting('powerbankCharge', 45)) or 45)
         if batteryOf(src) >= 100 then
             Core.Notify(src, L(src, 'ph.battery_full'), 'info')
-            return
+            return false
         end
-        if not V.Use('v-inventory').RemoveItem(src, 'powerbank', 1) then return end
+        if not V.Use('v-inventory').RemoveItem(src, 'powerbank', 1) then return false end
         setBattery(src, batteryOf(src) + amount)
         Core.Notify(src, (L(src, 'ph.powerbank_used')):format(amount), 'success')
+        return false
     end)
 end)
 
