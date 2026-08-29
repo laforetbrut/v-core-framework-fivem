@@ -153,6 +153,9 @@ server_scripts {
     'bridge/server/framework.lua',
     'bridge/server/characters.lua',
     'bridge/server/integrations.lua',
+    -- What THIS framework answers, filled into the hooks config.lua documents. Loaded
+    -- after integrations.lua, which is where those hooks are read from.
+    'bridge/server/vcore-hooks.lua',
 
     -- Staff holding another character's phone. Straight after framework.lua, which builds
     -- `Core`, and before everything that uses it: this file wraps `Core.GetPlayer`, and a file
