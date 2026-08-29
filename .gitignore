@@ -63,8 +63,10 @@ local-database/
 crashes/
 svadhesive/
 
-# Generated phone preview (rebuilt from source on demand)
-resources/\[local\]/v-phone/preview/
+# The phone's self-contained preview snapshot: 780 KB with the stylesheet and every script
+# inlined, rebuilt when somebody needs a single file to open or send. The harness beside it
+# (index.html, fixture.js) is hand-written and nothing regenerates it, so it is kept.
+resources/\[local\]/v-phone/preview/phone.html
 
 # Python bytecode from the module tools (v-sport/tools, v-hud/tools, ...)
 __pycache__/
