@@ -56,8 +56,14 @@ SKIP_EXT = ('.png', '.jpg', '.jpeg', '.webp', '.gif', '.ico', '.mp3', '.ogg', '.
 # it points, and the first version of this file filtered on the word - which hid the one real
 # finding it had, in server.cfg, behind six SVG coordinates it had mistaken for addresses.
 PLACEHOLDER = re.compile(
-    r'(your|votre|ta_|example|placeholder|user:password|xxx+|0{8,}|1234567890|'
+    r'(your|votre|ta_|example|placeholder|user:pass|xxx+|0{8,}|1234567890|'
     r'root@cfx\.re)', re.I)
+
+# A pattern that MATCHES a connection string is not one. tools/sql-check.py and the phone's
+# check-sql.py both carry `mysql://([^:@/]+)(?::([^@]*))?@...` to parse the URL an operator
+# passes them, and both were reported as if they held a credential. Regex metacharacters are
+# what tells them apart: no real connection string contains `[^` or `(?:`.
+IS_PATTERN = re.compile(r'(\[\^|\(\?:|\\d\+|\\s|\)\?|\|\))')
 
 # Only report an address when its surroundings claim it is one.
 IP_CONTEXT = re.compile(r'(://|host|\bip\b|addr|server|connect|endpoint|proxy)', re.I)
@@ -88,6 +94,8 @@ def main():
         for label, pattern in PATTERNS:
             for match in pattern.finditer(text):
                 fragment = match.group(0)
+                if IS_PATTERN.search(fragment):
+                    continue          # a regex that parses one, not a value
                 if PLACEHOLDER.search(fragment):
                     continue
                 if label == 'routable IP':

@@ -213,6 +213,25 @@ script is never read by the server: the resource reports "Started", registers it
 logs nothing, and the file simply does not run when a player connects. That was measured, not
 assumed - a deliberately broken client file produced a completely clean boot.
 
+**A fifth needs a database, which is why it is listed apart.** The four above read the
+repository and need nothing else. `sql-check` asks the database whether every SQL statement
+in the framework is one it would accept, which a boot test cannot: booting only ever runs the
+queries that run at boot, and a `SELECT` behind a shop or a phone app is not seen until a
+player walks into it.
+
+```
+database\start-db.bat
+set VCORE_DB=mysql://user:password@host:port/database
+python tools/sql-check.py --client "C:/Program Files/MariaDB 12.3/bin/mariadb.exe"
+```
+
+`PREPARE` runs the parser and the name resolver and stops: nothing is read, nothing is
+written. Over 903 complete statements it currently reports none the database refuses. It says
+out loud what it does not judge rather than counting it as passing - 66 queries assembled at
+runtime, and the handful written in qb-core's or ox_core's schema behind a
+`Bridge.framework == 'qb'` branch, which never run here and are listed apart so a permanent
+failure does not teach everybody to ignore the check.
+
 **A module can carry its own, and the phone does.** `v-phone/tools/test-all.py` runs twenty-two
 of them in the order that fails cheapest first, from a Lua compile through its own static
 checks to a probe that drives a real mouse through the compositor and reports every control
@@ -460,6 +479,25 @@ CLIENT cassé n'est jamais lu par le serveur : la ressource annonce « Started �
 réglages et ne journalise rien, et le fichier ne tourne simplement pas quand un joueur se
 connecte. Cela a été mesuré et non supposé : un fichier client volontairement cassé a produit
 un démarrage totalement propre.
+
+**Un cinquième exige une base de données, d'où sa place à part.** Les quatre ci-dessus lisent
+le dépôt et n'ont besoin de rien d'autre. `sql-check` demande à la base si chaque requête SQL
+du framework est une requête qu'elle accepterait, ce qu'un démarrage ne peut pas dire : il
+n'exécute que les requêtes du démarrage, et un `SELECT` derrière une boutique ou une
+application du téléphone n'est vu que lorsqu'un joueur s'en approche.
+
+```
+database\start-db.bat
+set VCORE_DB=mysql://user:password@host:port/database
+python tools/sql-check.py --client "C:/Program Files/MariaDB 12.3/bin/mariadb.exe"
+```
+
+`PREPARE` fait tourner l'analyseur et le résolveur de noms puis s'arrête : rien n'est lu, rien
+n'est écrit. Sur 903 requêtes complètes, aucune n'est refusée aujourd'hui. Il dit à voix haute
+ce qu'il ne juge pas plutôt que de le compter comme réussi : 66 requêtes assemblées à
+l'exécution, et la poignée écrites dans le schéma de qb-core ou d'ox_core derrière une branche
+`Bridge.framework == 'qb'`, qui ne tournent jamais ici et sont listées à part pour qu'un échec
+permanent n'apprenne à personne à ignorer le contrôle.
 
 **Un module peut porter la sienne, et le téléphone le fait.** `v-phone/tools/test-all.py` en
 enchaîne vingt-deux, dans l'ordre où l'échec coûte le moins cher d'abord : compilation Lua,
