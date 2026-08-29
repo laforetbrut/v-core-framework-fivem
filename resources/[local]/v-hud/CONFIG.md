@@ -198,6 +198,21 @@ Config.Compat.forceFramework = 'qb-core'   -- skip detection; nil means detect
 Set it on a server that has two installed — a qb-core server keeping `es_extended` around for
 one legacy script would otherwise be decided by start order.
 
+**The same override exists for every provider the HUD detects**, not only the framework. Each
+one sits beside its own detection list in section 11 of `config.lua`, and `nil` always means
+detect:
+
+| Knob | What it pins |
+|---|---|
+| `Config.Compat.forceFuel` | the fuel provider behind the gauge |
+| `Config.Compat.forceVoice` | the voice resource behind the range rings and the talking indicator |
+| `Config.Compat.forceNotify` | who draws notifications; `'native'` is the HUD's own toast |
+| `Config.Compat.forceInventory` | the inventory the harness ring reads |
+
+`forceFuel` is the one worth knowing about. Detection ends at `native`, which reads the game's
+own tank on a 0 to 65 scale instead of a true percentage, so a full tank shows as roughly 65 on
+the gauge. A server whose fuel resource starts late gets exactly that, and pinning it is the fix.
+
 **What actually differs.** Everything below is a property of the framework, not a gap in the
 HUD, and `/hudinfo` prints which one answered:
 
@@ -423,6 +438,22 @@ Config.Compat.forceFramework = 'qb-core'   -- court-circuite la détection ; nil
 
 À poser sur un serveur qui en a deux installés : un serveur qb-core qui garde `es_extended`
 pour un script hérité serait sinon départagé par l'ordre de démarrage.
+
+**Le même court-circuit existe pour chaque fournisseur que le HUD détecte**, pas seulement pour
+le framework. Chacun se trouve à côté de sa propre liste de détection, section 11 de
+`config.lua`, et `nil` veut toujours dire détecter :
+
+| Levier | Ce qu'il fixe |
+|---|---|
+| `Config.Compat.forceFuel` | le fournisseur de carburant derrière la jauge |
+| `Config.Compat.forceVoice` | la ressource vocale derrière les anneaux de portée et l'indicateur de parole |
+| `Config.Compat.forceNotify` | qui dessine les notifications ; `'native'` est le toast du HUD |
+| `Config.Compat.forceInventory` | l'inventaire que lit l'anneau de harnais |
+
+`forceFuel` est celui qui mérite d'être connu. La détection se termine sur `native`, qui lit le
+réservoir du jeu sur une échelle de 0 à 65 et non un vrai pourcentage : un plein s'affiche donc
+autour de 65 sur la jauge. Un serveur dont la ressource carburant démarre tard obtient
+exactement cela, et le fixer est la correction.
 
 **Ce qui diffère réellement.** Tout ce qui suit est une propriété du framework, pas un manque
 du HUD, et `/hudinfo` indique lequel a répondu :
