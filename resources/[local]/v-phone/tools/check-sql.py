@@ -73,7 +73,11 @@ def connection():
     for i, arg in enumerate(sys.argv):
         if arg == '--url' and i + 1 < len(sys.argv):
             url = sys.argv[i + 1]
-    m = re.match(r'mysql://([^:@/]+)(?::([^@]*))?@([^:/]+):(\d+)/([^?\s]+)$', url.strip())
+    # The trailing (?:\?\S*)? is what lets a connection string carry its parameters. Without
+    # it a perfectly ordinary `...?charset=utf8mb4` fell through to the usage message, which
+    # says the variable is unset - a misleading answer to a URL that was set and valid.
+    m = re.match(r'mysql://([^:@/]+)(?::([^@]*))?@([^:/]+):(\d+)/([^?\s]+)(?:\?\S*)?$',
+                 url.strip())
     if not m:
         sys.exit('set VPHONE_DB (or pass --url) to  mysql://user:password@host:port/database\n'
                  'A read-only copy of your schema is enough - nothing is executed.')
