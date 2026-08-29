@@ -241,3 +241,42 @@ Config.Compat.hooks.status = function(src)
         stress = tonumber(s.stress),
     }
 end
+
+--[[
+    Who the character is, for the Wallet's identity card.
+
+    Read from the `characters` table rather than from a player object, because this is
+    asked by CITIZEN ID and not by source: the Wallet draws a card for somebody who may not
+    be connected, and an export on the player object cannot answer for one who is not.
+    Reading the framework's own character table is what the qb, ox and ESX branches of this
+    same function already do - `players`, `characters` and `users` respectively - so this
+    follows the shape the file established rather than inventing one.
+
+    `sex` is a tinyint here, 0 and 1, which is the convention the bridge's own sexOf()
+    normalises: 0 male, 1 female. It is normalised on this side too so the card is handed
+    the same 'm'/'f' every other branch produces. There is no nationality column, and the
+    field is left out rather than filled with a guess.
+
+    Shape required: (citizenid, src) -> { first, last, dob, sex, id }
+]]
+Config.Compat.hooks.identity = function(citizenid, _)
+    citizenid = tostring(citizenid or '')
+    if citizenid == '' then return nil end
+
+    local row = MySQL.single.await(
+        'SELECT firstname, lastname, dob, sex FROM characters WHERE citizenid = ?',
+        { citizenid })
+    if type(row) ~= 'table' then return nil end
+
+    local sex
+    local n = tonumber(row.sex)
+    if n == 0 then sex = 'm' elseif n == 1 then sex = 'f' end
+
+    return {
+        first = row.firstname,
+        last = row.lastname,
+        dob = row.dob,
+        sex = sex,
+        id = citizenid,
+    }
+end
