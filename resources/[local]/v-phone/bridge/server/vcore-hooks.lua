@@ -166,3 +166,55 @@ Config.Compat.hooks.properties = function(citizenid)
     end
     return out
 end
+
+-- ══════════════════════════════════════════════════════════════
+-- Money
+-- ══════════════════════════════════════════════════════════════
+--[[
+    Without these the bridge reaches its last line - "Standalone, or a framework with no
+    money to take. Refuse rather than give it away" - and returns false. That is the right
+    failure and it is why nothing was ever charged wrongly, but it also means the store, the
+    transfers, Bank Pro and the donation pages all refuse on this framework.
+
+    v-core's player object is the whole answer: AddMoney and RemoveMoney each run the
+    framework's own hook, floor the amount, and RemoveMoney refuses when the balance is
+    short. They return true only when the money actually moved, which is the exact contract
+    config.lua asks for here - the store treats false as "not paid" and grants nothing, and
+    a transfer whose credit reports false is refunded to the sender rather than lost.
+
+    Its accounts are named `cash` and `bank`, which are the two names the phone passes.
+]]
+local core
+local function player(src)
+    if not core then core = ask('v-core', 'GetCore') end
+    if type(core) ~= 'table' or not core.GetPlayer then return nil end
+    local ok, p = pcall(core.GetPlayer, tonumber(src))
+    return ok and p or nil
+end
+
+--- (src) -> { cash, bank }
+Config.Compat.hooks.balances = function(src)
+    local p = player(src)
+    if not p or not p.GetMoney then return nil end
+    return {
+        cash = math.floor(tonumber(p.GetMoney('cash')) or 0),
+        bank = math.floor(tonumber(p.GetMoney('bank')) or 0),
+    }
+end
+
+--- (src, amount, account) -> boolean. True ONLY when the money left them.
+Config.Compat.hooks.removeMoney = function(src, amount, account)
+    local p = player(src)
+    if not p or not p.RemoveMoney then return false end
+    return p.RemoveMoney((account == 'cash') and 'cash' or 'bank',
+                         math.floor(tonumber(amount) or 0), 'v-phone') == true
+end
+
+--- (src, amount, account, reason) -> boolean. True ONLY when the money arrived.
+Config.Compat.hooks.addMoney = function(src, amount, account, reason)
+    local p = player(src)
+    if not p or not p.AddMoney then return false end
+    return p.AddMoney((account == 'cash') and 'cash' or 'bank',
+                      math.floor(tonumber(amount) or 0),
+                      tostring(reason or 'v-phone')) == true
+end
