@@ -218,3 +218,26 @@ Config.Compat.hooks.addMoney = function(src, amount, account, reason)
                       math.floor(tonumber(amount) or 0),
                       tostring(reason or 'v-phone')) == true
 end
+
+--[[
+    Needs, for the Health app.
+
+    Without this the bridge checks for esx_status, then branches on qb and ox, and falls
+    off the end returning nil - which the app draws as zeros. The preview showed exactly
+    that: 0 hunger, 0 thirst, 0 stress on a character who had none of those things wrong.
+
+    v-status owns them and says so in its own header: hunger, thirst and stress are its,
+    while health and armour stay native and are read off the ped by the client. So only the
+    three it actually keeps are passed, and the app reads the other two where it always did.
+
+    Shape required: (src) -> { hunger, thirst, ... }
+]]
+Config.Compat.hooks.status = function(src)
+    local s = ask('v-status', 'Get', tonumber(src))
+    if type(s) ~= 'table' then return nil end
+    return {
+        hunger = tonumber(s.hunger),
+        thirst = tonumber(s.thirst),
+        stress = tonumber(s.stress),
+    }
+end
