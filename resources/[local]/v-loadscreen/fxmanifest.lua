@@ -20,7 +20,15 @@ loadscreen_cursor 'yes'
 loadscreen_manual_shutdown 'yes'
 
 client_script 'client.lua'
-server_script 'server.lua'
+
+server_scripts {
+    -- v-core's helper library, server side only: vcore.lua declares this module's settings
+    -- through it. Not a shared_script, because the screen itself is HTML the client reads
+    -- before it has a server connection, and nothing there can use it.
+    '@v-core/lib/v.lua',
+    'vcore.lua',
+    'server.lua',
+}
 
 files {
     'index.html',

@@ -141,8 +141,8 @@ rejected rather than stored as something else. Changes fire `v-core:server:setti
 and are mirrored to every client (`Core.GetSetting` client-side), so nothing polls.
 
 **Auto-detection.** A resource with `v_module 'yes'` in its `fxmanifest.lua` is listed even
-before it registers anything - an operator can see it is installed. All 25 of our own
-modules carry the flag. Full guide: **[DEVELOPERS.md](DEVELOPERS.md)**.
+before it registers anything - an operator can see it is installed. All 39 modules carry the
+flag, imported ones included. Full guide: **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 **Settings vs. content.** A *tunable* (a rate, a threshold, a price multiplier) is a
 setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with an Editor
@@ -150,19 +150,24 @@ subtab - §7. Using a setting for a list, or a domain for a single number, is th
 this split exists to prevent.
 
 **36 of the 39 modules register with the core**, and 35 of those carry at least one tunable.
-The exceptions, each for its own reason:
+Counted from the boot log, where the registry prints each module and its setting count. The
+exceptions, each for its own reason:
 
-- `v-admin` is the panel itself, and `v-world` owns *lists* rather than tunables - the
-  settings-vs-content split above, working as intended. Neither registers.
-- `v-loadscreen` runs before a player is connected and reads its own file off disk from the
-  client, so a server-side value would not reach the page in time to matter. It does not
-  register either.
+- `v-admin` is the panel itself and `v-core` is the framework under it, so neither declares
+  settings to the registry; both are listed through the manifest flag, which is what tells an
+  operator they are running.
+- `v-world` owns *lists* rather than tunables - the settings-vs-content split above, working
+  as intended.
 - `v-spawn` registers with an empty list. It had one setting, a post-spawn screen hold that
   nothing read and that the spawn code deliberately refuses to do - holding there deadlocks
   into a black screen that never lifts. Registering with nothing keeps the panel listing the
   module under its own label rather than as a bare manifest flag.
 
-`v-core` itself is listed so an operator sees it running.
+`v-loadscreen` is the newest of the 36 and the narrowest. Its screen is HTML the client reads
+before it has a server connection, so wallpapers, tracks and timings cannot be pushed from the
+panel and stay in the file. What it declares is the one decision the server makes as it
+happens: whether the page's music diagnostics reach the console, and how many lines one player
+may put there.
 
 A caveat worth stating: a declared setting is only real if something **reads** it. The
 first sweep declared five multipliers (`v-shops` buy/sell, `v-crafting` duration,
