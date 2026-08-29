@@ -68,25 +68,107 @@ BLOCK_COMMENT = re.compile(r'--\[\[.*?\]\]', re.S)
 
 
 KEY_SHAPE = re.compile(r'^[A-Za-z0-9_]+\.[A-Za-z0-9_.\-]+$')
-L_BEFORE = re.compile(r'\bL\s*$')
+
+# The interfaces do not agree on a name for the same one-line resolver. v-phone calls it L,
+# v-appearance and v-inventory call it t, v-hud reaches it as S.t. Recognising only one of them
+# leaves whole modules unread: v-hud alone asks for 146 strings through S.t.
+#
+# The bare `t` must not be preceded by an identifier character or a dot, or every .split(,
+# format( and print( in the codebase opens a fake call. `S.t` is the one dotted form allowed.
+CALLEE_BEFORE = re.compile(r'(?:(?<![\w.])(?:L|t)|(?<![\w.])S\.t)\s*$')
+
+
+# A `/` opens a regular expression when what precedes it cannot end an expression. Getting this
+# wrong is not cosmetic: v-appearance escapes HTML with /[&<>"]/, and reading that double quote
+# as the start of a string swallowed the rest of the file, so the module reported zero keys and
+# looked clean while nine of them went unread.
+REGEX_AFTER = set('(,=:[!&|?{};+-*%~^<>')
+REGEX_KEYWORDS = frozenset(('return', 'typeof', 'case', 'in', 'of', 'new', 'delete', 'void',
+                            'instanceof', 'do', 'else', 'yield', 'await', 'throw'))
+TRAILING_WORD = re.compile(r'([A-Za-z_$][\w$]*)$')
 
 
 def read(path):
     return io.open(path, encoding='utf-8', errors='replace').read()
 
 
+def _starts_regex(before):
+    """`before` is the source up to the slash; only its tail matters."""
+    tail = before.rstrip()
+    if not tail:
+        return True
+    if tail[-1] in REGEX_AFTER:
+        return True
+    word = TRAILING_WORD.search(tail)
+    return bool(word and word.group(1) in REGEX_KEYWORDS)
+
+
+def _skip_regex(text, i, n):
+    """Consume a regex literal starting at `i`; returns the index just past it."""
+    j = i + 1
+    in_class = False
+    while j < n:
+        ch = text[j]
+        if ch == '\\':
+            j += 2
+            continue
+        if ch == '\n':
+            return i + 1          # unterminated: it was division after all
+        if ch == '[':
+            in_class = True
+        elif ch == ']':
+            in_class = False
+        elif ch == '/' and not in_class:
+            j += 1
+            while j < n and text[j].isalpha():
+                j += 1            # flags
+            return j
+        j += 1
+    return i + 1
+
+
 def js_locale_keys(text):
-    """Every string literal sitting inside an L( call, with whether it is a fragment.
+    """Every string literal sitting inside a locale call, with whether it is a fragment.
 
     Walks the source rather than matching it: the keys are nested inside ternaries and
     argument lists that no anchored pattern reaches. Tracks string state so a `//` inside a
     URL is not read as a comment, and a `(` inside a string does not open a call.
+
+    TEMPLATE LITERALS NEST, and treating one as a plain string is not a small error. The phone
+    builds its keypad as an outer template whose ${...} holds an inner one. Reading the inner
+    opening backtick as the outer's close inverts everything after it - code parsed as string,
+    string parsed as code - and the module went from 570 keys found to 86. So a template is a
+    mode, not a string: ${ returns to code, its matching } returns to the template, and keys
+    written inside an interpolation are seen like any other.
     """
     out = []
-    paren_is_call = []          # one flag per open paren: did an L open it
+    paren_is_call = []          # one flag per open paren: did a locale call open it
+    modes = ['code']            # 'code' or 'template'; the top of the stack is current
+    interp_at = []              # brace depth each ${ was opened at
+    braces = 0
     i, n = 0, len(text)
     while i < n:
         c = text[i]
+
+        if modes[-1] == 'template':
+            if c == '\\':
+                i += 2
+            elif c == '`':
+                modes.pop()
+                i += 1
+            elif c == '$' and i + 1 < n and text[i + 1] == '{':
+                modes.append('code')
+                interp_at.append(braces)
+                braces += 1
+                i += 2
+            else:
+                i += 1
+            continue
+
+        if c == '/' and i + 1 < n and text[i + 1] not in '/*' and \
+                _starts_regex(text[max(0, i - 24):i]):
+            i = _skip_regex(text, i, n)
+            continue
 
         if c == '/' and i + 1 < n and text[i + 1] in '/*':
             if text[i + 1] == '/':
@@ -97,7 +179,25 @@ def js_locale_keys(text):
             i = n if end < 0 else end
             continue
 
-        if c in '\'"`':
+        if c == '`':
+            modes.append('template')
+            i += 1
+            continue
+
+        if c == '{':
+            braces += 1
+            i += 1
+            continue
+
+        if c == '}':
+            braces -= 1
+            if interp_at and braces == interp_at[-1]:
+                interp_at.pop()
+                modes.pop()             # the ${...} closed; back inside the template
+            i += 1
+            continue
+
+        if c in '\'"':
             j, buf = i + 1, []
             while j < n:
                 if text[j] == '\\':
@@ -116,12 +216,34 @@ def js_locale_keys(text):
             continue
 
         if c == '(':
-            paren_is_call.append(bool(L_BEFORE.search(text[max(0, i - 8):i])))
+            paren_is_call.append(bool(CALLEE_BEFORE.search(text[max(0, i - 12):i])))
         elif c == ')' and paren_is_call:
             paren_is_call.pop()
         i += 1
 
     return out
+
+
+# A manifest may load another module's locale rather than copy its keys. v-cityhall does exactly
+# that for the licence counter it draws, and its own comment gives the reason: a copy drifts, and
+# a drifted key renders as the raw key in front of a player. Those keys are defined at runtime,
+# so a check that only reads the module's own locales/ reports four healthy strings as missing.
+BORROWED = re.compile(r"['\"]@([A-Za-z0-9_\-]+)/locales/(\w+)\.lua['\"]")
+
+
+def borrowed_keys(path, lang):
+    """Keys this module gets from another module's locale, via its manifest."""
+    manifest = os.path.join(path, 'fxmanifest.lua')
+    if not os.path.exists(manifest):
+        return set()
+    keys = set()
+    for other, other_lang in BORROWED.findall(strip_comments(read(manifest))):
+        if other_lang != lang:
+            continue
+        lent = os.path.join(ROOT, other, 'locales', '%s.lua' % lang)
+        if os.path.exists(lent):
+            keys |= set(KEY_DEF.findall(read(lent)))
+    return keys
 
 
 def strip_comments(text):
@@ -169,6 +291,10 @@ def main():
         defined_en = set(KEY_DEF.findall(read(en)))
         defined_fr = set(KEY_DEF.findall(read(fr))) if os.path.exists(fr) else None
 
+        # Parity below compares the module's OWN pair, so borrowing is kept separate: a module
+        # is not expected to mirror another one's file, only to resolve what it asks for.
+        available_en = defined_en | borrowed_keys(path, 'en')
+
         if defined_fr is not None:
             for missing, where in ((defined_en - defined_fr, 'fr'),
                                    (defined_fr - defined_en, 'en')):
@@ -199,7 +325,7 @@ def main():
                         else:
                             asked.add(literal)
 
-        undefined = sorted(k for k in asked if k not in defined_en)
+        undefined = sorted(k for k in asked if k not in available_en)
         if undefined:
             problems += 1
             print('%s: %d key(s) used in code and defined nowhere' % (name, len(undefined)))

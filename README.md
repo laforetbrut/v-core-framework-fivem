@@ -217,7 +217,9 @@ assumed - a deliberately broken client file produced a completely clean boot.
 is a web page is where nearly all of its text lives: v-phone asks for 591 keys from `app.js`
 and four from Lua. Reading only Lua validated four keys out of 852 and reported success. The
 phone resolves a key with `S[k] || k`, so a missing one is rendered to the player as its own
-name.
+name. The interfaces do not agree on a name for that resolver - v-phone calls it `L`,
+v-appearance and v-inventory call it `t`, v-hud reaches it as `S.t` - and all four are read,
+which is what brought v-hud's 118 menu strings and v-inventory's 13 under the check.
 
 Each was written because the thing it looks for had already happened at least once here: a live
 connection string in a tracked file, a key defined twice where the second silently won, and a
@@ -449,7 +451,10 @@ un démarrage totalement propre.
 l'interface est une page web, c'est là que vit presque tout le texte : v-phone demande 591 clés
 à `app.js` et quatre au Lua. Ne lire que le Lua validait quatre clés sur 852 en annonçant que
 tout allait bien. Le téléphone résout une clé par `S[k] || k`, donc une clé absente s'affiche au
-joueur sous son propre nom.
+joueur sous son propre nom. Les interfaces ne s'accordent pas sur le nom de ce résolveur :
+v-phone l'appelle `L`, v-appearance et v-inventory `t`, v-hud y accède par `S.t`. Les quatre
+formes sont lues, ce qui a fait entrer sous contrôle les 118 chaînes du menu de v-hud et les 13
+de v-inventory.
 
 Chacun a été écrit parce que ce qu'il cherche s'était déjà produit ici au moins une fois : une
 chaîne de connexion vivante dans un fichier suivi, une clé définie deux fois dont la seconde
