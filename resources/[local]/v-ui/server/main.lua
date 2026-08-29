@@ -150,7 +150,19 @@ local function buildVars(o, partial)
         add('--v-' .. k, c)
         add(('--v-%s-300'):format(k), shade(c, 0.28))
     end
-    for k, c in pairs(Config.Rarity) do add('--v-rar-' .. k, c) end
+    --[[
+        SORTED, because this goes straight into a file that is committed.
+
+        `pairs` has no defined order, so the rarity block came out in a different order on
+        different runs and every server start could leave theme-vars.css modified in git -
+        one custom property moved, same value, no meaning. A generated file that is tracked
+        has to be a function of its input and nothing else, or `git status` stops being a
+        signal. The preset lists below this already do it; this line was the one left out.
+    ]]
+    local rarities = {}
+    for k in pairs(Config.Rarity) do rarities[#rarities + 1] = k end
+    table.sort(rarities)
+    for _, k in ipairs(rarities) do add('--v-rar-' .. k, Config.Rarity[k]) end
     end
 
     if want('radius') then
