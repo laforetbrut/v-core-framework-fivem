@@ -1064,33 +1064,47 @@ hangs off. Eleven settings, and **Editor - Properties** for the rest.
 
 ### `v-phone` - iFruit, and what a shell has to refuse to do
 
-**The phone is a shell.** Messages and contacts are the only things it owns; every other app
-is a thin view over the module that already holds the data, and the client asks that module
-directly rather than going through v-phone. Proxying a balance through the phone would put a
-second copy of the bank's rules in the phone, and a second copy is a second answer.
+**A shell where something else owns the data, and the owner everywhere else.** The rule is
+one rule, and it cuts both ways. Where a v-core module already holds the truth - the bank,
+the garage, a property, a licence, a job - the app is a read-only view and the client asks
+that module rather than going through the phone: `server/apps.lua` is nothing but those
+views. Proxying a balance would put a second copy of the bank's rules in the phone, and a
+second copy is a second answer. Where nothing else holds it, the phone owns it outright, and
+that is most of it: 37 apps, 36 server files and **61 tables**, all prefixed `vphone_`.
+Bleeter, Snapmatic and Hush, a creator economy, donation pages, an arcade with a shared
+scoreboard, payphones, a police forensics terminal, reminders, store reviews and mail have no
+module behind them because there is no other module they could belong to.
 
-Building it turned up two places where being a shell means shipping **less**, not faking more:
+Two places where being a shell still means shipping **less**, not faking more:
 
 - **The jobs app is read only.** `v-cityhall:take` is gated on standing at a desk, and it
   should stay that way - browsing vacancies from a sofa is fine, being hired from one is not.
-  The vacancy list comes from a new `v-cityhall:OpenPositions()` export rather than a second
-  copy of "what counts as open".
-- **The camera ships disabled with no upload target.** Where a photo goes is an operator
-  decision; a default would be one made for them.
+  The vacancy list is read through the phone's own `Bridge.Jobs.All()`, which is what keeps
+  the app framework-agnostic - it reads whatever job table the server actually runs. The
+  `v-cityhall:OpenPositions()` export written for the previous phone is still there and now
+  has no caller anywhere in the framework.
+- **The camera ships disabled with no upload target.** Where a photograph goes is an operator
+  decision; a default would be one made for them. Note the two default sets disagree on this
+  deliberately: `Config.Settings.camera` is `true`, which is what a standalone install should
+  do, and the `V.Module` registration declares `false`, which is what this framework does -
+  the panel answers first, so `false` is what an operator here starts from.
 
-**A number is a column on the character**, minted server-side in a configurable format and
-retried on collision, because two characters made in the same second would otherwise share an
-inbox. Numbers address contacts, calls and messages - never the citizen id, which is a
-database key a player should not be trading.
+**A number is a row in `vphone_characters`**, keyed on the citizen id and minted server-side
+in a configurable format. Two characters made in the same second cannot share an inbox
+because the column carries a `UNIQUE` key: the database refuses the collision rather than the
+code hoping to notice it. Numbers address contacts, calls and messages - never the citizen
+id, which is a database key a player should not be trading.
 
 **Server-authoritative in exactly two places.** A message is stored and relayed by the server,
 because a client that could write another player's history could forge it; every query is
 scoped to the requester's citizen id in SQL, so a client cannot ask for a conversation it is
 not in. A call is routed by the server, so ringing somebody does not depend on the caller
-knowing where they are. **The phone does no audio at all** - a connected call hands both ends
+knowing where they are. **The phone does no CALL audio** - a connected call hands both ends
 to `v-voice`, which owns the Mumble channel, and the hang-up releases it even if the UI never
 saw the start, because a call that ends without releasing the channel leaves a player audible
-to strangers across the map.
+to strangers across the map. Music is the exception and a deliberate one: headphones never
+reach the server at all, but a speaker other people can hear is a broadcast, and a broadcast
+is the server's to make - `server/music.lua`.
 
 **Gestures, and where a drag starts deciding what it means.** The phone is driven by a
 mouse, so a swipe is a click-drag - but the rule is the real one: the **bottom edge** is
