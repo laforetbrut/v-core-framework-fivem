@@ -21,10 +21,10 @@ local T = {
     ['veh.err_nokeys'] = "Vous n'avez pas les clés.",
     ['veh.err_far'] = 'Vous êtes trop loin.',
     ['veh.err_novehicle'] = 'Aucun véhicule à proximité.',
-    ['veh.err_notlocked'] = 'Deja ouvert.',
+    ['veh.err_notlocked'] = 'Déjà ouvert.',
     ['veh.err_haskeys'] = 'Vous avez les clés de celui-ci.',
     ['veh.err_nopick'] = "Vous n'avez pas de crochet.",
-    ['veh.err_off'] = 'Desactive sur ce serveur.',
+    ['veh.err_off'] = 'Désactivé sur ce serveur.',
     ['veh.err_x'] = 'Une erreur est survenue.',
 }
 for k, v in pairs(T) do Locales.fr[k] = v end
