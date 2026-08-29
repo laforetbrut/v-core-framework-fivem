@@ -74,3 +74,95 @@ Config.Compat.hooks.jobs = function()
     table.sort(out, function(a, b) return (a.label or '') < (b.label or '') end)
     return out
 end
+
+--[[
+    Owned vehicles, for the Garage app.
+
+    `v-vehicles:GetOwned` takes a SOURCE, which is not what this hook is handed; the module
+    publishes `GetOwnedByCid` beside it for exactly this. Its rows come straight out of
+    character_vehicles, so plate, model, garage and state are already the names the hook
+    asks for and nothing is renamed on the way through.
+
+    Shape required: (citizenid) -> { { plate, model, garage, state }, ... }
+]]
+Config.Compat.hooks.vehicles = function(citizenid)
+    local rows = ask('v-vehicles', 'GetOwnedByCid', tostring(citizenid or ''))
+    if type(rows) ~= 'table' then return nil end
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        if type(r) == 'table' and r.plate then
+            out[#out + 1] = {
+                plate = tostring(r.plate),
+                model = tostring(r.model or ''),
+                garage = tostring(r.garage or ''),
+                state = r.state,
+            }
+        end
+    end
+    -- An empty table, not nil: the module answered and this character owns nothing, which
+    -- is a different thing from having no provider at all.
+    return out
+end
+
+--[[
+    Licences held, for the Wallet app.
+
+    Two sources, because neither has both halves. v-licenses knows WHICH a character holds
+    and their status; the label lives in v-world's `license_types` rows, where the editor
+    writes it. v-licenses' own Config.Types carries `i18n = 'lic.driving'` rather than a
+    label, and handing the phone a translation key would put `lic.driving` on the card.
+
+    Only `valid` is passed through. The shape has no room for a status, so a revoked or
+    suspended licence listed here would read as one the character still holds - which is
+    the opposite of what those statuses mean. `HasByCid` draws the same line.
+
+    Shape required: (src, citizenid) -> { { type, label }, ... }
+]]
+Config.Compat.hooks.licences = function(_, citizenid)
+    local rows = ask('v-licenses', 'GetAllByCid', tostring(citizenid or ''))
+    if type(rows) ~= 'table' then return nil end
+
+    local labels = {}
+    for _, ty in ipairs(ask('v-world', 'GetLicenseTypes') or {}) do
+        if type(ty) == 'table' and ty.key then labels[tostring(ty.key)] = ty.label end
+    end
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        if type(r) == 'table' and r.type and r.status == 'valid' then
+            local key = tostring(r.type)
+            out[#out + 1] = { type = key, label = labels[key] or key }
+        end
+    end
+    return out
+end
+
+--[[
+    Properties held, for the Property app.
+
+    v-housing's `GetProperties` is the map catalogue and takes no argument, so it answers
+    what exists rather than what a character owns - which is why the bridge's own
+    registration reached for a `GetOwned` that was never there. `OwnedByCid` is the reader
+    for this, and it lives in v-housing because ownership, tenancy and arrears are that
+    module's to define.
+
+    Shape required: (citizenid) -> { { label, address }, ... }
+    `address` is the property id, which is what this framework calls a place; the label is
+    already resolved against the catalogue on the way out of v-housing.
+]]
+Config.Compat.hooks.properties = function(citizenid)
+    local rows = ask('v-housing', 'OwnedByCid', tostring(citizenid or ''))
+    if type(rows) ~= 'table' then return nil end
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        if type(r) == 'table' and r.property then
+            out[#out + 1] = {
+                label = tostring(r.label or r.property),
+                address = tostring(r.property),
+            }
+        end
+    end
+    return out
+end

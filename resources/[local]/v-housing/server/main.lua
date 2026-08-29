@@ -325,6 +325,28 @@ end)
 -- ── Exports ───────────────────────────────────────────────────
 exports('GetProperties', function() return Props end)
 exports('HasKey',    function(cid, id) return hasKey(tostring(cid or ''), tostring(id or '')) end)
+--- Every property a character holds, by citizen id.
+---
+--- The same rows `v-housing:mine` answers a player with, reachable without a source: that
+--- callback needs a connected player, and a reader like the phone's Property app has a
+--- citizen id and nothing else. The query lives here rather than in the caller because
+--- ownership, tenancy and arrears are this module's to define - a second copy of
+--- `DATEDIFF(NOW(), paid_until)` somewhere else is a second answer to what rent is owed.
+exports('OwnedByCid', function(cid)
+    cid = tostring(cid or '')
+    if cid == '' then return {} end
+    local rows = MySQL.query.await([[SELECT o.property, o.tenancy, o.locked,
+        DATEDIFF(NOW(), o.paid_until) AS arrears FROM property_owners o WHERE o.citizenid = ?]],
+        { cid }) or {}
+    for _, r in ipairs(rows) do
+        local prop = Props[r.property]
+        r.label = prop and prop.label or r.property
+        r.kind = prop and prop.kind or 'house'
+        r.locked = isLocked(r)
+    end
+    return rows
+end)
+
 exports('OwnerOf',   function(id)
     return MySQL.scalar.await('SELECT citizenid FROM property_owners WHERE property = ? LIMIT 1', { tostring(id or '') })
 end)
