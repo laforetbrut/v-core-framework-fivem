@@ -326,3 +326,45 @@ Config.Compat.hooks.vehicleLabel = function(model)
     if type(label) ~= 'string' or label == '' then return nil end
     return label
 end
+
+--[[
+    What a garage is called, and where it is.
+
+    The sibling of the label above: the Garage app now names the cars, and this names the
+    place they are parked. A garage row carries a KEY - `ems_motorpool`, `grapeseed` - which
+    is not something to show a player, and without this the bridge falls back to reading
+    another garage script's config off disk, which on this framework finds nothing.
+
+    v-world holds the rows the editor writes, keyed by `id`, with the label and the
+    coordinates beside it. Cached and dropped on the framework's own change signal, the
+    same arrangement as the vehicle labels.
+
+    Shape required: (key) -> { label, x, y }
+]]
+local garages
+
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'garages' then garages = nil end
+end)
+
+Config.Compat.hooks.garage = function(key)
+    key = tostring(key or '')
+    if key == '' then return nil end
+
+    if not garages then
+        local rows = ask('v-world', 'GetGarages')
+        if type(rows) ~= 'table' then return nil end
+        garages = {}
+        for _, r in ipairs(rows) do
+            if type(r) == 'table' and r.id then garages[tostring(r.id)] = r end
+        end
+    end
+
+    local g = garages[key]
+    if type(g) ~= 'table' then return nil end
+    return {
+        label = tostring(g.label or key),
+        x = tonumber(g.x),
+        y = tonumber(g.y),
+    }
+end
