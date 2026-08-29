@@ -368,3 +368,45 @@ Config.Compat.hooks.garage = function(key)
         y = tonumber(g.y),
     }
 end
+
+--[[
+    The bank statement.
+
+    Without this the bridge falls through to a `bank_statements` query, which is
+    qb-banking's schema and does not exist here, so the statement was the phone's own rows
+    and nothing else - a deposit made at a bank, a salary, a shop, none of it appeared.
+
+    **The sign is the whole job.** v-banking stores `amount` as a positive number and
+    carries the direction in `type`: deposit and transfer_in come in, withdraw,
+    transfer_out and fee go out. Handing the amounts over raw would draw every withdrawal
+    as a credit, which is a statement that lies rather than one that is missing rows.
+
+    `label` is passed through as it is, including when it is nil. The qb branch above does
+    the same - it maps `reason AS label`, which is nullable - so the app already knows what
+    to do with one. Inventing a word here would put untranslated English in a French phone.
+
+    Shape required: (src, citizenid, limit) -> { { label, amount, at }, ... }
+]]
+local CREDITS = { deposit = true, transfer_in = true }
+
+Config.Compat.hooks.transactions = function(_, citizenid, limit)
+    citizenid = tostring(citizenid or '')
+    if citizenid == '' then return nil end
+    limit = math.max(1, math.min(200, math.floor(tonumber(limit) or 25)))
+
+    -- One literal, not two joined with `..`: tools/sql-check.py can only PREPARE a
+    -- complete statement, and a query assembled at runtime is counted as unverifiable
+    -- rather than checked. Written this way it is one of the 905 the database confirms.
+    local rows = MySQL.query.await([[SELECT type, amount, label, created_at
+        FROM bank_transactions WHERE citizenid = ? ORDER BY id DESC LIMIT ?]],
+        { citizenid, limit })
+    if type(rows) ~= 'table' then return nil end
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        local amount = math.abs(math.floor(tonumber(r.amount) or 0))
+        if not CREDITS[tostring(r.type or '')] then amount = -amount end
+        out[#out + 1] = { label = r.label, amount = amount, at = r.created_at }
+    end
+    return out
+end
