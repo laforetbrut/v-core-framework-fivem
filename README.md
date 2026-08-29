@@ -197,7 +197,7 @@ Then import **`database/schema.sql`** (24 tables). Migrations run automatically 
 
 ## Checks
 
-Three scripts under `tools/` answer questions whose wrong answer is silent in game. Each reads
+Four scripts under `tools/` answer questions whose wrong answer is silent in game. Each reads
 the repository, changes nothing, and exits non-zero when it finds something, so a hook or a CI
 step can fail on it. Run them from the repository root:
 
@@ -212,6 +212,20 @@ python tools/manifest-check.py    # every asset a NUI page loads is one the reso
 script is never read by the server: the resource reports "Started", registers its settings and
 logs nothing, and the file simply does not run when a player connects. That was measured, not
 assumed - a deliberately broken client file produced a completely clean boot.
+
+**A module can carry its own, and the phone does.** `v-phone/tools/test-all.py` runs twenty-two
+of them in the order that fails cheapest first, from a Lua compile through its own static
+checks to a probe that drives a real mouse through the compositor and reports every control
+reachable across all 37 apps. It has to be run from the resource's own directory, because it
+globs relatively:
+
+```
+cd "resources/[local]/v-phone" && python tools/test-all.py --fast
+```
+
+`--fast` skips the 71 screenshots; without it they are rebuilt. One of its checks is a selftest
+that shows every other check a fault it is supposed to catch, which is the property that stops
+a green light meaning nobody looked.
 
 `locale-check` reads the NUI JavaScript as well as the Lua, which for a module whose interface
 is a web page is where nearly all of its text lives: v-phone asks for 591 keys from `app.js`
@@ -430,7 +444,7 @@ Puis importe **`database/schema.sql`** (24 tables). Les migrations s'appliquent 
 
 ## Contrôles
 
-Trois scripts dans `tools/` répondent à des questions dont la mauvaise réponse est silencieuse
+Quatre scripts dans `tools/` répondent à des questions dont la mauvaise réponse est silencieuse
 en jeu. Chacun lit le dépôt, ne modifie rien, et sort en code non nul quand il trouve quelque
 chose, pour qu'un hook ou une étape de CI puisse échouer dessus. À lancer depuis la racine :
 
@@ -446,6 +460,20 @@ CLIENT cassé n'est jamais lu par le serveur : la ressource annonce « Started �
 réglages et ne journalise rien, et le fichier ne tourne simplement pas quand un joueur se
 connecte. Cela a été mesuré et non supposé : un fichier client volontairement cassé a produit
 un démarrage totalement propre.
+
+**Un module peut porter la sienne, et le téléphone le fait.** `v-phone/tools/test-all.py` en
+enchaîne vingt-deux, dans l'ordre où l'échec coûte le moins cher d'abord : compilation Lua,
+ses propres contrôles statiques, puis une sonde qui pilote une vraie souris à travers le
+compositeur et vérifie que chaque commande est atteignable sur les 37 applications. À lancer
+depuis le dossier de la ressource, car ses motifs sont relatifs :
+
+```
+cd "resources/[local]/v-phone" && python tools/test-all.py --fast
+```
+
+`--fast` saute les 71 captures ; sans lui elles sont reconstruites. L'un de ces contrôles est
+un autotest qui montre à chacun des autres une faute qu'il doit attraper, la propriété qui
+empêche un feu vert de vouloir dire que personne n'a regardé.
 
 `locale-check` lit aussi le JavaScript des pages NUI, et non le seul Lua. Pour un module dont
 l'interface est une page web, c'est là que vit presque tout le texte : v-phone demande 591 clés
