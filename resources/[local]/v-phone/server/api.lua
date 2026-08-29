@@ -839,9 +839,22 @@ exports('ImportPhone', function(citizenid, data, replace)
                 row.id = nil
                 local cols, marks, vals = {}, {}, {}
                 for col, value in pairs(row) do
-                    cols[#cols + 1] = '`' .. col .. '`'
-                    marks[#marks + 1] = '?'
-                    vals[#vals + 1] = value
+                    --[[
+                        A COLUMN NAME CANNOT BE A PARAMETER, so these are spliced into the
+                        statement while the values go through `?`. That makes the KEYS of
+                        this table part of the SQL, and they come from whatever file is
+                        being restored - a backup is data, not something to be trusted.
+
+                        Backticks alone are not a guard: a key carrying one closes the
+                        quoting and the rest of it is statement. Plain identifiers only, and
+                        anything else is left out rather than written in. Every real column
+                        in this schema is `[%w_]+`, so nothing legitimate is dropped.
+                    ]]
+                    if type(col) == 'string' and col:match('^[%w_]+$') then
+                        cols[#cols + 1] = '`' .. col .. '`'
+                        marks[#marks + 1] = '?'
+                        vals[#vals + 1] = value
+                    end
                 end
                 if #cols > 0 then
                     MySQL.insert.await(('INSERT INTO %s (%s) VALUES (%s)')
