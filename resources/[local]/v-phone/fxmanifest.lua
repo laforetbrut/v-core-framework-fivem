@@ -49,9 +49,15 @@ shared_scripts {
     'locales/fr.lua',
     'locales/en.lua',
     'config.lua',
-    -- Keeps Config.Settings meaningful now that the admin panel answers first. See the
-    -- file: panel, then this config, then whatever the call site passed.
-    'bridge/shared/vcore.lua',
+    -- Config.Settings is NOT consulted under this framework, and that is correct rather
+    -- than an oversight. VCore.GetSetting answers with the operator's value or, failing
+    -- that, the default declared in server/main.lua's V.Module block - so every one of the
+    -- thirty keys in Config.Settings is already answered before that table is reached.
+    -- Those two default sets disagree on purpose: Config.Settings holds what a standalone
+    -- install should do, and the V.Module block holds what this framework should do. The
+    -- camera is the clearest case, true there and false here, with the reason written into
+    -- its hint. A shim putting Config.Settings back in front was tried and removed: it
+    -- could never fire, and where it could it would have overruled a deliberate decision.
     -- Payphones. Loaded after config.lua because a booth's number is derived from the
     -- format the config names, and both the client and the server have to derive it the
     -- same way. See bridge/shared/booth.lua.
