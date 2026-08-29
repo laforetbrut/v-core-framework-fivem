@@ -31,6 +31,24 @@ local SOC = Config.Social
 local Core
 local function num(v, d) return tonumber(v) or d or 0 end
 
+--- A stored TINYINT(1), as a boolean.
+---
+--- **oxmysql hands a TINYINT(1) column back as a Lua boolean, not as 0 or 1.** Its type cast
+--- reads `case "TINY": return field.length === 1 ? field.string() === "1" : next()`, so the
+--- driver has already decided. `tonumber(true)` is nil, which made every one of the twenty-one
+--- `num(column, 0)` comparisons in this file false on every server: an account could be
+--- verified in the database and in the staff command's own listing, and the badge still could
+--- not appear anywhere.
+---
+--- All three shapes are accepted. A column that a computed expression produced - `EXISTS(...)`,
+--- `(a.citizenid = ?)` - comes back as a number, and a schema created wider than TINYINT(1) by
+--- an older build comes back as a number too.
+local function truthy(v)
+    if v == nil then return false end
+    if type(v) == 'boolean' then return v end
+    return (tonumber(v) or 0) ~= 0
+end
+
 local function L(src, k)
     local p = Core and Core.GetPlayer(src)
     local lang = (p and p.lang) or 'fr'
@@ -48,16 +66,90 @@ local function socFeedSize()
     return math.max(10, math.min(200, math.floor(tonumber(V.Setting('socialFeedSize', SOC.feedSize)) or SOC.feedSize)))
 end
 
+--- The `Config.Retention` key that answers the same question about the same table.
+---
+--- server/retention.lua carried its own number for each of these four, and two files answering
+--- one question is one file answering it wrongly: whichever was shorter won and neither said so.
+--- The key is kept and read here instead, so a server that set it still gets what it asked for.
+local RETENTION_KEY = {
+    posts    = 'socialPosts',
+    comments = 'socialComments',
+    stories  = 'socialStories',
+    messages = 'socialMessages',
+}
+
 --- Days before a kind of row is swept. 0 means never.
+---
+--- **This is the only place the question is answered.** Both sweeps that delete a social row -
+--- `socialSweep` below and `PhoneRetentionSweep` in server/retention.lua - come through here, so
+--- there is one clock per kind of row rather than one per file.
+---
+--- The order, most specific first:
+---
+---  1. `set phone_socialRetentionPosts 90`. A convar is an operator speaking directly, at
+---     runtime, and nothing below may silence it.
+---  2. `Config.Retention.socialPosts`, if a server set one. It used to be the retention file's
+---     own number for this table; it is read here now so that config still decides. Absent from
+---     the shipped config, which is what lets the two below apply.
+---  3. `Config.Settings.socialRetentionS3`, when the media provider is `s3`. **The four follow
+---     the provider**: a server keeping its files in its own bucket keeps them for a year, and a
+---     feed measured in weeks against files measured in a year is the wrong way round for the
+---     operator paying for the storage.
+---  4. `Config.Settings.socialRetention*`, then `Config.Social.retention`. Every other provider
+---     is somebody else's quota on a monthly plan and keeps the plain four.
+---
+--- The convar is looked at here rather than left to `V.Setting` alone, which falls back to
+--- `Config.Settings` before it ever reaches a default - and on s3 the plain four sitting in that
+--- table are precisely what is being replaced.
+---
+--- **Unset is the only state that lets the provider decide**, which is why this asks whether the
+--- convar exists rather than whether it parses. A convar that is set says what the operator wants
+--- even when what they typed is not a number, and the answer to that has always been 0, keep for
+--- ever - `V.Setting` hands the string back and `tonumber` fails on it. Reading a typo as "unset"
+--- would quietly swap that for six months. A `Config.Retention` value that is not a number is a
+--- different case and falls through: a Lua config cannot hold a half-typed number the way a
+--- console line can, so the only way to write one there is to have meant something else entirely.
+---
+--- `MediaProvider` lives in server/media.lua, which loads after this file. Every caller is a
+--- sweep - long after every file is in - but the guard costs one comparison and the alternative
+--- is a nil call at boot.
 local function socKeep(kind)
-    local days = tonumber(V.Setting('socialRetention' .. kind:sub(1, 1):upper() .. kind:sub(2),
-                                    SOC.retention[kind]))
+    local key = 'socialRetention' .. kind:sub(1, 1):upper() .. kind:sub(2)
+    local days
+
+    -- '' rather than a sentinel: `V.Setting` treats an empty convar as unset too, so the two
+    -- agree on which values are the operator speaking.
+    if GetConvar('phone_' .. key, '') == '' then
+        local legacy = (Config.Retention or {})[RETENTION_KEY[kind] or '']
+        if legacy ~= nil then days = tonumber(legacy) end
+
+        if not days and MediaProvider and MediaProvider() == 's3' then
+            local s3 = V.Setting('socialRetentionS3', nil)
+            if type(s3) == 'table' then days = tonumber(s3[kind]) end
+        end
+    end
+
+    days = days or tonumber(V.Setting(key, SOC.retention[kind]))
     return math.max(0, math.floor(days or 0))
+end
+
+--- How long a social row of this kind lives, in days, for anything else that sweeps one.
+---
+--- Global because server/retention.lua deletes out of the same four tables and must not carry a
+--- second answer. Its own numbers are gone; it asks this.
+function SocialKeepDays(kind)
+    return socKeep(tostring(kind or ''))
 end
 
 --- Same shape as the phone's wallpaper gate, for the same reason. Rejected rather than
 --- rewritten: silently fixing somebody's link is worse than telling them it is refused.
+--- A photo's URL may carry the phone's own edit recipe in its fragment. Stripped before the
+--- host is read: a fragment never reaches the host, so it cannot bear on whether the host is
+--- allowed, and on a URL with no path it would otherwise be read as part of the host itself.
+local function withoutRecipe(url) return (tostring(url or ''):gsub('#.*$', '')) end
+
 local function imageAllowed(url)
+    url = withoutRecipe(url)
     url = tostring(url or '')
     if url == '' then return true end
     local host = url:match('^https?://([^/]+)')
@@ -72,7 +164,38 @@ local function imageAllowed(url)
     for _, allowed in ipairs(hosts or SOC.imageHosts) do
         if host == allowed or host:sub(-(#allowed + 1)) == '.' .. allowed then return true end
     end
+
+    -- A photograph this phone took. Without this, picking one out of the gallery for an avatar,
+    -- a cover or a post was refused as `badhost` - the phone rejecting its own photograph
+    -- because the operator had not listed the CDN the phone itself uploads to.
+    if Bridge.MediaHasUrl and Bridge.MediaHasUrl(url) then return true end
+
     return false
+end
+
+--- The host gate, for a value that may not have changed.
+---
+--- A picture already stored passed this same check when it was set. Asking again later does not
+--- test the player's honesty, it tests whether the file still exists - and refusing the SAVE
+--- because of that locks a form over a field nobody was editing. Worse on Hush, where the
+--- `active` switch shares the payload: a player whose photograph expired could not turn their
+--- profile off, so they could not leave the app.
+---
+--- So an unchanged value is allowed through, and only a genuinely NEW url is judged.
+function PhoneImageAllowedOrSame(url, current)
+    url = tostring(url or '')
+    if url == '' then return true end
+    if url == tostring(current or '') then return true end
+    return imageAllowed(url)
+end
+
+--- The same gate, for the other apps that accept a picture.
+---
+--- Published rather than copied: a server that widens `socialImageHosts` widens it everywhere at
+--- once. A second copy of this function is a second list to forget to update, and the symptom
+--- would be one app refusing a photograph the app beside it accepts.
+function PhoneImageAllowed(url)
+    return imageAllowed(url)
 end
 
 -- ══════════════════════════════════════════════════════════════
@@ -87,7 +210,21 @@ local function appOfKind(kind) return kind == 'photo' and 'snap' or 'bleeter' en
 
 local function accountOf(cid, app)
     return MySQL.single.await(
-        'SELECT citizenid, handle, displayname, avatar, bio, phone, verified FROM social_accounts WHERE citizenid = ? AND app = ?',
+        'SELECT citizenid, handle, displayname, avatar, cover, bio, phone, verified, official FROM vphone_social_accounts WHERE citizenid = ? AND app = ?',
+        { cid, app })
+end
+
+--- The stored hash, fetched on its own.
+---
+--- `accountOf` deliberately does not select it, which is right - an account row is read on
+--- nearly every screen and the hash has no business travelling with it. But `soc:login`
+--- called `checkPw(a.password, ...)` against that row, and `a.password` was therefore always
+--- nil, so `checkPw` returned false before it compared anything. Every sign-in failed,
+--- including with the correct password, and the only way back into an account was a reset
+--- that did not exist yet.
+local function passwordOf(cid, app)
+    return MySQL.scalar.await(
+        'SELECT password FROM vphone_social_accounts WHERE citizenid = ? AND app = ?',
         { cid, app })
 end
 
@@ -127,12 +264,46 @@ local function genCode() return string.format('%04d', math.random(0, 9999)) end
 -- Per-session state, cleared when the player drops: the code we texted them, and which
 -- apps they are logged into on this device.
 local Pending = {}       -- [src] = { [app] = { code, number, at } }
-local Authed  = {}       -- [src] = { [app] = true }
+local Authed  = {}       -- [src] = { [app] = true }, this session's warm copy
+local ResetTry = {}      -- [src] = { [app] = { n, at } }, the password-reset attempt counter.
+                         -- Declared here rather than beside the reset code below, because
+                         -- playerDropped clears it and that handler is above it - as a later
+                         -- local it was a nil global there, and every disconnect raised.
+
+-- Signing in USED to be session-only, so every script restart and every server reboot threw
+-- the player back to a password prompt on a phone they had never left. It is their own
+-- handset and their own account: the answer belongs with the character, not the session.
+--
+-- Kept in the phone's own KV table rather than in a new column, so there is nothing to
+-- migrate and an operator can clear it by hand.
+local AUTH_KEY = 'soc_auth'
+
+local function authRecord(citizenid)
+    local rec = Bridge.KvGet(citizenid, AUTH_KEY)
+    return type(rec) == 'table' and rec or {}
+end
+
+local function isAuthed(src, citizenid, app)
+    if Authed[src] and Authed[src][app] ~= nil then return Authed[src][app] == true end
+    local on = authRecord(citizenid)[app] == true
+    Authed[src] = Authed[src] or {}
+    Authed[src][app] = on
+    return on
+end
+
+local function setAuthed(src, citizenid, app, on)
+    Authed[src] = Authed[src] or {}
+    Authed[src][app] = on and true or false
+    local rec = authRecord(citizenid)
+    rec[app] = on and true or nil
+    Bridge.KvSet(citizenid, AUTH_KEY, rec)
+end
 
 AddEventHandler('playerDropped', function()
     local src = source
     Pending[src] = nil
     Authed[src] = nil
+    ResetTry[src] = nil
 end)
 
 local function phoneNumberOf(src)
@@ -143,9 +314,23 @@ end
 
 local function smsCode(src, app, code)
     if GetResourceState('v-phone') ~= 'started' then return end
+    local name = APP_NAME[app] or 'iFruit'
+    local text = (LP(src, 'ph.soc_code_sms')):format(code)
+
+    -- A real message, in Messages, from the service that sent it. A banner disappears the
+    -- moment you look away and the code goes with it; a text is still there when you come
+    -- back to type it in, which is what anyone does with a verification code.
     pcall(function()
-        exports['v-phone']:Notify(src, app, APP_NAME[app] or 'iFruit',
-            ('Code de verification : %s'):format(code))
+        local p = Core and Core.GetPlayer and Core.GetPlayer(src)
+        if p and p.citizenid then
+            exports['v-phone']:SendServiceMessage(p.citizenid, name:sub(1, 12), text)
+        end
+    end)
+
+    -- And the banner as well, because the code is wanted immediately and the player is
+    -- already looking at the sign-up screen rather than at Messages.
+    pcall(function()
+        exports['v-phone']:Notify(src, app, name, text)
     end)
 end
 
@@ -163,7 +348,7 @@ V.Callback('v-phone:soc:me', function(src, resolve, data)
     local app = tostring((data and data.app) or 'bleeter')
     if not APPS[app] then resolve(false) return end
     local a = accountOf(p.citizenid, app)
-    local authed = a and Authed[src] and Authed[src][app] == true or false
+    local authed = (a ~= nil) and isAuthed(src, p.citizenid, app) or false
     resolve({ ok = true, exists = a ~= nil, authed = authed,
               account = authed and publicAccount(a) or nil })
 end)
@@ -216,21 +401,33 @@ V.Callback('v-phone:soc:register', function(src, resolve, data)
     if #pw < 4 then resolve({ error = 'password' }) return end
     local avatar = tostring((data and data.avatar) or ''):sub(1, 300)
     if avatar ~= '' and not imageAllowed(avatar) then resolve({ error = 'badhost' }) return end
+    -- The cover banner. Same host gate as the avatar: it faces every visitor to the profile,
+    -- so it is exactly as public as a post's image and gets the same check.
+    local cover = tostring((data and data.cover) or ''):sub(1, 300)
+    if cover ~= '' and not imageAllowed(cover) then resolve({ error = 'badhost' }) return end
     local bio = tostring((data and data.bio) or ''):sub(1, 160)
 
     if accountOf(p.citizenid, app) then resolve({ error = 'exists' }) return end
     local taken = MySQL.scalar.await(
-        'SELECT 1 FROM social_accounts WHERE app = ? AND handle = ? LIMIT 1', { app, handle })
+        'SELECT 1 FROM vphone_social_accounts WHERE app = ? AND handle = ? LIMIT 1', { app, handle })
     if taken then resolve({ error = 'taken' }) return end
 
-    MySQL.query.await([[INSERT INTO social_accounts
+    -- **`verified` is 0, and the literal 1 that used to be here is the bug.**
+    --
+    -- Two different things share that word. Signing up VERIFIES YOUR NUMBER - the code texted
+    -- to the phone, which is `pend.verified` a few lines above and is the gate on reaching this
+    -- statement at all. The `verified` COLUMN is the blue tick, granted by staff with
+    -- `/phoneadmin verify @handle` and by nothing else. Writing the first into the column of the
+    -- second gave every account that ever registered a badge, which is the same as no badge:
+    -- the one thing it is for is telling accounts apart.
+    MySQL.query.await([[INSERT INTO vphone_social_accounts
         (citizenid, app, handle, displayname, avatar, bio, phone, password, verified)
-        VALUES (?,?,?,?,?,?,?,?,1)]],
+        VALUES (?,?,?,?,?,?,?,?,0)]],
         { p.citizenid, app, handle, displayname, avatar, bio, pend.number, hashPw(pw) })
 
     Pending[src][app] = nil
-    Authed[src] = Authed[src] or {}
-    Authed[src][app] = true
+    -- Registering signs you in, and that has to persist like any other sign-in.
+    setAuthed(src, p.citizenid, app, true)
     resolve({ ok = true, account = { handle = handle, displayname = displayname, avatar = avatar, bio = bio } })
 end)
 
@@ -242,17 +439,90 @@ V.Callback('v-phone:soc:login', function(src, resolve, data)
     if not APPS[app] then resolve(false) return end
     local a = accountOf(p.citizenid, app)
     if not a then resolve({ error = 'noaccount' }) return end
-    if not checkPw(a.password, tostring((data and data.password) or '')) then
+    if not checkPw(passwordOf(p.citizenid, app), tostring((data and data.password) or '')) then
         resolve({ error = 'badpass' }) return
     end
-    Authed[src] = Authed[src] or {}
-    Authed[src][app] = true
+    setAuthed(src, p.citizenid, app, true)
+    resolve({ ok = true, account = publicAccount(a) })
+end)
+
+-- ── Forgetting the password ────────────────────────────────────
+-- The account is tied to this character's phone line, and the code goes to that line. So
+-- "forgot my password" is answered the same way the account was created in the first place:
+-- prove you hold the handset, then set a new one.
+--
+-- Rate limited per source. Without it this is a way to spam a player's own Messages, and -
+-- more to the point - an attempt counter is what stops a four-digit code from being walked
+-- through at leisure.
+local function resetGate(src, app)
+    ResetTry[src] = ResetTry[src] or {}
+    local t = ResetTry[src][app]
+    if not t or (os.time() - t.at) > 600 then
+        t = { n = 0, at = os.time() }
+        ResetTry[src][app] = t
+    end
+    t.n = t.n + 1
+    return t.n <= 5
+end
+
+V.Callback('v-phone:soc:resetCode', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or '')
+    if not APPS[app] then resolve(false) return end
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    if not resetGate(src, app) then resolve({ error = 'toomany' }) return end
+
+    local number = phoneNumberOf(src)
+    if not number or number == '' then resolve({ error = 'nonumber' }) return end
+
+    local code = genCode()
+    Pending[src] = Pending[src] or {}
+    Pending[src][app] = { code = code, number = number, at = os.time(), reset = true }
+    smsCode(src, app, code)
+    resolve({ ok = true, number = number })
+end)
+
+--- The code, and the password to put in its place. One call, so a verified code cannot be
+--- left lying around between "it was right" and "here is the new one".
+V.Callback('v-phone:soc:resetPassword', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = tostring((data and data.app) or '')
+    if not APPS[app] then resolve(false) return end
+
+    local pend = Pending[src] and Pending[src][app]
+    if not pend or not pend.reset then resolve({ error = 'nocode' }) return end
+    if (os.time() - pend.at) > 300 then
+        Pending[src][app] = nil
+        resolve({ error = 'expired' }) return
+    end
+    if not resetGate(src, app) then resolve({ error = 'toomany' }) return end
+
+    local code = tostring((data and data.code) or ''):gsub('%s', '')
+    if code ~= pend.code then resolve({ error = 'badcode' }) return end
+
+    local pw = tostring((data and data.password) or '')
+    if #pw < 4 then resolve({ error = 'password' }) return end
+
+    local a = accountOf(p.citizenid, app)
+    if not a then resolve({ error = 'noaccount' }) return end
+
+    MySQL.query.await('UPDATE vphone_social_accounts SET password = ? WHERE citizenid = ? AND app = ?',
+        { hashPw(pw), p.citizenid, app })
+
+    -- The code is spent, the attempt counter is cleared, and the new password signs them in:
+    -- making somebody type what they just chose is ceremony, not security.
+    Pending[src][app] = nil
+    ResetTry[src] = nil
+    setAuthed(src, p.citizenid, app, true)
     resolve({ ok = true, account = publicAccount(a) })
 end)
 
 V.Callback('v-phone:soc:logout', function(src, resolve, data)
     local app = tostring((data and data.app) or '')
-    if Authed[src] then Authed[src][app] = nil end
+    local p = Core.GetPlayer(src)
+    if p then setAuthed(src, p.citizenid, app, false) end
     resolve({ ok = true })
 end)
 
@@ -263,22 +533,33 @@ V.Callback('v-phone:soc:setup', function(src, resolve, data)
     local app = tostring((data and data.app) or 'bleeter')
     if not APPS[app] then resolve(false) return end
     -- Editing an existing profile, so it needs a logged-in account, not the sign-up path.
-    if not (Authed[src] and Authed[src][app]) then resolve({ error = 'unverified' }) return end
+    if not isAuthed(src, p.citizenid, app) then resolve({ error = 'unverified' }) return end
     local a = accountOf(p.citizenid, app)
     if not a then resolve({ error = 'noaccount' }) return end
 
     local displayname = tostring((data and data.displayname) or a.displayname or ''):sub(1, 40)
     if displayname == '' then displayname = a.handle end
+    -- Judged against what is already stored: an avatar the player is not changing must not
+    -- be able to refuse the save because its file expired. `a` is this account's current row.
     local avatar = tostring((data and data.avatar) or ''):sub(1, 300)
-    if avatar ~= '' and not imageAllowed(avatar) then resolve({ error = 'badhost' }) return end
+    if not PhoneImageAllowedOrSame(avatar, a.avatar) then resolve({ error = 'badhost' }) return end
+    -- The cover banner. This declaration was missing and the UPDATE below read `cover` as a
+    -- nil GLOBAL, so every profile save failed with "Column 'cover' cannot be null" - a hard
+    -- error, on a column that had only just been added.
+    --
+    -- Same host gate as the avatar: it faces every visitor to the profile, so it is exactly as
+    -- public as a post's image.
+    local cover = tostring((data and data.cover) or ''):sub(1, 300)
+    if not PhoneImageAllowedOrSame(cover, a.cover) then resolve({ error = 'badhost' }) return end
     local bio = tostring((data and data.bio) or ''):sub(1, 160)
 
     -- The handle is the account's name on the server and does not change here; only the
-    -- display name, avatar and bio do.
-    MySQL.query.await(
-        'UPDATE social_accounts SET displayname = ?, avatar = ?, bio = ? WHERE citizenid = ? AND app = ?',
-        { displayname, avatar, bio, p.citizenid, app })
-    resolve({ ok = true, account = { handle = a.handle, displayname = displayname, avatar = avatar, bio = bio } })
+    -- display name, avatar, cover and bio do.
+    MySQL.query.await([[UPDATE vphone_social_accounts
+        SET displayname = ?, avatar = ?, cover = ?, bio = ? WHERE citizenid = ? AND app = ?]],
+        { displayname, avatar, cover, bio, p.citizenid, app })
+    resolve({ ok = true, account = { handle = a.handle, displayname = displayname,
+                                     avatar = avatar, cover = cover, bio = bio } })
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -288,7 +569,7 @@ local function cidOfHandle(app, handle)
     handle = tostring(handle or ''):gsub('^@', ''):sub(1, 20)
     if handle == '' then return nil end
     return MySQL.scalar.await(
-        'SELECT citizenid FROM social_accounts WHERE app = ? AND handle = ?', { app, handle })
+        'SELECT citizenid FROM vphone_social_accounts WHERE app = ? AND handle = ?', { app, handle })
 end
 
 local function appOf(data)
@@ -300,55 +581,532 @@ end
 --- are subselects, so a feed stays a single round trip however long it is. The four
 --- placeholders are the caller's own citizen id, in order.
 local POST_COLUMNS = [[
-    s.id, s.kind, s.body, s.image, s.at,
-    a.handle, a.displayname, a.avatar, a.verified,
-    (SELECT COUNT(*) FROM social_likes l WHERE l.post_id = s.id) AS likes,
-    (SELECT COUNT(*) FROM social_comments c WHERE c.post_id = s.id) AS comments,
-    (SELECT COUNT(*) FROM social_reposts r WHERE r.post_id = s.id) AS reposts,
-    EXISTS(SELECT 1 FROM social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
-    EXISTS(SELECT 1 FROM social_reposts r2 WHERE r2.post_id = s.id AND r2.citizenid = ?) AS reposted,
-    EXISTS(SELECT 1 FROM social_follows f WHERE f.app = a.app AND f.from_cid = ? AND f.to_cid = s.citizenid) AS following,
+    s.id, s.kind, s.body, s.image, s.images, s.at,
+    a.handle, a.displayname, a.avatar, a.verified, a.official,
+    (SELECT COUNT(*) FROM vphone_social_likes l WHERE l.post_id = s.id) AS likes,
+    (SELECT COUNT(*) FROM vphone_social_comments c WHERE c.post_id = s.id) AS comments,
+    (SELECT COUNT(*) FROM vphone_social_reposts r WHERE r.post_id = s.id) AS reposts,
+    EXISTS(SELECT 1 FROM vphone_social_likes l2 WHERE l2.post_id = s.id AND l2.citizenid = ?) AS liked,
+    EXISTS(SELECT 1 FROM vphone_social_reposts r2 WHERE r2.post_id = s.id AND r2.citizenid = ?) AS reposted,
+    -- Whether THIS reader saved it. There is deliberately no count beside it: how many people
+    -- bookmarked something is not information a save is supposed to leak.
+    EXISTS(SELECT 1 FROM vphone_social_saves sv WHERE sv.post_id = s.id AND sv.citizenid = ?) AS saved,
+    EXISTS(SELECT 1 FROM vphone_social_follows f WHERE f.app = a.app AND f.from_cid = ? AND f.to_cid = s.citizenid) AS following,
     (s.citizenid = ?) AS mine
 ]]
 
+-- ══════════════════════════════════════════════════════════════
+-- Being told about it
+-- ══════════════════════════════════════════════════════════════
+--- Who wrote a post, and which app it belongs to.
+local function postAuthor(id)
+    local row = MySQL.single.await('SELECT citizenid, app, kind FROM vphone_social_posts WHERE id = ?', { id })
+    if not row then return nil end
+    -- `app` on the row, with the old rule as the fallback for a row written before the
+    -- column existed and somehow missed by the backfill.
+    return row.citizenid, (row.app ~= '' and row.app) or appOfKind(row.kind)
+end
+
+--- File a notification, unless it is somebody being told about their own action.
+---
+--- Liking your own post, replying to yourself, following yourself: all legal, none of them
+--- worth a badge on your own icon. The check is here rather than at each of the five call
+--- sites so it cannot be forgotten at one of them.
+local function notify(app, toCid, fromCid, kind, postId)
+    toCid, fromCid = tostring(toCid or ''), tostring(fromCid or '')
+    if toCid == '' or fromCid == '' or toCid == fromCid then return end
+    MySQL.insert('INSERT INTO vphone_social_notifs (app, to_cid, from_cid, kind, post_id) VALUES (?,?,?,?,?)',
+        { app, toCid, fromCid, tostring(kind), postId })
+end
+
+--- Lowercase the ASCII letters and nothing else.
+---
+--- `string.lower` is byte-wise and locale-dependent, and that is not a detail: on a Latin-1
+--- locale it maps 0xC3 to 0xE3, and 0xC3 is the LEAD BYTE of every accented Latin character in
+--- UTF-8. So `('#soirée'):lower()` does not return a lowercase tag, it returns a corrupt one -
+--- which then goes into the database and comes back as a broken glyph.
+---
+--- Restricting the match to the byte range A-Z cannot touch anything above 0x7F. The trade is
+--- that an accented capital stays capital, so #SOIRÉE and #soirée are two tags. That is a
+--- visible imperfection rather than a silent corruption, which is the right way round.
+local function lowerAscii(str)
+    return (tostring(str):gsub('[A-Z]', string.lower))
+end
+
+--- Cut a string to a byte budget without leaving half a character behind.
+---
+--- Lua strings are bytes and the tag column counts characters, so a plain `sub(1, 40)` on
+--- `#soirée` can stop between the two bytes of the é and store a broken sequence. This walks
+--- back to the start of the character the boundary landed inside.
+local function cutBytes(str, maxBytes)
+    if #str <= maxBytes then return str end
+    local nextByte = str:byte(maxBytes + 1)
+    local cut = str:sub(1, maxBytes)
+    -- 0x80..0xBF is a UTF-8 continuation byte: the boundary is mid-character.
+    if nextByte and nextByte >= 0x80 and nextByte < 0xC0 then
+        while #cut > 0 do
+            local b = cut:byte(#cut)
+            cut = cut:sub(1, #cut - 1)
+            if b >= 0xC0 then break end   -- that was the lead byte; the character is gone
+        end
+    end
+    return cut
+end
+
+--- Every #hashtag in a body, lowercased and de-duplicated.
+---
+--- Lowercased because #Ballas and #ballas are the same conversation, and a tag list that
+--- disagrees with itself is worse than no tag list.
+---
+--- The pattern takes anything that is not whitespace and not another # or @, then trims
+--- trailing punctuation, rather than allowing only `[%w_]`. `%w` is ASCII here, so the narrow
+--- version cut `#soirée` into `soir` plus a stray byte - fine for an English server and wrong
+--- for every other one. `lower()` leaves accented characters alone, which is the honest
+--- outcome: it means #Soirée and #soirée are two tags, and mangling the bytes to avoid that
+--- would be worse.
+local function tagsIn(body)
+    local seen, out = {}, {}
+    -- The match is not reassigned: a generic-for control variable is const in Lua 5.5, and
+    -- writing to it is a hard error there even though 5.4 allows it.
+    for raw in tostring(body or ''):gmatch('#([^%s#@]+)') do
+        -- A tag at the end of a sentence must not swallow the full stop.
+        --
+        -- The set is written out rather than using `%p`, and it is a Lua long string so no
+        -- character in it needs escaping. Lua patterns work on BYTES and `ispunct` is true for
+        -- 0xA9 - the second byte of an e-acute - so `%p` stripped that byte and left its lead
+        -- byte dangling, which is an invalid UTF-8 sequence in the database. Every character
+        -- listed here is ASCII, so no multi-byte sequence can be touched.
+        local trimmed = raw:gsub([=[[%.,;:!%?%)%]}>"']+$]=], '')
+        local tag = cutBytes(lowerAscii(trimmed), 40)
+        if #tag >= 2 and not seen[tag] then
+            seen[tag] = true
+            out[#out + 1] = tag
+            if #out >= 10 then break end   -- a post is not a tag dump
+        end
+    end
+    return out
+end
+
+--- Every @handle in a body, lowercased and de-duplicated.
+---
+--- Deliberately narrower than the tag pattern: registration strips a handle to `[%w_]`, so a
+--- wider pattern here could only ever match text that is not an account.
+local function handlesIn(body)
+    local seen, out = {}, {}
+    for raw in tostring(body or ''):gmatch('@([%w_]+)') do
+        -- Same treatment, for the same reason: registration filters a handle with `%w`, which
+        -- is also byte-wise, so a handle can in principle hold a byte that `lower` would ruin.
+        local handle = lowerAscii(raw):sub(1, 20)
+        if #handle >= 2 and not seen[handle] then
+            seen[handle] = true
+            out[#out + 1] = handle
+            if #out >= 10 then break end
+        end
+    end
+    return out
+end
+
+--- Index a new post's tags, and tell everybody it mentioned.
+local function indexPost(id, app, body, authorCid)
+    for _, tag in ipairs(tagsIn(body)) do
+        MySQL.insert('INSERT IGNORE INTO vphone_social_tags (post_id, app, tag) VALUES (?,?,?)',
+            { id, app, tag })
+    end
+    for _, handle in ipairs(handlesIn(body)) do
+        local cid = cidOfHandle(app, handle)
+        if cid then notify(app, cid, authorCid, 'mention', id) end
+    end
+end
+
 --- MySQL answers booleans as 0/1 and counts as strings. The page should receive the
 --- types it is going to render, not the types the driver happened to return.
+--- How many photographs one post may carry.
+local function maxImages()
+    return math.max(1, math.min(10, math.floor(num(V.Setting('socialMaxImages', SOC.maxImages), 4))))
+end
+
+--- The list a post carries, always at least its cover.
+---
+--- `images` is JSON and it comes out of a database, so it is decoded defensively: a row somebody
+--- edited by hand, or one written by an older build, must read as a single-photo post rather
+--- than take the feed down.
+local function imagesOf(row)
+    local out = {}
+    local raw = row.images
+    if type(raw) == 'string' and raw ~= '' then
+        local ok, list = pcall(json.decode, raw)
+        if ok and type(list) == 'table' then
+            for _, u in ipairs(list) do
+                local url = tostring(u or '')
+                if url ~= '' then out[#out + 1] = url end
+            end
+        end
+    end
+    if #out == 0 and tostring(row.image or '') ~= '' then out[1] = row.image end
+    while #out > maxImages() do table.remove(out) end
+    return out
+end
+
+--- The page's copy of the cap, so its Add button stops at the same number the server does.
+function PhoneSocialMaxImages()
+    return maxImages()
+end
+
 local function cleanPosts(rows)
     for _, r in ipairs(rows or {}) do
+        -- Sent as a list always, so the page has one shape to draw rather than two.
+        r.images = imagesOf(r)
         r.likes = num(r.likes, 0)
         r.comments = num(r.comments, 0)
         r.reposts = num(r.reposts, 0)
-        r.liked = num(r.liked, 0) == 1
-        r.reposted = num(r.reposted, 0) == 1
-        r.following = num(r.following, 0) == 1
-        r.verified = num(r.verified, 0) == 1
-        r.mine = num(r.mine, 0) == 1
+        r.liked = truthy(r.liked)
+        r.reposted = truthy(r.reposted)
+        r.saved = truthy(r.saved)
+        r.following = truthy(r.following)
+        r.verified = truthy(r.verified)
+        r.official = truthy(r.official)
+        r.mine = truthy(r.mine)
     end
     return rows or {}
 end
 
 -- ══════════════════════════════════════════════════════════════
+-- The hourly nudge
+-- ══════════════════════════════════════════════════════════════
+-- A banner telling ONE player how many posts have appeared on Bleeter or Snapmatic since
+-- they last opened it. A quiet feed is a feed nobody opens, and nobody posts to a feed
+-- nobody opens; this is the thing that breaks that circle.
+--
+-- It only earns that by being true. Two rules, and everything below exists to keep them:
+--
+--   1. Never sent when nothing is new TO THAT PLAYER. A notification that fires on a feed
+--      they have already read is the notification that teaches them to ignore the next one.
+--   2. Never sent twice about the same posts. Ignoring one must not mean receiving it again
+--      every hour until the end of the session.
+--
+-- The interval is a CEILING, not a schedule. Nothing fires on the hour: each player carries
+-- their own clock, started when they connect, so a restart that brings forty people back in
+-- the same minute does not make forty handsets buzz in the same second.
+
+local NUDGE_APPS = { 'bleeter', 'snap' }
+
+--- Where a character is in one app's feed, in the phone's own per-character store.
+---
+--- The record is `{ [app] = { seen = <post id>, told = <post id> } }`, and the two numbers
+--- answer two different questions:
+---
+---   `seen`  the newest post they have LOOKED at. Advanced by opening the feed and by nothing
+---           else, which is the rule `soc:notifSeen` already states for the notifications tab:
+---           opening it is reading it. "New to you" is counted from here.
+---   `told`  the newest post they have already been TOLD about. Advanced by sending a nudge and
+---           by nothing else. This is what stops the same posts being announced a second time.
+---
+--- **Kept here rather than in a table of its own, on purpose.** There is no read marker for the
+--- FEED anywhere in this file: the three `seen` columns it does have are per notification, per
+--- story and per direct message, and none of them says where a player got to in a timeline. A
+--- fourth table with a fourth `seen` column would be a second answer to "has this player read
+--- this", which is the one thing not to build. `vphone_kv` is where every other per-character
+--- fact the phone owns already lives, it is read through a per-character cache, and it needs
+--- no migration.
+local NUDGE_KEY = 'socnudge'
+
+local function nudgeRecord(cid)
+    local rec = Bridge.KvGet(cid, NUDGE_KEY)
+    return type(rec) == 'table' and rec or {}
+end
+
+--- One app's half of a record, with both numbers as numbers. Nil when this character has never
+--- been marked for this app at all, which is a state the decision below has to tell apart from
+--- "marked at zero" - see `plant`.
+local function nudgeMark(rec, app)
+    local mine = rec and rec[app]
+    if type(mine) ~= 'table' then return nil end
+    return { seen = math.floor(num(mine.seen, 0)), told = math.floor(num(mine.told, 0)) }
+end
+
+--- What the operator asked for, for one app.
+---
+--- Read on every pass rather than cached, so a convar moved on a live server takes effect
+--- without a restart - the same as every other setting in this file.
+local function nudgeCfg(app)
+    local all = type(SOC.nudge) == 'table' and SOC.nudge or {}
+    local mine = type(all[app]) == 'table' and all[app] or {}
+    local on = V.SettingBool('socialNudge', all.enabled ~= false) and mine.enabled ~= false
+    -- A ceiling under a minute is not a ceiling, it is a loop. The pass itself ticks once a
+    -- minute, so anything finer could not be honoured anyway.
+    return { on = on, minutes = math.max(1, math.floor(num(mine.minutes, 60))) }
+end
+
+--- The whole decision, as one function of plain values.
+---
+--- Everything around it is a database read, a preference lookup or a clock, and none of those
+--- run outside the game. This does, and tools/test-nudge.py drives it through every case that
+--- matters rather than trusting the loop below to be read correctly.
+---
+---   cfg   `{ on = <this app's half of the feature is on> }`
+---   gate  `{ due = <the ceiling has elapsed>, phone = <on them, with charge in it>,
+---           quiet = <do not disturb, this app silenced, or this app not installed> }`
+---   mark  `{ seen = , told = }`, or nil when this character has never been marked for this app
+---   feed  `{ top = }` on a first sight, `{ fresh = , freshtop = }` otherwise, or nil to ask
+---         whether reading one is worth a query at all
+---
+--- Answers a verdict, and for `send` and `plant` the count and the post id to record:
+---
+---   `off`    the feature, or this app's half of it, is switched off
+---   `wait`   the ceiling has not elapsed since this player's last turn
+---   `quiet`  the phone cannot show it, or the player has asked it not to
+---   `ask`    the gates pass; the caller should read the feed and call again
+---   `plant`  first sight of this character: record where the feed is and say nothing. Somebody
+---            who has never opened Bleeter must not be handed the whole history as a number.
+---   `none`   nothing has arrived that they have not seen, or not already been told about
+---   `send`   with how many are new to them
+---
+--- The order is the point. `quiet` is decided AFTER `due`, so a silenced phone still spends its
+--- turn: were it the other way round, turning do-not-disturb off would release an hour of
+--- held-back banners in one go. And `ask` sits between the free checks and the paid one, so a
+--- player with the app muted never costs a query.
+local function nudgeVerdict(cfg, gate, mark, feed)
+    if not (cfg and cfg.on) then return 'off' end
+    gate = gate or {}
+    if not gate.due then return 'wait' end
+    if not gate.phone or gate.quiet then return 'quiet' end
+    if not feed then return 'ask' end
+    if not mark then return 'plant', 0, math.floor(num(feed.top, 0)) end
+
+    local fresh = math.floor(num(feed.fresh, 0))
+    if fresh <= 0 then return 'none' end
+    -- Everything above their read mark has already been announced, so there is nothing NEW to
+    -- say. Saying it again is precisely how a notification stops being worth opening.
+    local freshtop = math.floor(num(feed.freshtop, 0))
+    if freshtop <= mark.told then return 'none' end
+    return 'send', fresh, freshtop
+end
+
+--- Move a character's read mark for one app up to the newest post there is.
+---
+--- Called from the feed, because opening the feed IS reading it. To the newest post that
+--- EXISTS rather than to the newest one the answer happened to carry: the Following tab shows a
+--- subset, and marking only what it showed would leave somebody who lives on that tab being
+--- nudged about strangers for ever.
+---
+--- `told` is carried up with it so it can never fall behind `seen`. A record where the phone
+--- has told you about less than you have read is not a state that means anything.
+---
+--- Written only when it MOVES. `Bridge.KvGet` answers from a per-character cache, so pulling to
+--- refresh on a quiet feed costs one table lookup and no write at all.
+local function nudgeMarkRead(cid, app)
+    local top = math.floor(num(MySQL.scalar.await(
+        'SELECT COALESCE(MAX(id), 0) FROM vphone_social_posts WHERE app = ?', { app }), 0))
+    local rec = nudgeRecord(cid)
+    local mine = nudgeMark(rec, app)
+    if mine and mine.seen >= top then return end
+    rec[app] = { seen = top, told = math.max(top, mine and mine.told or 0) }
+    Bridge.KvSet(cid, NUDGE_KEY, rec)
+end
+
+--- Everything that silences a notification, asked BEFORE one is made rather than after.
+---
+--- The client checks all of this again on arrival - `notificationMuted`, the do-not-disturb gate
+--- in `peek`, and the `hasItem` flag - and that is the path every other notification on this
+--- phone takes. Asking here as well is not a second rule; it is what stops a player's rate
+--- ceiling being spent on a banner that was never going to be drawn, and what stops a muted app
+--- costing a query an hour for ever.
+---
+--- `notifSilent` is deliberately NOT among these. Silent means seen but not heard: the banner is
+--- still wanted, only the sound is not, and that is the client's to apply.
+local function nudgeQuiet(src, p, app)
+    if PhoneHasApp and not PhoneHasApp(src, app) then return true end
+    local prefs = PhonePrefs and PhonePrefs(p)
+    if type(prefs) ~= 'table' then return false end
+    if prefs.dnd == true then return true end
+    for _, id in ipairs(prefs.notifMuted or {}) do
+        if tostring(id) == app then return true end
+    end
+    return false
+end
+
+--- One player, one app, one turn.
+local function nudgeOne(src, p, app, cfg)
+    local cid = p.citizenid
+    -- No account, no feed. Planting a mark for somebody who has not registered would record
+    -- where a timeline they cannot see had got to.
+    if not accountOf(cid, app) then return 'noaccount' end
+
+    -- Carrying it, and with charge in it: both halves of "a phone that is off, or not on them",
+    -- in the one answer the rest of the resource already uses.
+    --
+    -- A failure FAILS OPEN, the same direction the item check itself does. `PhoneUsable` is
+    -- registered by this resource, so the only way to miss it is to ask during a restart - and a
+    -- feature that quietly switches itself off is worse than one banner too many, especially when
+    -- `hasItem` below already tells the client what it needs to withhold a peek.
+    local ok, usable = pcall(function()
+        return exports[GetCurrentResourceName()]:PhoneUsable(src)
+    end)
+    local gate = {
+        due = true,
+        phone = (not ok) or usable == true,
+        quiet = nudgeQuiet(src, p, app),
+    }
+
+    local rec = nudgeRecord(cid)
+    local mark = nudgeMark(rec, app)
+    -- The free checks first, with no feed. Reading one for a player who has do-not-disturb on
+    -- would be a query an hour for a banner nobody was ever going to be shown.
+    local gated = nudgeVerdict(cfg, gate, mark, nil)
+    if gated ~= 'ask' then return gated end
+
+    local feed
+    if mark then
+        -- **The count and the mark come out of one read.** Asking for the count and then asking
+        -- again for the newest id would be two snapshots, and a post written between them would
+        -- either be counted and not marked - announced twice - or marked and not counted.
+        --
+        -- A range seek from their read mark forward on `app_idx (app, id)`, so this costs the
+        -- new rows and not the table.
+        local row = MySQL.single.await([[SELECT COUNT(*) AS fresh, COALESCE(MAX(id), 0) AS freshtop
+            FROM vphone_social_posts WHERE app = ? AND id > ? AND citizenid <> ?]],
+            { app, mark.seen, cid })
+        feed = { fresh = num(row and row.fresh, 0), freshtop = num(row and row.freshtop, 0) }
+    else
+        feed = { top = num(MySQL.scalar.await(
+            'SELECT COALESCE(MAX(id), 0) FROM vphone_social_posts WHERE app = ?', { app }), 0) }
+    end
+
+    local verdict, count, top = nudgeVerdict(cfg, gate, mark, feed)
+    if verdict ~= 'plant' and verdict ~= 'send' then return verdict end
+
+    -- Re-read rather than reusing the record from before the query: the player may have opened
+    -- the app while it was in flight, and their own read mark is the one that wins.
+    local rec2 = nudgeRecord(cid)
+    local after = nudgeMark(rec2, app)
+    if verdict == 'plant' then
+        -- Opened it during the query. They have a real mark of their own now, so leave it.
+        if after then return 'plant' end
+        rec2[app] = { seen = top, told = top }
+        Bridge.KvSet(cid, NUDGE_KEY, rec2)
+        return 'plant'
+    end
+
+    -- Read it during the query, and reading it covered everything this was going to announce.
+    -- `nudgeMarkRead` has already carried `told` up with it, so there is nothing left to write.
+    if after and after.seen >= top then return 'none' end
+    rec2[app] = { seen = after and after.seen or mark.seen,
+                  told = math.max(top, after and after.told or 0) }
+    Bridge.KvSet(cid, NUDGE_KEY, rec2)
+
+    TriggerClientEvent('v-phone:client:banner', src, {
+        app = app, icon = app,
+        -- `LP` translates for ONE player, in the language that player carries. `L` on the server
+        -- would answer in the server's own language and hand a French player an English word.
+        title = LP(src, 'ph.soc_nudge_title', APP_NAME[app] or app),
+        body = count == 1 and LP(src, 'ph.soc_nudge_one') or LP(src, 'ph.soc_nudge_many', count),
+        -- See server/main.lua: a notification claiming they are holding their phone when they
+        -- are not is a peek that rises out of an empty pocket.
+        hasItem = PhoneRequiresItem(src),
+    })
+    return 'send'
+end
+
+--- Whose turn is next, per source and per app.
+---
+--- In memory and per SESSION, and that IS the stagger: a player's clock starts when they
+--- connect, so people who reconnected after a restart come due spread across the whole interval
+--- rather than together, and a few seconds of jitter keeps two who connected in the same tick
+--- from sharing a tick for ever after.
+---
+--- Nothing in here needs to survive a restart. What must survive is the MARK, and that is in
+--- the database - so a restart costs at most one delayed nudge and can never cause a duplicate.
+--- A player who disconnects and comes back waits a full interval for their first one.
+local nudgeNext = {}
+
+AddEventHandler('playerDropped', function()
+    nudgeNext[source] = nil
+end)
+
+--- One pass over everybody online.
+---
+--- Cheap by construction: a player whose turn has not come costs one table lookup, and a player
+--- whose turn has come costs one indexed range read. An idle server reads nothing at all,
+--- because every mark is already level with the newest post.
+local function nudgePass()
+    if not socOn() then return end
+    local now = os.time()
+
+    for _, raw in ipairs(GetPlayers()) do
+        local src = tonumber(raw)
+        local mine = src and nudgeNext[src]
+        if src and not mine then
+            mine = {}
+            nudgeNext[src] = mine
+        end
+
+        -- Whose turn has come, worked out before the player is fetched at all: on a full server
+        -- this loop runs sixty times an hour over everybody, and all but two of those passes
+        -- have nothing to do.
+        local due = nil
+        for _, app in ipairs(NUDGE_APPS) do
+            local cfg = nudgeCfg(app)
+            if not mine then                        -- no source: nothing to schedule
+                break
+            elseif not mine[app] then
+                -- First sight of this session. Their interval starts now, with a few seconds of
+                -- spread on top so two players who connected in the same tick do not share a
+                -- tick for ever afterwards.
+                mine[app] = now + cfg.minutes * 60 + math.random(0, 59)
+            elseif now >= mine[app] then
+                -- The clock is moved BEFORE the turn is taken. `nudgeOne` awaits, and a pass
+                -- that outlasts its own tick must not find this player due a second time.
+                mine[app] = now + cfg.minutes * 60
+                due = due or {}
+                due[#due + 1] = { app = app, cfg = cfg }
+            end
+        end
+
+        if due then
+            local p = Core.GetPlayer(src)
+            if p and p.citizenid then
+                for _, turn in ipairs(due) do nudgeOne(src, p, turn.app, turn.cfg) end
+            end
+        end
+    end
+end
+
+-- ══════════════════════════════════════════════════════════════
 -- The feed
 -- ══════════════════════════════════════════════════════════════
--- One table, two kinds. Bleeter shows 'text', Snapmatic shows 'photo': the same feed with
--- different content types and different chrome, which is all those two apps ever were.
+-- One table, two apps. The same feed with different chrome, filtered on `s.app` - which is
+-- what the post was actually filed under, rather than on its content type. Bleeter carries
+-- text AND pictures, like the thing it is modelled on; Snapmatic carries pictures only,
+-- because it is a photo app.
 V.Callback('v-phone:soc:feed', function(src, resolve, data)
     if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    local kind = (data and data.kind == 'photo') and 'photo' or 'text'
+    -- The client still says which feed it wants by content type, because that is how the two
+    -- apps are told apart on screen; the server turns it into an app name once, here.
+    local photo = (data and data.kind == 'photo')
+    -- `appOf` already falls back to 'bleeter', so this is the client's app when it named one
+    -- and the content type's app otherwise - which keeps an older page working.
+    local app = (data and data.app) and appOf(data) or appOfKind(photo and 'photo' or 'text')
 
-    local app = appOfKind(kind)
+    local kindWhere = 's.app = ?'
+
     -- Two feeds, one query: everything, or only the accounts you follow plus your own.
     -- A "following" tab that quietly showed strangers would not be worth having.
     local following = (data and data.scope) == 'following'
     local where = following
         and [[ AND (s.citizenid = ? OR EXISTS(
-                 SELECT 1 FROM social_follows f WHERE f.app = a.app
+                 SELECT 1 FROM vphone_social_follows f WHERE f.app = a.app
                    AND f.from_cid = ? AND f.to_cid = s.citizenid))]]
         or ''
 
-    local args = { p.citizenid, p.citizenid, p.citizenid, p.citizenid, app, kind }
+    -- Five, not four: POST_COLUMNS gained `saved`. Miscounting these silently shifts every
+    -- later placeholder along by one, which is the kind of bug that answers with somebody
+    -- else's rows rather than with an error.
+    local args = { p.citizenid, p.citizenid, p.citizenid, p.citizenid, p.citizenid, app }
+    -- One placeholder now, for `s.app = ?`. It used to be one or two depending on the feed,
+    -- and a miscount here shifts every later binding silently.
+    args[#args + 1] = app
     if following then
         args[#args + 1] = p.citizenid
         args[#args + 1] = p.citizenid
@@ -357,38 +1115,92 @@ V.Callback('v-phone:soc:feed', function(src, resolve, data)
 
     local rows = MySQL.query.await(([[
         SELECT %s
-        FROM social_posts s
-        JOIN social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
-        WHERE s.kind = ?%s
+        FROM vphone_social_posts s
+        JOIN vphone_social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        WHERE %s%s
         ORDER BY s.id DESC LIMIT ?
-    ]]):format(POST_COLUMNS, where), args) or {}
+    ]]):format(POST_COLUMNS, kindWhere, where), args) or {}
 
-    resolve({ ok = true, posts = cleanPosts(rows) })
+    -- The cap travels with the feed rather than in the boot payload: this is the one
+    -- answer the social apps always fetch, and the composer is the only thing that needs
+    -- it. A phone that never opens Bleeter never carries the number.
+    resolve({ ok = true, posts = cleanPosts(rows), maxImages = maxImages() })
+
+    -- Opening the feed IS reading it, the same rule the notifications tab states further down.
+    -- This is the mark the hourly nudge counts "new to you" from, so it is advanced here and
+    -- nowhere else: somebody who has just opened Bleeter has, by definition, nothing waiting.
+    --
+    -- AFTER the answer has gone, deliberately. It is bookkeeping the player is not waiting on,
+    -- and putting its read in front of the feed would put a round trip between tapping the app
+    -- and seeing it. On a feed that has not moved it does not even write.
+    nudgeMarkRead(p.citizenid, app)
 end)
 
 V.Callback('v-phone:soc:post', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    local kind = (data and data.kind == 'photo') and 'photo' or 'text'
-    if not accountOf(p.citizenid, appOfKind(kind)) then resolve({ error = 'noaccount' }) return end
+    -- The app the client named, and it is now recorded on the row rather than inferred back
+    -- out of `kind` later. A clip is a photo that moves: it shares the account, the host
+    -- gate and the feed, with its media URL in `image`.
+    --
+    -- Snapmatic is a photo app, so a text post addressed to it is filed on Bleeter instead -
+    -- that is the only case where the client's choice is overruled, and it is overruled
+    -- towards the app that can actually show the thing.
+    local raw = (data and data.kind) or 'text'
+    local kind = (raw == 'photo' or raw == 'video') and raw or 'text'
+    local wantApp = tostring((data and data.app) or '')
+    local mediaApp = (wantApp == 'bleeter' or wantApp == 'snap') and wantApp or appOfKind(kind)
+    if kind == 'text' then mediaApp = 'bleeter' end
+    if not accountOf(p.citizenid, mediaApp) then resolve({ error = 'noaccount' }) return end
     local body = tostring((data and data.body) or '')
         :sub(1, math.floor(num(V.Setting('socialMaxLength', SOC.postMax), 280)))
-    local image = tostring((data and data.image) or ''):sub(1, 300)
+    -- **Every URL is checked on its own.** A list is not one attachment with extras: an
+    -- allowed host on the first does not vouch for the fourth, and checking only `image` would
+    -- have made the other three a way past the host gate entirely.
+    --
+    -- Truncated rather than refused. A client asking for more than the cap has a bug or an old
+    -- build, and answering "too many" to somebody who attached five photographs is worse for
+    -- them than posting four - the page enforces the same cap and would not normally send more.
+    local list = {}
+    local sent = (data and data.images)
+    if type(sent) ~= 'table' then sent = { (data and data.image) or '' } end
+    local seen = {}
+    for _, u in ipairs(sent) do
+        local url = tostring(u or ''):sub(1, 300)
+        -- The same photograph twice is one attachment, not two.
+        if url ~= '' and not seen[url] and imageAllowed(url) then
+            seen[url] = true
+            list[#list + 1] = url
+            if #list >= maxImages() then break end
+        elseif url ~= '' and not imageAllowed(url) then
+            resolve({ error = 'badhost' })
+            return
+        end
+    end
+    local image = list[1] or ''
 
-    if kind == 'photo' then
-        -- A photo post is the photo; a caption is optional. And the URL faces every
-        -- client that opens the feed, so it goes through the host gate.
+    if kind == 'photo' or kind == 'video' then
+        -- The media is the post; a caption is optional.
         if image == '' then resolve({ error = 'noimage' }) return end
-        if not imageAllowed(image) then resolve({ error = 'badhost' }) return end
     else
-        if body:gsub('%s', '') == '' then resolve({ error = 'empty' }) return end
-        image = ''
+        if body:gsub('%s', '') == '' and image == '' then resolve({ error = 'empty' }) return end
     end
 
+    -- A clip is one file. Four videos in a card is a frame-rate problem rather than a feature,
+    -- and nothing in the page draws a grid of them.
+    if kind == 'video' then list = { image } end
+
     local id = MySQL.insert.await(
-        'INSERT INTO social_posts (citizenid, kind, body, image) VALUES (?,?,?,?)',
-        { p.citizenid, kind, body, image })
+        'INSERT INTO vphone_social_posts (citizenid, app, kind, body, image, images) VALUES (?,?,?,?,?,?)',
+        { p.citizenid, mediaApp, kind, body, image, #list > 1 and json.encode(list) or nil })
     Core.Log('social', ('%s posted %s #%d'):format(p.citizenid, kind, id), nil, p.citizenid)
+    -- Hashtags into their own table, and anybody the post named gets told. Both read the
+    -- body that was actually stored, not the one that arrived, so a truncated post cannot
+    -- index a tag the reader will never see.
+    -- `mediaApp`, which is what this post was actually filed under. `appOfKind(kind)` would
+    -- say 'snap' for every photo, so a photo posted to Bleeter would have its tags indexed
+    -- against the wrong app and never appear under them.
+    if id then indexPost(id, mediaApp, body, p.citizenid) end
     resolve({ ok = true, id = id })
 end)
 
@@ -402,16 +1214,20 @@ V.Callback('v-phone:soc:like', function(src, resolve, data)
     -- can never count twice, whatever order the packets land in.
     local liked
     local exists = MySQL.scalar.await(
-        'SELECT 1 FROM social_likes WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+        'SELECT 1 FROM vphone_social_likes WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
     if exists then
-        MySQL.query.await('DELETE FROM social_likes WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+        MySQL.query.await('DELETE FROM vphone_social_likes WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
         liked = false
     else
-        MySQL.insert.await('INSERT IGNORE INTO social_likes (post_id, citizenid) VALUES (?,?)', { id, p.citizenid })
+        MySQL.insert.await('INSERT IGNORE INTO vphone_social_likes (post_id, citizenid) VALUES (?,?)', { id, p.citizenid })
         liked = true
+        -- Only on the way up. Somebody who likes, unlikes and likes again has not done
+        -- three things worth being told about.
+        local author, app = postAuthor(id)
+        if author then notify(app, author, p.citizenid, 'like', id) end
     end
     local count = num(MySQL.scalar.await(
-        'SELECT COUNT(*) FROM social_likes WHERE post_id = ?', { id }), 0)
+        'SELECT COUNT(*) FROM vphone_social_likes WHERE post_id = ?', { id }), 0)
     resolve({ ok = true, liked = liked, likes = count })
 end)
 
@@ -419,6 +1235,146 @@ end)
 -- Hush
 -- ══════════════════════════════════════════════════════════════
 local function hushOn() return socOn() and V.SettingBool('socialHush', SOC.hush.enabled) end
+
+--- What a profile may say about itself, as closed sets.
+---
+--- **Every one of these is drawn on a stranger's screen.** Free text there is free text in
+--- somebody else's markup, and it is also untranslatable - the page turns `hobby_cars` into
+--- whatever the reader's language calls it, which a typed string could never do. A key that is
+--- not in the set is dropped rather than refused: an older page sending an option this build
+--- removed should lose that one field, not fail to save a profile.
+local HUSH_LOOKING = { serious = true, casual = true, friends = true, unsure = true }
+local HUSH_INTERESTS = {
+    cars = true, music = true, food = true, gym = true, films = true, games = true,
+    nights = true, beach = true, hiking = true, art = true, animals = true, travel = true,
+    fishing = true, bikes = true, coffee = true, dancing = true, cooking = true, guns = true,
+}
+--- The conversation starters. The KEY is the question and the player writes the answer, which
+--- is the one piece of free text on a Hush card - capped, stripped, and escaped by the page.
+local HUSH_PROMPTS = {
+    perfect_night = true, never_again = true, order_at_bar = true, worst_habit = true,
+    find_me = true, deal_breaker = true, sunday = true, brag = true,
+}
+
+--- A stored `interests` column back into a list, dropping anything not in the set.
+---
+--- Filtered on the way OUT as well as on the way in. A row written by an older build, by hand,
+--- or by an operator's own migration can hold a key this build does not know, and the page turns
+--- a key into a translated chip - so an unknown one would draw a locale key on a stranger's
+--- profile.
+local function hushSplit(csv)
+    local out = {}
+    for key in tostring(csv or ''):gmatch('([^,]+)') do
+        if HUSH_INTERESTS[key] and #out < 6 then out[#out + 1] = key end
+    end
+    return out
+end
+
+--- The keys of a closed set, sorted, so the page's picker is in the same order every time it
+--- is drawn. `pairs` has no order, and a picker whose rows move between visits is a picker
+--- nobody can build a habit with.
+local function hushKeys(set)
+    local out = {}
+    for key in pairs(set) do out[#out + 1] = key end
+    table.sort(out)
+    return out
+end
+
+--- How much a day of Hush Premium costs, and what it buys. Read through `V.Setting` so an
+--- operator can move the price with a convar on a live server.
+local function hushPass()
+    local cfg = (SOC.hush and SOC.hush.premium) or {}
+    return {
+        on = cfg.enabled ~= false,
+        price = math.max(0, math.floor(num(V.Setting('socialHushPrice', cfg.price), 50))),
+        account = (cfg.account == 'cash') and 'cash' or 'bank',
+        hours = math.max(1, math.floor(num(cfg.hours, 24))),
+        likes = math.max(1, math.floor(num(cfg.likes, 25))),
+        supers = math.max(0, math.floor(num(cfg.superLikes, 5))),
+        seeLikes = cfg.seeLikes ~= false,
+        rewindLikes = cfg.rewindLikes ~= false,
+    }
+end
+
+--- Characters with a pass purchase in flight, so a second tap cannot start another.
+---
+--- Keyed by citizen id rather than by source: a staff member holding somebody's phone acts as
+--- that character, and it is the CHARACTER who may only be buying one pass at a time.
+local HushBuying = {}
+
+--- Likes and super likes this character has claimed but not yet written.
+---
+--- **The cap is counted from rows, and the row is written last.** `hushLikeCaps`, `hushSpent`
+--- and the "already judged?" read are three awaits before the INSERT, so every request issued
+--- in the same tick read the same count and every one of them passed - which on the free tier
+--- turns three likes a day into as many as the page cares to fire, and the cap is precisely
+--- what the premium pass is sold to raise.
+---
+--- A lock would have closed it and refused a legitimate second swipe while the first was still
+--- in flight, which on a swipe deck IS the feature breaking. Counting the writes in flight
+--- refuses nothing extra: the count is read and the claim taken with no yield between them, and
+--- Lua only interleaves coroutines at a yield, so those two lines are atomic.
+local HushFlight = {}
+
+AddEventHandler('playerDropped', function()
+    local p = Core.GetPlayer(source)
+    if p and p.citizenid then HushFlight[p.citizenid] = nil end
+end)
+
+--- Is this character's pass still running, and until when?
+---
+--- Read from the database on every call rather than cached. A cache here would have to be
+--- invalidated by a purchase, by the clock, and by a character switch, and the read is a scalar
+--- on the primary key.
+local function hushPremiumUntil(cid)
+    local until_ = MySQL.scalar.await(
+        'SELECT premium_until FROM vphone_hush_profiles WHERE citizenid = ?', { cid })
+    until_ = math.floor(num(until_, 0))
+    return (until_ > os.time()) and until_ or 0
+end
+
+--- The like ceiling for this character today: the free one, or the pass's.
+local function hushLikeCaps(cid)
+    local pass = hushPass()
+    local premium = pass.on and hushPremiumUntil(cid) > 0
+    if premium then return pass.likes, pass.supers, true end
+    return math.max(0, math.floor(num(V.Setting('socialDailyLikes', SOC.hush.dailyLikes), 3))),
+           math.max(0, math.floor(num(SOC.hush.dailySuper, 1))), false
+end
+
+--- How many likes and super likes this character has spent in the last day.
+local function hushSpent(cid)
+    local row = MySQL.single.await([[SELECT
+            SUM(liked = 1) AS likes,
+            SUM(liked = 1 AND super = 1) AS supers
+        FROM vphone_hush_likes
+        WHERE from_cid = ? AND at > DATE_SUB(NOW(), INTERVAL 1 DAY)]], { cid }) or {}
+    return math.floor(num(row.likes, 0)), math.floor(num(row.supers, 0))
+end
+
+--- The current year, for the age arithmetic in SQL. Read once: it is a constant for any
+--- session short enough to matter, and calling os.date per row would be silly.
+local THIS_YEAR = tonumber(os.date('%Y')) or 2026
+
+--- How far away another character is, in metres, or nil when they are not connected.
+---
+--- Rounded to ten metres before it leaves the server. A dating app has no business handing one
+--- player another's exact position, and "260 m" is as useful as "263.4 m" while being useless
+--- for finding somebody who has not agreed to be found.
+local function hushDistance(src, targetCid)
+    local target = Core.GetPlayerByCitizenId(targetCid)
+    if not target or not target.source then return nil end
+    local ok, metres = pcall(function()
+        -- Hush measures the distance from the phone's OWNER, so a staff member holding one
+        -- does not put the deck around themselves.
+        local a = GetEntityCoords(GetPlayerPed(PhoneActingSource
+            and PhoneActingSource(src) or src))
+        local b = GetEntityCoords(GetPlayerPed(target.source))
+        return #(a - b)
+    end)
+    if not ok or not metres then return nil end
+    return math.floor(metres / 10) * 10
+end
 
 --- A date of birth becomes an age and nothing else: the card shows how old somebody is,
 --- never the day they were born.
@@ -431,9 +1387,151 @@ V.Callback('v-phone:soc:hushMe', function(src, resolve)
     if not hushOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
-    local row = MySQL.single.await(
-        'SELECT bio, photo, active FROM hush_profiles WHERE citizenid = ?', { p.citizenid })
-    resolve({ ok = true, profile = row and { bio = row.bio, photo = row.photo, active = num(row.active, 0) == 1 } or nil })
+    local row = MySQL.single.await([[SELECT bio, photo, photo2, photo3, gender, seeking,
+        min_age, max_age, active, job, looking, interests, prompt, prompt_answer,
+        premium_until FROM vphone_hush_profiles WHERE citizenid = ?]], { p.citizenid })
+
+    local pass = hushPass()
+    local until_ = math.floor(num(row and row.premium_until, 0))
+    if until_ <= os.time() then until_ = 0 end
+    local likeCap, superCap, premium = hushLikeCaps(p.citizenid)
+    local likesUsed, supersUsed = hushSpent(p.citizenid)
+
+    resolve({
+        ok = true,
+        profile = row and {
+            bio = row.bio, photo = row.photo, photo2 = row.photo2, photo3 = row.photo3,
+            gender = row.gender, seeking = row.seeking,
+            minAge = num(row.min_age, 18), maxAge = num(row.max_age, 99),
+            active = truthy(row.active),
+            job = row.job, looking = row.looking, prompt = row.prompt,
+            promptAnswer = row.prompt_answer,
+            interests = hushSplit(row.interests),
+        } or nil,
+        -- What this player may still do today, so the page can say "2 likes left" instead of
+        -- letting them find out by being refused.
+        limits = {
+            likes = likeCap, likesUsed = likesUsed,
+            supers = superCap, supersUsed = supersUsed,
+            premium = premium, until_ = until_,
+        },
+        -- The shop window for the pass. Sent whether or not they have one: the page draws the
+        -- price on the buy button and the renewal date on the badge from the same fields.
+        pass = pass.on and {
+            price = pass.price, account = pass.account, hours = pass.hours,
+            likes = pass.likes, supers = pass.supers,
+            seeLikes = pass.seeLikes, rewindLikes = pass.rewindLikes,
+        } or nil,
+        -- The closed sets, so the page builds its pickers from what the server will accept
+        -- rather than from a copy that drifts.
+        options = { looking = hushKeys(HUSH_LOOKING), interests = hushKeys(HUSH_INTERESTS),
+                    prompts = hushKeys(HUSH_PROMPTS) },
+    })
+end)
+
+--- Buy a day of Hush Premium.
+---
+--- **The money moves before the pass is granted, and a debit that cannot be confirmed grants
+--- nothing.** `Bridge.RemoveMoney` answers false on every framework it supports when the
+--- balance will not cover it, and the operator's own hook is asked first - so this works on
+--- qb-core, qbx_core, ox_core, ESX and anything wired through `Config.Compat.hooks.removeMoney`
+--- without a branch here per framework.
+V.Callback('v-phone:soc:hushPass', function(src, resolve)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local pass = hushPass()
+    if not pass.on then resolve({ error = 'off' }) return end
+
+    -- A profile has to exist first: the pass is a column on it, and buying a pass for a
+    -- profile nobody can be shown is spending money on nothing.
+    local has = MySQL.scalar.await(
+        'SELECT 1 FROM vphone_hush_profiles WHERE citizenid = ?', { p.citizenid })
+    if not has then resolve({ error = 'noprofile' }) return end
+
+    -- **One purchase at a time per character.**
+    --
+    -- Everything below yields: the debit, the update, the read back. Two taps on the buy
+    -- button in the same second both got past the checks, both were charged, and both wrote
+    -- the same expiry - so the player paid twice for one day. The flag is cleared on every
+    -- exit path below, including the refusal.
+    if HushBuying[p.citizenid] then resolve({ error = 'busy' }) return end
+    HushBuying[p.citizenid] = true
+
+    -- **The money comes off the phone's OWNER, not off whoever is holding it.**
+    --
+    -- Under a staff phone-view session `Core.GetPlayer(src)` answers with the held character -
+    -- that is the whole point of admin view - but `src` is still the staff member. So the
+    -- purchase was granted to the character on screen and paid for out of the wallet of the
+    -- person looking at it. Every other paying path in this resource resolves the actor
+    -- through `PhoneActingSource` first, and this one did not.
+    local acting = PhoneActingSource and PhoneActingSource(src) or src
+
+    if pass.price > 0 then
+        local paid = Bridge.RemoveMoney(acting, pass.price, pass.account, 'Hush Premium')
+        if paid ~= true then
+            HushBuying[p.citizenid] = nil
+            resolve({ error = 'nomoney' })
+            return
+        end
+    end
+
+    -- **The extension is computed in SQL, against the stored value.**
+    --
+    -- Reading the expiry into Lua, adding a day and writing the result back is a check-then-act
+    -- across three awaits. `GREATEST` does the same arithmetic inside the statement, where
+    -- nothing can interleave.
+    MySQL.query.await([[UPDATE vphone_hush_profiles
+        SET premium_until = GREATEST(COALESCE(premium_until, 0), UNIX_TIMESTAMP()) + ?
+        WHERE citizenid = ?]], { pass.hours * 3600, p.citizenid })
+    HushBuying[p.citizenid] = nil
+    local until_ = hushPremiumUntil(p.citizenid)
+    Core.Log('social', ('hush premium %s for %dh (%d)')
+        :format(p.citizenid, pass.hours, pass.price), nil, p.citizenid)
+
+    local likeCap, superCap = hushLikeCaps(p.citizenid)
+    local likesUsed, supersUsed = hushSpent(p.citizenid)
+    resolve({ ok = true, until_ = until_,
+              limits = { likes = likeCap, likesUsed = likesUsed, supers = superCap,
+                         supersUsed = supersUsed, premium = true, until_ = until_ } })
+end)
+
+--- Who has liked you and is waiting for an answer. **The pass buys this.**
+---
+--- Without it the page is told how many there are and nothing else, which is the honest version
+--- of the tease every dating app runs: the count is real, and paying reveals the faces rather
+--- than inventing them.
+V.Callback('v-phone:soc:hushLikedMe', function(src, resolve)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    -- Only people I have not already judged. Somebody I passed on is not waiting for me.
+    local rows = MySQL.query.await([[SELECT h.citizenid, h.photo, h.job, h.bio, l.super,
+               c.firstname, c.dob
+        FROM vphone_hush_likes l
+        JOIN vphone_hush_profiles h ON h.citizenid = l.from_cid AND h.active = 1
+        JOIN vphone_characters c ON c.citizenid = l.from_cid
+        WHERE l.to_cid = ? AND l.liked = 1
+          AND NOT EXISTS (SELECT 1 FROM vphone_hush_likes m
+                          WHERE m.from_cid = ? AND m.to_cid = l.from_cid)
+        ORDER BY l.super DESC, l.at DESC LIMIT 30]], { p.citizenid, p.citizenid }) or {}
+
+    local pass = hushPass()
+    local premium = pass.on and pass.seeLikes and hushPremiumUntil(p.citizenid) > 0
+    if not premium then
+        -- The COUNT and nothing else. No name, no photograph, no citizen id - a payload that
+        -- carries them and a page that blurs them is a payload anybody can read.
+        resolve({ ok = true, locked = true, count = #rows })
+        return
+    end
+
+    local out = {}
+    for i, r in ipairs(rows) do
+        out[i] = { ref = r.citizenid, name = r.firstname, age = ageFrom(r.dob),
+                   photo = r.photo, job = r.job, bio = r.bio, super = truthy(r.super) }
+    end
+    resolve({ ok = true, locked = false, count = #out, people = out })
 end)
 
 V.Callback('v-phone:soc:hushSetup', function(src, resolve, data)
@@ -441,14 +1539,79 @@ V.Callback('v-phone:soc:hushSetup', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
     local bio = tostring((data and data.bio) or ''):sub(1, SOC.bioMax)
-    local photo = tostring((data and data.photo) or ''):sub(1, 300)
-    if photo ~= '' and not imageAllowed(photo) then resolve({ error = 'badhost' }) return end
+    -- Three photographs, each through the host gate: they face every profile this one is
+    -- shown to, so they are as public as a post's image.
+    -- What is already on this profile, so an unchanged photograph is not re-judged. Without
+    -- this, a player whose picture expired could not save anything at all - and because
+    -- `active` rides in the same payload, could not switch the profile off either. They could
+    -- not leave the app.
+    local had = MySQL.single.await(
+        'SELECT photo, photo2, photo3 FROM vphone_hush_profiles WHERE citizenid = ?',
+        { p.citizenid }) or {}
+
+    local photos = {}
+    for i, key in ipairs({ 'photo', 'photo2', 'photo3' }) do
+        local url = tostring((data and data[key]) or ''):sub(1, 300)
+        if not PhoneImageAllowedOrSame(url, had[key]) then
+            resolve({ error = 'badhost' }) return
+        end
+        photos[i] = url
+    end
     local active = (data and data.active == false) and 0 or 1
 
-    MySQL.query.await([[INSERT INTO hush_profiles (citizenid, bio, photo, active)
-        VALUES (?,?,?,?)
-        ON DUPLICATE KEY UPDATE bio=VALUES(bio), photo=VALUES(photo), active=VALUES(active)]],
-        { p.citizenid, bio, photo, active })
+    -- Who this profile is, and who it wants to see. Self-declared on both counts: the
+    -- framework's idea of a character's sex is a different question from who they are looking
+    -- for, and a dating app that decides the second one for somebody is not a dating app.
+    local gender = tostring((data and data.gender) or '')
+    gender = (gender == 'm' or gender == 'f') and gender or ''
+    local seeking = tostring((data and data.seeking) or 'all')
+    if seeking ~= 'm' and seeking ~= 'f' then seeking = 'all' end
+
+    -- The age range, bounded and ordered. 18 is the floor because everybody on this app is an
+    -- adult, and swapping a reversed pair is kinder than refusing it.
+    local minAge = math.max(18, math.min(99, math.floor(num(data and data.minAge, 18))))
+    local maxAge = math.max(18, math.min(99, math.floor(num(data and data.maxAge, 99))))
+    if minAge > maxAge then minAge, maxAge = maxAge, minAge end
+
+    -- What they do. The one free-text field besides the bio and the prompt answer, and it is
+    -- a job title rather than a sentence - forty characters, stripped of control codes.
+    local job = tostring((data and data.job) or ''):gsub('%c', ' '):gsub('%s+', ' ')
+    job = job:gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 40)
+
+    -- Closed sets from here down. An unknown key is DROPPED rather than refused, so a page a
+    -- build behind loses one field instead of failing to save the profile at all.
+    local looking = tostring((data and data.looking) or '')
+    if not HUSH_LOOKING[looking] then looking = '' end
+
+    local interests = {}
+    local seenTag = {}
+    for _, key in ipairs((data and type(data.interests) == 'table' and data.interests) or {}) do
+        key = tostring(key or '')
+        if HUSH_INTERESTS[key] and not seenTag[key] and #interests < 6 then
+            seenTag[key] = true
+            interests[#interests + 1] = key
+        end
+    end
+
+    local prompt = tostring((data and data.prompt) or '')
+    if not HUSH_PROMPTS[prompt] then prompt = '' end
+    local answer = tostring((data and data.promptAnswer) or ''):gsub('%c', ' '):gsub('%s+', ' ')
+    answer = answer:gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 140)
+    -- An answer with no question is a line of text nothing introduces, and a question with no
+    -- answer is a blank on the card. Neither is kept.
+    if prompt == '' or answer == '' then prompt, answer = '', '' end
+
+    MySQL.query.await([[INSERT INTO vphone_hush_profiles
+            (citizenid, bio, photo, photo2, photo3, gender, seeking, min_age, max_age, active,
+             job, looking, interests, prompt, prompt_answer)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON DUPLICATE KEY UPDATE bio=VALUES(bio), photo=VALUES(photo), photo2=VALUES(photo2),
+            photo3=VALUES(photo3), gender=VALUES(gender), seeking=VALUES(seeking),
+            min_age=VALUES(min_age), max_age=VALUES(max_age), active=VALUES(active),
+            job=VALUES(job), looking=VALUES(looking), interests=VALUES(interests),
+            prompt=VALUES(prompt), prompt_answer=VALUES(prompt_answer)]],
+        { p.citizenid, bio, photos[1], photos[2], photos[3], gender, seeking,
+          minAge, maxAge, active, job, looking, table.concat(interests, ','), prompt, answer })
     resolve({ ok = true })
 end)
 
@@ -464,23 +1627,84 @@ V.Callback('v-phone:soc:hushNext', function(src, resolve)
     -- A pass comes round again after `Config.Social.hush.passDays`, because a deck you
     -- can empty for ever is a deck that ends. A LIKE never does: that one is a decision.
     local passDays = math.max(0, math.floor(num(SOC.hush.passDays, 7)))
+    local me = MySQL.single.await(
+        'SELECT gender, seeking, min_age, max_age FROM vphone_hush_profiles WHERE citizenid = ?',
+        { p.citizenid }) or {}
+
+    -- **Both** preferences, not one.
+    --
+    -- Showing somebody a profile that would never want them back is how a dating app wastes
+    -- everybody's time: a card that cannot become a match is a card that should not be dealt.
+    -- So the deck filters on what THIS player is looking for and on whether the other profile
+    -- is looking for them. `seeking = 'all'` and a blank gender both mean "no opinion", which
+    -- has to pass rather than exclude - most profiles will not have filled this in.
+    local wants = tostring(me.seeking or 'all')
+    local myGender = tostring(me.gender or '')
+    local minAge = math.max(18, math.floor(num(me.min_age, 18)))
+    local maxAge = math.max(minAge, math.floor(num(me.max_age, 99)))
+
     local row = MySQL.single.await(([[
-        SELECT h.citizenid, h.bio, h.photo, c.firstname, c.dob
-        FROM hush_profiles h
-        JOIN characters c ON c.citizenid = h.citizenid
+        SELECT h.citizenid, h.bio, h.photo, h.photo2, h.photo3, h.gender,
+               h.job, h.looking, h.interests, h.prompt, h.prompt_answer,
+               c.firstname, c.dob
+        FROM vphone_hush_profiles h
+        JOIN vphone_characters c ON c.citizenid = h.citizenid
         WHERE h.active = 1 AND h.citizenid <> ?
-          AND NOT EXISTS (SELECT 1 FROM hush_likes l
+          AND NOT EXISTS (SELECT 1 FROM vphone_hush_likes l
                           WHERE l.from_cid = ? AND l.to_cid = h.citizenid
                             AND (l.liked = 1%s))
+          -- What I am looking for.
+          AND (? = 'all' OR h.gender = '' OR h.gender = ?)
+          -- And what they are looking for, when either of us has said.
+          AND (h.seeking = 'all' OR ? = '' OR h.seeking = ?)
+          -- Age, both ways: mine of them, and theirs of me.
+          AND (c.dob IS NULL OR c.dob = ''
+               OR (%d - CAST(LEFT(c.dob, 4) AS UNSIGNED)) BETWEEN ? AND ?)
         ORDER BY RAND() LIMIT 1
     ]]):format(passDays > 0
         and (' OR l.at > DATE_SUB(NOW(), INTERVAL %d DAY)'):format(passDays)
-        or ' OR 1 = 1'), { p.citizenid, p.citizenid })
+        or ' OR 1 = 1', THIS_YEAR),
+        { p.citizenid, p.citizenid, wants, wants, myGender, myGender, minAge, maxAge })
     if not row then resolve({ ok = true, profile = nil }) return end
 
-    resolve({ ok = true, profile = {
+    local photos = {}
+    for _, url in ipairs({ row.photo, row.photo2, row.photo3 }) do
+        if url and url ~= '' then photos[#photos + 1] = tostring(url) end
+    end
+
+    -- What the two of them have in common, worked out here rather than on the page: the page
+    -- does not hold the reader's own profile while a card is on screen, and a shared interest
+    -- is the single most useful thing a dating card can say.
+    local mineTags = {}
+    for _, key in ipairs(hushSplit(MySQL.scalar.await(
+        'SELECT interests FROM vphone_hush_profiles WHERE citizenid = ?', { p.citizenid }))) do
+        mineTags[key] = true
+    end
+    local theirTags, shared = hushSplit(row.interests), {}
+    for _, key in ipairs(theirTags) do
+        if mineTags[key] then shared[#shared + 1] = key end
+    end
+
+    local likeCap, superCap, premium = hushLikeCaps(p.citizenid)
+    local likesUsed, supersUsed = hushSpent(p.citizenid)
+
+    resolve({ ok = true,
+      limits = { likes = likeCap, likesUsed = likesUsed, supers = superCap,
+                 supersUsed = supersUsed, premium = premium },
+      profile = {
         ref = row.citizenid, name = row.firstname, age = ageFrom(row.dob),
-        bio = row.bio, photo = row.photo,
+        bio = row.bio, photo = row.photo, photos = photos,
+        job = row.job, looking = row.looking,
+        interests = theirTags, shared = shared,
+        prompt = row.prompt, promptAnswer = row.prompt_answer,
+        -- How far away, in metres, when they are connected. A dating app without distance is a
+        -- pen-pal service, and on a server the answer is genuinely useful.
+        distance = hushDistance(src, row.citizenid),
+        -- Did they already super like me? Tinder shows this before the swipe, and it is the
+        -- whole point of a super like.
+        superOnMe = MySQL.scalar.await([[SELECT 1 FROM vphone_hush_likes
+            WHERE from_cid = ? AND to_cid = ? AND liked = 1 AND super = 1]],
+            { row.citizenid, p.citizenid }) ~= nil,
     } })
 end)
 
@@ -492,43 +1716,133 @@ V.Callback('v-phone:soc:hushChoice', function(src, resolve, data)
     if target == '' or target == p.citizenid then resolve(false) return end
 
     local liked = data and data.like == true
+    local super = liked and (data and data.super == true) or false
+
+    -- Set when a like is claimed against the in-flight count below, and given back the moment
+    -- the row it was claiming for has been written - or the request has failed.
+    local claimed = false
+    local function unclaim()
+        if not claimed then return end
+        claimed = false
+        local held = HushFlight[p.citizenid]
+        if not held then return end
+        held.likes = held.likes - 1
+        held.supers = held.supers - (super and 1 or 0)
+        if held.likes <= 0 and held.supers <= 0 then HushFlight[p.citizenid] = nil end
+    end
+
+    -- A super like is capped hard and separately from ordinary likes. That cap IS the feature:
+    -- a signal everybody can send at will says nothing.
+    -- **Both ceilings are read BEFORE the row is written**, not after.
+    --
+    -- The like ceiling used to be checked by inserting the row and counting afterwards, then
+    -- deleting it again when the count came out too high. That is a write, a read and a write
+    -- to answer a question the first read could have answered - and it left a window in which
+    -- a second request saw the row that was about to be removed. The pass moves both numbers,
+    -- so this is also where the pass earns its money.
+    local likeCap, superCap = hushLikeCaps(p.citizenid)
+    if liked then
+        local likesUsed, supersUsed = hushSpent(p.citizenid)
+        -- Already judged? Then this is a change of mind on a card that came round again, and
+        -- it does not spend a second like.
+        local already = MySQL.scalar.await([[SELECT liked FROM vphone_hush_likes
+            WHERE from_cid = ? AND to_cid = ?]], { p.citizenid, target })
+        local spends = num(already, 0) ~= 1
+
+        -- **No yield from here to the claim below**, which is what makes this hold.
+        local flight = HushFlight[p.citizenid] or { likes = 0, supers = 0 }
+        if spends and (likesUsed + flight.likes) >= likeCap then
+            resolve({ error = 'limit', cap = likeCap, premium = false }) return
+        end
+        if super and (supersUsed + flight.supers) >= superCap then
+            resolve({ error = 'superlimit', cap = superCap }) return
+        end
+        if spends then
+            HushFlight[p.citizenid] = {
+                likes = flight.likes + 1,
+                supers = flight.supers + (super and 1 or 0),
+            }
+            claimed = true
+        end
+    end
+
     -- A pass is recorded too, or the same face comes back every time the app opens. It
     -- is an UPDATE rather than an IGNORE because a pass expires: seeing somebody again
     -- has to restart their clock, otherwise the second pass never sticks.
-    MySQL.insert.await([[INSERT INTO hush_likes (from_cid, to_cid, liked) VALUES (?,?,?)
-        ON DUPLICATE KEY UPDATE liked = VALUES(liked), at = CURRENT_TIMESTAMP]],
-        { p.citizenid, target, liked and 1 or 0 })
+    MySQL.insert.await([[INSERT INTO vphone_hush_likes (from_cid, to_cid, liked, super)
+            VALUES (?,?,?,?)
+        ON DUPLICATE KEY UPDATE liked = VALUES(liked), super = VALUES(super),
+            at = CURRENT_TIMESTAMP]],
+        { p.citizenid, target, liked and 1 or 0, super and 1 or 0 })
 
-    if not liked then resolve({ ok = true, match = false }) return end
+    -- The row exists, so the claim is redundant: `hushSpent` counts it from here on.
+    unclaim()
 
-    -- The daily ceiling counts LIKES, not passes: saying no is free.
-    local today = num(MySQL.scalar.await([[SELECT COUNT(*) FROM hush_likes
-        WHERE from_cid = ? AND liked = 1 AND at > DATE_SUB(NOW(), INTERVAL 1 DAY)]],
-        { p.citizenid }), 0)
-    if today > math.floor(num(V.Setting('socialDailyLikes', SOC.hush.dailyLikes), 30)) then
-        MySQL.query.await('DELETE FROM hush_likes WHERE from_cid = ? AND to_cid = ?', { p.citizenid, target })
-        resolve({ error = 'limit' }) return
+    -- What is left, so the page can count down without asking again.
+    local likesLeft, supersLeft = hushSpent(p.citizenid)
+    likesLeft = math.max(0, likeCap - likesLeft)
+    supersLeft = math.max(0, superCap - supersLeft)
+
+    if not liked then
+        resolve({ ok = true, match = false, left = likesLeft, supersLeft = supersLeft })
+        return
     end
 
     local mutual = MySQL.scalar.await(
-        'SELECT 1 FROM hush_likes WHERE from_cid = ? AND to_cid = ? AND liked = 1',
+        'SELECT 1 FROM vphone_hush_likes WHERE from_cid = ? AND to_cid = ? AND liked = 1',
         { target, p.citizenid })
     if not mutual then resolve({ ok = true, match = false }) return end
 
-    -- The match: the one moment identity crosses, because both sides asked for it. Names
-    -- and numbers travel through v-phone, which owns numbers; each side gets a message
-    -- from the other, so the conversation already exists when they open it.
-    local phone = V.Use('v-phone')
-    local myNumber = phone.GetNumber(p.citizenid)
-    local theirNumber = phone.GetNumber(target)
-    local them = MySQL.single.await('SELECT firstname FROM characters WHERE citizenid = ?', { target })
+    -- The match: a first name, and nothing else.
+    --
+    -- **No phone number, and no SMS.** This used to look each side's number up and text both of
+    -- them, which handed each person the other's number at the moment of matching - the one
+    -- thing Hush is not supposed to do, and it survived the change that took the number out of
+    -- the match LIST because the number left by a different door. The conversation Hush needs
+    -- is its own: `hushChat` addresses by the match and never learns who is on the other end.
+    local them = MySQL.single.await('SELECT firstname FROM vphone_characters WHERE citizenid = ?', { target })
 
-    if myNumber and theirNumber then
-        phone.SendMessage(p.citizenid, theirNumber, L(src, 'soc.match_line'))
-        phone.SendMessage(target, myNumber, L(src, 'soc.match_line'))
-    end
     Core.Log('social', ('hush match %s <-> %s'):format(p.citizenid, target), nil, p.citizenid)
-    resolve({ ok = true, match = true, name = them and them.firstname or '?', number = theirNumber })
+    resolve({ ok = true, match = true, name = them and them.firstname or '?', super = super,
+              left = likesLeft, supersLeft = supersLeft })
+end)
+
+--- Undo the last pass.
+---
+--- Only a PASS. Undoing a like would let somebody take back a match after seeing who it was,
+--- and a match is the one thing on this app that both sides agreed to - it is not a decision
+--- one of them gets to reverse quietly.
+V.Callback('v-phone:soc:hushRewind', function(src, resolve)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local row = MySQL.single.await([[SELECT to_cid FROM vphone_hush_likes
+        WHERE from_cid = ? AND liked = 0 ORDER BY at DESC LIMIT 1]], { p.citizenid })
+    if not row then resolve({ error = 'nothing' }) return end
+
+    MySQL.query.await('DELETE FROM vphone_hush_likes WHERE from_cid = ? AND to_cid = ?',
+        { p.citizenid, row.to_cid })
+    resolve({ ok = true })
+end)
+
+--- Undo a match, from either side.
+---
+--- Both rows go. Leaving the other half behind would put the person straight back in the deck
+--- as somebody who already liked you, so the next swipe would re-match you with somebody you
+--- had just walked away from.
+V.Callback('v-phone:soc:hushUnmatch', function(src, resolve, data)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local target = tostring((data and data.ref) or '')
+    if target == '' then resolve(false) return end
+
+    MySQL.query.await([[DELETE FROM vphone_hush_likes
+        WHERE (from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?)]],
+        { p.citizenid, target, target, p.citizenid })
+    Core.Log('social', ('hush unmatch %s <-> %s'):format(p.citizenid, target), nil, p.citizenid)
+    resolve({ ok = true })
 end)
 
 --- Everyone who liked you back. A dating app whose matches you can only ever see once,
@@ -541,30 +1855,187 @@ V.Callback('v-phone:soc:hushMatches', function(src, resolve)
     local rows = MySQL.query.await([[
         SELECT mine.to_cid AS cid, mine.at,
                c.firstname, c.dob, h.bio, h.photo
-        FROM hush_likes mine
-        JOIN hush_likes theirs
+        FROM vphone_hush_likes mine
+        JOIN vphone_hush_likes theirs
           ON theirs.from_cid = mine.to_cid AND theirs.to_cid = mine.from_cid AND theirs.liked = 1
-        LEFT JOIN characters c ON c.citizenid = mine.to_cid
-        LEFT JOIN hush_profiles h ON h.citizenid = mine.to_cid
+        LEFT JOIN vphone_characters c ON c.citizenid = mine.to_cid
+        LEFT JOIN vphone_hush_profiles h ON h.citizenid = mine.to_cid
         WHERE mine.from_cid = ? AND mine.liked = 1
         ORDER BY mine.at DESC LIMIT 50
     ]], { p.citizenid }) or {}
 
-    local phone = GetResourceState('v-phone') == 'started' and V.Use('v-phone') or nil
+    -- Every unread count in one grouped read, instead of one query per match inside the loop
+    -- below. Same predicates, same key - `inbox_idx (app, to_cid, seen)` serves this directly,
+    -- where the per-row form probed an index that does not carry `seen`.
+    --
+    -- It counts unread from ANYBODY, not only from matches; the extra keys are simply never
+    -- looked up, because the only reader is `unread[r.cid]` and `r.cid` is always a match.
+    local unread = {}
+    for _, u in ipairs(MySQL.query.await([[
+        SELECT from_cid AS other, COUNT(*) AS n FROM vphone_social_dm
+        WHERE app = 'hush' AND to_cid = ? AND seen = 0
+        GROUP BY from_cid]], { p.citizenid }) or {}) do
+        unread[u.other] = num(u.n, 0)
+    end
+
     local out = {}
     for _, r in ipairs(rows) do
-        -- A match already exchanged numbers, so the number is theirs to have. Nothing
-        -- else about the citizen behind it travels.
+        -- **No phone number.** A match is two people who liked a first name and a photograph;
+        -- handing over the number behind it makes a dating app a directory, and the number is
+        -- the one thing a player cannot take back once somebody has it. They talk inside Hush,
+        -- and they give out their number themselves if they decide to.
+        --
+        -- `ref` is the citizen id, and it is opaque: the client hands it straight back and it is
+        -- never displayed. Everything shown is the first name, an age from the date of birth,
+        -- and what they wrote about themselves.
         out[#out + 1] = {
+            ref = r.cid,
             name = r.firstname or '?',
             age = ageFrom(r.dob),
             bio = r.bio or '',
             photo = r.photo or '',
             at = r.at,
-            number = phone and phone.GetNumber(r.cid) or nil,
+            unread = math.floor(unread[r.cid] or 0),
         }
     end
     resolve({ ok = true, matches = out })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Hush: its own conversations
+-- ══════════════════════════════════════════════════════════════
+-- **Matches talk inside Hush, not by text message.**
+--
+-- Opening a match used to hand over their phone NUMBER and push the player into the Messages app.
+-- Two things wrong with that. A number cannot be taken back: one swipe and a stranger has the way
+-- to reach you everywhere, for ever, whatever you decide about them ten minutes later. And a
+-- conversation that leaves the app leaves its context - unmatching stops nothing, because the
+-- thread is in Messages now.
+--
+-- So Hush carries its own thread. It reuses `vphone_social_dm` - the table Bleeter and Snapmatic
+-- already use - under `app = 'hush'`, because a second messages table would be a second set of
+-- bugs. What differs is ADDRESSING: the other two address by handle, and a Hush profile has no
+-- handle, so these two address by the match itself and check the match on every call.
+--
+-- Unmatching deletes the like rows, so `hushMatched` goes false and the thread becomes
+-- unreachable from both sides at once. That is the point of talking here rather than by SMS.
+
+--- Are these two matched? Both directions, both liked. The gate on every call below.
+local function hushMatched(a, b)
+    if a == '' or b == '' or a == b then return false end
+    return MySQL.scalar.await([[SELECT 1 FROM vphone_hush_likes mine
+        JOIN vphone_hush_likes theirs
+          ON theirs.from_cid = mine.to_cid AND theirs.to_cid = mine.from_cid AND theirs.liked = 1
+        WHERE mine.from_cid = ? AND mine.to_cid = ? AND mine.liked = 1 LIMIT 1]], { a, b }) ~= nil
+end
+
+--- One conversation. Marks what arrived as seen, because opening it is reading it.
+--- Delete one direct message - Bleeter, Snapmatic or Hush.
+---
+--- **The same two meanings behind one word as SMS**, because a phone that deletes differently
+--- depending which app you are in is a phone nobody trusts:
+---
+---   * a message you SENT is unsent, so the row goes and it leaves both phones;
+---   * a message you RECEIVED comes off YOUR copy only, because deleting somebody else's record
+---     of what they said is not yours to do.
+---
+--- One handler for all three apps: they share `vphone_social_dm`, so a second implementation
+--- would only be a second set of bugs. The `app` is read from the row, never from the page -
+--- passing it in would let a Bleeter call reach into a Hush thread.
+V.Callback('v-phone:soc:dmDelete', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve({ error = 'args' }) return end
+
+    local row = MySQL.single.await(
+        'SELECT app, from_cid, to_cid FROM vphone_social_dm WHERE id = ?', { id })
+    if not row then resolve({ error = 'gone' }) return end
+    if row.from_cid ~= p.citizenid and row.to_cid ~= p.citizenid then
+        resolve({ error = 'notyours' })
+        return
+    end
+
+    if row.from_cid == p.citizenid then
+        MySQL.update.await('DELETE FROM vphone_social_dm WHERE id = ?', { id })
+        MySQL.update.await('DELETE FROM vphone_dm_hidden WHERE message_id = ?', { id })
+        resolve({ ok = true, both = true })
+        return
+    end
+
+    MySQL.query.await(
+        'INSERT IGNORE INTO vphone_dm_hidden (message_id, citizenid) VALUES (?,?)',
+        { id, p.citizenid })
+    resolve({ ok = true, both = false })
+end)
+
+V.Callback('v-phone:soc:hushChat', function(src, resolve, data)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local other = tostring((data and data.ref) or '')
+    if not hushMatched(p.citizenid, other) then resolve({ error = 'nomatch' }) return end
+
+    local rows = MySQL.query.await([[SELECT id, from_cid, body, image, at
+        FROM vphone_social_dm
+        WHERE app = 'hush' AND ((from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?))
+          AND id NOT IN (SELECT message_id FROM vphone_dm_hidden WHERE citizenid = ?)
+        ORDER BY id ASC LIMIT 200]],
+        { p.citizenid, other, other, p.citizenid, p.citizenid }) or {}
+
+    MySQL.update.await([[UPDATE vphone_social_dm SET seen = 1
+        WHERE app = 'hush' AND from_cid = ? AND to_cid = ?]], { other, p.citizenid })
+
+    local out = {}
+    for i, r in ipairs(rows) do
+        -- `mine` rather than a citizen id: the page needs to know which side a line is on and
+        -- nothing else. No name, no number, no citizen id - the row id travels only because
+        -- deleting a line has to be able to name which one.
+        out[i] = { id = r.id, mine = r.from_cid == p.citizenid,
+                   body = r.body or '', image = r.image or '', at = r.at }
+    end
+
+    -- Who they are, from the profile, so the thread has a face at the top of it.
+    local who = MySQL.single.await([[SELECT c.firstname, c.dob, h.photo
+        FROM vphone_hush_profiles h LEFT JOIN vphone_characters c ON c.citizenid = h.citizenid
+        WHERE h.citizenid = ?]], { other })
+
+    resolve({ ok = true, messages = out, name = who and who.firstname or '?',
+              age = who and ageFrom(who.dob) or nil, photo = who and who.photo or '' })
+end)
+
+--- Say something to a match.
+V.Callback('v-phone:soc:hushSay', function(src, resolve, data)
+    if not hushOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local other = tostring((data and data.ref) or '')
+    if not hushMatched(p.citizenid, other) then resolve({ error = 'nomatch' }) return end
+
+    local body = tostring((data and data.body) or ''):sub(1, 500)
+    local image = tostring((data and data.image) or ''):sub(1, 300)
+    if image ~= '' and not imageAllowed(image) then resolve({ error = 'badhost' }) return end
+    if body:gsub('%s', '') == '' and image == '' then resolve({ error = 'empty' }) return end
+
+    MySQL.insert.await(
+        'INSERT INTO vphone_social_dm (app, from_cid, to_cid, body, image) VALUES (?,?,?,?,?)',
+        { 'hush', p.citizenid, other, body, image })
+
+    -- The notification carries the FIRST NAME, which is all Hush ever shows of anybody. Not a
+    -- handle - there is none - and certainly not a number.
+    local target = Core.GetPlayerByCitizenId and Core.GetPlayerByCitizenId(other)
+    if target and target.source and GetResourceState('v-phone') == 'started' then
+        local me = MySQL.single.await(
+            'SELECT firstname FROM vphone_characters WHERE citizenid = ?', { p.citizenid })
+        pcall(function()
+            exports['v-phone']:Notify(target.source, 'hush', me and me.firstname or '?',
+                body ~= '' and body or (Locales.fr or {})['soc.dm_photo'] or 'Photo')
+        end)
+    end
+    resolve({ ok = true })
 end)
 
 -- ══════════════════════════════════════════════════════════════
@@ -591,19 +2062,21 @@ V.Callback('v-phone:soc:profile', function(src, resolve, data)
     if not a then resolve({ error = 'nouser' }) return end
 
     local counts = MySQL.single.await([[
-        SELECT (SELECT COUNT(*) FROM social_posts s WHERE s.citizenid = ? AND s.kind = ?) AS posts,
-               (SELECT COUNT(*) FROM social_follows f WHERE f.app = ? AND f.to_cid = ?) AS followers,
-               (SELECT COUNT(*) FROM social_follows f2 WHERE f2.app = ? AND f2.from_cid = ?) AS following
-    ]], { cid, kind, app, cid, app, cid }) or {}
+        SELECT (SELECT COUNT(*) FROM vphone_social_posts s WHERE s.citizenid = ? AND s.app = ?) AS posts,
+               (SELECT COUNT(*) FROM vphone_social_follows f WHERE f.app = ? AND f.to_cid = ?) AS followers,
+               (SELECT COUNT(*) FROM vphone_social_follows f2 WHERE f2.app = ? AND f2.from_cid = ?) AS following
+    ]], { cid, app, app, cid, app, cid }) or {}
 
     local posts = MySQL.query.await(([[
-        SELECT %s FROM social_posts s
-        JOIN social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
-        WHERE s.citizenid = ? AND s.kind = ?
+        SELECT %s FROM vphone_social_posts s
+        JOIN vphone_social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        WHERE s.citizenid = ? AND s.app = ?
         ORDER BY s.id DESC LIMIT ?
     ]]):format(POST_COLUMNS), {
-        p.citizenid, p.citizenid, p.citizenid, p.citizenid,
-        app, cid, kind, socFeedSize(),
+        -- Five: POST_COLUMNS binds the reader's own id once per EXISTS - liked, reposted,
+        -- saved, following - plus once for `mine`.
+        p.citizenid, p.citizenid, p.citizenid, p.citizenid, p.citizenid,
+        app, cid, app, socFeedSize(),
     }) or {}
 
     resolve({
@@ -611,7 +2084,8 @@ V.Callback('v-phone:soc:profile', function(src, resolve, data)
         me = cid == p.citizenid,
         account = {
             handle = a.handle, displayname = a.displayname, avatar = a.avatar,
-            bio = a.bio, verified = num(a.verified, 0) == 1,
+            bio = a.bio, cover = a.cover,
+            verified = truthy(a.verified), official = truthy(a.official),
         },
         counts = {
             posts = num(counts.posts, 0),
@@ -619,7 +2093,7 @@ V.Callback('v-phone:soc:profile', function(src, resolve, data)
             following = num(counts.following, 0),
         },
         followed = cid ~= p.citizenid and MySQL.scalar.await(
-            'SELECT 1 FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+            'SELECT 1 FROM vphone_social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
             { app, p.citizenid, cid }) ~= nil or false,
         posts = cleanPosts(posts),
     })
@@ -637,21 +2111,21 @@ V.Callback('v-phone:soc:search', function(src, resolve, data)
     local rows
     if q:gsub('%s', '') == '' then
         rows = MySQL.query.await([[
-            SELECT a.handle, a.displayname, a.avatar, a.bio, a.verified,
-                   (SELECT COUNT(*) FROM social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
-                   EXISTS(SELECT 1 FROM social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
+            SELECT a.handle, a.displayname, a.avatar, a.cover, a.bio, a.verified, a.official,
+                   (SELECT COUNT(*) FROM vphone_social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
+                   EXISTS(SELECT 1 FROM vphone_social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
                    (a.citizenid = ?) AS me
-            FROM social_accounts a WHERE a.app = ?
+            FROM vphone_social_accounts a WHERE a.app = ?
             ORDER BY followers DESC, a.handle ASC LIMIT 30
         ]], { p.citizenid, p.citizenid, app }) or {}
     else
         local like = '%' .. q .. '%'
         rows = MySQL.query.await([[
-            SELECT a.handle, a.displayname, a.avatar, a.bio, a.verified,
-                   (SELECT COUNT(*) FROM social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
-                   EXISTS(SELECT 1 FROM social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
+            SELECT a.handle, a.displayname, a.avatar, a.bio, a.verified, a.official,
+                   (SELECT COUNT(*) FROM vphone_social_follows f WHERE f.app = a.app AND f.to_cid = a.citizenid) AS followers,
+                   EXISTS(SELECT 1 FROM vphone_social_follows f2 WHERE f2.app = a.app AND f2.from_cid = ? AND f2.to_cid = a.citizenid) AS followed,
                    (a.citizenid = ?) AS me
-            FROM social_accounts a
+            FROM vphone_social_accounts a
             WHERE a.app = ? AND (a.handle LIKE ? OR a.displayname LIKE ?)
             ORDER BY (a.handle = ?) DESC, followers DESC LIMIT 30
         ]], { p.citizenid, p.citizenid, app, like, like, q }) or {}
@@ -659,9 +2133,10 @@ V.Callback('v-phone:soc:search', function(src, resolve, data)
 
     for _, r in ipairs(rows) do
         r.followers = num(r.followers, 0)
-        r.followed = num(r.followed, 0) == 1
-        r.verified = num(r.verified, 0) == 1
-        r.me = num(r.me, 0) == 1
+        r.followed = truthy(r.followed)
+        r.verified = truthy(r.verified)
+        r.official = truthy(r.official)
+        r.me = truthy(r.me)
     end
     resolve({ ok = true, accounts = rows })
 end)
@@ -676,19 +2151,20 @@ V.Callback('v-phone:soc:follow', function(src, resolve, data)
     if cid == p.citizenid then resolve({ error = 'self' }) return end
 
     local exists = MySQL.scalar.await(
-        'SELECT 1 FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+        'SELECT 1 FROM vphone_social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
         { app, p.citizenid, cid })
     if exists then
-        MySQL.query.await('DELETE FROM social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
+        MySQL.query.await('DELETE FROM vphone_social_follows WHERE app = ? AND from_cid = ? AND to_cid = ?',
             { app, p.citizenid, cid })
     else
-        MySQL.insert.await('INSERT IGNORE INTO social_follows (app, from_cid, to_cid) VALUES (?,?,?)',
+        MySQL.insert.await('INSERT IGNORE INTO vphone_social_follows (app, from_cid, to_cid) VALUES (?,?,?)',
             { app, p.citizenid, cid })
+        notify(app, cid, p.citizenid, 'follow', nil)
     end
     resolve({
         ok = true, followed = not exists,
         followers = num(MySQL.scalar.await(
-            'SELECT COUNT(*) FROM social_follows WHERE app = ? AND to_cid = ?', { app, cid }), 0),
+            'SELECT COUNT(*) FROM vphone_social_follows WHERE app = ? AND to_cid = ?', { app, cid }), 0),
     })
 end)
 
@@ -703,15 +2179,16 @@ V.Callback('v-phone:soc:comments', function(src, resolve, data)
     local app = appOf(data)
 
     local rows = MySQL.query.await([[
-        SELECT c.id, c.body, c.at, a.handle, a.displayname, a.avatar, a.verified,
+        SELECT c.id, c.body, c.at, a.handle, a.displayname, a.avatar, a.verified, a.official,
                (c.citizenid = ?) AS mine
-        FROM social_comments c
-        JOIN social_accounts a ON a.citizenid = c.citizenid AND a.app = ?
+        FROM vphone_social_comments c
+        JOIN vphone_social_accounts a ON a.citizenid = c.citizenid AND a.app = ?
         WHERE c.post_id = ? ORDER BY c.id ASC LIMIT 200
     ]], { p.citizenid, app, id }) or {}
     for _, r in ipairs(rows) do
-        r.mine = num(r.mine, 0) == 1
-        r.verified = num(r.verified, 0) == 1
+        r.mine = truthy(r.mine)
+        r.verified = truthy(r.verified)
+        r.official = truthy(r.official)
     end
     resolve({ ok = true, comments = rows })
 end)
@@ -724,14 +2201,18 @@ V.Callback('v-phone:soc:comment', function(src, resolve, data)
     local id = math.floor(num(data and data.id, 0))
     local body = tostring((data and data.body) or ''):sub(1, 280)
     if id <= 0 or body:gsub('%s', '') == '' then resolve({ error = 'empty' }) return end
-    if not MySQL.scalar.await('SELECT 1 FROM social_posts WHERE id = ?', { id }) then
+    if not MySQL.scalar.await('SELECT 1 FROM vphone_social_posts WHERE id = ?', { id }) then
         resolve({ error = 'gone' }) return
     end
 
-    MySQL.insert.await('INSERT INTO social_comments (post_id, citizenid, body) VALUES (?,?,?)',
+    MySQL.insert.await('INSERT INTO vphone_social_comments (post_id, citizenid, body) VALUES (?,?,?)',
         { id, p.citizenid, body })
+    -- `postApp`, not `app`: shadowing the request's app with the post's would work here and
+    -- quietly mislead whoever edits the lines after it.
+    local author, postApp = postAuthor(id)
+    if author then notify(postApp, author, p.citizenid, 'comment', id) end
     resolve({ ok = true, comments = num(MySQL.scalar.await(
-        'SELECT COUNT(*) FROM social_comments WHERE post_id = ?', { id }), 0) })
+        'SELECT COUNT(*) FROM vphone_social_comments WHERE post_id = ?', { id }), 0) })
 end)
 
 V.Callback('v-phone:soc:uncomment', function(src, resolve, data)
@@ -740,7 +2221,7 @@ V.Callback('v-phone:soc:uncomment', function(src, resolve, data)
     local id = math.floor(num(data and data.id, 0))
     if id <= 0 then resolve(false) return end
     -- Your own comment only. The author check is the WHERE clause, not a branch.
-    MySQL.query.await('DELETE FROM social_comments WHERE id = ? AND citizenid = ?', { id, p.citizenid })
+    MySQL.query.await('DELETE FROM vphone_social_comments WHERE id = ? AND citizenid = ?', { id, p.citizenid })
     resolve({ ok = true })
 end)
 
@@ -753,17 +2234,25 @@ V.Callback('v-phone:soc:repost', function(src, resolve, data)
     if id <= 0 then resolve(false) return end
 
     local exists = MySQL.scalar.await(
-        'SELECT 1 FROM social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+        'SELECT 1 FROM vphone_social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
     if exists then
-        MySQL.query.await('DELETE FROM social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+        MySQL.query.await('DELETE FROM vphone_social_reposts WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
     else
-        MySQL.insert.await('INSERT IGNORE INTO social_reposts (post_id, citizenid) VALUES (?,?)',
+        MySQL.insert.await('INSERT IGNORE INTO vphone_social_reposts (post_id, citizenid) VALUES (?,?)',
             { id, p.citizenid })
+    end
+    -- Same rule as a like: the notification belongs to the act of reposting, not to
+    -- toggling it off again. `exists` was the state BEFORE this call, so a fresh repost is
+    -- `not exists` - there is no `reposted` local here, and reading one as a global would
+    -- have been nil and silently notified nobody.
+    if not exists then
+        local author, postApp = postAuthor(id)
+        if author then notify(postApp, author, p.citizenid, 'repost', id) end
     end
     resolve({
         ok = true, reposted = not exists,
         reposts = num(MySQL.scalar.await(
-            'SELECT COUNT(*) FROM social_reposts WHERE post_id = ?', { id }), 0),
+            'SELECT COUNT(*) FROM vphone_social_reposts WHERE post_id = ?', { id }), 0),
     })
 end)
 
@@ -772,14 +2261,19 @@ V.Callback('v-phone:soc:delete', function(src, resolve, data)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
     if id <= 0 then resolve(false) return end
-    local n = MySQL.update.await('DELETE FROM social_posts WHERE id = ? AND citizenid = ?',
+    local n = MySQL.update.await('DELETE FROM vphone_social_posts WHERE id = ? AND citizenid = ?',
         { id, p.citizenid })
     if not n or n == 0 then resolve({ error = 'notyours' }) return end
     -- The post is gone, so its likes, comments and reposts are noise. Clear them rather
     -- than leaving rows pointing at nothing.
-    MySQL.query.await('DELETE FROM social_likes WHERE post_id = ?', { id })
-    MySQL.query.await('DELETE FROM social_comments WHERE post_id = ?', { id })
-    MySQL.query.await('DELETE FROM social_reposts WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM vphone_social_likes WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM vphone_social_comments WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM vphone_social_reposts WHERE post_id = ?', { id })
+    -- And its tags, and every notification that points at it. A notification whose post is
+    -- gone is a tap that leads nowhere.
+    MySQL.query.await('DELETE FROM vphone_social_saves WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM vphone_social_tags WHERE post_id = ?', { id })
+    MySQL.query.await('DELETE FROM vphone_social_notifs WHERE post_id = ?', { id })
     resolve({ ok = true })
 end)
 
@@ -790,6 +2284,785 @@ end)
 -- rules - it disappears, and being seen is part of its state - not to keep two feeds.
 local STORY_HOURS = 24
 
+-- ══════════════════════════════════════════════════════════════
+-- Notifications, hashtags and trending
+-- ══════════════════════════════════════════════════════════════
+--- What happened to you. Newest first, with the handle behind it resolved here so the page
+--- never has to make a second call per row.
+V.Callback('v-phone:soc:notifs', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+
+    local rows = MySQL.query.await([[SELECT n.id, n.kind, n.post_id, n.seen,
+            UNIX_TIMESTAMP(n.at) AS ts,
+            a.handle, a.displayname, a.avatar, a.verified, a.official,
+            (SELECT LEFT(s.body, 80) FROM vphone_social_posts s WHERE s.id = n.post_id) AS excerpt
+        FROM vphone_social_notifs n
+        JOIN vphone_social_accounts a ON a.citizenid = n.from_cid AND a.app = n.app
+        WHERE n.app = ? AND n.to_cid = ?
+        ORDER BY n.id DESC LIMIT 60]], { app, p.citizenid }) or {}
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        out[#out + 1] = {
+            id = math.floor(num(r.id, 0)),
+            kind = tostring(r.kind or ''),
+            postId = r.post_id and math.floor(num(r.post_id, 0)) or nil,
+            seen = truthy(r.seen),
+            ts = math.floor(num(r.ts, 0)),
+            handle = tostring(r.handle or ''),
+            displayname = r.displayname and tostring(r.displayname) or nil,
+            avatar = r.avatar and tostring(r.avatar) or nil,
+            verified = truthy(r.verified),
+            official = truthy(r.official),
+            excerpt = r.excerpt and tostring(r.excerpt) or nil,
+        }
+    end
+    resolve({ ok = true, notifs = out })
+end)
+
+--- How many are unread. Its own call because the tab bar wants the number on every screen,
+--- not just on the notifications tab, and a count is one indexed read rather than sixty rows.
+V.Callback('v-phone:soc:notifCount', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    resolve({ ok = true, unread = num(MySQL.scalar.await(
+        'SELECT COUNT(*) FROM vphone_social_notifs WHERE app = ? AND to_cid = ? AND seen = 0',
+        { app, p.citizenid }), 0) })
+end)
+
+--- Mark them read. All of them: opening the tab IS reading them, and per-row seen state on a
+--- list somebody just looked at is bookkeeping nobody asked for.
+V.Callback('v-phone:soc:notifSeen', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    MySQL.update.await(
+        'UPDATE vphone_social_notifs SET seen = 1 WHERE app = ? AND to_cid = ? AND seen = 0',
+        { app, p.citizenid })
+    resolve({ ok = true })
+end)
+
+--- Every post carrying one tag, newest first. The tag table is indexed on (app, tag, post_id),
+--- so this is a range read rather than a scan of every body ever written.
+V.Callback('v-phone:soc:tag', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local tag = cutBytes(lowerAscii(tostring((data and data.tag) or ''):gsub('^#', '')), 40)
+    if tag == '' then resolve({ error = 'notag' }) return end
+
+    local rows = MySQL.query.await(([[
+        SELECT %s
+        FROM vphone_social_posts s
+        JOIN vphone_social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        JOIN vphone_social_tags t ON t.post_id = s.id AND t.app = ?
+        WHERE t.tag = ? AND s.app = ?
+        ORDER BY s.id DESC LIMIT ?
+    ]]):format(POST_COLUMNS),
+        { p.citizenid, p.citizenid, p.citizenid, p.citizenid, p.citizenid,
+          app, app, tag, app, socFeedSize() }) or {}
+
+    resolve({ ok = true, tag = tag, posts = cleanPosts(rows) })
+end)
+
+--- What people are talking about: the most used tags in a recent window, with how many posts
+--- carry each. A window rather than all time, because "trending" that never changes is just a
+--- list of the tags somebody used most in the first week the server ran.
+V.Callback('v-phone:soc:trending', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local hours = math.max(1, math.min(168, math.floor(num(SOC.trendingHours, 48))))
+
+    local rows = MySQL.query.await([[SELECT tag, COUNT(*) AS posts
+        FROM vphone_social_tags
+        WHERE app = ? AND at >= (NOW() - INTERVAL ? HOUR)
+        GROUP BY tag ORDER BY posts DESC, tag ASC LIMIT 10]], { app, hours }) or {}
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        out[#out + 1] = { tag = tostring(r.tag), posts = math.floor(num(r.posts, 0)) }
+    end
+    resolve({ ok = true, trending = out, hours = hours })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Saving a post
+-- ══════════════════════════════════════════════════════════════
+--- Save or unsave. A toggle, keyed on the pair, so a double tap cannot count twice.
+V.Callback('v-phone:soc:save', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+
+    local exists = MySQL.scalar.await(
+        'SELECT 1 FROM vphone_social_saves WHERE post_id = ? AND citizenid = ?', { id, p.citizenid })
+    if exists then
+        MySQL.query.await('DELETE FROM vphone_social_saves WHERE post_id = ? AND citizenid = ?',
+            { id, p.citizenid })
+    else
+        MySQL.insert.await('INSERT IGNORE INTO vphone_social_saves (post_id, citizenid) VALUES (?,?)',
+            { id, p.citizenid })
+    end
+    -- Nobody is notified. A save is private, and telling the author would make it public.
+    resolve({ ok = true, saved = not exists })
+end)
+
+--- Everything this reader saved, newest save first - not newest post. Somebody looking at
+--- their saves is looking for the thing they kept, and they remember when they kept it.
+V.Callback('v-phone:soc:saved', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+
+    local rows = MySQL.query.await(([[
+        SELECT %s
+        FROM vphone_social_saves sv
+        JOIN vphone_social_posts s ON s.id = sv.post_id
+        JOIN vphone_social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        -- The POST's app, not just the author's account. Somebody with an account on both
+        -- would otherwise see their saved Bleeter posts inside Snapmatic.
+        WHERE sv.citizenid = ? AND s.app = ?
+        ORDER BY sv.at DESC, sv.post_id DESC LIMIT ?
+    ]]):format(POST_COLUMNS),
+        { p.citizenid, p.citizenid, p.citizenid, p.citizenid, p.citizenid,
+          app, p.citizenid, app, socFeedSize() }) or {}
+
+    -- The cap travels with the feed rather than in the boot payload: this is the one
+    -- answer the social apps always fetch, and the composer is the only thing that needs
+    -- it. A phone that never opens Bleeter never carries the number.
+    resolve({ ok = true, posts = cleanPosts(rows), maxImages = maxImages() })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Explore
+-- ══════════════════════════════════════════════════════════════
+--- Photographs from accounts this reader does not already follow.
+---
+--- The point of an explore grid is to show something the feed cannot, so it deliberately
+--- EXCLUDES the people already followed and the reader themselves. Ordered by likes over a
+--- recent window rather than all time: a grid that never changes is a hall of fame, not a
+--- place to discover anybody.
+V.Callback('v-phone:soc:explore', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+    local hours = math.max(1, math.min(720, math.floor(num(SOC.exploreHours, 168))))
+
+    local rows = MySQL.query.await(([[
+        SELECT %s
+        FROM vphone_social_posts s
+        JOIN vphone_social_accounts a ON a.citizenid = s.citizenid AND a.app = ?
+        -- Both: the app it was posted to, and that it is actually a picture. Explore is a
+        -- grid, so a text post on the same app has nothing to show in it.
+        WHERE s.app = ? AND s.kind IN ('photo', 'video')
+          AND s.citizenid <> ?
+          AND NOT EXISTS(SELECT 1 FROM vphone_social_follows f
+                         WHERE f.app = ? AND f.from_cid = ? AND f.to_cid = s.citizenid)
+          AND s.at >= (NOW() - INTERVAL ? HOUR)
+        ORDER BY likes DESC, s.id DESC LIMIT ?
+    ]]):format(POST_COLUMNS),
+        -- a.app, s.app, s.citizenid, f.app, f.from_cid, hours, limit - in that order.
+        { p.citizenid, p.citizenid, p.citizenid, p.citizenid, p.citizenid,
+          app, app, p.citizenid, app, p.citizenid, hours, socFeedSize() }) or {}
+
+    -- The cap travels with the feed rather than in the boot payload: this is the one
+    -- answer the social apps always fetch, and the composer is the only thing that needs
+    -- it. A phone that never opens Bleeter never carries the number.
+    resolve({ ok = true, posts = cleanPosts(rows), maxImages = maxImages() })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Who watched a story
+-- ══════════════════════════════════════════════════════════════
+--- The viewers of one story, for its author and nobody else.
+---
+--- The seen table has existed since stories shipped and only ever drove the unseen ring. This
+--- reads the other direction, which is what the author actually wants to know.
+V.Callback('v-phone:soc:storyViewers', function(src, resolve, data)
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+
+    -- Only the author. Who watched somebody else's story is their business, and asking for a
+    -- story id that is not yours must answer nothing rather than a list.
+    local owner = MySQL.scalar.await(
+        'SELECT citizenid FROM vphone_social_stories WHERE id = ? AND app = ?', { id, app })
+    if not owner then resolve({ error = 'gone' }) return end
+    if owner ~= p.citizenid then resolve({ error = 'notyours' }) return end
+
+    local rows = MySQL.query.await([[SELECT a.handle, a.displayname, a.avatar, a.verified, a.official
+        FROM vphone_social_story_seen v
+        JOIN vphone_social_accounts a ON a.citizenid = v.citizenid AND a.app = ?
+        WHERE v.story_id = ?
+        ORDER BY a.handle LIMIT 100]], { app, id }) or {}
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        out[#out + 1] = {
+            handle = tostring(r.handle), displayname = r.displayname and tostring(r.displayname) or nil,
+            avatar = r.avatar and tostring(r.avatar) or nil,
+            verified = truthy(r.verified),
+            official = truthy(r.official),
+        }
+    end
+    resolve({ ok = true, viewers = out })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- People behind a number
+-- ══════════════════════════════════════════════════════════════
+-- Every count in this app was a dead end. A post said how many likes it had and there was no
+-- way to find out whose; a profile said how many followers and the number was the whole
+-- answer. On a roleplay server those lists ARE the app - who follows whom is the social map,
+-- and a like is somebody telling you they were there.
+
+--- One person, shaped the way every list in this app shapes a person.
+---
+--- Written once because there are now four lists - viewers, likers, followers, following - and
+--- four copies of the same six fields is four chances for one of them to start including a
+--- citizen id.
+local function personRow(r)
+    return {
+        handle = tostring(r.handle),
+        displayname = r.displayname and tostring(r.displayname) or nil,
+        avatar = r.avatar and tostring(r.avatar) or nil,
+        verified = truthy(r.verified),
+        official = truthy(r.official),
+    }
+end
+
+--- Who liked a post.
+---
+--- Public, deliberately. A like is a public act: the count is already on the card and the
+--- author is already told who it was. Hiding the list while showing the number is the shape of
+--- privacy without any of it.
+V.Callback('v-phone:soc:likers', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+
+    local id = math.floor(num(data and data.id, 0))
+    if id <= 0 then resolve(false) return end
+    -- The post has to exist AND belong to this app: a Bleeter id asked for as a Snapmatic post
+    -- would otherwise answer with the likes of somebody else's post.
+    local exists = MySQL.scalar.await(
+        'SELECT 1 FROM vphone_social_posts WHERE id = ? AND app = ? LIMIT 1', { id, app })
+    if not exists then resolve({ error = 'gone' }) return end
+
+    local rows = MySQL.query.await([[SELECT a.handle, a.displayname, a.avatar, a.verified, a.official
+        FROM vphone_social_likes l
+        JOIN vphone_social_accounts a ON a.citizenid = l.citizenid AND a.app = ?
+        WHERE l.post_id = ?
+        ORDER BY l.citizenid = ? DESC, a.handle
+        LIMIT 200]], { app, id, p.citizenid }) or {}
+
+    local out = {}
+    for _, r in ipairs(rows) do out[#out + 1] = personRow(r) end
+    resolve({ ok = true, people = out })
+end)
+
+--- Who follows an account, or who it follows.
+---
+--- `which` is one of two words and is checked against both rather than pasted into the query:
+--- the direction decides which COLUMN is joined, and a column name coming from the client is
+--- how a list turns into a way to read the table.
+V.Callback('v-phone:soc:follows', function(src, resolve, data)
+    if not socOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+    local app = appOf(data)
+    if not accountOf(p.citizenid, app) then resolve({ error = 'noaccount' }) return end
+
+    local handle = tostring((data and data.handle) or '')
+    local cid = handle ~= '' and cidOfHandle(app, handle) or p.citizenid
+    if not cid then resolve({ error = 'nouser' }) return end
+
+    local which = tostring((data and data.which) or 'followers')
+    if which ~= 'followers' and which ~= 'following' then which = 'followers' end
+
+    -- Two whole statements rather than one with a column pasted in. It is four more lines and
+    -- it cannot be turned into a different query by anything the client sends.
+    local rows
+    if which == 'followers' then
+        rows = MySQL.query.await([[SELECT a.handle, a.displayname, a.avatar, a.verified, a.official
+            FROM vphone_social_follows f
+            JOIN vphone_social_accounts a ON a.citizenid = f.from_cid AND a.app = ?
+            WHERE f.app = ? AND f.to_cid = ?
+            ORDER BY f.at DESC LIMIT 200]], { app, app, cid })
+    else
+        rows = MySQL.query.await([[SELECT a.handle, a.displayname, a.avatar, a.verified, a.official
+            FROM vphone_social_follows f
+            JOIN vphone_social_accounts a ON a.citizenid = f.to_cid AND a.app = ?
+            WHERE f.app = ? AND f.from_cid = ?
+            ORDER BY f.at DESC LIMIT 200]], { app, app, cid })
+    end
+
+    local out = {}
+    for _, r in ipairs(rows or {}) do out[#out + 1] = personRow(r) end
+    resolve({ ok = true, people = out, which = which })
+end)
+
+-- ══════════════════════════════════════════════════════════════
+-- Verification
+-- ══════════════════════════════════════════════════════════════
+-- **Two badges, and they are two different things rather than two levels of one.**
+--
+--   `verified`  the blue tick. BOUGHT, at a desk on the map, and staff may still grant it.
+--   `official`  the orange mark. Granted by staff and by nothing else. There is no callback
+--               that writes it, so there is no message a client could send that would.
+--
+-- Two columns rather than one number, because they are independent facts. An account can hold
+-- both; revoking one has to leave the other exactly where it was; and a level would make the
+-- orange one "blue, but more", which is the opposite of what it says. Both live on the account
+-- row, which is already per (citizenid, app), so Bleeter and Snapmatic are independent without
+-- anything extra being stored.
+--
+-- Everything below that SELLS the blue one is governed by `Config.SocialVerify`. Nothing below
+-- can grant the orange one.
+
+local VERIFY_APPS = { bleeter = true, snap = true }
+
+local function verifyCfg()
+    local c = Config.SocialVerify
+    return (type(c) == 'table') and c or {}
+end
+
+--- Is the desk open for business?
+---
+--- Not "does the badge exist" - the badges are columns and always exist. This governs SELLING
+--- only, so an operator who switches it off takes nothing away from anybody who already paid.
+--- `set phone_socialVerify false` does the same thing on a running server.
+local function verifySellOn()
+    if not socOn() then return false end
+    if verifyCfg().enabled == false then return false end
+    return V.SettingBool('socialVerify', true)
+end
+
+--- Does the desk sell a badge for this app? An operator's list wins; the default is both.
+local function verifySells(app)
+    if not VERIFY_APPS[app] then return false end
+    local list = verifyCfg().apps
+    if type(list) ~= 'table' then return true end
+    for _, one in ipairs(list) do
+        if tostring(one):lower() == app then return true end
+    end
+    return false
+end
+
+--- What one costs on one app. Never negative, and never a fraction of a dollar.
+local function verifyPrice(app)
+    local prices = verifyCfg().price
+    local p = (type(prices) == 'table') and prices[app] or prices
+    return math.max(0, math.floor(num(p, 0)))
+end
+
+--- Which purse pays, and where the money lands.
+local function verifyPurse()
+    return (tostring(verifyCfg().money or 'bank') == 'cash') and 'cash' or 'bank'
+end
+
+--- Is the app on this phone? On by default, because a badge on an app the player cannot open
+--- is money taken for nothing. `requireApp = false` sells it anyway, for a server whose social
+--- apps are not removable in the first place.
+local function verifyInstalled(src, app)
+    if verifyCfg().requireApp == false then return true end
+    if not PhoneHasApp then return true end
+    return PhoneHasApp(src, app) == true
+end
+
+--- What this source is holding in the purse that pays, or nil when it cannot be read.
+---
+--- **nil is not zero, and the difference matters.** A balance that could not be read is a
+--- question the bridge could not answer, and turning that into 0 would tell somebody with a
+--- full account that they cannot afford a badge. `Bridge.RemoveMoney` is the authority either
+--- way; this is the courtesy that refuses before the money moves, so it steps aside when it
+--- does not know rather than guessing against the player.
+local function verifyBalance(src)
+    local read = Bridge.Banking and Bridge.Banking.Balances and Bridge.Banking.Balances(src)
+    if type(read) ~= 'table' then return nil end
+    local held = read[verifyPurse()]
+    return held ~= nil and num(held, 0) or nil
+end
+
+--- The desks, as plain coordinates. `normalisePlaces` in config.lua has already turned every
+--- `coords = vector3(...)` into x/y/z, so there is one shape to read here.
+local function verifyPoints()
+    local out = {}
+    local fallback = math.max(0.5, num(verifyCfg().distance, 2.0))
+    for i, pt in ipairs(verifyCfg().points or {}) do
+        if type(pt) == 'table' and pt.enabled ~= false and pt.x ~= nil and pt.y ~= nil then
+            out[#out + 1] = {
+                index = i,
+                label = pt.label and tostring(pt.label) or nil,
+                x = num(pt.x, 0.0) + 0.0, y = num(pt.y, 0.0) + 0.0, z = num(pt.z, 0.0) + 0.0,
+                radius = math.max(0.5, num(pt.radius, fallback)),
+            }
+        end
+    end
+    return out
+end
+
+--- The desk a position is standing at, or nil.
+---
+--- **Read from the ped, on the server.** A client that could name the desk it is at could name
+--- one it is nowhere near, and a badge sold in a place stops being sold in a place the moment
+--- the place is the client's word for it. server/charging.lua answers "am I at a charger" the
+--- same way and for the same reason.
+local function verifyDeskAt(coords)
+    if not coords then return nil end
+    local best, bestAt
+    for _, pt in ipairs(verifyPoints()) do
+        local d = #(coords - vector3(pt.x, pt.y, pt.z))
+        if d <= pt.radius and (bestAt == nil or d < bestAt) then best, bestAt = pt, d end
+    end
+    return best, bestAt
+end
+
+local function verifyPedCoords(src)
+    src = tonumber(src)
+    local ped = src and GetPlayerPed(src)
+    if not ped or ped == 0 then return nil end
+    return GetEntityCoords(ped)
+end
+
+--- One account's two badges, or nil when there is no account on that app.
+local function verifyBadges(cid, app)
+    local row = MySQL.single.await(
+        'SELECT handle, verified, official FROM vphone_social_accounts WHERE citizenid = ? AND app = ?',
+        { cid, app })
+    if not row then return nil end
+    return {
+        handle = tostring(row.handle or ''),
+        verified = truthy(row.verified),
+        official = truthy(row.official),
+    }
+end
+
+--- **Every reason to say no, answered before a single unit moves.**
+---
+--- This resource has already shipped a path that charged for something which no longer existed,
+--- so the ORDER is part of the design and not an accident of how it was written:
+---
+---   off           the desk is closed on this server, or the social apps are
+---   badapp        an app the desk does not sell, or a name that is not an app at all
+---   range         not at a desk. First of the per-player refusals on purpose: it is the one
+---                 that guards against a forged request, and a forged request must not be able
+---                 to learn whether a handle exists by reading which refusal comes back
+---   notinstalled  the app is not on their phone, so the badge would hang on nothing
+---   noaccount     no account on that app - there is no row for a badge to sit on
+---   hasbadge      already verified there. Selling it twice is selling nothing
+---   paying        a purchase of theirs is already in flight
+---   nomoney       the price is more than they are holding
+---   ok            take the money
+---
+--- Pure, deliberately. It reads a table of facts and answers with a word: it queries nothing,
+--- charges nothing and does not know what a source is. That is what lets tools/test-verify.py
+--- drive every branch of it outside the game, which is the only place these branches can all
+--- be reached.
+local function verifyVerdict(s)
+    s = s or {}
+    if not s.on then return 'off' end
+    if not s.sells then return 'badapp' end
+    if not s.atDesk then return 'range' end
+    if not s.installed then return 'notinstalled' end
+    if not s.account then return 'noaccount' end
+    if s.verified then return 'hasbadge' end
+    if s.paying then return 'paying' end
+    local price = math.max(0, math.floor(num(s.price, 0)))
+    -- A balance of nil is "the bridge could not say", not "nothing". The debit below is the
+    -- authority; this only refuses when the answer is known and it is short.
+    if price > 0 and s.balance ~= nil and num(s.balance, 0) < price then return 'nomoney' end
+    return 'ok'
+end
+
+--- One purchase at a time per character.
+---
+--- Everything in the buy path yields - the balance read, the debit, the update - so two taps in
+--- the same second both got past the checks on the old Hush pass and both were charged. The
+--- same trap, the same guard, cleared on every exit path including the refusals.
+local VerifyBuying = {}
+
+--- What the desk is offering this player, for the sheet the phone raises.
+---
+--- The state of every app is answered in one call, because the sheet has to say WHY an app
+--- cannot be bought - no account, already verified, not installed - rather than leaving a row
+--- that does nothing when it is tapped.
+V.Callback('v-phone:soc:verifyDesk', function(src, resolve)
+    if not verifySellOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    -- The person actually standing at the desk, and whose money this would be. Under a staff
+    -- phone-view session those are the held character, not the staff member holding the screen.
+    local acting = PhoneActingSource and PhoneActingSource(src) or src
+    local desk, away = verifyDeskAt(verifyPedCoords(acting))
+    if not desk then resolve({ error = 'range' }) return end
+
+    local purse = verifyPurse()
+    local held = verifyBalance(acting)
+
+    local out = {}
+    for _, app in ipairs({ 'bleeter', 'snap' }) do
+        if verifySells(app) then
+            local badges = verifyBadges(p.citizenid, app)
+            local price = verifyPrice(app)
+            local installed = verifyInstalled(src, app)
+            out[#out + 1] = {
+                app = app,
+                name = APP_NAME[app],
+                price = price,
+                handle = badges and badges.handle or nil,
+                verified = badges and badges.verified or false,
+                official = badges and badges.official or false,
+                installed = installed,
+                account = badges ~= nil,
+                -- The same verdict the purchase will reach, so a row that cannot be bought
+                -- says so before it is tapped rather than after.
+                verdict = verifyVerdict({
+                    on = true, sells = true, atDesk = true,
+                    installed = installed,
+                    account = badges ~= nil,
+                    verified = badges and badges.verified or false,
+                    paying = VerifyBuying[p.citizenid] == true,
+                    price = price, balance = held,
+                }),
+            }
+        end
+    end
+
+    resolve({
+        ok = true,
+        label = desk.label,
+        away = away and math.floor(away * 10) / 10 or nil,
+        money = purse,
+        balance = held,
+        apps = out,
+    })
+end)
+
+--- Buy the blue tick on one app.
+---
+--- **Nothing the page sends decides anything.** It names an app and that is the whole of its
+--- say: the price comes from the config, the desk comes from the ped's real position, and the
+--- payment goes through `Bridge.RemoveMoney`, which answers false on every framework it
+--- supports when the balance will not cover it. A debit that cannot be confirmed grants nothing.
+V.Callback('v-phone:soc:verifyBuy', function(src, resolve, data)
+    if not verifySellOn() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local app = tostring((data and data.app) or ''):lower()
+    local acting = PhoneActingSource and PhoneActingSource(src) or src
+    local desk = verifyDeskAt(verifyPedCoords(acting))
+    local badges = VERIFY_APPS[app] and verifyBadges(p.citizenid, app) or nil
+    local price = verifyPrice(app)
+    local purse = verifyPurse()
+
+    local verdict = verifyVerdict({
+        on = true,
+        sells = verifySells(app),
+        atDesk = desk ~= nil,
+        installed = verifyInstalled(src, app),
+        account = badges ~= nil,
+        verified = badges and badges.verified or false,
+        paying = VerifyBuying[p.citizenid] == true,
+        price = price,
+        balance = verifyBalance(acting),
+    })
+    if verdict ~= 'ok' then resolve({ error = verdict, price = price }) return end
+
+    VerifyBuying[p.citizenid] = true
+
+    if price > 0 then
+        local paid = Bridge.RemoveMoney(acting, price, purse,
+            ('v-phone: %s verification'):format(APP_NAME[app] or app))
+        if paid ~= true then
+            VerifyBuying[p.citizenid] = nil
+            resolve({ error = 'nomoney', price = price })
+            return
+        end
+    end
+
+    -- **The badge is written against the account that has not got it yet.**
+    --
+    -- `verified = 0` in the WHERE, so two writes that somehow both got here still produce one
+    -- grant: the second changes no rows. `official` is not named at all, which is the whole
+    -- point of two columns - buying blue cannot disturb an orange mark staff granted.
+    local changed = MySQL.update.await(
+        'UPDATE vphone_social_accounts SET verified = 1 WHERE citizenid = ? AND app = ? AND verified = 0',
+        { p.citizenid, app })
+    VerifyBuying[p.citizenid] = nil
+
+    if (tonumber(changed) or 0) < 1 then
+        -- Paid, and the row says it was already verified. The money is gone and refusing now
+        -- would be taking it for nothing, so this reads as success - and it is logged loudly,
+        -- because it means two purchases raced and one of them should not have got here.
+        V.Log(('verification: %s paid %d for %s and the badge was already set')
+            :format(tostring(p.citizenid), price, app))
+    end
+
+    local account = tostring(verifyCfg().account or '')
+    if account ~= '' and price > 0 then
+        local landed = Bridge.AddSociety and Bridge.AddSociety(account, price,
+            ('v-phone: %s verification'):format(APP_NAME[app] or app)) or false
+        if not landed then
+            -- Printed unconditionally: an operator who named an account and never sees the
+            -- money is looking at a misconfiguration, and a silent one is worse than a line.
+            V.Log(('verification: could not credit "%s" with %d - check the account exists')
+                :format(account, price))
+        end
+    end
+
+    Core.Log('social', ('verified %s on %s (%d)'):format(p.citizenid, app, price),
+             nil, p.citizenid)
+    TriggerClientEvent('v-phone:client:socialRefresh', src, app)
+
+    resolve({ ok = true, app = app, price = price,
+              handle = badges and badges.handle or nil })
+end)
+
+--- Grant or revoke the badge on one account.
+---
+--- The column and the badge have both existed since the app shipped - the badge is drawn
+--- wherever a name appears - and nothing has ever set it, so no account could be verified by
+--- anybody. This is the missing half.
+---
+--- Deliberately NOT a callback: a client must never be able to ask for this. It is an export,
+--- and the only thing that calls it is the ace-gated staff command in server/admin.lua. A
+--- server with its own admin menu calls the export from there.
+---
+---     exports['v-phone']:SetVerified('bleeter', 'somehandle', true)
+---
+--- Returns ok, and the handle as it is actually stored, so a caller can echo it back.
+--- Take the badge off every account on one app, or on both.
+---
+--- **For the servers that ran a build where registering granted it.** Every account created
+--- before that was fixed carries a tick, which makes the tick meaningless - the one thing it is
+--- for is telling accounts apart. Undoing that one handle at a time is not realistic on a
+--- server with two hundred characters.
+---
+---     exports['v-phone']:ClearVerified()          -- both apps
+---     exports['v-phone']:ClearVerified('bleeter') -- one of them
+---
+--- Returns how many accounts it changed. Deliberately NOT run by an update: it is somebody
+--- else's database and somebody else's decision, and a server that granted those badges on
+--- purpose would lose them without being asked.
+exports('ClearVerified', function(app)
+    local one = tostring(app or ''):lower()
+    one = (one == 'snap' or one == 'bleeter') and one or nil
+
+    local changed
+    if one then
+        changed = MySQL.update.await(
+            'UPDATE vphone_social_accounts SET verified = 0 WHERE app = ? AND verified <> 0', { one })
+    else
+        changed = MySQL.update.await(
+            'UPDATE vphone_social_accounts SET verified = 0 WHERE verified <> 0')
+    end
+    changed = tonumber(changed) or 0
+
+    -- Every phone that is open is showing the old badge until something makes it look again.
+    for _, raw in ipairs(GetPlayers()) do
+        local other = tonumber(raw)
+        if other then
+            TriggerClientEvent('v-phone:client:socialRefresh', other, one or 'bleeter')
+            if not one then TriggerClientEvent('v-phone:client:socialRefresh', other, 'snap') end
+        end
+    end
+    return changed
+end)
+
+exports('SetVerified', function(app, handle, on)
+    app = (tostring(app or ''):lower() == 'snap') and 'snap' or 'bleeter'
+    handle = tostring(handle or ''):gsub('^@', ''):gsub('%s', '')
+    if handle == '' then return false, 'nohandle' end
+
+    local cid = cidOfHandle(app, handle)
+    if not cid then return false, 'nosuchhandle' end
+
+    MySQL.update.await(
+        'UPDATE vphone_social_accounts SET verified = ? WHERE citizenid = ? AND app = ?',
+        { on and 1 or 0, cid, app })
+
+    -- The badge is on every card that account has ever posted, so an open phone would keep
+    -- showing the old state until something else made it refresh. Telling it costs one event.
+    local target = Core.GetPlayerByCitizenId(cid)
+    if target and target.source then
+        TriggerClientEvent('v-phone:client:socialRefresh', target.source, app)
+    end
+    return true, handle
+end)
+
+--- Who is verified, for a staff command that wants to list them. Handles only: this is an
+--- account list, not a character list, and it has no business carrying citizen ids.
+exports('VerifiedHandles', function(app)
+    app = (tostring(app or ''):lower() == 'snap') and 'snap' or 'bleeter'
+    local rows = MySQL.query.await(
+        'SELECT handle FROM vphone_social_accounts WHERE app = ? AND verified = 1 ORDER BY handle',
+        { app }) or {}
+    local out = {}
+    for _, r in ipairs(rows) do out[#out + 1] = tostring(r.handle) end
+    return out
+end)
+
+--- Grant or revoke the OFFICIAL mark - the orange one - on one account.
+---
+--- **There is no player-facing route to this and there is not meant to be.** The blue tick is
+--- for sale at a desk; this one says an account is who it claims to be, and a badge that can be
+--- bought cannot say that. So it is an export and a staff command, exactly like `SetVerified`
+--- was before the desk existed, and no callback anywhere writes this column.
+---
+---     exports['v-phone']:SetOfficial('bleeter', 'lspd', true)
+---
+--- It does not touch `verified`. Somebody who paid for the blue tick and is then made official
+--- keeps both, and taking the orange one away leaves the one they bought alone - which is the
+--- reason these are two columns and not one level.
+---
+--- Returns ok, and the handle as it is actually stored, so a caller can echo it back.
+exports('SetOfficial', function(app, handle, on)
+    app = (tostring(app or ''):lower() == 'snap') and 'snap' or 'bleeter'
+    handle = tostring(handle or ''):gsub('^@', ''):gsub('%s', '')
+    if handle == '' then return false, 'nohandle' end
+
+    local cid = cidOfHandle(app, handle)
+    if not cid then return false, 'nosuchhandle' end
+
+    MySQL.update.await(
+        'UPDATE vphone_social_accounts SET official = ? WHERE citizenid = ? AND app = ?',
+        { on and 1 or 0, cid, app })
+
+    local target = Core.GetPlayerByCitizenId(cid)
+    if target and target.source then
+        TriggerClientEvent('v-phone:client:socialRefresh', target.source, app)
+    end
+    return true, handle
+end)
+
+--- Who holds the orange mark, for the staff listing.
+exports('OfficialHandles', function(app)
+    app = (tostring(app or ''):lower() == 'snap') and 'snap' or 'bleeter'
+    local rows = MySQL.query.await(
+        'SELECT handle FROM vphone_social_accounts WHERE app = ? AND official = 1 ORDER BY handle',
+        { app }) or {}
+    local out = {}
+    for _, r in ipairs(rows) do out[#out + 1] = tostring(r.handle) end
+    return out
+end)
+
 V.Callback('v-phone:soc:stories', function(src, resolve, data)
     if not socOn() then resolve({ error = 'off' }) return end
     local p = Core.GetPlayer(src)
@@ -799,13 +3072,13 @@ V.Callback('v-phone:soc:stories', function(src, resolve, data)
     local rows = MySQL.query.await([[
         SELECT t.id, t.citizenid, t.image, t.body, t.at,
                a.handle, a.displayname, a.avatar,
-               EXISTS(SELECT 1 FROM social_story_seen v WHERE v.story_id = t.id AND v.citizenid = ?) AS seen,
+               EXISTS(SELECT 1 FROM vphone_social_story_seen v WHERE v.story_id = t.id AND v.citizenid = ?) AS seen,
                (t.citizenid = ?) AS mine
-        FROM social_stories t
-        JOIN social_accounts a ON a.citizenid = t.citizenid AND a.app = t.app
+        FROM vphone_social_stories t
+        JOIN vphone_social_accounts a ON a.citizenid = t.citizenid AND a.app = t.app
         WHERE t.app = ? AND t.at > DATE_SUB(NOW(), INTERVAL ? HOUR)
           AND (t.citizenid = ? OR EXISTS(
-                SELECT 1 FROM social_follows f
+                SELECT 1 FROM vphone_social_follows f
                 WHERE f.app = t.app AND f.from_cid = ? AND f.to_cid = t.citizenid))
         ORDER BY t.id ASC
     ]], { p.citizenid, p.citizenid, app, STORY_HOURS, p.citizenid, p.citizenid }) or {}
@@ -818,12 +3091,12 @@ V.Callback('v-phone:soc:stories', function(src, resolve, data)
         if not byAuthor[key] then
             byAuthor[key] = {
                 handle = r.handle, displayname = r.displayname, avatar = r.avatar,
-                mine = num(r.mine, 0) == 1, unseen = false, items = {},
+                mine = truthy(r.mine), unseen = false, items = {},
             }
             order[#order + 1] = byAuthor[key]
         end
         local group = byAuthor[key]
-        local seen = num(r.seen, 0) == 1
+        local seen = truthy(r.seen)
         if not seen then group.unseen = true end
         group.items[#group.items + 1] = { id = r.id, image = r.image, body = r.body, at = r.at, seen = seen }
     end
@@ -845,7 +3118,7 @@ V.Callback('v-phone:soc:story', function(src, resolve, data)
     if image == '' then resolve({ error = 'noimage' }) return end
     if not imageAllowed(image) then resolve({ error = 'badhost' }) return end
 
-    MySQL.insert.await('INSERT INTO social_stories (app, citizenid, image, body) VALUES (?,?,?,?)',
+    MySQL.insert.await('INSERT INTO vphone_social_stories (app, citizenid, image, body) VALUES (?,?,?,?)',
         { app, p.citizenid, image, tostring((data and data.body) or ''):sub(1, 160) })
     resolve({ ok = true })
 end)
@@ -855,7 +3128,7 @@ V.Callback('v-phone:soc:storySeen', function(src, resolve, data)
     if not p then resolve(false) return end
     local id = math.floor(num(data and data.id, 0))
     if id <= 0 then resolve(false) return end
-    MySQL.insert.await('INSERT IGNORE INTO social_story_seen (story_id, citizenid) VALUES (?,?)',
+    MySQL.insert.await('INSERT IGNORE INTO vphone_social_story_seen (story_id, citizenid) VALUES (?,?)',
         { id, p.citizenid })
     resolve({ ok = true })
 end)
@@ -872,17 +3145,17 @@ V.Callback('v-phone:soc:dmList', function(src, resolve, data)
     local app = appOf(data)
 
     local rows = MySQL.query.await([[
-        SELECT a.handle, a.displayname, a.avatar,
+        SELECT a.handle, a.displayname, a.avatar, a.verified, a.official,
                m.body, m.image, m.at, (m.from_cid = ?) AS mine,
-               (SELECT COUNT(*) FROM social_dm u
+               (SELECT COUNT(*) FROM vphone_social_dm u
                  WHERE u.app = m.app AND u.to_cid = ? AND u.seen = 0
                    AND u.from_cid = IF(m.from_cid = ?, m.to_cid, m.from_cid)) AS unread
-        FROM social_dm m
-        JOIN social_accounts a
+        FROM vphone_social_dm m
+        JOIN vphone_social_accounts a
           ON a.app = m.app AND a.citizenid = IF(m.from_cid = ?, m.to_cid, m.from_cid)
         WHERE m.app = ? AND (m.from_cid = ? OR m.to_cid = ?)
           AND m.id = (
-            SELECT MAX(m2.id) FROM social_dm m2
+            SELECT MAX(m2.id) FROM vphone_social_dm m2
             WHERE m2.app = m.app
               AND ((m2.from_cid = m.from_cid AND m2.to_cid = m.to_cid)
                 OR (m2.from_cid = m.to_cid AND m2.to_cid = m.from_cid)))
@@ -890,7 +3163,9 @@ V.Callback('v-phone:soc:dmList', function(src, resolve, data)
     ]], { p.citizenid, p.citizenid, p.citizenid, p.citizenid, app, p.citizenid, p.citizenid }) or {}
 
     for _, r in ipairs(rows) do
-        r.mine = num(r.mine, 0) == 1
+        r.mine = truthy(r.mine)
+        r.verified = truthy(r.verified)
+        r.official = truthy(r.official)
         r.unread = num(r.unread, 0)
     end
     resolve({ ok = true, threads = rows })
@@ -904,14 +3179,15 @@ V.Callback('v-phone:soc:dmThread', function(src, resolve, data)
     if not cid then resolve({ error = 'nouser' }) return end
 
     local rows = MySQL.query.await([[
-        SELECT id, body, image, at, (from_cid = ?) AS mine FROM social_dm
+        SELECT id, body, image, at, (from_cid = ?) AS mine FROM vphone_social_dm
         WHERE app = ? AND ((from_cid = ? AND to_cid = ?) OR (from_cid = ? AND to_cid = ?))
+          AND id NOT IN (SELECT message_id FROM vphone_dm_hidden WHERE citizenid = ?)
         ORDER BY id ASC LIMIT 200
-    ]], { p.citizenid, app, p.citizenid, cid, cid, p.citizenid }) or {}
-    for _, r in ipairs(rows) do r.mine = num(r.mine, 0) == 1 end
+    ]], { p.citizenid, app, p.citizenid, cid, cid, p.citizenid, p.citizenid }) or {}
+    for _, r in ipairs(rows) do r.mine = truthy(r.mine) end
 
     -- Opening the thread is reading it.
-    MySQL.query.await('UPDATE social_dm SET seen = 1 WHERE app = ? AND from_cid = ? AND to_cid = ?',
+    MySQL.query.await('UPDATE vphone_social_dm SET seen = 1 WHERE app = ? AND from_cid = ? AND to_cid = ?',
         { app, cid, p.citizenid })
 
     local a = accountOf(cid, app)
@@ -935,7 +3211,7 @@ V.Callback('v-phone:soc:dmSend', function(src, resolve, data)
     if image ~= '' and not imageAllowed(image) then resolve({ error = 'badhost' }) return end
     if body:gsub('%s', '') == '' and image == '' then resolve({ error = 'empty' }) return end
 
-    MySQL.insert.await('INSERT INTO social_dm (app, from_cid, to_cid, body, image) VALUES (?,?,?,?,?)',
+    MySQL.insert.await('INSERT INTO vphone_social_dm (app, from_cid, to_cid, body, image) VALUES (?,?,?,?,?)',
         { app, p.citizenid, cid, body, image })
 
     -- A message they cannot see until they happen to open the app is a message that does
@@ -961,12 +3237,17 @@ end)
 
 --- Post as the system/an event, for modules that want to put something on Bleeter (a
 --- news module, a race result). `handle` must be an account that exists.
-exports('SocialPostAs', function(cid, kind, body, image)
+--- `app` is optional and defaults to what the kind implies, so existing callers keep
+--- working; pass 'bleeter' with a photo to put a picture on Bleeter.
+exports('SocialPostAs', function(cid, kind, body, image, app)
     cid = tostring(cid or '')
-    if not accountOf(cid, appOfKind(kind == 'photo' and 'photo' or 'text')) then return false end
+    kind = (kind == 'photo') and 'photo' or 'text'
+    app = (app == 'bleeter' or app == 'snap') and app or appOfKind(kind)
+    if kind == 'text' then app = 'bleeter' end
+    if not accountOf(cid, app) then return false end
     return MySQL.insert.await(
-        'INSERT INTO social_posts (citizenid, kind, body, image) VALUES (?,?,?,?)',
-        { cid, kind == 'photo' and 'photo' or 'text', tostring(body or ''):sub(1, 280),
+        'INSERT INTO vphone_social_posts (citizenid, app, kind, body, image) VALUES (?,?,?,?,?)',
+        { cid, app, kind, tostring(body or ''):sub(1, 280),
           tostring(image or ''):sub(1, 300) }) ~= nil
 end)
 
@@ -980,10 +3261,10 @@ end)
 -- per server in the admin panel. A throwaway story and a conversation are not the same
 -- thing, so they are not swept on the same schedule - and 0 anywhere means "keep it".
 local SWEEPS = {
-    { kind = 'stories',  table = 'social_stories', label = 'story',   hours = true },
-    { kind = 'posts',    table = 'social_posts',   label = 'post' },
-    { kind = 'comments', table = 'social_comments', label = 'comment' },
-    { kind = 'messages', table = 'social_dm',      label = 'message' },
+    { kind = 'stories',  table = 'vphone_social_stories', label = 'story',   hours = true },
+    { kind = 'posts',    table = 'vphone_social_posts',   label = 'post' },
+    { kind = 'comments', table = 'vphone_social_comments', label = 'comment' },
+    { kind = 'messages', table = 'vphone_social_dm',      label = 'message' },
 }
 
 function socialSweep(loud)
@@ -1005,10 +3286,10 @@ function socialSweep(loud)
 
     -- Rows that only exist to point at something else. A like on a post that has been
     -- swept is not a like, it is a dangling key.
-    MySQL.query.await('DELETE FROM social_likes WHERE post_id NOT IN (SELECT id FROM social_posts)')
-    MySQL.query.await('DELETE FROM social_reposts WHERE post_id NOT IN (SELECT id FROM social_posts)')
-    MySQL.query.await('DELETE FROM social_comments WHERE post_id NOT IN (SELECT id FROM social_posts)')
-    MySQL.query.await('DELETE FROM social_story_seen WHERE story_id NOT IN (SELECT id FROM social_stories)')
+    MySQL.query.await('DELETE FROM vphone_social_likes WHERE post_id NOT IN (SELECT id FROM vphone_social_posts)')
+    MySQL.query.await('DELETE FROM vphone_social_reposts WHERE post_id NOT IN (SELECT id FROM vphone_social_posts)')
+    MySQL.query.await('DELETE FROM vphone_social_comments WHERE post_id NOT IN (SELECT id FROM vphone_social_posts)')
+    MySQL.query.await('DELETE FROM vphone_social_story_seen WHERE story_id NOT IN (SELECT id FROM vphone_social_stories)')
 end
 
 --- Called by the phone once v-core is up and `Core` is known, because the phone is the
@@ -1016,126 +3297,310 @@ end
 function SocialBoot(core)
     Core = core
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_accounts` (
-        `citizenid` VARCHAR(16) NOT NULL,
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_accounts` (
+        `citizenid` VARCHAR(64) NOT NULL,
         `app`       VARCHAR(12) NOT NULL DEFAULT 'bleeter',
         `handle`      VARCHAR(20) NOT NULL,
         `displayname` VARCHAR(40) NOT NULL DEFAULT '',
         `avatar`    VARCHAR(300) NOT NULL DEFAULT '',
+        `cover`     VARCHAR(300) NOT NULL DEFAULT '',
         `bio`       VARCHAR(160) NOT NULL DEFAULT '',
         `phone`     VARCHAR(20) NOT NULL DEFAULT '',
         `password`  VARCHAR(80) NOT NULL DEFAULT '',
         `verified`  TINYINT(1) NOT NULL DEFAULT 0,
+        -- The ORANGE mark, and its own column rather than a second value in `verified`.
+        -- The blue one is bought and this one is granted; an account may hold both, and
+        -- taking either away has to leave the other exactly where it was.
+        `official`  TINYINT(1) NOT NULL DEFAULT 0,
         PRIMARY KEY (`citizenid`, `app`),
         UNIQUE KEY `handle` (`app`, `handle`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    -- Accounts made before credentials existed keep working: they are marked verified and
-    -- given the handle as a display name, so nobody is locked out by the upgrade.
+    -- `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so a column
+    -- added after release has to be added on its own or it never appears - the bank app lost
+    -- its whole statement to exactly this once already.
+    local hasCover = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_accounts'
+          AND COLUMN_NAME = 'cover' LIMIT 1]])
+    if not hasCover then
+        MySQL.query.await(
+            "ALTER TABLE `vphone_social_accounts` ADD COLUMN `cover` VARCHAR(300) NOT NULL DEFAULT '' AFTER `avatar`")
+        print('[v-phone] social: added vphone_social_accounts.cover')
+    end
+
+    -- Accounts made before credentials existed keep working: they are given the handle as a
+    -- display name, so nobody is left with a blank one by the upgrade.
     for col, ddl in pairs({
         displayname = "ADD COLUMN `displayname` VARCHAR(40) NOT NULL DEFAULT ''",
         phone       = "ADD COLUMN `phone` VARCHAR(20) NOT NULL DEFAULT ''",
         password    = "ADD COLUMN `password` VARCHAR(80) NOT NULL DEFAULT ''",
         verified    = "ADD COLUMN `verified` TINYINT(1) NOT NULL DEFAULT 0",
+        -- Added after release, so it has to be added on its own or a database that already
+        -- has this table never gets it: `CREATE TABLE IF NOT EXISTS` does nothing at all to a
+        -- table that exists. Defaults to 0, so nobody is made official by an update.
+        official    = "ADD COLUMN `official` TINYINT(1) NOT NULL DEFAULT 0",
     }) do
         local has = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
-            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'social_accounts'
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_accounts'
               AND COLUMN_NAME = ? LIMIT 1]], { col })
-        if not has then MySQL.query.await('ALTER TABLE `social_accounts` ' .. ddl) end
+        if not has then MySQL.query.await('ALTER TABLE `vphone_social_accounts` ' .. ddl) end
     end
-    MySQL.query.await("UPDATE `social_accounts` SET `verified` = 1 WHERE `verified` = 0 AND `password` = ''")
-    MySQL.query.await("UPDATE `social_accounts` SET `displayname` = `handle` WHERE `displayname` = ''")
+    -- **The blue tick is NOT handed out here, and the line that did it is gone.**
+    --
+    -- It read `SET verified = 1 WHERE verified = 0 AND password = ''`, and the comment above it
+    -- called that "keeps working". Two different things share the word: signing up verifies
+    -- your NUMBER, and the `verified` COLUMN is the badge staff grant with
+    -- `/phoneadmin verify @handle`. The sign-up path has a long comment about exactly this
+    -- confusion because the same mistake was made there once and fixed; this copy survived.
+    --
+    -- It was not a one-time migration either. It ran on EVERY boot, so any account with an
+    -- empty password - one seeded by a script, imported from elsewhere, or created by another
+    -- resource - was badged at the next restart, for ever. A badge everybody has is not a
+    -- badge; telling accounts apart is the one thing it is for.
+    --
+    -- Nothing replaces it. An account with no password is not locked out: `resetGate` texts a
+    -- code to the number on the account and lets a new password be set, which is the path that
+    -- already existed and the one that actually solves being unable to sign in. `verified` was
+    -- never consulted for authentication at all - it is drawn, and nothing else.
+    --
+    -- Badges already granted by this line are left alone: they are somebody else's database
+    -- and taking them back is not an update's decision. `exports['v-phone']:ClearVerified()`
+    -- is there for an operator who wants them gone.
+    MySQL.query.await("UPDATE `vphone_social_accounts` SET `displayname` = `handle` WHERE `displayname` = ''")
 
     -- A database created before accounts were per-app is migrated in place: existing
     -- rows become Bleeter accounts, which is what they were in spirit.
     local hasApp = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
-        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'social_accounts'
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_accounts'
           AND COLUMN_NAME = 'app' LIMIT 1]])
     if not hasApp then
-        MySQL.query.await("ALTER TABLE `social_accounts` ADD COLUMN `app` VARCHAR(12) NOT NULL DEFAULT 'bleeter'")
-        MySQL.query.await("ALTER TABLE `social_accounts` DROP PRIMARY KEY, ADD PRIMARY KEY (`citizenid`, `app`)")
-        MySQL.query.await("ALTER TABLE `social_accounts` DROP INDEX `handle`")
-        MySQL.query.await("ALTER TABLE `social_accounts` ADD UNIQUE KEY `handle` (`app`, `handle`)")
+        MySQL.query.await("ALTER TABLE `vphone_social_accounts` ADD COLUMN `app` VARCHAR(12) NOT NULL DEFAULT 'bleeter'")
+        MySQL.query.await("ALTER TABLE `vphone_social_accounts` DROP PRIMARY KEY, ADD PRIMARY KEY (`citizenid`, `app`)")
+        MySQL.query.await("ALTER TABLE `vphone_social_accounts` DROP INDEX `handle`")
+        MySQL.query.await("ALTER TABLE `vphone_social_accounts` ADD UNIQUE KEY `handle` (`app`, `handle`)")
         print('[v-social] accounts migrated to one per app')
     end
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_posts` (
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_posts` (
         `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
+        -- WHICH APP this post belongs to.
+        --
+        -- It used to be derived from `kind`: text meant Bleeter, photo meant Snapmatic. That
+        -- worked exactly as long as the two apps carried different content types, and broke
+        -- the moment Bleeter learnt to post pictures - every photograph, wherever it was
+        -- written, appeared on Snapmatic and never on Bleeter. A post's app is a fact about
+        -- the post, not something to infer from its media type, so it is stored.
+        `app`       VARCHAR(8)  NOT NULL DEFAULT 'bleeter',
         `kind`      VARCHAR(8)  NOT NULL DEFAULT 'text',
         `body`      VARCHAR(1000) NOT NULL DEFAULT '',
+        -- The COVER, and the first of `images` when there are several.
+        --
+        -- Kept as its own column on purpose. The profile grid, the share sheet, the story row,
+        -- the home widget and every export read this one field, and a post with four pictures
+        -- has a cover like any other post - so none of them had to learn about the list.
         `image`     VARCHAR(300) NOT NULL DEFAULT '',
+        -- The rest of them, as a JSON array including the cover. NULL on every row written
+        -- before this column existed, which decodes to "just the cover" - a faithful reading,
+        -- because one is all those posts ever had.
+        `images`    TEXT NULL DEFAULT NULL,
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (`id`), KEY `kind_idx` (`kind`, `id`)
+        PRIMARY KEY (`id`), KEY `app_idx` (`app`, `id`), KEY `kind_idx` (`kind`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_likes` (
+    -- `CREATE TABLE IF NOT EXISTS` does nothing to a table that already exists, so the
+    -- column is added on its own - and then BACKFILLED from what the old rule would have
+    -- said. Every existing photo really was on Snapmatic and every existing text really was
+    -- on Bleeter, because that was the only behaviour there had ever been, so this is a
+    -- faithful record of where those posts already are rather than a guess.
+    local hasApp = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_posts'
+          AND COLUMN_NAME = 'app' LIMIT 1]])
+    if not hasApp then
+        MySQL.query.await("ALTER TABLE `vphone_social_posts` ADD COLUMN `app` VARCHAR(8) NOT NULL DEFAULT 'bleeter'")
+        MySQL.query.await("UPDATE `vphone_social_posts` SET `app` = 'snap' WHERE `kind` IN ('photo', 'video')")
+        MySQL.query.await('ALTER TABLE `vphone_social_posts` ADD INDEX `app_idx` (`app`, `id`)')
+        print('[v-phone] social: added posts.app and backfilled it from kind')
+    end
+
+    -- `images` on a table that already exists. No backfill: NULL is read as the single
+    -- `image` those rows carry, so there is nothing to write.
+    local hasImages = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_posts'
+          AND COLUMN_NAME = 'images' LIMIT 1]])
+    if not hasImages then
+        MySQL.query.await('ALTER TABLE `vphone_social_posts` ADD COLUMN `images` TEXT NULL DEFAULT NULL')
+        print('[v-phone] social: added posts.images for multi-photo posts')
+    end
+
+    -- What somebody did to your post, or to you. The one thing a social app cannot be
+    -- without: a like nobody is told about may as well not have happened.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_notifs` (
+        `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `app`      VARCHAR(8)  NOT NULL DEFAULT 'bleeter',
+        `to_cid`   VARCHAR(64) NOT NULL,
+        `from_cid` VARCHAR(64) NOT NULL,
+        `kind`     VARCHAR(10) NOT NULL,
+        `post_id`  INT UNSIGNED NULL DEFAULT NULL,
+        `seen`     TINYINT(1)  NOT NULL DEFAULT 0,
+        `at`       TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`id`),
+        KEY `inbox` (`app`, `to_cid`, `id`),
+        KEY `unread` (`app`, `to_cid`, `seen`),
+        KEY `post` (`post_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    -- Hashtags, extracted once when the post is written. The alternative is a LIKE '%#tag%'
+    -- scan over every post ever made, every time somebody taps a tag, which is fine on a
+    -- test server and hopeless on a real one.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_tags` (
+        `post_id` INT UNSIGNED NOT NULL,
+        `app`     VARCHAR(8)  NOT NULL DEFAULT 'bleeter',
+        `tag`     VARCHAR(40) NOT NULL,
+        `at`      TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`post_id`, `tag`),
+        KEY `bytag` (`app`, `tag`, `post_id`),
+        KEY `trend` (`app`, `at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_likes` (
         `post_id`   INT UNSIGNED NOT NULL,
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
         PRIMARY KEY (`post_id`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `hush_profiles` (
-        `citizenid` VARCHAR(16) NOT NULL,
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_hush_profiles` (
+        `citizenid` VARCHAR(64) NOT NULL,
         `bio`       VARCHAR(160) NOT NULL DEFAULT '',
         `photo`     VARCHAR(300) NOT NULL DEFAULT '',
+        `photo2`    VARCHAR(300) NOT NULL DEFAULT '',
+        `photo3`    VARCHAR(300) NOT NULL DEFAULT '',
+        -- Self-declared, which is how a dating app works: the framework's idea of a
+        -- character's sex is not the same question as who they are looking for.
+        `gender`    VARCHAR(1) NOT NULL DEFAULT '',
+        `seeking`   VARCHAR(3) NOT NULL DEFAULT 'all',
+        `min_age`   TINYINT UNSIGNED NOT NULL DEFAULT 18,
+        `max_age`   TINYINT UNSIGNED NOT NULL DEFAULT 99,
         `active`    TINYINT(1) NOT NULL DEFAULT 1,
         PRIMARY KEY (`citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `hush_likes` (
-        `from_cid` VARCHAR(16) NOT NULL,
-        `to_cid`   VARCHAR(16) NOT NULL,
+    -- Columns added after the table shipped, one at a time, because `CREATE TABLE IF NOT
+    -- EXISTS` does nothing to a table that already exists. This is the third time that has
+    -- caught something in this resource, so it is now the reflex.
+    local function hushColumn(column, definition)
+        local has = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_hush_profiles'
+              AND COLUMN_NAME = ? LIMIT 1]], { column })
+        if has then return end
+        MySQL.query.await(('ALTER TABLE `vphone_hush_profiles` ADD COLUMN `%s` %s')
+            :format(column, definition))
+        print(('[v-phone] hush: added %s'):format(column))
+    end
+    hushColumn('photo2', "VARCHAR(300) NOT NULL DEFAULT ''")
+    hushColumn('photo3', "VARCHAR(300) NOT NULL DEFAULT ''")
+    hushColumn('gender', "VARCHAR(1) NOT NULL DEFAULT ''")
+    hushColumn('seeking', "VARCHAR(3) NOT NULL DEFAULT 'all'")
+    hushColumn('min_age', 'TINYINT UNSIGNED NOT NULL DEFAULT 18')
+    hushColumn('max_age', 'TINYINT UNSIGNED NOT NULL DEFAULT 99')
+    -- A profile that is a photograph and one line is a profile nobody can decide anything
+    -- from. These five are what an actual dating app asks for, and every one of them is drawn
+    -- on the card rather than stored and forgotten.
+    hushColumn('job', "VARCHAR(40) NOT NULL DEFAULT ''")
+    hushColumn('looking', "VARCHAR(8) NOT NULL DEFAULT ''")
+    -- A comma-separated list of keys from a CLOSED set, never free text. Free text here would
+    -- be a chip drawn on a stranger's screen, and a closed set also means the two sides of a
+    -- match can be told they have something in common.
+    hushColumn('interests', "VARCHAR(120) NOT NULL DEFAULT ''")
+    hushColumn('prompt', "VARCHAR(16) NOT NULL DEFAULT ''")
+    hushColumn('prompt_answer', "VARCHAR(140) NOT NULL DEFAULT ''")
+    -- When the premium pass runs out, as a unix timestamp. NULL is "never had one".
+    hushColumn('premium_until', 'INT UNSIGNED NULL DEFAULT NULL')
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_hush_likes` (
+        `from_cid` VARCHAR(64) NOT NULL,
+        `to_cid`   VARCHAR(64) NOT NULL,
         `liked`    TINYINT(1) NOT NULL DEFAULT 0,
+        -- A super like is a like that says so. Its own table would buy nothing: it is the
+        -- same row, the same uniqueness, and the same expiry rules.
+        `super`    TINYINT(1) NOT NULL DEFAULT 0,
         `at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`from_cid`, `to_cid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_follows` (
+    local hasSuper = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_hush_likes'
+          AND COLUMN_NAME = 'super' LIMIT 1]])
+    if not hasSuper then
+        MySQL.query.await('ALTER TABLE `vphone_hush_likes` ADD COLUMN `super` TINYINT(1) NOT NULL DEFAULT 0')
+        print('[v-phone] hush: added super')
+    end
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_follows` (
         `app`      VARCHAR(12) NOT NULL DEFAULT 'bleeter',
-        `from_cid` VARCHAR(16) NOT NULL,
-        `to_cid`   VARCHAR(16) NOT NULL,
+        `from_cid` VARCHAR(64) NOT NULL,
+        `to_cid`   VARCHAR(64) NOT NULL,
         `at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`app`, `from_cid`, `to_cid`), KEY `to_idx` (`app`, `to_cid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_comments` (
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_comments` (
         `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `post_id`   INT UNSIGNED NOT NULL,
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
         `body`      VARCHAR(280) NOT NULL DEFAULT '',
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`), KEY `post_idx` (`post_id`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_reposts` (
+    -- Saved posts. The one thing on a social app that is nobody else's business: a like is
+    -- public, a repost is public, a save is a private bookmark and its count is never shown.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_saves` (
         `post_id`   INT UNSIGNED NOT NULL,
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
+        `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (`post_id`, `citizenid`),
+        KEY `mine` (`citizenid`, `post_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_reposts` (
+        `post_id`   INT UNSIGNED NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`post_id`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_stories` (
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_stories` (
         `id`        INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `app`       VARCHAR(12) NOT NULL DEFAULT 'snap',
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
         `image`     VARCHAR(300) NOT NULL DEFAULT '',
         `body`      VARCHAR(160) NOT NULL DEFAULT '',
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`), KEY `live_idx` (`app`, `at`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_story_seen` (
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_story_seen` (
         `story_id`  INT UNSIGNED NOT NULL,
-        `citizenid` VARCHAR(16) NOT NULL,
+        `citizenid` VARCHAR(64) NOT NULL,
         PRIMARY KEY (`story_id`, `citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
-    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `social_dm` (
+    -- One row per direct message a reader has taken off their own copy. A separate table
+    -- rather than a column, for the same reason SMS uses one: a message has two readers and
+    -- only one row, so "deleted" is not a property of the message.
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_dm_hidden` (
+        `message_id` INT UNSIGNED NOT NULL,
+        `citizenid`  VARCHAR(64) NOT NULL,
+        PRIMARY KEY (`message_id`, `citizenid`),
+        KEY `citizenid` (`citizenid`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
+
+    MySQL.query.await([[CREATE TABLE IF NOT EXISTS `vphone_social_dm` (
         `id`       INT UNSIGNED NOT NULL AUTO_INCREMENT,
         `app`      VARCHAR(12) NOT NULL DEFAULT 'bleeter',
-        `from_cid` VARCHAR(16) NOT NULL,
-        `to_cid`   VARCHAR(16) NOT NULL,
+        `from_cid` VARCHAR(64) NOT NULL,
+        `to_cid`   VARCHAR(64) NOT NULL,
         `body`     VARCHAR(500) NOT NULL DEFAULT '',
         `image`    VARCHAR(300) NOT NULL DEFAULT '',
         `seen`     TINYINT(1) NOT NULL DEFAULT 0,
@@ -1153,6 +3618,17 @@ function SocialBoot(core)
         while true do
             Wait(60 * 60 * 1000)
             socialSweep(false)
+        end
+    end)
+
+    -- The nudge. A minute is the GRANULARITY, not the rate: every player carries their own
+    -- interval and this only asks whose is up. Wrapped so a database that is briefly away costs
+    -- one pass rather than the thread, which is how the sweep above learnt to survive.
+    CreateThread(function()
+        while true do
+            Wait(60 * 1000)
+            local ok, err = pcall(nudgePass)
+            if not ok then print('[v-phone] social nudge: ' .. tostring(err)) end
         end
     end)
 end

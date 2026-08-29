@@ -3,20 +3,34 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <!-- No `color-scheme` meta. On an OS in dark mode it opts this frame into the
-       browser's dark handling, and CEF then paints an opaque canvas BENEATH the
-       document - a grey sheet over the whole game, from the moment the resource
-       starts. It cannot be undone from CSS, because the paint is below the CSS box.
-       style.css pins `html { color-scheme: normal }` as a second guard. -->
   <title>iFruit</title>
-  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme.css">
-  <link rel="stylesheet" href="https://cfx-nui-v-ui/theme-vars.css">
-  <script src="https://cfx-nui-v-ui/theme.js"></script>
+
+  <!-- There is deliberately NO `<meta name="color-scheme">` here, and there must not be.
+       Declaring one opts the page into the browser's own light/dark handling, and a
+       Chromium that resolves it to dark paints an OPAQUE canvas under the whole document -
+       below the CSS, so `html, body { background: transparent }` does not stop it and it
+       does not show up in computed styles either. In a NUI page that canvas is a grey
+       sheet over the entire game: the phone appears to work, but the world behind it is
+       covered from the moment the resource starts.
+
+       The phone's light and dark are decided by the author classes `.screen.dark` and
+       `body.inframe.dark`, both toggled from JS. Nothing here reads the browser's scheme,
+       so nothing is lost by leaving this out. -->
+
+  <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="theme-vars.css">
+  <script src="theme.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- The chrome is a phone's. The accent, panel and radius tokens come from v-ui,
-       so a server that themes the framework purple gets a purple iPhone. -->
+       so a server that themes the framework purple gets a purple handset. -->
+  <!-- Whose phone this is, when it is not yours.
+       OUTSIDE the bezel on purpose: a staff member holding somebody else's handset has to be
+       able to see that at a glance, and anything drawn inside the screen is something the
+       phone's own UI can cover. -->
+  <div class="adminview hidden" id="adminview" role="status"></div>
+
   <div id="device" class="device hidden">
     <div class="bezel">
       <span class="btn-side action"></span>
@@ -40,15 +54,15 @@
           </span>
         </div>
 
-        <!-- Dynamic Island. It expands for a live activity, which is the single most
-             recognisable thing about a modern iPhone. -->
+        <!-- The Island. It expands for a live activity, which is the single most
+             recognisable thing about a modern handset. -->
         <div class="island" id="island" role="status" aria-live="polite" aria-atomic="true">
           <div class="icontent">
             <span class="idot" id="islandIcon"></span>
             <span class="itxt"><span class="it1" id="islandT1"></span><span class="it2" id="islandT2"></span></span>
             <span class="iwave"><i></i><i></i><i></i><i></i></span>
           </div>
-          <!-- The notification that grows out of the black pill, iOS 27 style. -->
+          <!-- The notification that grows out of the black pill, FruitOS style. -->
           <div class="inotif" id="inotif">
             <span class="inic" id="inicon"></span>
             <span class="intxt"><span class="int1" id="inTitle"></span><span class="int2" id="inBody"></span></span>
@@ -71,13 +85,13 @@
           </button>
         </div>
 
-        <!-- Secure unlock. Face ID is bound to the active character; the six-digit
+        <!-- Secure unlock. Face Unlock is bound to the active character; the six-digit
              fallback is verified by the server and is never kept in this page. -->
         <section class="auth" id="auth" role="dialog" aria-modal="true" aria-label="Secure unlock">
           <div class="authstage" id="authstage"></div>
         </section>
 
-        <!-- First-run setup. It lives below the real status bar and Dynamic Island,
+        <!-- First-run setup. It lives below the real status bar and Island,
              so the device keeps its physical identity throughout activation. -->
         <section class="setup" id="setup" role="dialog" aria-modal="true" aria-label="Phone setup" aria-hidden="true">
           <div class="setupstage" id="setupstage"></div>
@@ -88,7 +102,12 @@
           <div class="widgets" id="widgets"></div>
           <div class="pages" id="pages"></div>
           <div class="dots" id="dots"></div>
-          <button class="arrangedone" id="arrangedone" type="button" aria-label="Done"></button>
+          <div class="arrangebar" id="arrangebar">
+            <button class="arrangeadd" id="waddbtn" type="button" aria-label="Add widget">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>
+            </button>
+            <button class="arrangedone" id="arrangedone" type="button" aria-label="Done"></button>
+          </div>
           <button class="searchpill glass" id="spill" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
             <span id="spilltxt">Search</span>
@@ -116,9 +135,14 @@
 
         <!-- Call -->
         <section class="callui" id="callui">
+          <!-- Put the call away without ending it. The call carries on in the island, which is
+               where a modern handset keeps one while you use something else. -->
+          <button class="callmin" id="callmin" type="button" aria-label="Hide call"></button>
           <div class="callav" id="callav"></div>
           <div class="callnum" id="callnum"></div>
           <div class="callstate" id="callstate"></div>
+          <!-- Who else is on it. Empty on an ordinary call, which is most of them. -->
+          <div class="callroster" id="callroster"></div>
           <div class="callpad" id="callpad"></div>
           <div class="callbtns" id="callbtns"></div>
         </section>
@@ -151,14 +175,26 @@
         <section class="folderview" id="folderview" role="dialog" aria-modal="true" aria-label="App folder">
           <div class="foldername" id="foldername"></div>
           <div class="folderapps" id="folderapps"></div>
+          <!-- Visible buttons, always there.
+               Taking an app out of a folder has been reported four times. Every attempt so far
+               hung it off a GESTURE - a tap during a drag, then a long press - and every one of
+               them failed in players' hands for reasons that do not reproduce here. Opening a
+               folder is the one part of this that has never been in question, so the controls
+               go where the player already is, as buttons they can see. Renaming follows the
+               same rule: the folder title is tappable like a phone, but the button is what
+               guarantees it can be reached. -->
+          <div class="folderacts">
+            <button class="foldermanage" id="folderrename" type="button"></button>
+            <button class="foldermanage" id="foldermanage" type="button"></button>
+          </div>
         </section>
 
-        <!-- Control centre -->
-        <section class="cc" id="cc" aria-label="Control centre">
+        <!-- Quick settings -->
+        <section class="cc" id="cc" aria-label="Quick settings">
           <div class="paneltop ccstatus">
             <span class="ccclock" id="ccclock">00:00</span>
             <span class="ccdevice" id="ccdevice"></span>
-            <button class="panelclose" id="ccclose" type="button" aria-label="Close control centre">
+            <button class="panelclose" id="ccclose" type="button" aria-label="Close quick settings">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg>
             </button>
           </div>
@@ -179,12 +215,69 @@
         <div class="emojipanel" id="emojipanel"></div>
         <div class="banner glass-solid" id="banner" role="status" aria-live="polite"></div>
         <div class="toast glass-solid" id="toast" role="status" aria-live="polite"></div>
+        <!-- One photograph, filling the screen. Every app that shows a picture opens this one:
+             Messages, Bleeter, Snapmatic, OnlyFruits, Mail, the Gallery. Above the sheet,
+             because a photo can be opened from inside one. -->
+        <div class="photoview" id="photoview" role="dialog" aria-modal="true"></div>
         <div class="hud glass-solid" id="hud"></div>
         <div class="dragghost" id="dragghost"></div>
         <button class="homebar" id="homebar" type="button" aria-label="Home"></button>
       </div>
     </div>
   </div>
+
+  <!-- The warrant terminal. A separate full-screen surface, not part of the phone: an
+       officer opens it at a forensics point to read a suspect's phone. Hidden until the
+       client raises it. -->
+  <div class="forensic hidden" id="forensic">
+    <div class="forensicwrap">
+      <header class="forensichead">
+        <div class="forensictitle">
+          <span class="forensicdot"></span>
+          <span class="forensicmark" id="forensicmark">DIGITAL FORENSICS</span>
+          <!-- The case reference. Cosmetic, and the point of it is that a terminal which
+               stamps a case number on what it prints reads like evidence handling rather
+               than like a search box. -->
+          <span class="forensiccase" id="forensiccase"></span>
+        </div>
+        <button class="forensicx" id="forensicx" type="button" aria-label="Close">&times;</button>
+      </header>
+      <div class="forensicbody" id="forensicbody"></div>
+    </div>
+  </div>
+
+  <!-- The payphone. Also a surface of its own rather than part of the phone: a player at a
+       call box has no handset in hand, so none is drawn. Hidden until the client raises it. -->
+  <!-- The emergency alert. OUTSIDE the handset markup on purpose: it has to draw with the
+       phone shut, because an alert that only appears once you open your phone is not an
+       alert. Same reasoning as the payphone panel below. -->
+  <div class="emergency" id="emergency" role="alertdialog" aria-live="assertive"></div>
+  <!-- A staff voice, live in every phone. A strip rather than a card: it has to be visible for
+       as long as the broadcast lasts without covering whatever the player was doing. -->
+  <div class="vbstrip" id="vbstrip" role="status" aria-live="polite"></div>
+
+  <div class="booth hidden" id="booth">
+    <div class="boothwrap">
+      <!-- The armored handset on its steel lanyard, hanging in the cradle. Decoration: the
+           call is placed on the panel, but a payphone without a receiver on a cord does not
+           read as a payphone. -->
+      <div class="boothhook" aria-hidden="true">
+        <span class="boothreceiver"></span>
+        <span class="boothcord"></span>
+      </div>
+      <header class="boothhead">
+        <div class="boothplate2">
+          <span class="boothmaker" id="boothbrand">Badger</span>
+          <span class="boothmodel" id="boothname">Payphone</span>
+        </div>
+        <button class="boothx" id="boothx" type="button" aria-label="Close">&times;</button>
+      </header>
+      <div class="boothbody" id="boothbody"></div>
+      <!-- Coin return, at the bottom where your hand goes. Also decoration. -->
+      <div class="boothreturn" aria-hidden="true"><span></span><i>COIN RETURN</i></div>
+    </div>
+  </div>
+
   <!-- The kit lives in sdk.js so the built-in apps and a third-party app draw
        themselves with the same code. Two copies would drift. -->
   <script src="sdk.js"></script>

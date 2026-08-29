@@ -325,7 +325,11 @@ def main():
                         else:
                             asked.add(literal)
 
-        undefined = sorted(k for k in asked if k not in available_en)
+        # A locale key is `prefix.name` here - all 8816 of them, measured, not assumed. The
+        # Lua pattern accepts T( among its locale functions, and the phone's bridge uses a
+        # local T() to resolve database table names: T('vehicles') was reported as a missing
+        # translation. Requiring the dot cannot hide a real key, because there are none.
+        undefined = sorted(k for k in asked if '.' in k and k not in available_en)
         if undefined:
             problems += 1
             print('%s: %d key(s) used in code and defined nowhere' % (name, len(undefined)))

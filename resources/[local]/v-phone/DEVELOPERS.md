@@ -2,7 +2,7 @@
 
 iFruit AppKit permet d’ajouter une application complète sans modifier le téléphone, sans
 bundler et sans framework JavaScript. Une application peut tenir dans un dossier, être
-installable depuis le FruitStore et utiliser les mêmes composants Clear Glass que les
+installable depuis le FruitStore et utiliser les mêmes composants Glass que les
 applications natives.
 
 ## Démarrage en 60 secondes
@@ -20,10 +20,15 @@ Ou manuellement :
 2. Renommer le dossier avec l’identifiant de l’application.
 3. Modifier `app.lua`.
 4. Construire l’interface dans `index.html`.
-5. Redémarrer `v-phone`. L’application apparaît automatiquement dans le FruitStore.
+5. Ajouter deux lignes à `fxmanifest.lua` : `apps/mon_app/app.lua` dans
+   `shared_scripts`, et `apps/mon_app/index.html` dans `files`.
+6. Redémarrer `v-phone`. L’application apparaît dans le FruitStore.
 
-Il n’est pas nécessaire de modifier `fxmanifest.lua`, `config.lua`, le client ou le
-serveur du téléphone. Les motifs `apps/*` chargent automatiquement le nouveau dossier.
+Il n’est pas nécessaire de modifier `config.lua`, le client ou le serveur du téléphone.
+Les fichiers sont nommés et non globalisés, et c’est voulu : `apps/_loader.lua` explique
+pourquoi. Un motif qui ne correspond à rien avertit à chaque redémarrage, et un motif ne
+se résout pas du tout à travers une jonction, ce qui est la façon dont la ressource est
+installée par quiconque développe dessus.
 
 ```text
 apps/
@@ -159,7 +164,7 @@ L’objet donné au rendu contient :
 Le contrôleur retourné par `Phone.mount()` expose `getState()`, `setState()`, `render()`
 et `run()`.
 
-## Composants Clear Glass
+## Composants Glass
 
 Tous les composants échappent leurs textes et suivent automatiquement le mode clair,
 sombre, la couleur d’accent et le niveau de transparence du joueur.
@@ -169,7 +174,7 @@ const UI = PhoneUI;
 
 UI.hero({ appicon: 'heart', eyebrow: 'Aujourd’hui', value: '82', subtitle: 'Excellent' });
 UI.group([UI.row({ title: 'Profil', chevron: true })], { header: 'Compte' });
-UI.card('<p>Contenu libre</p>', { title: 'Carte', subtitle: 'Clear Glass' });
+UI.card('<p>Contenu libre</p>', { title: 'Carte', subtitle: 'Glass' });
 UI.grid([
   UI.tile({ icon: 'star', title: 'Favoris', value: '12', data: { action: 'favorites' } }),
   UI.tile({ icon: 'bell', title: 'Alertes', value: '3', data: { action: 'alerts' } })
@@ -279,7 +284,7 @@ await Phone.share({ title: 'Partager', text: 'Mon contenu' });
 await Phone.share({ kind: 'photo', url: photoUrl });
 ```
 
-Le partage propose Messages, copie et AirDrop lorsque le type le permet.
+Le partage propose Messages, copie et FruitDrop lorsque le type le permet.
 
 ### Feuilles d’actions et confirmation
 
@@ -375,10 +380,17 @@ Config.Home = {
     -- Installées sur un téléphone neuf, dans cet ordre.
     -- Tout ce qui est dans le catalogue et ABSENT d'ici doit être téléchargé
     -- depuis le FruitStore.
-    installed = { 'bank', 'mail', 'maps', 'camera', 'gallery', 'music', 'store' },
+    installed = {
+        'emergency',  -- premiere sur la grille, et `required` : jamais un telechargement
+        'bank', 'mail', 'maps', 'camera', 'gallery', 'music',
+        'garage', 'property', 'wallet', 'jobs', 'health',
+        'notes', 'reminders', 'calc',
+        'mdt',        -- reservee a la police par `job` dans le catalogue
+        'store',
+    },
 
     -- Ne peuvent pas être supprimées par le joueur.
-    required = { 'phone', 'messages', 'contacts', 'store', 'settings' },
+    required = { 'phone', 'messages', 'contacts', 'store', 'settings', 'emergency' },
 
     -- Jamais proposées : ni écran d'accueil, ni magasin, ni recherche.
     hidden = {},

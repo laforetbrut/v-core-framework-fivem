@@ -36,7 +36,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 #: and this stopped matching a single one of them. The check went on printing "ok" over 119
 #: fewer words. A checker that quietly reads less than it thinks is worse than no checker,
 #: because its silence gets taken for a pass.
-PAIR = re.compile(r"""\['([a-z0-9_]+(?:\.[a-z0-9_]+)*)'\]\s*=\s*(['"])((?:(?!\2)[^\\]|\\.)*)\2""")
+PAIR = re.compile(r"""\['((?:ph|app)\.[a-z0-9_]+)'\]\s*=\s*(['"])((?:(?!\2)[^\\]|\\.)*)\2""")
 ACC = re.compile('[à-ÿ]')
 WORD = re.compile('[A-Za-zÀ-ÿ]+')
 

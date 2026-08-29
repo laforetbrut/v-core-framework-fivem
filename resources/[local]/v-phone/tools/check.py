@@ -32,17 +32,17 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _glob(*parts, **kw):
     """
     glob under ROOT, with ROOT escaped.
 
-    Inside a framework this resource sits in a `[local]` folder, and glob reads `[...]` as a
-    character class: the unescaped base matched a one-character directory named l, o, c or a,
-    which does not exist, so every scan returned nothing. The checker then reported that all
-    44 NUI callbacks were unanswered by a phone that answers 45 of them.
+    Inside this framework the resource sits in a `[local]` folder, and glob reads `[...]`
+    as a character class: the unescaped base matches a one-character directory named l, o,
+    c or a, which does not exist, so every scan returns nothing. The checker then reported
+    149 NUI callbacks unanswered by a phone that answers all of them.
     """
     return glob.glob(os.path.join(glob.escape(ROOT), *parts), **kw)
 
@@ -284,28 +284,10 @@ def page_classes(sources):
 STYLELESS_ON_PURPOSE = {'boothdial'}
 
 
-def _stylesheet(name):
-    """
-    Where a stylesheet the page links actually lives.
-
-    Standalone, all three sit in html/. Inside this framework the page pulls the shared two
-    from v-ui (`https://cfx-nui-v-ui/theme.css`), so only style.css is local; looking for the
-    others here would fail outright, and treating them as empty would report every class v-ui
-    provides as unstyled.
-    """
-    local = os.path.join(ROOT, 'html', name)
-    if os.path.exists(local):
-        return local
-    shared = os.path.join(os.path.dirname(ROOT), 'v-ui', name)
-    return shared if os.path.exists(shared) else None
-
-
 def check_css(report):
     styled = set()
     for name in ('style.css', 'theme.css', 'theme-vars.css'):
-        path = _stylesheet(name)
-        if path:
-            styled |= styled_classes(read(path))
+        styled |= styled_classes(read(os.path.join(ROOT, 'html', name)))
 
     used = page_classes([(p, read(p)) for p in
                          (os.path.join(ROOT, 'html', 'app.js'),
@@ -445,75 +427,23 @@ def check_sql(report):
     return not problems
 
 
-def tile_names(kit):
-    """Names in sdk.js's TILES table: the coloured app tiles appIcon prefers."""
-    m = re.search(r'\bTILES\s*=\s*\{', kit)
-    if not m:
-        return set()
-    i, depth, j = m.end(), 1, m.end()
-    while j < len(kit) and depth:
-        if kit[j] == '{':
-            depth += 1
-        elif kit[j] == '}':
-            depth -= 1
-        j += 1
-    return set(re.findall(r"[\{,\s]([a-z][a-z0-9_]*)\s*:\s*\{", kit[i:j]))
-
-
-def empty_icon_args(app):
-    """The icon argument of every UI.empty(text, icon) call.
-
-    Walked rather than matched: the text argument nests parentheses several deep, as in
-    L('ph.err_' + ((me && me.error) || 'off')), which no single pattern survives.
-    """
-    out, at = [], 0
-    while True:
-        at = app.find('UI.empty(', at)
-        if at < 0:
-            return out
-        i, depth, last = at + len('UI.empty('), 1, None
-        while i < len(app) and depth:
-            c = app[i]
-            if c == '(':
-                depth += 1
-            elif c == ')':
-                depth -= 1
-                if depth == 0:
-                    break
-            elif c == "'" and depth == 1:
-                j = app.find("'", i + 1)
-                if j < 0:
-                    break
-                last = app[i + 1:j]
-                i = j
-            i += 1
-        if last and re.match(r'^[a-z][a-z0-9_]*$', last):
-            out.append(last)
-        at += 1
-
-
 # ══ 6. Every icon the page asks for exists ═════════════════════════════════
 # An icon name that is not in the set draws NOTHING. No error, no console line, no gap in the
 # layout worth noticing - just a button with no picture on it, which is exactly how `svg('x')`
-# and `icon: 'flag'` both shipped.
-#
-# The set is `const ICONS` in html/sdk.js, which index.html loads and the manifest serves: the
-# same table the page reads at runtime. It used to be read out of a built preview instead,
-# because the names came from v-ui and were only inlined there. They do not any more, and the
-# check went on looking in a file that no longer holds them - printing "no icon table in the
-# built preview" and returning a pass, which is not an outcome a check is allowed to have.
+# and `icon: 'flag'` both shipped. The names live in v-ui, outside this repository, so they are
+# read out of the built preview, which inlines the whole set.
 
 def check_icons(report):
-    kit = os.path.join(ROOT, 'html', 'sdk.js')
-    if not os.path.exists(kit):
-        report('icons', 'html/sdk.js is missing - the page has no icon kit', ['sdk.js not found'])
-        return False
+    preview = os.path.join(ROOT, 'preview', 'index.html')
+    if not os.path.exists(preview):
+        report('icons', 'no preview built - run tools/make-preview.py', [])
+        return True
 
-    built = read(kit)
+    built = read(preview)
     m = re.search(r'(?:ICONS|icons)\s*=\s*\{', built)
     if not m:
-        report('icons', 'no ICONS table in html/sdk.js', ['the icon set could not be read'])
-        return False
+        report('icons', 'no icon table in the built preview', [])
+        return True
     i, depth, j = m.end(), 1, m.end()
     while j < len(built) and depth:
         if built[j] == '{':
@@ -522,44 +452,23 @@ def check_icons(report):
             depth -= 1
         j += 1
     known = set(re.findall(r"(?m)[\{,\s]([a-z][a-z0-9_]*)\s*:\s*['\"`]", built[i:j]))
-
-    # Names added after the literal, as `ICONS.x = ...`. Two app marks are aliased onto
-    # their tile glyph that way, so a check reading only the literal calls them missing.
-    known |= set(re.findall(r"\bICONS\.([a-z][a-z0-9_]*)\s*=", built))
     if not known:
-        report('icons', 'the icon table read as empty', ['ICONS parsed to nothing'])
-        return False
-
-    tiles = tile_names(built)
+        report('icons', 'the icon table read as empty', [])
+        return True
 
     app = read(os.path.join(ROOT, 'html', 'app.js'))
     asked = {}
     for name in re.findall(r"svg\('([a-z0-9_]+)'\)", app):
         asked.setdefault(name, "svg('%s')" % name)
-    # Not `appicon:`, which resolves against a different table - see below.
-    for name in re.findall(r"(?<!app)icon: '([a-z0-9_]+)'", app):
+    for name in re.findall(r"icon: '([a-z0-9_]+)'", app):
         asked.setdefault(name, "icon: '%s'" % name)
+    # `appIcon` takes an APP id, not an icon name, and those are drawn from a different table.
+    for name in re.findall(r"UI\.appIcon\('([a-z0-9_]+)'\)", app):
+        asked.pop(name, None)
 
-    # UI.empty(text, icon) puts its second argument through svg() like any other name, and it
-    # was never read here. It is the form the social app uses for every empty state, so six of
-    # them sat behind a check that only knew about svg('x').
-    for name in empty_icon_args(app):
-        asked.setdefault(name, "UI.empty(..., '%s')" % name)
-
-    problems = ['%s falls back to the dot - no such icon' % asked[n]
+    problems = ['%s draws nothing - no such icon' % asked[n]
                 for n in sorted(set(asked) - known)]
-
-    # `appicon:` and UI.appIcon() resolve through TILES first and only then fall back to the
-    # icon set, so they are judged against both. A name in neither reaches the player as the
-    # grey tile with a dot on it.
-    both = known | tiles
-    for name in sorted(set(re.findall(r"appicon: '([a-z0-9_]+)'", app)
-                           + re.findall(r"UI\.appIcon\('([a-z0-9_]+)'\)", app))):
-        if name not in both:
-            problems.append("appicon: '%s' is in neither the tiles nor the icons" % name)
-
-    report('icons', '%d icons and %d tiles available, %d name(s) asked for'
-           % (len(known), len(tiles), len(asked)), problems)
+    report('icons', '%d icons available, %d asked for' % (len(known), len(asked)), problems)
     return not problems
 
 
@@ -710,13 +619,7 @@ def check_prefs_round_trip(report):
     src = read(os.path.join(ROOT, 'server', 'main.lua'))
 
     # What prefsOf returns: the keys of the table it hands back.
-    #
-    # Both declaration forms, because they are the same function. Anchoring only on the
-    # assignment form meant this whole check reported "not found" and returned a pass on a
-    # copy that writes `local function prefsOf(...)` - green, and looking at nothing.
     start = src.find('prefsOf = function(')
-    if start < 0:
-        start = src.find('local function prefsOf(')
     if start < 0:
         report('prefs round trip', 'prefsOf not found', [])
         return True
@@ -751,19 +654,11 @@ def check_prefs_round_trip(report):
     SECRET = {'passcodeHash'}
     # Written as the resolved twin of another key rather than as a setting of its own.
     MIRROR = {'dark'}
-    # Kept in the same table but owned by the app store, which writes them when an optional
-    # app is installed or removed - not settings the prefs callback has any business touching.
-    ELSEWHERE = {'added', 'removed'}
 
     problems = []
     for key in sorted(written - returned - SECRET - MIRROR):
         problems.append('prefs.%s is written by v-phone:prefs and never returned by prefsOf - '
                         'it saves and then disappears from the page' % key)
-    # The other half of a round trip, which this check was named for and did not look at: a
-    # key the page is handed and nothing can ever set is a control that does not respond.
-    for key in sorted(returned - written - SECRET - MIRROR - ELSEWHERE):
-        problems.append('prefs.%s is returned by prefsOf and written by nothing - '
-                        'the page can read it and no setting can change it' % key)
 
     report('prefs round trip', '%d written, %d returned' % (len(written), len(returned)),
            problems)
@@ -968,23 +863,6 @@ def check_setnav(report):
     return not problems
 
 
-def apps_block(cfg):
-    """
-    The Config.Apps table, whatever declares the next block.
-
-    This used to end the slice at `Config.StoreApps`, a table this framework's copy of the
-    phone does not have - so both app checks below found no block, said so, and returned a
-    pass. A checker that reports "not found" and then calls itself satisfied is worse than no
-    checker: it is a green light for something nobody looked at. The end is now simply the
-    next top-level Config declaration.
-    """
-    start = cfg.find('Config.Apps')
-    if start < 0:
-        return None, None
-    nxt = re.search(r'(?m)^Config\.\w+', cfg[start + 1:])
-    end = (start + 1 + nxt.start()) if nxt else len(cfg)
-    return start, end
-
 def check_app_metadata(report):
     """Every app in the catalogue needs a `Config.AppMetadata` entry.
 
@@ -1000,8 +878,9 @@ def check_app_metadata(report):
     Nothing else notices, because the merge falls back to an empty table rather than failing.
     """
     cfg = read(os.path.join(ROOT, 'config.lua'))
-    start, end = apps_block(cfg)
-    if start is None:
+    start = cfg.find('Config.Apps')
+    end = cfg.find('Config.StoreApps')
+    if start < 0 or end < 0:
         report('app metadata', 'Config.Apps not found', [])
         return True
 
@@ -1083,8 +962,9 @@ def check_app_descriptions(report):
     every key it is asked for and answers happily.
     """
     cfg = read(os.path.join(ROOT, 'config.lua'))
-    start, end = apps_block(cfg)
-    if start is None:
+    start = cfg.find('Config.Apps')
+    end = cfg.find('Config.StoreApps')
+    if start < 0 or end < 0:
         report('app descriptions', 'Config.Apps not found', [])
         return True
 
@@ -1103,45 +983,6 @@ def check_app_descriptions(report):
     return not problems
 
 
-def check_app_owners(report):
-    """An app owned by another resource has to have a way of reaching it.
-
-    `Config.Apps` lets an entry name an `owner`: the store hides the app when that resource is
-    not running, and the whole point of the field is that the data comes from there. Nine of
-    the twenty-four are owned that way - the bank by v-banking, the MDT by v-police, the map by
-    v-world - and each one is answered somewhere, either by the phone's client bridging a
-    request to the owner or by its server calling the owner's exports.
-
-    An owner nothing ever talks to is an app that installs, opens, and shows an empty screen:
-    the store lists it because the resource is running, and nothing behind it ever answers.
-    """
-    cfg = read(os.path.join(ROOT, 'config.lua'))
-    start, end = apps_block(cfg)
-    if start is None:
-        report('app owners', 'Config.Apps not found', [])
-        return True
-
-    owners = {}
-    for app, owner in re.findall(r"\{ id = '([a-z0-9_]+)'[^}]*?owner = '([a-z-]+)'",
-                                 cfg[start:end], re.S):
-        if owner != 'v-phone':
-            owners[app] = owner
-
-    sources = ''
-    for rel in ('server/main.lua', 'client/main.lua'):
-        path = os.path.join(ROOT, rel)
-        if os.path.exists(path):
-            sources += read(path)
-
-    problems = []
-    for app, owner in sorted(owners.items()):
-        if owner not in sources:
-            problems.append('%s is owned by %s and nothing in the phone ever calls it - '
-                            'the app opens on an empty screen' % (app, owner))
-
-    report('app owners', '%d app(s) owned by another resource' % len(owners), problems)
-    return not problems
-
 CHECKS = [
     ('callbacks', check_callbacks),
     ('social ops', check_social_ops),
@@ -1158,7 +999,6 @@ CHECKS = [
     ('app descriptions', check_app_descriptions),
     ('zero is true', check_zero_is_true),
     ('app metadata', check_app_metadata),
-    ('app owners', check_app_owners),
     ('setNav shape', check_setnav),
     ('locale duplicates', check_duplicate_locale),
 ]

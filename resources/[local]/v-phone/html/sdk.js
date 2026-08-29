@@ -4,8 +4,8 @@
 
    Ship an app in one HTML file. No build step, no framework, no bundler:
 
-     <link rel="stylesheet" href="https://cfx-nui-v-phone/style.css">
-     <script src="https://cfx-nui-v-phone/sdk.js"><\/script>
+     <link rel="stylesheet" href="https://cfx-nui-v-phone/html/style.css">
+     <script src="https://cfx-nui-v-phone/html/sdk.js"><\/script>
      (the escaped slash above is deliberate: an unescaped closing script tag here
       would end any <script> tag it was pasted into)
      <script>
@@ -42,6 +42,25 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+  // A URL on its way into a CSS `url("...")`.
+  //
+  // `esc` is not enough on its own here, and the reason is worth stating: the `&quot;` it
+  // produces is turned back into a real quote by the HTML parser before the CSS parser ever
+  // sees the value - so the very character that was meant to be neutralised is the one that
+  // closes the url() token. Control characters go too, because a newline inside a style
+  // attribute ends the declaration.
+  //
+  // Deliberately a copy of the one in app.js rather than a shared import: the sdk is meant to
+  // be readable on its own by somebody writing their first app, and it has no module system.
+  const cssUrl = (url) => Array.from(String(url || ''))
+    .filter((char) => {
+      const code = char.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join('')
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"');
+
   // ══ Icons ══════════════════════════════════════════════════
   const ICONS = {
     // The iFruit mark: a fruit with a stem and one leaf. It used to be a ball with a
@@ -51,6 +70,20 @@
     messages: 'M12 3c-5 0-9 3.4-9 7.6 0 2.4 1.3 4.5 3.3 5.9l-.9 3.9 4.2-2.2c.8.2 1.6.3 2.4.3 5 0 9-3.4 9-7.9S17 3 12 3Z',
     contacts: 'M12 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM4 21a8 8 0 0 1 16 0',
     bank: 'M3 10h18L12 4 3 10ZM5 10v8M10 10v8M14 10v8M19 10v8M3 20h18',
+    // A taxi roof sign over a windscreen. The stroke twin of the `taxi` tile.
+    taxi: 'M5 17V11l2-4h10l2 4v6M5 17h14M7 17v2M17 17v2M8 11h8M9.5 7V5h5v2',
+    // A ticket with a perforated edge, for the tab that lists the player's own lines.
+    ticket: 'M4 9V7h16v2a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4Zm5-2v10',
+    // A clock face, for the results tab: past draws are a timeline.
+    clock: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4v5l3.5 2',
+    // A lottery ball: a circle with a highlight arc. The stroke twin of the `lottery` tile.
+    lottery: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Zm0 4a5 5 0 0 1 5 5M8.5 8.5h.01',
+    // A takeaway bag with a handle. The stroke twin of the `zuber` tile, for the menu rows.
+    zuber: 'M6 8h12l-1 12H7L6 8Zm3 0V6a3 3 0 0 1 6 0v2M4 8h16',
+    // A battery with a bolt through it. The stroke twin of the `charging` tile, for the rows
+    // and the empty states inside FruitCharge.
+    charging: 'M4 8h11a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1ZM19 11v2'
+      + 'M10.6 9.4 8 12.3h2.2l-.5 2.3 2.7-3H10l.6-2.2Z',
     garage: 'M3 20V9l9-5 9 5v11M7 20v-7h10v7M7 16h10',
     wallet: 'M3 7h15a2 2 0 0 1 2 2v9H3zM3 7V5h13M17 12h3v3h-3z',
     jobs: 'M4 8h16v12H4zM9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M4 13h16',
@@ -62,6 +95,7 @@
     speaker: 'M12 4v16l-5-4H3V8h4l5-4ZM16 9a4 4 0 0 1 0 6M18.5 6.5a8 8 0 0 1 0 11',
     keypad: 'M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01',
     add: 'M12 5v14M5 12h14',
+    minus: 'M5 12h14',
     chevron: 'M9 4l7 8-7 8',
     send: 'M4 12l16-8-6 8 6 8z',
     del: 'M9 6h11v12H9L3 12zM17 9l-5 6M12 9l5 6',
@@ -88,7 +122,7 @@
     snow: 'M7 15a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6 1.5A3.5 3.5 0 0 1 17 15M8 19h.01M12 20h.01M16 19h.01',
     search: 'M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14ZM20 20l-4-4',
     sparkles: 'M12 2l1.4 4.6L18 8l-4.6 1.4L12 14l-1.4-4.6L6 8l4.6-1.4L12 2ZM19 14l.8 2.2L22 17l-2.2.8L19 20l-.8-2.2L16 17l2.2-.8L19 14ZM5 13l.8 2.2L8 16l-2.2.8L5 19l-.8-2.2L2 16l2.2-.8L5 13Z',
-    bleet: 'M21 6.2c-.7.3-1.4.5-2.1.6.8-.5 1.3-1.2 1.6-2-.7.4-1.5.7-2.3.9A3.3 3.3 0 0 0 12.6 8.3c-2.6-.1-5-1.4-6.6-3.4-.9 1.5-.5 3.4 1 4.4-.6 0-1.1-.2-1.6-.4 0 1.6 1.1 3 2.7 3.3-.5.1-1 .2-1.5.1.4 1.3 1.7 2.3 3.1 2.3-1.4 1.1-3.2 1.6-5 1.4 1.5 1 3.3 1.5 5.2 1.5 6.3 0 9.8-5.3 9.6-10 .7-.5 1.2-1.1 1.6-1.8z',
+    bleet: 'M3.6 9h16.8v2H3.6zM3.6 14h16.8v2H3.6zM8.4 3.6h2l-1.6 16.8h-2zM14.2 3.6h2l-1.6 16.8h-2z',
     snap: 'M4 8h3l2-3h6l2 3h3v12H4zM12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
     dot: 'M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z',
     airplane: 'M12 3c.9 0 1.4 1 1.4 2.2v4.1l7.1 4.2v2l-7.1-2.1v4l2.1 1.6v1.6L12 19.6 8.5 20.8v-1.6l2.1-1.6v-4L3.5 15.5v-2l7.1-4.2V5.2C10.6 4 11.1 3 12 3Z',
@@ -107,10 +141,32 @@
     location: 'M12 21s7-6.2 7-12A7 7 0 1 0 5 9c0 5.8 7 12 7 12ZM12 6.5a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z',
     copy: 'M8 8h12v12H8zM4 4h12v4M4 4v12h4',
     warning: 'M12 3 2.5 20h19L12 3ZM12 9v5M12 17h.01',
+    // A siren horn with two arcs of sound. The stroke twin of the `alerts` tile, used on the
+    // cards, the tabs and the empty states inside the Alerts app.
+    alerts: 'M4 14V9l9-4v14l-9-4Zm0 0H3a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1m13-1a3 3 0 0 1 0 6m2-9a7 7 0 0 1 0 12',
+    // A rising line over an axis, for the Export app: a price board is a chart before it is
+    // anything else.
+    export: 'M4 19h16M4 19V5m3 10 3.5-4L14 14l5-6',
+    // The two arrows a market moves in. Used on the price rows and in the alert sheet.
+    up: 'M12 19V5m0 0-6 6m6-6 6 6',
+    down: 'M12 5v14m0 0 6-6m-6 6-6-6',
+    // A spanner at an angle, for the Repair app: the rows, the tabs and the empty states.
+    repair: 'M14.7 6.3a4 4 0 0 0 5.2 5.2l-8.2 8.2a2.5 2.5 0 0 1-3.5-3.5l8.2-8.2Zm0 0L17.5 3.5M9.5 14.5l-4 4',
+    // A star, for the rating rows. Filled by the fill rule rather than a second path.
+    star: 'M12 3.6l2.6 5.3 5.8.8-4.2 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.6 9.7l5.8-.8L12 3.6Z',
+    // A flame, for a fire alert.
+    fire: 'M12 21a5 5 0 0 0 5-5c0-4-5-5-4-10-3 1.5-6 4.5-6 9a5 5 0 0 0 5 6Zm0 0a2.5 2.5 0 0 0 2.5-2.5c0-2-2.5-2.5-2.5-4.5-1.5 1-2.5 2.5-2.5 4.5A2.5 2.5 0 0 0 12 21Z',
+    // A cloud with a bolt, for a weather alert.
+    weather: 'M7 15a4 4 0 0 1 0-8 5.5 5.5 0 0 1 10.6 1.5A3.5 3.5 0 0 1 17 15M13 13l-3 4h4l-3 4',
+    // A car from the side, for a road alert.
+    car: 'M5 16v2M19 16v2M3 16v-3l2-5h14l2 5v3H3Zm3-3h.01M18 13h.01M6 8h12',
     images: 'M8 3h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM4 7v12a2 2 0 0 0 2 2h12M10 9a1.4 1.4 0 1 0 0 2.8 1.4 1.4 0 0 0 0-2.8ZM20 15l-4-4-6 6',
-    airdrop: 'M12 20a1 1 0 0 0 .9-1.5l-.9-1.6-.9 1.6A1 1 0 0 0 12 20ZM7.5 13.5a6.4 6.4 0 0 1 9 0M4.7 10.7a10.3 10.3 0 0 1 14.6 0M12 8.5a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z',
+    fruitdrop: 'M12 20a1 1 0 0 0 .9-1.5l-.9-1.6-.9 1.6A1 1 0 0 0 12 20ZM7.5 13.5a6.4 6.4 0 0 1 9 0M4.7 10.7a10.3 10.3 0 0 1 14.6 0M12 8.5a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z',
     share: 'M12 3l4 4M12 3L8 7M12 3v13M6 12H5a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5a2 2 0 0 0-2-2h-1',
     landscape: 'M3 8a2 2 0 0 1 2-2h11a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM19 10l2.5 2-2.5 2M21.5 12H15',
+    camrotate: 'M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM5 8V6a1 1 0 0 1 1-1h2M19 16v2a1 1 0 0 1-1 1h-2M4 11a8 8 0 0 1 3-5M20 13a8 8 0 0 1-3 5',
+    // A question mark in a ring, for a control that brings back an instruction.
+    help: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM9.7 9.4A2.5 2.5 0 0 1 14.5 10.2c0 1.7-2.5 2-2.5 3.5M12 17h.01',
     callout: 'M6.5 2.5l3.2 5-2.2 2.2a13.5 13.5 0 0 0 6.8 6.8l2.2-2.2 5 3.2-2 4.2c-8.6.5-17.4-8.3-16.9-16.9zM15 3h6v6M21 3l-7 7',
     callin: 'M6.5 2.5l3.2 5-2.2 2.2a13.5 13.5 0 0 0 6.8 6.8l2.2-2.2 5 3.2-2 4.2c-8.6.5-17.4-8.3-16.9-16.9zM21 3l-7 7M14 3v7h7',
     callmissed: 'M6.5 2.5l3.2 5-2.2 2.2a13.5 13.5 0 0 0 6.8 6.8l2.2-2.2 5 3.2-2 4.2c-8.6.5-17.4-8.3-16.9-16.9zM14 3l7 7M21 3l-7 7',
@@ -118,7 +174,7 @@
     lockshut: 'M8 10V7a4 4 0 0 1 8 0v3M6.5 10h11A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10ZM12 14v3',
     lockopen: 'M9 10V7a4 4 0 0 1 7.7-1.5M6.5 10h11A1.5 1.5 0 0 1 19 11.5v8A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-8A1.5 1.5 0 0 1 6.5 10ZM12 14v3',
     cipher: 'M12 2.5l7 3v5.8c0 4.6-2.8 7.8-7 10.2-4.2-2.4-7-5.6-7-10.2V5.5l7-3ZM9 11h6v5H9zM10 11V9a2 2 0 0 1 4 0v2',
-    faceid: 'M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3M9 9h.01M15 9h.01M12 9v4h-2M8.5 16c2 1.6 5 1.6 7 0',
+    faceunlock: 'M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M8 21H5a2 2 0 0 1-2-2v-3M16 21h3a2 2 0 0 0 2-2v-3M9 9h.01M15 9h.01M12 9v4h-2M8.5 16c2 1.6 5 1.6 7 0',
     timer: 'M9 2h6M12 5v2M12 12l3-2M12 6a7 7 0 1 0 7 7 7 7 0 0 0-7-7Z',
     mail: 'M3 6h18v12H3zM3 7l9 6 9-6',
     reply: 'M9 5L3 11l6 6M3 11h10a8 8 0 0 1 8 8',
@@ -126,6 +182,9 @@
     repost: 'M4 9V8a3 3 0 0 1 3-3h10l-3-3M20 15v1a3 3 0 0 1-3 3H7l3 3M17 5l3 3M7 19l-3-3',
     home: 'M4 11.2 12 4l8 7.2M6.5 10v9.2h4.2V15h2.6v4.2h4.2V10',
     star2: 'M12 3l2.7 5.9 6.3.7-4.7 4.3 1.3 6.3L12 17l-5.6 3.2 1.3-6.3L3 9.6l6.3-.7z',
+    // Nested arcs, for the forensics terminal. `faceunlock` was standing in for this and it
+    // reads as a viewfinder bracket, which is not what a fingerprint looks like.
+    fingerprint: 'M12 3.4c-4.7 0-8.5 3.9-8.5 8.6v4M12 6.7c-2.9 0-5.2 2.4-5.2 5.3v5.6M12 10c-1.1 0-2 .9-2 2.1v7.1M12 3.4c4.7 0 8.5 3.9 8.5 8.6v4M12 6.7c2.9 0 5.2 2.4 5.2 5.3v5.6M12 10c1.1 0 2 .9 2 2.1v7.1',
   };
   const FILLED = { phone: 1, messages: 1, hangup: 1, answer: 1, send: 1, star: 1 };
 
@@ -160,7 +219,7 @@
      *   subtitle        second line
      *   value           trailing text; `tone: 'pos' | 'neg'`, `mono: true`
      *   badge / time    trailing pill or timestamp
-     *   toggle          an iOS switch (true / false)
+     *   toggle          a FruitOS switch (true / false)
      *   chevron         the disclosure arrow
      *   data            { k: v } becomes data-k="v", for your click handler
      */
@@ -169,7 +228,29 @@
         ? UI.appIcon(o.appicon, 'appx')
         : o.icon
           ? '<span class="ricon"' + (o.tint ? ' style="background:' + esc(o.tint) + '"' : '') + '>' + svg(o.icon) + '</span>'
-          : (o.avatar ? '<span class="rav">' + esc(String(o.avatar).slice(0, 1).toUpperCase()) + '</span>' : '');
+          : (o.avatar
+              // A real picture when there is one, and the initial when there is not.
+              //
+              // A contact's photo was stored, sent to the page and drawn on exactly one screen -
+              // the contact card - because this was the only avatar the kit could draw and it
+              // only ever knew how to draw a letter. Every list of people in the phone went
+              // through here, so every one of them showed initials.
+              //
+              // `photo` is a URL the server has already host-gated, and it is set as a
+              // background rather than an <img> so it crops to the circle without a second rule.
+              // **The letter is written in BOTH branches.**
+              //
+              // These used to test whether a url EXISTS, never whether it loaded, and the
+              // picture branch emitted an empty element - so a contact whose photograph
+              // expired got a hole where somebody with no photograph at all got their
+              // initial. The image sits on top as a background; when it fails to load, the
+              // letter underneath is simply revealed.
+              ? (o.photo
+                  ? '<span class="rav ravimg" style="background-image:url(&quot;' +
+                    esc(cssUrl(String(o.photo))) + '&quot;)">' +
+                    esc(String(o.avatar || o.title || '?').slice(0, 1).toUpperCase()) + '</span>'
+                  : '<span class="rav">' + esc(String(o.avatar).slice(0, 1).toUpperCase()) + '</span>')
+              : '');
       const tail =
         (o.badge ? '<span class="rbadge">' + esc(o.badge) + '</span>' : '') +
         (o.time ? '<span class="rtime">' + esc(o.time) + '</span>' : '') +
@@ -182,10 +263,56 @@
       if (o.toggle !== undefined) {
         attrs += ' role="switch" aria-checked="' + (o.toggle ? 'true' : 'false') + '"';
       }
-      return '<button class="row ' + (lead ? 'lead' : '') + '" type="button"' + attrs + '>' + lead +
+      // Two classes the row cannot work out for itself, because CEF has no `:has()`.
+      //
+      //   av   the leading element is a 38px avatar rather than a 30px tile, so the
+      //        separator under this row is inset 66 and not 58. Without it every avatar
+      //        list in the phone - Messages, Contacts, Calls and all four social apps -
+      //        draws its hairline six pixels short of the name it is supposed to line up
+      //        with.
+      //   two  the row carries a subtitle, so it is the 68px two-line row rather than the
+      //        52px one. A stylesheet can see the avatar and the subtitle in the DOM; it
+      //        just cannot select on them here.
+      const av = !o.appicon && !o.icon && !!o.avatar;
+      const cls = 'row' + (lead ? ' lead' : '') + (av ? ' av' : '') + (o.subtitle ? ' two' : '');
+      // **A row carrying its own buttons is not itself a button.** `accessory` takes a
+      // string of markup - `UI.stepper()`, say - and the row becomes a `<div role="group">`.
+      // A <button> nested inside a <button> is invalid, and Blink does not merely warn about
+      // it: it closes the outer one and hoists the inner, silently restructuring the DOM
+      // under whatever code was about to query it.
+      if (o.accessory) {
+        return '<div class="' + cls + '" role="group"' + attrs + '>' + lead +
+          '<span class="rmain"><span class="rt">' + esc(o.title) + '</span>' +
+          (o.subtitle ? '<span class="rs">' + esc(o.subtitle) + '</span>' : '') +
+          '</span>' + tail + o.accessory + '</div>';
+      }
+      return '<button class="' + cls + '" type="button"' + attrs + '>' + lead +
         '<span class="rmain"><span class="rt">' + esc(o.title) + '</span>' +
         (o.subtitle ? '<span class="rs">' + esc(o.subtitle) + '</span>' : '') +
         '</span>' + tail + '</button>';
+    },
+
+    /**
+     * A stepper, 92 x 32, for a row that changes a number in place.
+     * `data` becomes data-attributes on BOTH halves; the pressed half is told apart by
+     * `data-step`, which is `-1` or `1`.
+     *
+     *   UI.row({ title: 'Quantity', value: n,
+     *            accessory: UI.stepper({ data: { field: 'qty' } }) })
+     */
+    stepper: function (o) {
+      o = o || {};
+      let attrs = '';
+      const data = o.data || {};
+      for (const k in data) attrs += ' data-' + k + '="' + esc(data[k]) + '"';
+      const half = (dir, icon, label, off) =>
+        '<button type="button" data-step="' + dir + '"' + attrs +
+        ' aria-label="' + esc(label) + '"' + (off ? ' aria-disabled="true"' : '') + '>' +
+        svg(icon) + '</button>';
+      return '<span class="stepper">' +
+        half('-1', 'minus', o.decrementLabel || 'Decrease', o.minReached) +
+        half('1', 'add', o.incrementLabel || 'Increase', o.maxReached) +
+        '</span>';
     },
 
     /**
@@ -226,8 +353,28 @@
         '" aria-label="' + esc(placeholder) + '" value="' + esc(value || '') + '" ' + (attrs || '') + ' />';
     },
 
+    /**
+     * An empty state.
+     *
+     * Two forms, and the first one is the reason the second exists rather than
+     * replacing it: `empty(text, icon)` is what all 127 call sites in the phone use,
+     * and it keeps working untouched. `empty({ title, body, icon, action })` adds the
+     * description line and the call to action that FruitOS puts under it.
+     *
+     * `action` is `{ label, id }`. It emits the SAME `.bigbtn` the rest of the phone
+     * uses rather than a private button class, so there is one button in the resource
+     * and a caller wires it with the id it already passed.
+     */
     empty: function (text, icon) {
-      return '<div class="empty" role="status">' + (icon ? svg(icon) : '') + '<div>' + esc(text) + '</div></div>';
+      const o = (text && typeof text === 'object') ? text : { title: text, icon: icon };
+      const glyph = o.icon ? svg(o.icon) : '';
+      const body = o.body ? '<div class="emptybody">' + esc(o.body) + '</div>' : '';
+      const action = (o.action && o.action.label)
+        ? UI.button(o.action.label, o.action.id || 'emptycta', o.action.style || '')
+        : '';
+      return '<div class="empty" role="status"><div class="emptymid">' + glyph +
+        '<div class="emptytitle">' + esc(o.title == null ? '' : o.title) + '</div>' +
+        body + '</div>' + action + '</div>';
     },
 
     /** Replace the app body. Inside a frame this is the document body. */
@@ -246,7 +393,7 @@
       });
     },
 
-    /** A free-form Clear Glass card. */
+    /** A free-form Glass card. */
     card: function (content, opts) {
       const o = opts || {};
       const title = o.title ? '<div class="uicard-title">' + esc(o.title) + '</div>' : '';
@@ -334,7 +481,7 @@
   };
 
   // ══ App icon tiles ═══════════════════════════════════════════
-  // An iOS app icon is a vivid gradient squircle with a FILLED white glyph. The
+  // A FruitOS app icon is a vivid gradient squircle with a FILLED white glyph. The
   // stroke set above is for rows and buttons; drawing it on a flat tint is what
   // made the home screen read as a web page rather than a phone. One table, so a
   // third-party app gets the same treatment just by naming an icon.
@@ -371,6 +518,40 @@
     messages: { bg: GREEN, d: G.messages },
     contacts: { bg: GREY, d: G.contacts },
     bank: { bg: 'linear-gradient(180deg,#2ECC71,#0B8F43)', d: G.bank },
+    // Bank Pro. Purple, so the company account never gets confused for the green personal one
+    // at a glance - the same building glyph, a different tint is the whole point.
+    bankpro: { bg: 'linear-gradient(180deg,#A98BFF,#5E2FD6)', d: G.bank },
+    // Taxi. The yellow every taxi on earth is, with a roof sign - recognisable at tile size
+    // without reading the name, which is the whole job of an icon.
+    // The lottery. A ball on green baize, which is what every lottery in the world looks like -
+    // and green rather than gold on purpose: gold is what the app promises, not what it is.
+    lottery: { bg: 'linear-gradient(180deg,#2FBF71,#12864A)', fill: '#FFFFFF',
+      d: 'M12 4.4a7.6 7.6 0 1 0 0 15.2 7.6 7.6 0 0 0 0-15.2Zm0 1.7a5.9 5.9 0 1 1 0 11.8 5.9 5.9 0 0 1'
+       + ' 0-11.8Zm-1.6 2.2a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Zm3.4 1.5a1.2 1.2 0 1 0 0 2.4 1.2'
+       + ' 1.2 0 0 0 0-2.4Zm-2.6 3a1.2 1.2 0 1 0 0 2.4 1.2 1.2 0 0 0 0-2.4Z' },
+    taxi: { bg: 'linear-gradient(180deg,#FFD84D,#F0A400)', fill: '#1A1A1A',
+      d: 'M6.2 17.4v-5.6l1.9-3.8h7.8l1.9 3.8v5.6H6.2Zm1.6-5.2h8.4l-1.2-2.4H9L7.8 12.2Zm.4 5.9h1.9v1.6H8.2'
+       + 'v-1.6Zm5.7 0h1.9v1.6h-1.9v-1.6ZM9.4 4.6h5.2v2.2H9.4V4.6Z' },
+    // Zuber. Black on black with a white bag, which is what a delivery app looks like: the
+    // brand it is dressed as owns almost nothing else.
+    zuber: { bg: 'linear-gradient(180deg,#2B2B2E,#0A0A0B)',
+      d: 'M6.6 7.8h10.8l-.9 11.4a1.2 1.2 0 0 1-1.2 1.1H8.7a1.2 1.2 0 0 1-1.2-1.1L6.6 7.8Zm2.7 0V6.4'
+       + 'a2.7 2.7 0 0 1 5.4 0v1.4h-1.8V6.4a.9.9 0 0 0-1.8 0v1.4H9.3Z' },
+    // FruitCharge. A battery with a bolt, on the electric green of a charging light.
+    charging: { bg: 'linear-gradient(180deg,#5EE68A,#0FB94E)',
+      d: 'M6 4h9a2 2 0 0 1 2 2v1h1.6a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H17v1a2 2 0 0 1-2 2H6a2 2 0 0'
+       + ' 1-2-2V6a2 2 0 0 1 2-2zm5.4 3-3 5h2.2l-.6 3.2L13.6 10h-2.2L11.4 7z' },
+    // OnlyFruits. Its own tile, because without one it fell through to the generic grey square
+    // - the app whose whole subject is pictures was the only icon in the store with no colour
+    // at all. Magenta into violet: adjacent to Hush's red without being it, so the two social
+    // apps are not the same tile at a glance.
+    // The path is written out rather than taken from the icon table: that table is `ICONS`,
+    // which is drawn with a STROKE, and `G` - the one these tiles fill - has no sparkle in it.
+    // `G.sparkles` is undefined, and an undefined `d` is a tile with nothing on it.
+    onlyfruits: { bg: 'linear-gradient(180deg,#FF54A8,#8A2BE2)', fill: '#FFFFFF',
+      d: 'M12 2.4l1.65 5.35L19 9.4l-5.35 1.65L12 16.4l-1.65-5.35L5 9.4l5.35-1.65L12 2.4Z'
+       + 'M18.6 13.4l.85 2.55L22 16.8l-2.55.85L18.6 20.2l-.85-2.55L15.2 16.8l2.55-.85L18.6 13.4Z'
+       + 'M5.9 12.9l.8 2.4L9 16.1l-2.3.8L5.9 19.3l-.8-2.4L2.8 16.1l2.3-.8L5.9 12.9Z' },
     garage: { bg: 'linear-gradient(180deg,#54B9FF,#0A63D6)', d: G.garage },
     wallet: { bg: 'linear-gradient(180deg,#3A3A3C,#141416)', d: G.wallet },
     jobs: { bg: 'linear-gradient(180deg,#7D7AFF,#4B48D6)', d: G.jobs },
@@ -378,6 +559,34 @@
     music: { bg: 'linear-gradient(180deg,#FB5C74,#F5233B)', d: G.music },
     house: { bg: 'linear-gradient(180deg,#49C6D8,#0E8FA6)', d: G.house },
     shield: { bg: 'linear-gradient(180deg,#3C82F6,#0A48C4)', d: G.shield },
+    // 911. Red, because every emergency service on every phone is, and because it has to be
+    // findable on a crowded home screen by somebody who is not reading.
+    // Export. Green over dark, which is what a market board looks like everywhere - and green
+    // rather than the Bank's green because this one is a price, not a balance: a hair darker,
+    // and it carries a chart rather than a building.
+    export: { bg: 'linear-gradient(180deg,#1F2A24,#0B120E)', fill: '#34C759',
+      d: 'M4.2 18.4h15.6a1 1 0 0 1 0 2H3.9a1.1 1.1 0 0 1-1.1-1.1V4.2a1 1 0 0 1 2 0v14.2Zm2.5-3.1a1'
+       + ' 1 0 0 1-.14-1.4l3.5-4.2a1 1 0 0 1 1.44-.11l2.72 2.4 3.6-4.32a1 1 0 1 1 1.54 1.28l-4.25'
+       + ' 5.1a1 1 0 0 1-1.43.12l-2.73-2.4-2.85 3.42a1 1 0 0 1-1.4.11Z' },
+    // Repair. Deep blue with a white spanner: a workshop app, and blue rather than the orange
+    // FruitCharge wears so the two utility tiles are not the same colour at a glance.
+    repair: { bg: 'linear-gradient(180deg,#4C8DFF,#1B3FAE)', fill: '#FFFFFF',
+      d: 'M15.9 4.1a4.6 4.6 0 0 0-1.06 4.72L6.6 17.06a2.9 2.9 0 1 0 4.1 4.1l8.24-8.24A4.6 4.6 0 0 0'
+       + ' 20.7 5.2l-2.63 2.63a1.5 1.5 0 0 1-2.12-2.12L18.58 3.1a4.6 4.6 0 0 0-2.68 1ZM8.65 17.9a1.1'
+       + ' 1.1 0 1 1 1.56 1.56 1.1 1.1 0 0 1-1.56-1.56Z' },
+    // Public alerts. Amber rather than the red 911 wears: the two apps sit next to each other on
+    // every home screen, and one of them is the one you press when it is YOUR emergency. A siren
+    // horn, which is what a public address system looks like anywhere in the world.
+    alerts: { bg: 'linear-gradient(180deg,#FFC24D,#E07800)', fill: '#1A1A1A',
+      d: 'M4.8 14.9V9.1a1.2 1.2 0 0 1 .78-1.13l7.3-2.74a1.2 1.2 0 0 1 1.62 1.13v11.28a1.2 1.2 0 0 1'
+       + '-1.62 1.13l-7.3-2.74a1.2 1.2 0 0 1-.78-1.13Zm-1.7-4.6h.6v3.4h-.6a1.3 1.3 0 0 1-1.3-1.3v-.8a1.3'
+       + ' 1.3 0 0 1 1.3-1.3Zm3.9 5.5 1.9.72v2.68a1.2 1.2 0 0 1-2.4 0v-3.4Zm10.4-6.2a4.2 4.2 0 0 1 0 4.8'
+       + 'l-1.3-.95a2.6 2.6 0 0 0 0-2.9l1.3-.95Zm2.2-2.6a7.6 7.6 0 0 1 0 10l-1.3-.95a6 6 0 0 0 0-8.1l1.3'
+       + '-.95Z' },
+    emergency: { bg: 'linear-gradient(180deg,#FF6B6B,#D70015)',
+      d: 'M12 2.6a1.4 1.4 0 0 1 1.22.71l9.1 15.98A1.4 1.4 0 0 1 21.1 21.4H2.9a1.4 1.4 0 0 1'
+       + '-1.22-2.1l9.1-15.99A1.4 1.4 0 0 1 12 2.6zm-1.15 5.9v6.05h2.3V8.5h-2.3zm0 7.5v2.2h2.3'
+       + 'v-2.2h-2.3z' },
     calc: { bg: 'linear-gradient(180deg,#3A3A3C,#141416)', d: G.calc, fill: '#FF9F0A' },
     heart: { bg: '#FFFFFF', d: G.heart, fill: '#FF2D55' },
     check: { bg: '#FFFFFF', d: G.check, fill: '#FF9500' },
@@ -385,37 +594,43 @@
     store: { bg: 'linear-gradient(180deg,#31A5FF,#0A6CFF)', d: G.store },
     settings: { bg: GREY, d: G.settings },
     note: { bg: 'linear-gradient(180deg,#FFD44D 0%,#FFD44D 24%,#FFFFFF 24%)', d: G.note, fill: '#C2C3C8' },
-    bleet: { bg: 'linear-gradient(180deg,#5BC9F8,#1D9BF0)',
-      d: 'M21 6.2c-.7.3-1.4.5-2.1.6.8-.5 1.3-1.2 1.6-2-.7.4-1.5.7-2.3.9A3.3 3.3 0 0 0 12.6 8.3c-2.6-.1-5-1.4-6.6-3.4-.9 1.5-.5 3.4 1 4.4-.6 0-1.1-.2-1.6-.4 0 1.6 1.1 3 2.7 3.3-.5.1-1 .2-1.5.1.4 1.3 1.7 2.3 3.1 2.3-1.4 1.1-3.2 1.6-5 1.4 1.5 1 3.3 1.5 5.2 1.5 6.3 0 9.8-5.3 9.6-10 .7-.5 1.2-1.1 1.6-1.8z' },
+    bleet: { bg: 'linear-gradient(180deg,#6FD3E8,#0FA3D8)',
+      d: 'M3.6 9h16.8v2H3.6zM3.6 14h16.8v2H3.6zM8.4 3.6h2l-1.6 16.8h-2zM14.2 3.6h2l-1.6 16.8h-2z' },
     snap: { bg: 'linear-gradient(180deg,#63D2FF,#0A84D6)', d: G.camera },
     hush: { bg: 'linear-gradient(180deg,#FF5E9C,#FF2D55)', d: G.heart },
+    // Fruitee. A hand holding a heart: giving, not liking. Teal into green rather than the
+    // pink Hush wears, because the two would otherwise be the same tile with the same glyph -
+    // and green is what money looks like everywhere else in this phone.
+    fruitee: { bg: 'linear-gradient(180deg,#3ED9A4,#0FA36B)', fill: '#FFFFFF',
+      d: 'M12 12.9c-2.6-1.9-4.5-3.6-4.5-5.6 0-1.4 1.1-2.5 2.4-2.5.8 0 1.6.4 2.1 1.1.5-.7 1.3-1.1'
+       + ' 2.1-1.1 1.3 0 2.4 1.1 2.4 2.5 0 2-1.9 3.7-4.5 5.6Z'
+       + 'M4.2 14.1a1.2 1.2 0 0 1 1.6-.4l2.6 1.5h3.2a1.1 1.1 0 0 1 0 2.2H9.3a.6.6 0 0 0 0 1.2h2.5'
+       + 'c.6 0 1.2-.2 1.7-.5l4-2.4a1.3 1.3 0 0 1 1.7.4 1.3 1.3 0 0 1-.4 1.8l-4.1 2.5c-.9.6-1.9.9-3'
+       + ' .9H6.1a1.2 1.2 0 0 1-1-.6l-1.3-2.3a1.2 1.2 0 0 1 .4-1.6Z' },
     cipher: { bg: 'radial-gradient(circle at 28% 16%,#7CF7D4 0%,#14B89A 28%,#073B46 72%,#04161D 100%)', d: G.cipher },
     mail: { bg: 'linear-gradient(180deg,#5AC8FA,#0A63D6)', d: G.mail, fill: '#fff' },
     images: { bg: 'linear-gradient(135deg,#FF3B30 0%,#FF9500 20%,#FFCC00 40%,#34C759 60%,#0A84FF 80%,#5E5CE6 100%)', d: G.images, fill: '#fff' },
   };
 
-  // Two names lived only in TILES, and svg() reads ICONS and never TILES: every plain
-  // svg() of them drew the fallback dot. That is the music art on the hero, the album
-  // button and both now-playing rows, and every empty state in Hush. config.lua names
-  // these apps' icons 'music' and 'hush', so a name has to resolve in BOTH tables to
-  // work everywhere: as a tile on the home screen, and as a glyph inside a row.
-  //
-  // Same paths the tiles draw, and marked filled, because these are solid shapes rather
-  // than the stroked outlines the rest of the set is drawn as. Hush's tile is the heart,
-  // so its glyph is too.
-  ICONS.music = G.music;
-  ICONS.hush = G.heart;
-  FILLED.music = 1;
-  FILLED.hush = 1;
-
   /** The coloured app tile. `cls` adds context classes ('appx' inside a row). */
   UI.appIcon = function (name, cls) {
-    const t = TILES[name];
+    // hasOwn, not a truthiness test: TILES is a plain object literal, so TILES['__proto__']
+    // and TILES['constructor'] are truthy inherited values whose .bg and .d are undefined,
+    // and the tile would render `background:undefined`.
+    const t = Object.prototype.hasOwnProperty.call(TILES, name) ? TILES[name] : null;
     const open = '<span class="ic ' + (cls || '') + '" aria-hidden="true" style="background:' +
       (t ? t.bg : GREY) + '">';
     if (!t) return open + svg(name) + '</span>';
     return open + '<svg viewBox="0 0 24 24" fill="' + (t.fill || '#fff') + '"><path d="' +
       t.d + '"/></svg></span>';
+  };
+
+  /// Does the phone ship a tile of its own for this name?
+  ///
+  /// Asked by the home screen so an app that this phone knows about draws ITS tile rather than
+  /// whatever an operator's config row happens to name - see `appTile` in app.js.
+  UI.hasTile = function (name) {
+    return Object.prototype.hasOwnProperty.call(TILES, name);
   };
 
   root.PhoneUI = UI;
@@ -558,7 +773,12 @@
         });
       },
       setJSON: function (key, value) {
-        return send('storage', { op: 'set', key: key, value: value });
+        // **Serialised here, not on the server.** Lua has one table type, so an array handed
+        // across as a raw value came back as an object: `setJSON('tasks', [])` stored `{}`.
+        // A string skips the server's encode branch and is stored verbatim, which is what
+        // `getJSON` above parses - and data written the old way is already valid JSON, so it
+        // keeps reading.
+        return send('storage', { op: 'set', key: key, value: JSON.stringify(value) });
       },
     },
 
