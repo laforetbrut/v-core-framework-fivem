@@ -445,23 +445,75 @@ def check_sql(report):
     return not problems
 
 
+def tile_names(kit):
+    """Names in sdk.js's TILES table: the coloured app tiles appIcon prefers."""
+    m = re.search(r'\bTILES\s*=\s*\{', kit)
+    if not m:
+        return set()
+    i, depth, j = m.end(), 1, m.end()
+    while j < len(kit) and depth:
+        if kit[j] == '{':
+            depth += 1
+        elif kit[j] == '}':
+            depth -= 1
+        j += 1
+    return set(re.findall(r"[\{,\s]([a-z][a-z0-9_]*)\s*:\s*\{", kit[i:j]))
+
+
+def empty_icon_args(app):
+    """The icon argument of every UI.empty(text, icon) call.
+
+    Walked rather than matched: the text argument nests parentheses several deep, as in
+    L('ph.err_' + ((me && me.error) || 'off')), which no single pattern survives.
+    """
+    out, at = [], 0
+    while True:
+        at = app.find('UI.empty(', at)
+        if at < 0:
+            return out
+        i, depth, last = at + len('UI.empty('), 1, None
+        while i < len(app) and depth:
+            c = app[i]
+            if c == '(':
+                depth += 1
+            elif c == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            elif c == "'" and depth == 1:
+                j = app.find("'", i + 1)
+                if j < 0:
+                    break
+                last = app[i + 1:j]
+                i = j
+            i += 1
+        if last and re.match(r'^[a-z][a-z0-9_]*$', last):
+            out.append(last)
+        at += 1
+
+
 # ══ 6. Every icon the page asks for exists ═════════════════════════════════
 # An icon name that is not in the set draws NOTHING. No error, no console line, no gap in the
 # layout worth noticing - just a button with no picture on it, which is exactly how `svg('x')`
-# and `icon: 'flag'` both shipped. The names live in v-ui, outside this repository, so they are
-# read out of the built preview, which inlines the whole set.
+# and `icon: 'flag'` both shipped.
+#
+# The set is `const ICONS` in html/sdk.js, which index.html loads and the manifest serves: the
+# same table the page reads at runtime. It used to be read out of a built preview instead,
+# because the names came from v-ui and were only inlined there. They do not any more, and the
+# check went on looking in a file that no longer holds them - printing "no icon table in the
+# built preview" and returning a pass, which is not an outcome a check is allowed to have.
 
 def check_icons(report):
-    preview = os.path.join(ROOT, 'preview', 'index.html')
-    if not os.path.exists(preview):
-        report('icons', 'no preview built - run tools/make-preview.py', [])
-        return True
+    kit = os.path.join(ROOT, 'html', 'sdk.js')
+    if not os.path.exists(kit):
+        report('icons', 'html/sdk.js is missing - the page has no icon kit', ['sdk.js not found'])
+        return False
 
-    built = read(preview)
+    built = read(kit)
     m = re.search(r'(?:ICONS|icons)\s*=\s*\{', built)
     if not m:
-        report('icons', 'no icon table in the built preview', [])
-        return True
+        report('icons', 'no ICONS table in html/sdk.js', ['the icon set could not be read'])
+        return False
     i, depth, j = m.end(), 1, m.end()
     while j < len(built) and depth:
         if built[j] == '{':
@@ -470,23 +522,44 @@ def check_icons(report):
             depth -= 1
         j += 1
     known = set(re.findall(r"(?m)[\{,\s]([a-z][a-z0-9_]*)\s*:\s*['\"`]", built[i:j]))
+
+    # Names added after the literal, as `ICONS.x = ...`. Two app marks are aliased onto
+    # their tile glyph that way, so a check reading only the literal calls them missing.
+    known |= set(re.findall(r"\bICONS\.([a-z][a-z0-9_]*)\s*=", built))
     if not known:
-        report('icons', 'the icon table read as empty', [])
-        return True
+        report('icons', 'the icon table read as empty', ['ICONS parsed to nothing'])
+        return False
+
+    tiles = tile_names(built)
 
     app = read(os.path.join(ROOT, 'html', 'app.js'))
     asked = {}
     for name in re.findall(r"svg\('([a-z0-9_]+)'\)", app):
         asked.setdefault(name, "svg('%s')" % name)
-    for name in re.findall(r"icon: '([a-z0-9_]+)'", app):
+    # Not `appicon:`, which resolves against a different table - see below.
+    for name in re.findall(r"(?<!app)icon: '([a-z0-9_]+)'", app):
         asked.setdefault(name, "icon: '%s'" % name)
-    # `appIcon` takes an APP id, not an icon name, and those are drawn from a different table.
-    for name in re.findall(r"UI\.appIcon\('([a-z0-9_]+)'\)", app):
-        asked.pop(name, None)
 
-    problems = ['%s draws nothing - no such icon' % asked[n]
+    # UI.empty(text, icon) puts its second argument through svg() like any other name, and it
+    # was never read here. It is the form the social app uses for every empty state, so six of
+    # them sat behind a check that only knew about svg('x').
+    for name in empty_icon_args(app):
+        asked.setdefault(name, "UI.empty(..., '%s')" % name)
+
+    problems = ['%s falls back to the dot - no such icon' % asked[n]
                 for n in sorted(set(asked) - known)]
-    report('icons', '%d icons available, %d asked for' % (len(known), len(asked)), problems)
+
+    # `appicon:` and UI.appIcon() resolve through TILES first and only then fall back to the
+    # icon set, so they are judged against both. A name in neither reaches the player as the
+    # grey tile with a dot on it.
+    both = known | tiles
+    for name in sorted(set(re.findall(r"appicon: '([a-z0-9_]+)'", app)
+                           + re.findall(r"UI\.appIcon\('([a-z0-9_]+)'\)", app))):
+        if name not in both:
+            problems.append("appicon: '%s' is in neither the tiles nor the icons" % name)
+
+    report('icons', '%d icons and %d tiles available, %d name(s) asked for'
+           % (len(known), len(tiles), len(asked)), problems)
     return not problems
 
 

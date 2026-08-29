@@ -394,6 +394,20 @@
     images: { bg: 'linear-gradient(135deg,#FF3B30 0%,#FF9500 20%,#FFCC00 40%,#34C759 60%,#0A84FF 80%,#5E5CE6 100%)', d: G.images, fill: '#fff' },
   };
 
+  // Two names lived only in TILES, and svg() reads ICONS and never TILES: every plain
+  // svg() of them drew the fallback dot. That is the music art on the hero, the album
+  // button and both now-playing rows, and every empty state in Hush. config.lua names
+  // these apps' icons 'music' and 'hush', so a name has to resolve in BOTH tables to
+  // work everywhere: as a tile on the home screen, and as a glyph inside a row.
+  //
+  // Same paths the tiles draw, and marked filled, because these are solid shapes rather
+  // than the stroked outlines the rest of the set is drawn as. Hush's tile is the heart,
+  // so its glyph is too.
+  ICONS.music = G.music;
+  ICONS.hush = G.heart;
+  FILLED.music = 1;
+  FILLED.hush = 1;
+
   /** The coloured app tile. `cls` adds context classes ('appx' inside a row). */
   UI.appIcon = function (name, cls) {
     const t = TILES[name];

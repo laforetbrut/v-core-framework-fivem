@@ -1545,7 +1545,7 @@ function healthRecord() {
     const r = (d && d.record) || {};
     body(
       UI.hero({
-        appicon: 'health',
+        appicon: 'heart',
         eyebrow: L('ph.steps'),
         value: String(r.steps || 0),
         subtitle: L('ph.steps_today'),
