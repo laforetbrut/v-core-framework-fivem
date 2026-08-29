@@ -227,3 +227,10 @@
 **Root cause:** the server never reads client scripts. It ships them to the client, and a syntax error surfaces only in a player's own console when they connect.
 **Fix:** `tools/lua-syntax.py` compiles all 300 Lua files and discards the result. Its first run reported v-hud's weapon test as a syntax error, which is valid FiveM: `` `WEAPON_UNARMED` `` between backticks is a CitizenFX joaat literal that stock Lua rejects. Those are replaced with a number before parsing, so valid code is not "fixed" into broken code.
 **Prevention:** state what a verification actually covers. A boot test covers server scripts, manifests and resource start-up; client Lua, NUI assets and anything gated behind a connected player need their own check.
+
+## [2026-08-29 06:05] — A Lua block scanner that closed on the first inline `if ... end`
+**Context:** Sweeping every server-loaded file for the defect just fixed in v-loadscreen: a net event parameter printed to the console without being sanitised. The sweep reported zero across 186 files.
+**Error:** Zero was meaningless. Run against the pre-fix `v-loadscreen/server.lua` recovered from git, the same sweep also reported zero, on the one case known to be real.
+**Root cause:** two faults in the function-body extractor. It started the brace depth at 0 while already inside the handler, so `if type(line) ~= 'string' then return end` on the first line closed the whole body and the scan never reached the `print` below it. It also counted `for`, `while` and `do` as separate openers, leaving every loop unbalanced by one.
+**Fix:** depth starts at 1, and only `function`, `if` and `do` open a block - `for` and `while` are not counted because the `do` that follows them is what `end` closes. With that, the pre-fix file reports the defect and the fixed file reports nothing.
+**Prevention:** a sweep for a known defect class must be run against a known instance before its silence is believed. Git history is the cheapest source of one: the version from before the fix is a free positive control.
