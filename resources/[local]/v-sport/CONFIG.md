@@ -595,6 +595,11 @@ how long a buff may last, and how far a buff may push the effective value past a
 It cannot push the section 7 **effects** past their own maximum - that ceiling is hard, and the
 check script asserts it. Full detail in API.md.
 
+Two flags in it decide what the outside world hears. `notifyApply` and `notifyExpire` tell the
+**player** when a buff lands and when it wears off. `fireExpiryEvents` tells other **resources**:
+it gates `vsport:server:BuffExpired`, its client twin and `vsport:server:DrainExpired` together,
+so turning it off silences every integration hooked onto the end of a buff or a drain.
+
 `Config.Items` is the four consumables. Each entry holds both the gameplay fields - the effect, the
 amount, the duration, the cooldown - and the inventory metadata: `label`, `description`, `weight`
 and `image`. An optional `needs` table says what the item is worth as food and drink, honoured

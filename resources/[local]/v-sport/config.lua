@@ -1591,8 +1591,9 @@ Config.Buffs = {
     notifyApply = true,
     notifyExpire = true,
 
-    -- Fire `vsport:server:BuffExpired` and its client twin so a drug script can hook a
-    -- comedown onto the end of its own buff without polling.
+    -- Fire `vsport:server:BuffExpired`, its client twin, and `vsport:server:DrainExpired`, so a
+    -- drug script can hook a comedown onto the end of its own buff or drain without polling.
+    -- One flag for all three: turning it off silences every integration built on them.
     fireExpiryEvents = true,
 }
 

@@ -699,6 +699,7 @@ Listen for these instead of polling.
 | `vsport:server:StatChanged` | `src, stat, before, after` | Any change outside a session. |
 | `vsport:server:StatsReset` | `src` | `ResetStats` was called. |
 | `vsport:server:BuffExpired` | `src, id, stat` | A buff or multiplier ran out. |
+| `vsport:server:DrainExpired` | `src, id, stat` | A drain added with `AddDrain` ran out. |
 | `vsport:server:ItemUsed` | `src, configKey, effect` | A `Config.Items` entry was used. |
 | `vsport:server:CheatSuspected` | `src, reason, detail` | Rejections passed the threshold. |
 
@@ -717,6 +718,15 @@ AddEventHandler('vsport:server:BuffExpired', function(src, id, stat)
     end
 end)
 ```
+
+`vsport:server:DrainExpired` is the same hook for the other half of the pair: `AddDrain` says
+how a stat bleeds away, and this says when the bleeding stopped. Same arguments, same id you
+passed in.
+
+**All three expiry events are gated by `Config.Buffs.fireExpiryEvents`** (on by default):
+`vsport:server:BuffExpired`, its client twin, and `vsport:server:DrainExpired`. Turn the flag
+off and a handler registered against any of them simply never runs, which is worth knowing
+before spending an evening on why your comedown never fires.
 
 ### Client
 
