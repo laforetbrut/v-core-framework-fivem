@@ -204,7 +204,7 @@ step can fail on it. Run them from the repository root:
 ```
 python tools/lua-syntax.py        # every Lua file compiles, client ones included
 python tools/privacy-sweep.py     # anything that must never be committed
-python tools/locale-check.py      # keys defined once, on both sides, and all of them used ones exist
+python tools/locale-check.py      # keys defined once, on both sides, and every key asked for exists
 python tools/manifest-check.py    # every asset a NUI page loads is one the resource serves
 ```
 
@@ -212,6 +212,12 @@ python tools/manifest-check.py    # every asset a NUI page loads is one the reso
 script is never read by the server: the resource reports "Started", registers its settings and
 logs nothing, and the file simply does not run when a player connects. That was measured, not
 assumed - a deliberately broken client file produced a completely clean boot.
+
+`locale-check` reads the NUI JavaScript as well as the Lua, which for a module whose interface
+is a web page is where nearly all of its text lives: v-phone asks for 591 keys from `app.js`
+and four from Lua. Reading only Lua validated four keys out of 852 and reported success. The
+phone resolves a key with `S[k] || k`, so a missing one is rendered to the player as its own
+name.
 
 Each was written because the thing it looks for had already happened at least once here: a live
 connection string in a tracked file, a key defined twice where the second silently won, and a
@@ -438,6 +444,12 @@ CLIENT cassé n'est jamais lu par le serveur : la ressource annonce « Started �
 réglages et ne journalise rien, et le fichier ne tourne simplement pas quand un joueur se
 connecte. Cela a été mesuré et non supposé : un fichier client volontairement cassé a produit
 un démarrage totalement propre.
+
+`locale-check` lit aussi le JavaScript des pages NUI, et non le seul Lua. Pour un module dont
+l'interface est une page web, c'est là que vit presque tout le texte : v-phone demande 591 clés
+à `app.js` et quatre au Lua. Ne lire que le Lua validait quatre clés sur 852 en annonçant que
+tout allait bien. Le téléphone résout une clé par `S[k] || k`, donc une clé absente s'affiche au
+joueur sous son propre nom.
 
 Chacun a été écrit parce que ce qu'il cherche s'était déjà produit ici au moins une fois : une
 chaîne de connexion vivante dans un fichier suivi, une clé définie deux fois dont la seconde

@@ -27,6 +27,18 @@ TWO THINGS THIS HAS TO GET RIGHT, both learned by getting them wrong first:
   * Comments mention keys. v-core's locale header documents the API as `calls L('key', ...)`,
     which is prose, not a call. Comments are stripped before anything is matched.
 
+THE INTERFACE ASKS FOR KEYS TOO, and for a while this check could not see any of them. A module
+whose interface is a NUI page keeps its text in JavaScript: v-phone asks for 591 keys from
+app.js and four from Lua, so reading only .lua validated four keys out of 852 and reported
+success. The phone resolves with `const L = (k) => S[k] || k`, which renders the key itself when
+it is absent, so the failure this missed is a player reading `ph.mail_kept` in the interface.
+
+JavaScript is not matched with the Lua pattern, because the keys sit in places that pattern
+cannot reach: `L(saved ? 'ph.a' : 'ph.b')` holds two of them and starts with neither. The JS
+scan walks parentheses and string state instead, so a literal anywhere inside an L( call is
+found however it is nested. A literal glued to a `+` is a prefix finished at runtime, counted
+and not judged, exactly as `..` is on the Lua side.
+
 Exit code is 1 when something is wrong, so a hook or a CI step can fail on it.
 """
 
@@ -55,8 +67,61 @@ LINE_COMMENT = re.compile(r'--(?!\[\[).*')
 BLOCK_COMMENT = re.compile(r'--\[\[.*?\]\]', re.S)
 
 
+KEY_SHAPE = re.compile(r'^[A-Za-z0-9_]+\.[A-Za-z0-9_.\-]+$')
+L_BEFORE = re.compile(r'\bL\s*$')
+
+
 def read(path):
     return io.open(path, encoding='utf-8', errors='replace').read()
+
+
+def js_locale_keys(text):
+    """Every string literal sitting inside an L( call, with whether it is a fragment.
+
+    Walks the source rather than matching it: the keys are nested inside ternaries and
+    argument lists that no anchored pattern reaches. Tracks string state so a `//` inside a
+    URL is not read as a comment, and a `(` inside a string does not open a call.
+    """
+    out = []
+    paren_is_call = []          # one flag per open paren: did an L open it
+    i, n = 0, len(text)
+    while i < n:
+        c = text[i]
+
+        if c == '/' and i + 1 < n and text[i + 1] in '/*':
+            if text[i + 1] == '/':
+                end = text.find('\n', i)
+            else:
+                end = text.find('*/', i + 2)
+                end = n if end < 0 else end + 2
+            i = n if end < 0 else end
+            continue
+
+        if c in '\'"`':
+            j, buf = i + 1, []
+            while j < n:
+                if text[j] == '\\':
+                    j += 2
+                    continue
+                if text[j] == c:
+                    break
+                buf.append(text[j])
+                j += 1
+            if any(paren_is_call):
+                literal = ''.join(buf)
+                glued = bool(re.search(r'\+\s*$', text[max(0, i - 40):i])) or \
+                        bool(re.match(r'\s*\+', text[j + 1:j + 41]))
+                out.append((literal, glued))
+            i = j + 1
+            continue
+
+        if c == '(':
+            paren_is_call.append(bool(L_BEFORE.search(text[max(0, i - 8):i])))
+        elif c == ')' and paren_is_call:
+            paren_is_call.pop()
+        i += 1
+
+    return out
 
 
 def strip_comments(text):
@@ -115,15 +180,24 @@ def main():
 
         asked = set()
         for base, dirs, files in os.walk(path):
-            dirs[:] = [d for d in dirs if d not in ('locales', 'tools', 'node_modules')]
+            # `preview` holds a generated copy of the interface; judging it would double every
+            # finding and report the generator's output as if it were source.
+            dirs[:] = [d for d in dirs
+                       if d not in ('locales', 'tools', 'node_modules', 'preview')]
             for f in files:
-                if not f.endswith('.lua'):
-                    continue
-                for key, concat in CALL.findall(strip_comments(read(os.path.join(base, f)))):
-                    if concat:
-                        prefixes += 1     # finished at runtime; nothing to verify here
-                    else:
-                        asked.add(key)
+                full = os.path.join(base, f)
+                if f.endswith('.lua'):
+                    for key, concat in CALL.findall(strip_comments(read(full))):
+                        if concat:
+                            prefixes += 1     # finished at runtime; nothing to verify here
+                        else:
+                            asked.add(key)
+                elif f.endswith('.js'):
+                    for literal, glued in js_locale_keys(read(full)):
+                        if glued or not KEY_SHAPE.match(literal):
+                            prefixes += 1
+                        else:
+                            asked.add(literal)
 
         undefined = sorted(k for k in asked if k not in defined_en)
         if undefined:
