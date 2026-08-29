@@ -503,7 +503,13 @@ end
 local function printItems(target, which)
     local lines = {}
 
-    which = tostring(which or ''):lower()
+    -- `which` reaches here from a net event, so it is whatever the caller chose to send and not
+    -- necessarily one of the names below. It is only ever compared against BLOCKS, except in the
+    -- unknown-inventory line, which puts it in the console verbatim. Capped and flattened here,
+    -- once, for every path: without a length limit one call prints a string of any size, and a
+    -- newline inside it turns that one line into several that can be dressed up as another
+    -- resource's log in front of whoever is reading the console.
+    which = tostring(which or ''):lower():gsub('%c', ' '):sub(1, 40)
 
     if which == '' then
         which = detectInventory()
