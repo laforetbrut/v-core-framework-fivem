@@ -280,3 +280,49 @@ Config.Compat.hooks.identity = function(citizenid, _)
         id = citizenid,
     }
 end
+
+--[[
+    What a vehicle is CALLED, from its spawn code.
+
+    The Garage app draws the `model` it is handed, and without this the bridge's last line
+    capitalises the spawn code: `brioso` becomes `Brioso`, `adder` becomes `Adder`. The
+    catalogue in this framework has the real names - adder is a Truffade Adder - so a player
+    reads a car's name rather than its asset name.
+
+    Read from v-world rather than from `v-vehicleshop:GetCatalogue()`, which is the
+    dealership's view and answers what is FOR SALE. A label is needed for every car anybody
+    owns, including one the dealers stopped stocking, and v-world holds the rows the editor
+    writes. Same reason the job list is read from there.
+
+    Cached, because a garage list asks this once per vehicle and the table is a hundred
+    rows of nothing changing. `v-world:server:changed` is the framework's own signal that
+    an editor wrote something, and it is what v-vehicleshop rebuilds on, so the cache is
+    dropped there rather than left to go stale until a restart.
+]]
+local labels
+
+AddEventHandler('v-world:server:changed', function(domain)
+    if domain == nil or domain == 'vehcat' then labels = nil end
+end)
+
+Config.Compat.hooks.vehicleLabel = function(model)
+    model = tostring(model or ''):lower()
+    if model == '' then return nil end
+
+    if not labels then
+        local rows = ask('v-world', 'GetVehicleCatalogue')
+        if type(rows) ~= 'table' then return nil end
+        labels = {}
+        for _, r in ipairs(rows) do
+            if type(r) == 'table' and r.model and r.label then
+                labels[tostring(r.model):lower()] = tostring(r.label)
+            end
+        end
+    end
+
+    -- nil, not the model: the bridge's own fallback capitalises it, and answering with the
+    -- spawn code here would replace that with the same thing while claiming it is a name.
+    local label = labels[model]
+    if type(label) ~= 'string' or label == '' then return nil end
+    return label
+end
