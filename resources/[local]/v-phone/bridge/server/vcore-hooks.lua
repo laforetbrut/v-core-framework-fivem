@@ -410,3 +410,56 @@ Config.Compat.hooks.transactions = function(_, citizenid, limit)
     end
     return out
 end
+
+-- ══════════════════════════════════════════════════════════════
+-- The company account, for Bank Pro
+-- ══════════════════════════════════════════════════════════════
+--[[
+    v-factions keeps a treasury per job and per gang, and Bank Pro is the job one: the
+    account it asks about is derived from the character's own job, in `accountFor`.
+
+    THE NAME NEEDS UNPICKING. The phone builds the account as `Config.BankPro.accountPrefix
+    .. job.name` - empty by default, `society_` on a server whose banking script prefixes
+    them - while v-factions is keyed on the bare job name. Looking `society_police` up in a
+    table keyed on `police` returns nil for ever, and the app would look wired while showing
+    nothing, so the prefix is taken back off here rather than assumed absent.
+
+    Reading a balance CREATES the account at the configured starting figure if it is not
+    there. That is v-factions' own design - a faction's treasury begins at its first look -
+    and it is left alone rather than worked around from the outside.
+]]
+local function faction(account)
+    account = tostring(account or '')
+    if account == '' then return nil end
+    local prefix = tostring((Config.BankPro and Config.BankPro.accountPrefix) or '')
+    if prefix ~= '' and account:sub(1, #prefix) == prefix then
+        account = account:sub(#prefix + 1)
+    end
+    return account ~= '' and account or nil
+end
+
+--- (account) -> number or nil. nil means "cannot be read", which the app draws
+--- differently from a zero somebody genuinely has.
+Config.Compat.hooks.societyBalance = function(account)
+    local name = faction(account)
+    if not name then return nil end
+    return tonumber(ask('v-factions', 'GetBalance', name, 'job'))
+end
+
+--- (account, amount, reason) -> boolean. True only when it landed.
+Config.Compat.hooks.society = function(account, amount, reason)
+    local name = faction(account)
+    if not name then return false end
+    return ask('v-factions', 'Deposit', name, 'job',
+               math.abs(math.floor(tonumber(amount) or 0)),
+               tostring(reason or 'v-phone')) == true
+end
+
+--- (account, amount, reason) -> boolean. True only when the money left the account.
+Config.Compat.hooks.societyRemove = function(account, amount, reason)
+    local name = faction(account)
+    if not name then return false end
+    return ask('v-factions', 'Withdraw', name, 'job',
+               math.abs(math.floor(tonumber(amount) or 0)),
+               tostring(reason or 'v-phone')) == true
+end
