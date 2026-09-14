@@ -1,6 +1,6 @@
 # v-core - a roleplay framework built for FiveM Enhanced
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-e8a33d.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-e8a33d.svg)](LICENSE)
 [![FiveM Enhanced](https://img.shields.io/badge/FiveM-Enhanced-e8a33d.svg)](https://forum.cfx.re/)
 [![Lua 5.4](https://img.shields.io/badge/Lua-5.4-000080.svg)](https://www.lua.org/)
 [![Modules](https://img.shields.io/badge/modules-39-e8a33d.svg)](ARCHITECTURE.md)
