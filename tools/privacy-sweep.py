@@ -65,6 +65,13 @@ PLACEHOLDER = re.compile(
 # what tells them apart: no real connection string contains `[^` or `(?:`.
 IS_PATTERN = re.compile(r'(\[\^|\(\?:|\\d\+|\\s|\)\?|\|\))')
 
+# The phone's Mail app is set in the game's world: its addresses live on the game's own companies
+# (`Config.Mail` in v-phone/config.lua), and its docs and tests are full of them. They are fiction,
+# not anybody's inbox, and the sixty-odd of them buried the one real finding. Matched on the whole
+# domain, so a real provider is never excused by a lookalike.
+WORLD_MAIL = re.compile(r'@(ls\.com|ifruit\.ls|lspd\.gov|lscustoms\.com|eyefind\.info|'
+                        r'lifeinvader\.com|bilkinton\.com)$', re.I)
+
 # Only report an address when its surroundings claim it is one.
 IP_CONTEXT = re.compile(r'(://|host|\bip\b|addr|server|connect|endpoint|proxy)', re.I)
 
@@ -98,6 +105,8 @@ def main():
                     continue          # a regex that parses one, not a value
                 if PLACEHOLDER.search(fragment):
                     continue
+                if label == 'e-mail address' and WORLD_MAIL.search(fragment):
+                    continue          # an in-game address, see WORLD_MAIL
                 if label == 'routable IP':
                     around = text[max(0, match.start() - 40):match.end() + 40]
                     if not IP_CONTEXT.search(around):
