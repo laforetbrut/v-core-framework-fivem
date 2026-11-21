@@ -505,7 +505,7 @@ v-notify.
   reason, and so is the HUD's built-in stress system, which v-status owns here.
 
 ### `v-sport` ✅ - training
-**Done.** Physical training. Every sport prop already on the map becomes usable, a rhythm QTE drives
+**Done** (v-sport 1.0.4). Physical training. Every sport prop already on the map becomes usable, a rhythm QTE drives
 the workout, and strength, lung capacity and stamina are trained, decay when unused, and can be read
 and pushed by any other resource through its API. A live in-game equipment aligner for staff, and
 seventeen exercises across thirty models. Re-based on v-core through a `vcore` adapter, the ~20k-line

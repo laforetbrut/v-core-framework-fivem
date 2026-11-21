@@ -200,6 +200,9 @@ Locale.register('fr', {
 
     ['cmd.dev']                 = 'Revérifier si vous pouvez utiliser les outils de dev',
     ['cmd.dev_granted']         = 'Outils de développement débloqués',
+    ['cmd.sound']               = 'Jouer les sons de l\'entraînement, tous ou un seul',
+    ['cmd.sound_unknown']       = 'Aucun son nommé %s. Essayez : %s',
+    ['cmd.sound_off']           = 'Les sons de l\'entraînement sont coupés (Config.Minigame.sounds.enabled)',
     ['cmd.tune']                = 'Aligner un exercice sur un prop, en direct',
     ['cmd.tune_usage']          = 'Usage : /%s <clé d\'équipement>',
 

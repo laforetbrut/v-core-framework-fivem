@@ -5,7 +5,7 @@ lua54 'yes'
 name 'v-sport'
 author 'vyrriox'
 description 'v-sport — physical training: every sport prop in the map becomes usable, a rhythm QTE drives the workout, and strength, lung capacity and stamina are trained, decay when unused, and can be pushed around by any other resource (v-core module)'
-version '1.0.3'
+version '1.0.4'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
