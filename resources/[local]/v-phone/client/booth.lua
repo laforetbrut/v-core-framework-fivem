@@ -139,14 +139,14 @@ local function openBooth()
         current = { x = booth.x, y = booth.y, z = booth.z, number = res.number }
         isOpen = true
         SetNuiFocus(true, true)
-        -- The strings travel with the panel.
+        -- The strings travel with the panel when the page does not hold them yet.
         --
-        -- The page's table is filled by the phone's own `open` message, and a payphone is the
-        -- one screen a player can reach WITHOUT ever opening their phone - that is the whole
-        -- point of a payphone. So on a fresh connection every label on this panel rendered as
-        -- its own key: `ph.booth_title`, `ph.booth_call`, and so on, exactly as reported.
-        SendNUIMessage({ action = 'booth:open', data = res, call = boothCall,
-                         strings = PhoneStrings and PhoneStrings() or nil })
+        -- A payphone is the one screen a player can reach WITHOUT ever opening their phone -
+        -- that is the whole point of a payphone. Before the table travelled with it, every label
+        -- on this panel rendered as its own key on a fresh connection: `ph.booth_title`,
+        -- `ph.booth_call`, and so on, exactly as reported. client/main.lua decides whether the
+        -- page already holds this language, so the table is not resent on every visit.
+        SendNUIMessage(PhoneWithStrings({ action = 'booth:open', data = res, call = boothCall }))
     end, { x = booth.x, y = booth.y, z = booth.z })
 end
 

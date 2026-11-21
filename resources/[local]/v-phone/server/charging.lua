@@ -108,8 +108,11 @@ function PlugOk(src, source)
     -- Consent is for topping up a phone somebody is using. There is nothing to consent to when
     -- the handset is dead: plugging it in is the only thing anybody would ever want, and the
     -- switch reappears the moment there is enough charge to open the app and throw it.
-    local self = exports[GetCurrentResourceName()]
-    if (self:GetBattery(src) or 0) <= 0 then return true end
+    --
+    -- `PhoneBattery` rather than the `GetBattery` export: this runs from the state tick every two
+    -- seconds for everybody in a car or at home, and the export was a trip out through the
+    -- resource's own export table for a number main.lua is holding. Both return `batteryOf`.
+    if PhoneBattery(src) <= 0 then return true end
 
     return p ~= nil
 end

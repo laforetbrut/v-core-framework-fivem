@@ -29,6 +29,34 @@ Locales = Locales or { en = {}, fr = {} }
 --- locale file falls back to, so a partial translation reads as French rather than as nothing.
 LOCALE_FALLBACK = 'fr'
 
+--- The local player's language as last carried by their state bag, on the client only.
+---
+--- **Kept here rather than read from the bag on every call.** `LocalPlayer.state.lang` is not a
+--- field read: each `.state` builds a fresh state bag proxy (a table, a metatable, two closures)
+--- and decodes the value through msgpack, and the old code did it twice per call. `L()` runs
+--- inside per-frame loops - the payphone and desk prompts, four camera help lines - so that was
+--- about 600 bytes of garbage per label per frame, for a value that changes once per session.
+---
+--- So the bag is read once, lazily, and then followed by a change handler. The handler takes
+--- the new value from its argument, because FiveM runs change handlers BEFORE it stores the
+--- value: reading the bag from inside one answers with the old language.
+local bagLang = nil      -- a non-empty string, or nil when the bag carries nothing usable
+local bagRead = false    -- has the bag been read, or has the handler already told us?
+
+local function usableLang(value)
+    if type(value) == 'string' and value ~= '' then return value end
+    return nil
+end
+
+if not IsDuplicityVersion() then
+    AddStateBagChangeHandler('lang', ('player:%s'):format(GetPlayerServerId(PlayerId())),
+        function(_, _, value)
+            -- A bag that lands after the first read replaces whatever the convar or the fallback
+            -- answered, which is the whole reason the server pushes it.
+            bagLang, bagRead = usableLang(value), true
+        end)
+end
+
 --- The language for the local player, or the server's default.
 ---
 --- Exposed rather than local because client/main.lua builds the page's string table and has
@@ -40,8 +68,13 @@ function PhoneLang()
     end
     -- The state bag first: the server writes it on load, so this is right even when the
     -- operator used `set` rather than `setr` and the convar below is invisible here.
-    local carried = LocalPlayer and LocalPlayer.state and LocalPlayer.state.lang
-    if type(carried) == 'string' and carried ~= '' then return carried end
+    if not bagRead then
+        bagRead = true
+        bagLang = usableLang(LocalPlayer and LocalPlayer.state and LocalPlayer.state.lang)
+    end
+    if bagLang then return bagLang end
+    -- Still read per call while the bag is empty, exactly as before: that is the moment before
+    -- the server's push lands, and a replicated convar may still move under it.
     local convar = GetConvar('phone_locale', '')
     if convar ~= '' then return convar end
     return LOCALE_FALLBACK

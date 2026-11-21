@@ -248,7 +248,7 @@ local function postsFor(readerCid, creatorCid, limit)
     local out = {}
     for _, r in ipairs(rows) do
         local price = math.floor(num(r.price, 0))
-        local subsOnly = num(r.subs_only, 0) == 1
+        local subsOnly = (r.subs_only == true or num(r.subs_only, 0) == 1)
         -- Free to everybody, or already bought, or covered by a subscription, or your own.
         local open = postOpen(mine, price, subsOnly, num(r.bought, 0) == 1, isSub)
 
@@ -260,6 +260,10 @@ local function postsFor(readerCid, creatorCid, limit)
             sold = math.floor(num(r.sold, 0)),
             ts = math.floor(num(r.ts, 0)),
             locked = (not open) or nil,
+            -- Your own picture, so the page can offer to take it down. The server checks
+            -- ownership again when it is asked to: this flag decides what is DRAWN, never
+            -- what is allowed.
+            mine = mine or nil,
             -- The one line the whole app is built around.
             image = open and r.image or nil,
         }
@@ -285,6 +289,12 @@ local function cardOf(row, readerCid)
             'SELECT 1 FROM vphone_fan_follows WHERE citizenid = ? AND creator = ?',
             { readerCid, row.citizenid }) ~= nil or nil,
         subscribed = readerCid ~= row.citizenid and subscribed(readerCid, row.citizenid) or nil,
+        -- When the subscription runs out, so the app can say what cancelling costs somebody
+        -- rather than making them find out afterwards.
+        subUntil = readerCid ~= row.citizenid and MySQL.scalar.await(
+            [[SELECT UNIX_TIMESTAMP(until_at) FROM vphone_fan_subs
+              WHERE citizenid = ? AND creator = ? AND until_at > NOW()]],
+            { readerCid, row.citizenid }) or nil,
     }
 end
 
@@ -312,7 +322,7 @@ V.Callback('v-phone:fan:open', function(src, resolve)
         WHERE 1 = 1]] .. livePosts('po') .. [[
         ORDER BY po.id DESC LIMIT 40]], { cid, cid }) or {}) do
         local price = math.floor(num(r.price, 0))
-        local subsOnly = num(r.subs_only, 0) == 1
+        local subsOnly = (r.subs_only == true or num(r.subs_only, 0) == 1)
         local open = postOpen(false, price, subsOnly, num(r.bought, 0) == 1,
                               subscribed(cid, r.citizenid))
         feed[#feed + 1] = {
@@ -622,7 +632,7 @@ V.Callback('v-phone:fan:unlock', function(src, resolve, data)
         resolve({ error = 'postgone' }) return
     end
     if post.citizenid == cid then resolve({ error = 'self' }) return end
-    if num(post.subs_only, 0) == 1 then resolve({ error = 'subsonly' }) return end
+    if (post.subs_only == true or num(post.subs_only, 0) == 1) then resolve({ error = 'subsonly' }) return end
 
     local price = math.floor(num(post.price, 0))
     if price <= 0 then resolve({ error = 'free' }) return end
@@ -684,6 +694,28 @@ V.Callback('v-phone:fan:subscribe', function(src, resolve, data)
         exports[GetCurrentResourceName()]:NotifyCitizen(row.citizenid, 'onlyfruits',
             LP(src, 'ph.fan_notif_sub'), tostring(price))
     end)
+    resolve({ ok = true })
+end)
+
+--- **Cancel a subscription.**
+---
+--- There is no recurring charge to stop - a subscription is a month bought up front - so what
+--- this ends is the ACCESS, and it ends it now. Nothing is refunded and nothing pretends to
+--- be: the app says what is being given up before it asks, and the row is simply removed.
+--- Without this the only way out was to wait, which is why somebody asked for it.
+V.Callback('v-phone:fan:unsub', function(src, resolve, data)
+    if not enabled() then resolve({ error = 'off' }) return end
+    local p = Core.GetPlayer(src)
+    if not p then resolve(false) return end
+
+    local row = profileByHandle(data and data.handle)
+    if not row then resolve({ error = 'nocreator' }) return end
+    if row.citizenid == p.citizenid then resolve({ error = 'self' }) return end
+
+    local n = MySQL.update.await(
+        'DELETE FROM vphone_fan_subs WHERE citizenid = ? AND creator = ?',
+        { p.citizenid, row.citizenid }) or 0
+    if n <= 0 then resolve({ error = 'nosub' }) return end
     resolve({ ok = true })
 end)
 

@@ -319,7 +319,9 @@ local function payPot(m, winnerSide)
                 :format(amount, tostring(m[side].cid), why))
             return
         end
-        local acting = PhoneActingSource and PhoneActingSource(src) or src
+        -- `true`: a payout is never the payee's own activity. It runs from the round clock, or from
+        -- the other fighter forfeiting or leaving, so it must not keep a held phone's session alive.
+        local acting = PhoneActingSource and PhoneActingSource(src, true) or src
         if not Bridge.AddMoney(acting, amount, 'bank', 'v-phone: FruitBrawl ' .. why) then
             print(('[v-phone] FruitBrawl: %d could not be paid to %s (%s)')
                 :format(amount, tostring(m[side].cid), why))

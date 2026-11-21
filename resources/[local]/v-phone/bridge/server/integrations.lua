@@ -579,7 +579,7 @@ end
 -- `bank_accounts` / `bank_statements` tables. So every branch that already handled qb-banking
 -- handles it too, and the ones below say so by name rather than by accident.
 local BANKS = { 'doc-banking', 'Renewed-Banking', 'qb-banking', 'okokBanking', 'qs-banking',
-                'esx_banking' }
+                'esx_banking', 'ox_banking' }
 
 Bridge.Banking = {}
 
@@ -772,6 +772,17 @@ function Bridge.RemoveSociety(account, amount, reason)
         if done then return true end
     end
 
+    -- The other direction on ox, and the dangerous one, so it is read before it is written:
+    -- the balance check above already refused an overdraw wherever a balance could be read,
+    -- and `oxGroupBalance` is one of the places it can.
+    local oxId = oxGroupAccountId(account)
+    if oxId then
+        local ok, done = pcall(function()
+            return exports.ox_core:RemoveAccountBalance(oxId, amount) ~= false
+        end)
+        if ok and done then return true end
+    end
+
     return false
 end
 
@@ -807,6 +818,28 @@ end
 --- Returns the amount actually taken, which is 0 when there was nothing to take OR when the
 --- credit failed. The caller decides what a failure means: the store keeps the sale either way,
 --- because refusing to sell an app because a society account was misspelled would punish the
+--- **A group's account id in ox_core**, found the same way its balance is: in the table.
+---
+--- ox has no banking exports of its own and ox_banking is a face on these very rows, so a
+--- company account is reached by its id. The id is cached per group for as long as the server
+--- runs, because a group does not change account between two payments.
+local oxGroupAccountIds = {}
+
+local function oxGroupAccountId(account)
+    if Bridge.framework ~= 'ox' then return nil end
+    if oxGroupAccountIds[account] ~= nil then
+        return oxGroupAccountIds[account] or nil
+    end
+    local ok, id = pcall(function()
+        return MySQL.scalar.await(
+            'SELECT id FROM accounts WHERE `group` = ? ORDER BY isDefault DESC, id ASC LIMIT 1',
+            { account })
+    end)
+    local value = (ok and tonumber(id)) and math.floor(tonumber(id)) or false
+    oxGroupAccountIds[account] = value
+    return value or nil
+end
+
 --- player for the operator's typo.
 function Bridge.Revenue(cfg, amount, reason)
     if type(cfg) ~= 'table' then return 0 end
@@ -871,6 +904,20 @@ function Bridge.AddSociety(account, amount, reason)
             end)
         end)
         if ok and landed then return true end
+    end
+
+    -- **ox had no path here at all**, so every cut, fee and payout aimed at a company on an ox
+    -- server answered false: the tax on a Fruitee gift, a VineMarket posting fee, anything a
+    -- script pays a society. The money was not lost - the callers treat a failed credit as a
+    -- sink or refund the player - but it never arrived either, which is what "the ox banking
+    -- bridge is shaky" looks like from a server. ox_banking is a face on ox_core's accounts, so
+    -- this is the same door its own interface uses.
+    local oxId = oxGroupAccountId(account)
+    if oxId then
+        local ok, done = pcall(function()
+            return exports.ox_core:AddAccountBalance(oxId, amount) ~= false
+        end)
+        if ok and done then return true end
     end
 
     return false
@@ -1055,10 +1102,59 @@ end
 --- Anything not in this list means the phone keeps its own lines. Add a script here only when
 --- `Transactions` genuinely returns its rows.
 local READABLE_HISTORY = { ['Renewed-Banking'] = true, ['qs-banking'] = true,
-                           ['qb-banking'] = true, ['doc-banking'] = true }
+                           ['qb-banking'] = true, ['doc-banking'] = true,
+                           ['ox_banking'] = true }
+
+--- **Which ox account a character's money is in.**
+---
+--- ox_banking is a face on ox_core's accounts rather than a bank of its own, so nothing is
+--- asked of ox_banking here: the balance, the history and the company accounts are all
+--- ox_core's, and the phone already spends and receives through them. What was missing was the
+--- history, which is why a player on an ox server saw a balance and no movements at all.
+---
+--- The account instance carries methods, and methods do not survive the export boundary - the
+--- same reason `oxGroupBalance` reads the table. Only the id is taken across.
+local function oxAccountId(src)
+    if Bridge.framework ~= 'ox' then return nil end
+    local ok, player = pcall(function() return exports.ox_core:GetPlayer(src) end)
+    if not ok or not player or not player.charId then return nil end
+    local gotAccount, account = pcall(function()
+        return exports.ox_core:GetCharacterAccount(player.charId)
+    end)
+    if gotAccount and type(account) == 'table' and tonumber(account.id) then
+        return math.floor(tonumber(account.id))
+    end
+    return nil
+end
+
+--- The movements of one ox account, newest first, signed the way the phone draws them:
+--- money arriving is positive, money leaving is negative.
+local function oxTransactions(accountId, limit)
+    if not accountId then return nil end
+    local ok, rows = pcall(function()
+        return MySQL.query.await([[
+            SELECT message AS label,
+                   CASE WHEN toId = ? THEN amount ELSE -amount END AS amount,
+                   date AS at
+            FROM accounts_transactions
+            WHERE fromId = ? OR toId = ?
+            ORDER BY id DESC LIMIT ?]],
+            { accountId, accountId, accountId, limit })
+    end)
+    if not ok or type(rows) ~= 'table' then return nil end
+    for _, r in ipairs(rows) do
+        -- ox leaves the message empty for a movement made by another resource. A line with no
+        -- label reads as a blank row in the app, so it is named for what it is instead.
+        if r.label == nil or tostring(r.label) == '' then r.label = 'Transaction' end
+    end
+    return rows
+end
 
 --- Can the running banking script's own statement be read?
 function Bridge.Banking.HistoryReadable()
+    -- ox keeps every movement in `accounts_transactions` whether or not ox_banking is
+    -- installed, so the history is readable on an ox server with no banking script at all.
+    if Bridge.framework == 'ox' then return true end
     local script = choose('banking', BANKS)
     return (script ~= nil) and (READABLE_HISTORY[script] == true)
 end
@@ -1074,6 +1170,13 @@ function Bridge.Banking.Transactions(src, citizenid, limit)
     end
 
     local bank = choose('banking', BANKS)
+    -- ox: the account rows are ox_core's whether or not ox_banking is installed, so this does
+    -- not wait for the bank to be detected. An ox server with no banking script at all still
+    -- has a history to show.
+    if Bridge.framework == 'ox' then
+        local rows = oxTransactions(oxAccountId(src), limit)
+        if rows then return rows end
+    end
     if bank == 'Renewed-Banking' then
         local rows = callExport(bank, 'getAccountTransactions', citizenid)
         if type(rows) == 'table' then return rows end
@@ -1145,6 +1248,18 @@ function Bridge.Banking.SocietyTransactions(account, limit)
     if custom then
         local ok, rows = pcall(custom, account, limit)
         if ok and type(rows) == 'table' then return rows end
+    end
+
+    -- ox: a group's account is a row in the same table a character's is, found by the group
+    -- name. Bank Pro signs a negative amount as money leaving, so these need no statement_type.
+    if Bridge.framework == 'ox' then
+        local ok, id = pcall(function()
+            return MySQL.scalar.await(
+                'SELECT id FROM accounts WHERE `group` = ? ORDER BY isDefault DESC, id ASC LIMIT 1',
+                { account })
+        end)
+        local rows = ok and tonumber(id) and oxTransactions(math.floor(tonumber(id)), limit)
+        if rows then return rows end
     end
 
     local bank = choose('banking', BANKS)
@@ -1393,6 +1508,37 @@ function Bridge.Identity(citizenid, src)
         if ok and type(info) == 'table' then return info end
     end
 
+    --- **A date of birth, or nothing at all.**
+    ---
+    --- What comes back here is whatever the framework's own character creator wrote, through
+    --- whatever the SQL driver makes of it. ox declares the column as a DATE, which oxmysql may
+    --- hand over as text or as an epoch; older schemas and some character creators store free
+    --- text, and one of them writes the literal word "none" when the player skipped the field -
+    --- which the wallet then printed, on the card, as the character's date of birth.
+    ---
+    --- So: a real date comes back as `YYYY-MM-DD`, and anything that is not one comes back as
+    --- nil, which takes the line off the card rather than showing a value nobody wrote.
+    local function dobOf(value)
+        if type(value) == 'number' then
+            -- Seconds or milliseconds, both of which a driver may hand over for a DATE.
+            local seconds = value > 1e11 and math.floor(value / 1000) or math.floor(value)
+            local ok, text = pcall(os.date, '!%Y-%m-%d', seconds)
+            return (ok and type(text) == 'string') and text or nil
+        end
+        if type(value) ~= 'string' then return nil end
+        local text = value:gsub('^%s+', ''):gsub('%s+$', '')
+        -- `1998-04-23`, with or without a time after it.
+        local y, m, d = text:match('^(%d%d%d%d)-(%d%d)-(%d%d)')
+        -- `23/04/1998` and `23-04-1998`, which qb's creator writes.
+        if not y then
+            d, m, y = text:match('^(%d%d)[/%-](%d%d)[/%-](%d%d%d%d)$')
+        end
+        if not y then return nil end
+        local month, day = tonumber(m), tonumber(d)
+        if not month or not day or month < 1 or month > 12 or day < 1 or day > 31 then return nil end
+        return ('%s-%02d-%02d'):format(y, month, day)
+    end
+
     --- 0/1, 'm'/'f', 'male'/'female', or anything else, as 'm' or 'f' or nil.
     local function sexOf(value)
         if value == nil then return nil end
@@ -1408,7 +1554,7 @@ function Bridge.Identity(citizenid, src)
         if ok and type(info) == 'table' then
             return {
                 first = info.firstname, last = info.lastname,
-                dob = info.birthdate, sex = sexOf(info.gender),
+                dob = dobOf(info.birthdate), sex = sexOf(info.gender),
                 nationality = info.nationality, id = citizenid,
             }
         end
@@ -1419,7 +1565,7 @@ function Bridge.Identity(citizenid, src)
         if row then
             return {
                 first = row.firstName, last = row.lastName,
-                dob = row.dateofbirth, sex = sexOf(row.gender), id = citizenid,
+                dob = dobOf(row.dateofbirth), sex = sexOf(row.gender), id = citizenid,
             }
         end
 
@@ -1431,7 +1577,7 @@ function Bridge.Identity(citizenid, src)
         if row then
             return {
                 first = row.firstname, last = row.lastname,
-                dob = row.dateofbirth, sex = sexOf(row.sex),
+                dob = dobOf(row.dateofbirth), sex = sexOf(row.sex),
                 height = tonumber(row.height), id = citizenid,
             }
         end
@@ -1539,6 +1685,16 @@ end
 function Bridge.Garages.LocatePlate(plate)
     local wanted = tostring(plate or ''):upper():gsub('%s', '')
     if wanted == '' then return nil end
+
+    -- v-park keeps a parked car in its own store and only spawns it near a player, so a car
+    -- left across the map is not in GetAllVehicles at all. Its record knows where it stands.
+    if GetResourceState('v-park') == 'started' then
+        local okPark, rec = pcall(function() return exports['v-park']:GetVehicleByPlate(plate) end)
+        local c = okPark and type(rec) == 'table' and rec.coords
+        if c and tonumber(c.x) and tonumber(c.y) then
+            return { x = tonumber(c.x), y = tonumber(c.y), z = tonumber(c.z) or 0.0 }
+        end
+    end
 
     local ok, result = pcall(function()
         for _, vehicle in ipairs(GetAllVehicles()) do

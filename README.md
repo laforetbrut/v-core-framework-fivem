@@ -232,10 +232,10 @@ runtime, and the handful written in qb-core's or ox_core's schema behind a
 `Bridge.framework == 'qb'` branch, which never run here and are listed apart so a permanent
 failure does not teach everybody to ignore the check.
 
-**A module can carry its own, and the phone does.** `v-phone/tools/test-all.py` runs twenty-two
+**A module can carry its own, and the phone does.** `v-phone/tools/test-all.py` runs thirty-two
 of them in the order that fails cheapest first, from a Lua compile through its own static
 checks to a probe that drives a real mouse through the compositor and reports every control
-reachable across all 37 apps. It has to be run from the resource's own directory, because it
+reachable across all 38 apps. It has to be run from the resource's own directory, because it
 globs relatively:
 
 ```
@@ -500,9 +500,9 @@ l'exécution, et la poignée écrites dans le schéma de qb-core ou d'ox_core de
 permanent n'apprenne à personne à ignorer le contrôle.
 
 **Un module peut porter la sienne, et le téléphone le fait.** `v-phone/tools/test-all.py` en
-enchaîne vingt-deux, dans l'ordre où l'échec coûte le moins cher d'abord : compilation Lua,
+enchaîne trente-deux, dans l'ordre où l'échec coûte le moins cher d'abord : compilation Lua,
 ses propres contrôles statiques, puis une sonde qui pilote une vraie souris à travers le
-compositeur et vérifie que chaque commande est atteignable sur les 37 applications. À lancer
+compositeur et vérifie que chaque commande est atteignable sur les 38 applications. À lancer
 depuis le dossier de la ressource, car ses motifs sont relatifs :
 
 ```

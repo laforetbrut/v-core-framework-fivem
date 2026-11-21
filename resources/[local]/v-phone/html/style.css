@@ -1,5 +1,6 @@
 /* ============================================================
    v-phone — iFruit · FruitOS "Glass"
+   Author: vyrriox
 
    Two rules govern everything below.
 
@@ -521,9 +522,18 @@ input { font: inherit; }
 
    Moving only the transform means the worst an animation that never runs can do is leave
    the phone 46px low and slightly small. Visible and usable beats pretty and absent. */
+/* **The entrance carries the handset's own scale, because an animation owns `transform`.**
+   A running or filled animation beats an inline style, so keyframes that said `scale(.94)` and
+   `none` threw away the size the player chose and left every handset drawn at 100% whatever
+   the setting said - and a phone drawn at one size while the page believed another is a phone
+   whose buttons are not where the cursor is. `--device-scale` is what applyDevice sets, and it
+   is 1 before it has ever run. `--device-rise` is the sideways case: a rotated handset is
+   centred with a translate of its own, and losing that threw it off the screen. Its fallback
+   is an identity translate rather than `none`: a keyword inside a transform LIST makes the
+   whole declaration invalid, and an invalid declaration takes the inline style down with it. */
 @keyframes ph-rise {
-  from { transform: translateY(46px) scale(.94); }
-  to   { transform: none; }
+  from { transform: var(--device-rise, translate(0)) translateY(46px) scale(calc(var(--device-scale, 1) * .94)); }
+  to   { transform: var(--device-rise, translate(0)) scale(var(--device-scale, 1)); }
 }
 
 /* Titanium band, then the black ceramic front, then the screen. */
@@ -676,7 +686,15 @@ input { font: inherit; }
 }
 
 .screen { position: absolute; inset: 10px; overflow: hidden; border-radius: 47px;
-  background: var(--wall, #050914); background-position: center; background-size: cover; }
+  background: var(--wall, #050914); background-position: center; background-size: cover;
+  /* **The screen's own size, written down rather than measured.**
+     372x784 for the device, inset 10px on every side. The page converts the mouse into these
+     pixels, and asking the browser for the number instead is what made the gestures wrong
+     above 100%: a measured width on an element with `zoom` is reported differently from one
+     Chromium to the next. A unitless custom property comes back exactly as it is written,
+     whatever the handset is drawn at. Keep these two in step with the rule above. */
+  --screen-w: 352;
+  --screen-h: 764; }
 
 /* Wallpapers are gradients, not images: an image is a download every player pays
    for, and the phone should not be the module that adds one. */
@@ -839,8 +857,13 @@ input { font: inherit; }
      invisible hit area under it catches a swipe that starts a little off the pill or a
      tap that lands beside it - which is what made the bar miss "sometimes". */
   touch-action: none; }
+/* **It used to reach 26px above the pill, and that is an app's own bottom bar.** In Messages
+   the band sat over the composer: a tap meant for the text field landed on the home indicator
+   and closed the app. The swipe up does not depend on this halo - the screen reads the bottom
+   34px as an edge gesture whatever is under the finger - so the halo only has to catch a tap
+   that lands a little beside the pill, and 10px above it is plenty. */
 .homebar::before { content: ''; position: absolute; left: -40px; right: -40px;
-  top: -26px; bottom: -14px; }
+  top: -10px; bottom: -14px; }
 
 /* ══ Lock screen ══════════════════════════════════════════════ */
 .lock { position: absolute; inset: 0; z-index: 20; display: flex; flex-direction: column;
@@ -920,8 +943,8 @@ input { font: inherit; }
 .tile { display: flex; flex-direction: column; align-items: center; gap: 6px;
   animation: ph-in .2s var(--spring) backwards; }
 .tile .wrap { position: relative; }
-/* FruitOS icon geometry: 60px, corner radius 22.5% of the side. */
-.tile .ic { width: 60px; height: 60px; border-radius: 13.5px; overflow: hidden;
+/* FruitOS icon geometry: 60px, corner radius about 28% of the side. */
+.tile .ic { width: 60px; height: 60px; border-radius: 17px; overflow: hidden;
   display: flex; align-items: center; justify-content: center; color: #fff;
   box-shadow: 0 4px 12px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.35),
               inset 0 0 0 .5px rgba(255,255,255,.18);
@@ -1319,7 +1342,16 @@ input { font: inherit; }
 .bub { max-width: 74%; padding: 9px 14px; border-radius: 20px; font-size: 16px;
   line-height: 1.32; word-break: break-word; white-space: pre-wrap; position: relative;
   animation: ph-bub .3s var(--spring) backwards; }
-@keyframes ph-bub { from { opacity: 0; transform: translateY(8px) scale(.94); } to { opacity: 1; transform: none; } }
+/* **The slide uses `translate` and `scale`, not `transform`, and that is the point.**
+   A message bubble that animates `transform` is a bubble the browser gives its own layer, and
+   a layer inside a handset drawn above 100% is rastered once and then stretched - which is why
+   the text inside a conversation looked soft while the list of conversations beside it did
+   not. The standalone properties animate the same movement and leave no transform behind. A
+   browser without them simply fades the bubble in, which is the half of this that matters. */
+@keyframes ph-bub {
+  from { opacity: 0; translate: 0 8px; scale: .94; }
+  to   { opacity: 1; translate: 0 0; scale: 1; }
+}
 .bub.them { align-self: flex-start; background: var(--bub-them); color: var(--bub-them-label);
   border-bottom-left-radius: 6px; }
 .bub.me { align-self: flex-end; background: var(--app-tint); color: #fff;
@@ -1718,9 +1750,9 @@ input { font: inherit; }
   font-size: 9px; font-weight: 700; letter-spacing: .06em; background: rgba(0,0,0,.55);
   color: #fff; line-height: 1.5; }
 
-.compose { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 8px;
-  padding: 8px 12px 14px; background: var(--app-bg); }
-.compose .field { margin: 0; border-radius: 20px; padding: 9px 14px; }
+.compose { flex: 0 0 auto; display: flex; align-items: flex-end; gap: 6px;
+  padding: 8px 10px 14px; background: var(--app-bg); }
+.compose .field { margin: 0; border-radius: 20px; padding: 9px 12px; }
 .compose .sendbtn { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
   background: var(--app-tint); color: #fff; display: flex; align-items: center;
   justify-content: center; transition: transform .16s var(--snap); }
@@ -2214,8 +2246,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
    centres the glyph itself rather than the line it sits on. */
 .widget .wicon { display: flex; align-items: center; opacity: .78; }
 .widget .wicon svg { width: 15px; height: 15px; }
-.widget.w-calendar .wday { font-size: 12px; font-weight: 700; letter-spacing: .12em;
-  text-transform: uppercase; color: var(--fruitos-red); }
+.widget.w-calendar .wday { font-size: 12px; font-weight: 600; letter-spacing: .01em;
+  text-transform: none; color: var(--fruitos-red); }
 .widget.w-calendar .wnum { font-family: var(--fruitos-num); font-size: 40px; font-weight: 500; line-height: 1; }
 
 /* ══ Search pill above the dock ═══════════════════════════════ */
@@ -2464,7 +2496,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .locbtn svg { width: 18px; height: 18px; }
 
 /* The attach button beside the compose field. */
-.compose .attach { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 50%;
+.compose .attach { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   background: var(--app-fill); color: var(--app-label2); font-size: 22px; line-height: 1; }
 .gpick { display: flex; align-items: center; gap: 10px; padding: 9px 4px; font-size: 15px;
@@ -2779,7 +2811,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .emojigrid button:active { background: rgba(255,255,255,.14); transform: scale(1.25); }
 
 /* The composer's emoji trigger sits next to the attach button. */
-.compose .emoji { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+.compose .emoji { flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%;
   font-size: 18px; background: rgba(120,120,128,.24); display: flex; align-items: center;
   justify-content: center; }
 
@@ -2926,7 +2958,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 
 /* The icon size is computed from the cell a chosen grid actually gives it. */
 .pages .tile .ic { width: var(--isz, 60px); height: var(--isz, 60px);
-  border-radius: var(--iradius, 13.5px); }
+  border-radius: calc(var(--isz, 60px) * .2833); }
 .pages .tile .ic svg { width: 56%; height: 56%; }
 .pages .tile .nm { font-size: var(--ilabel, 11.5px); }
 /* **The inside of a folder has to shrink with the outside of it.** The box already tracked
@@ -2938,7 +2970,7 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
    above give. At isz=22 a cell is 8.1px instead of 3px. Those fixed values stay as the fallback
    for the drag ghost, which is drawn at a fixed 60px and never reads `--isz`. */
 .pages .tile .folder { width: var(--isz, 60px); height: var(--isz, 60px);
-  border-radius: var(--iradius, 13.5px);
+  border-radius: calc(var(--isz, 60px) * .2833);
   padding: calc(var(--isz, 60px) * .1); gap: calc(var(--isz, 60px) * .0667); }
 .pages .tile .folder > span,
 .pages .tile .folder > span > .ic { border-radius: calc(var(--isz, 60px) * .075); }
@@ -3030,8 +3062,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   --ph-r-xl: 30px;
   --ph-touch: 44px;
   --ph-fast: 140ms;
-  --ph-med: 280ms;
-  --ph-slow: 440ms;
+  --ph-med: 220ms;
+  --ph-slow: 320ms;
   --ph-ease: cubic-bezier(.2, .82, .2, 1);
   --ph-spring: cubic-bezier(.22, .9, .18, 1);
 
@@ -3378,30 +3410,25 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   --glass-x: 22%;
   --glass-y: -18%;
   min-height: 110px;
-  border-radius: 22px;
+  border-radius: 25px;
   padding: 15px;
   overflow: hidden;
   box-shadow:
-    inset 0 0 0 .5px rgba(255, 255, 255, .25),
-    inset 0 1px 0 rgba(255, 255, 255, .24),
-    0 13px 30px rgba(0, 0, 0, .30);
-  transition: transform var(--ph-fast) var(--ph-spring), box-shadow var(--ph-fast) ease;
+    inset 0 0 0 1px rgba(255, 255, 255, .12),
+    inset 0 1px 0 rgba(255, 255, 255, .22),
+    0 6px 16px rgba(0, 0, 0, .18);
+  transition: transform var(--ph-fast) var(--ph-spring);
 }
 
 .widget:hover {
   transform: translateY(-1px);
-  box-shadow:
-    inset 0 0 0 .5px rgba(255, 255, 255, .28),
-    inset 0 1px 0 rgba(255, 255, 255, .28),
-    0 16px 34px rgba(0, 0, 0, .34);
 }
 
 .widget.w-weather {
   background:
     radial-gradient(110% 95% at var(--glass-x) var(--glass-y),
       rgba(255, 255, 255, var(--sheen-a, .18)), transparent 56%),
-    radial-gradient(90% 100% at 100% 100%, rgba(52, 199, 89, .20), transparent 60%),
-    linear-gradient(155deg, #56b5ff, #1673dc 58%, #174fae);
+    linear-gradient(155deg, #327fd0, #175fa8 58%, #183e70);
 }
 
 .widget.w-calendar {
@@ -3428,13 +3455,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   position: relative;
   overflow: hidden;
   box-shadow:
-    inset 0 0 0 .5px rgba(255, 255, 255, .24),
-    inset 0 1px 0 rgba(255, 255, 255, .34),
-    0 7px 17px rgba(0, 0, 0, .38);
-  transition:
-    transform var(--ph-fast) var(--ph-spring),
-    filter var(--ph-fast) ease,
-    box-shadow var(--ph-fast) ease;
+    inset 0 0 0 .5px rgba(255, 255, 255, .20),
+    inset 0 1px 0 rgba(255, 255, 255, .38),
+    0 4px 10px rgba(0, 0, 0, .22);
+  transition: transform var(--ph-fast) var(--ph-spring);
 }
 
 .tile .ic::after {
@@ -3444,9 +3468,8 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   pointer-events: none;
   border-radius: inherit;
   background:
-    radial-gradient(110% 80% at 20% -10%, rgba(255, 255, 255, .30), transparent 48%),
-    linear-gradient(180deg, rgba(255, 255, 255, .08), transparent 42%, rgba(0, 0, 0, .08));
-  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .14);
+    linear-gradient(145deg, rgba(255, 255, 255, .24), transparent 44%, rgba(255, 255, 255, .06));
+  box-shadow: inset 0 -1px 0 rgba(0, 0, 0, .08);
 }
 
 .tile .ic > svg,
@@ -3456,25 +3479,18 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 }
 
 .tile:hover > .wrap > .ic {
-  filter: brightness(1.045) saturate(1.05);
-  transform: translateY(-1px) scale(1.018);
-  box-shadow:
-    inset 0 0 0 .5px rgba(255, 255, 255, .28),
-    inset 0 1px 0 rgba(255, 255, 255, .38),
-    0 10px 21px rgba(0, 0, 0, .42);
+  transform: translateY(-1px) scale(1.025);
 }
 
 .tile:active > .wrap > .ic {
-  transform: scale(.89);
-  filter: brightness(.94);
+  transform: scale(.94);
 }
 
 /* A folder gets the same press feedback as an app, on the folder box rather than on the four
    icons inside it. Scoping the rules above removed the feedback a folder used to get by
    accident, and the accident looked wrong: the box stayed put while its contents shrank. */
 .tile:active > .wrap > .folder {
-  transform: scale(.89);
-  filter: brightness(.94);
+  transform: scale(.94);
 }
 
 .tile .nm {
@@ -3501,20 +3517,9 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
     0 7px 17px rgba(0, 0, 0, .36);
 }
 
-/* **The dock keeps its dark tint on purpose, and takes the measured edge.**
-
-   The tint stays because the material derivation is explicit that Glass Regular
-   composites to `#858585` over black - it is a LIGHT material on a dark backdrop, not a
-   dark one - and the dock sits over an arbitrary wallpaper with white icon labels under
-   it. Swapping the fill would wash the icons out on any dark wallpaper. The kit contains
-   no dock, so there is nothing here to be unfaithful to.
-
-   What DOES change is the edge, and this one is measured. `filter1_iii`, the most reused
-   filter in the kit at 87 occurrences, is a tight bright line on the TOP edge sitting on
-   a wide soft shade, plus the same bright line on the BOTTOM edge. This surface had the
-   top line and then a dark line along the bottom, which is the opposite of the material:
-   a glass slab is lit at both edges and shaded at the top, never shaded at the foot.
-   Falloffs are the kit's own: 10px for the two bright lines, 30px for the shade. */
+/* A static lens: the player's glass preference controls the rim and tint.
+   Keep the lower fill dark enough to separate icons from a bright wallpaper.
+   No backdrop sampling or animated shadows on this always-visible surface. */
 .dock {
   --glass-x: 21%;
   --glass-y: -26%;
@@ -3522,19 +3527,13 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
   padding: 11px 10px;
   border-radius: 33px;
   background:
-    radial-gradient(150% 120% at var(--glass-x) var(--glass-y),
-      rgba(255, 255, 255, var(--sheen-a, .18)),
-      rgba(255, 255, 255, .035) 42%,
-      transparent 67%),
-    linear-gradient(145deg, rgba(255, 255, 255, .09), transparent 48%, rgba(0, 0, 0, .11)),
-    linear-gradient(180deg, rgba(42, 43, 50, var(--tint-a, .42)), rgba(20, 21, 26, .60));
+    linear-gradient(155deg, rgba(255, 255, 255, var(--sheen-a, .18)), transparent 48%),
+    linear-gradient(180deg, rgba(62, 72, 91, var(--tint-a, .42)), rgba(20, 27, 40, .64));
   box-shadow:
-    inset 0 10px 10px -10px rgba(255, 255, 255, .26),
-    inset 0 -10px 10px -10px rgba(255, 255, 255, .26),
-    inset 0 30px 30px -30px rgba(0, 0, 0, .18),
-    inset 0 0 0 .5px rgba(255, 255, 255, var(--rim-a, .31)),
-    0 0 0 .5px rgba(0, 0, 0, .32),
-    0 17px 38px rgba(0, 0, 0, .34);
+    inset 0 1px 0 rgba(255, 255, 255, var(--rim-a, .31)),
+    inset 0 -1px 0 rgba(255, 255, 255, .12),
+    inset 0 0 0 1px rgba(255, 255, 255, .10),
+    0 8px 20px rgba(0, 0, 0, .22);
 }
 
 .searchpill {
@@ -5644,10 +5643,10 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; appearance: 
 .cc {
   color: #fff;
   background:
-    radial-gradient(90% 62% at 16% -5%, rgba(121, 161, 224, .30), transparent 62%),
-    radial-gradient(82% 64% at 100% 100%, rgba(162, 89, 177, .24), transparent 68%),
-    linear-gradient(155deg, rgba(255, 255, 255, .055), transparent 44%),
-    rgba(8, 9, 14, .885);
+    radial-gradient(90% 62% at 16% -5%, rgba(121, 161, 224, .22), transparent 62%),
+    radial-gradient(82% 64% at 100% 100%, rgba(162, 89, 177, .15), transparent 68%),
+    linear-gradient(155deg, rgba(255, 255, 255, .04), transparent 44%),
+    #11131b;
   box-shadow:
     inset 0 0 0 .5px rgba(255, 255, 255, .16),
     0 22px 60px rgba(0, 0, 0, .55);
@@ -10502,6 +10501,38 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
   text-align: left;
 }
 
+/* The header row: the name button and, on your own post, the three dots beside it. Siblings in
+   a row because a button inside a button is invalid markup. The row carries the bottom margin
+   the name button used to, so a card with no dots lays out exactly as before. */
+.post .pheadrow {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-bottom: 7px;
+}
+
+.post .pheadrow .phead {
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  margin-bottom: 0;
+}
+
+/* Your own post's actions. 34 square, the avatar's own height, so the header does not grow and
+   a cursor finds it without aiming. The dots are drawn heavier than the set's 1.9 stroke, which
+   at this size leaves three specks. */
+.post .pmore {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.post .pmore svg { width: 22px; height: 22px; stroke-width: 3.2; }
+.post .pmore:hover,
+.post .pmore:active { background: var(--app-fill); }
+
 /* The verified badge. Bigger than it was, and lit: at 14px flat it read as a bullet point
    next to the name rather than as a mark, which is the opposite of what a badge is for. */
 .pverif {
@@ -10582,6 +10613,40 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
 .pact.plike.on svg { fill: currentColor; }
 .pact.prepost.on { color: var(--fruitos-green); }
 .pact.pdel:active { color: var(--fruitos-red); }
+
+.postlocation {
+  display: flex;
+  width: 100%;
+  min-height: 58px;
+  align-items: center;
+  gap: 11px;
+  margin-top: 10px;
+  padding: 9px 12px;
+  border-radius: 17px;
+  color: var(--app-label);
+  background: var(--app-fill);
+  text-align: left;
+  box-shadow: inset 0 0 0 .5px var(--app-sep);
+}
+.postlocation > svg:first-child { width: 23px; height: 23px; color: var(--app-tint); }
+.postlocation > svg:last-child { width: 15px; height: 15px; margin-left: auto;
+  color: var(--app-label3); }
+.postlocation span { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.postlocation b { font-size: 13px; font-weight: var(--fw-semibold); }
+.postlocation small { font-size: 11px; color: var(--app-label2); }
+.postlocation:active { opacity: .72; }
+.postlocation:focus-visible, .soclocpick:focus-visible {
+  outline: 2px solid var(--app-tint); outline-offset: 2px;
+}
+
+.soclocpick { display: flex; width: 100%; min-height: 46px; align-items: center;
+  gap: 9px; padding: 0 13px; margin: 8px 0 0; border-radius: 14px;
+  color: var(--app-tint); background: var(--app-fill);
+  font-size: 13px; font-weight: var(--fw-semibold); text-align: left; }
+.soclocpick svg { width: 18px; height: 18px; }
+.soclocpick.on { color: #fff; background: #0066cc; }
+.soclochint { margin: 5px 4px 12px; font-size: 11px; line-height: 1.35;
+  color: var(--app-label2); }
 
 /* ── Several photographs on one post ──────────────────────────
    Four arrangements, not one at four sizes: two split the card down the middle, three put a
@@ -12235,13 +12300,34 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
   width: 128px; height: 128px; font-size: 52px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, .5), inset 0 0 0 1px rgba(255, 255, 255, .12);
 }
-.callui.facetime::after {
+
+/* **The other person, behind the whole call.**
+   A video call is a picture of somebody filling the screen. There is no live picture by
+   default, but there is their photograph, so it goes behind everything, blurred and darkened
+   until it is a mood rather than a portrait - the portrait is the round avatar above it. It is
+   drawn on a pseudo-element rather than on the panel itself so the gradient underneath still
+   shows through where the photograph is dark, and so a call with no photograph on file simply
+   keeps that gradient. */
+.callui.facetime.haspeer::before {
   content: '';
-  position: absolute; right: 16px; top: 74px;
-  width: 96px; height: 132px; border-radius: 14px;
-  background: linear-gradient(180deg, #1a2534, #0d141d);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .1);
+  position: absolute; inset: 0; z-index: 0;
+  background-image: var(--peer-photo);
+  background-size: cover; background-position: center;
+  filter: blur(26px) saturate(.9) brightness(.38);
+  transform: scale(1.15);           /* the blur would otherwise show the edges */
+  border-radius: 47px;
 }
+/* The corner used to be an empty rectangle drawn here, which reads as a picture that failed
+   rather than as a design. It is a real element now, carrying the photograph from your own
+   card or your initial - see `faceSelfCard`. The frame is kept, as its backdrop. */
+.callui.facetime .faceself.selfcard {
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(180deg, #1a2534, #0d141d);
+  background-size: cover; background-position: center;
+  font-size: 40px; font-weight: 600; color: rgba(255, 255, 255, .82);
+  letter-spacing: .5px;
+}
+.callui.facetime .faceself.selfcard.hasphoto { color: transparent; }
 
 /* With the live picture on, the peer's frame fills the call screen and your own sits in
    the corner - the placeholder above is covered by them. Both are plain <img> elements
@@ -12257,8 +12343,18 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
   background: #0d141d;
   box-shadow: 0 8px 24px rgba(0, 0, 0, .45), inset 0 0 0 1px rgba(255, 255, 255, .12);
 }
-/* The name, timer and buttons stay above the picture. */
-.callui.facetime > *:not(.facepeer):not(.faceself) { position: relative; z-index: 4; }
+/* The name, timer and buttons stay above the picture.
+
+   **Only the stacking is changed, never the positioning.** This said `position: relative` on
+   every child, which put the three that are ABSOLUTE back into the flow: the speaker row, the
+   hang-up row and the corner button left their places and landed on top of the name and the
+   timer, piled in the middle of the screen. The ones that need a position to be raised are
+   named instead, and they are exactly the ones that had none. */
+.callui.facetime > *:not(.facepeer):not(.faceself) { z-index: 4; }
+.callui.facetime > .callav,
+.callui.facetime > .callnum,
+.callui.facetime > .callstate,
+.callui.facetime > .callroster { position: relative; }
 
 /* ══ The payphone ═══════════════════════════════════════════════
    Built from the anatomy of a real call box, because that is what the player is standing in
@@ -12891,6 +12987,27 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
 /* Explore and Saved are grids of photographs. Same tiles as the gallery, so a player who has
    used one already knows the other. */
 .socgrid { margin-top: 2px; }
+
+/* A post with no photograph, in a grid of them: its opening words on the card colour. Bleeter's
+   Saved tab is this grid too, and every saved bleet was an empty square in it. */
+.socgrid .shot.socgridtext {
+  display: flex;
+  padding: 8px 9px;
+  overflow: hidden;
+  background-color: var(--app-card);
+}
+
+.socgridtext span {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  color: var(--app-label);
+  font-size: var(--fs-caption1);
+  line-height: 1.3;
+  text-align: left;
+  word-break: break-word;
+}
 
 /* "Seen by", along the bottom of your own story. */
 .storyseen { position: absolute; left: 14px; bottom: 16px; z-index: 2;
@@ -14080,6 +14197,14 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
    wraps; everything else about it stays exactly as the field it replaced, so the composer row
    is unchanged. */
 .compose .msgbox {
+  /* **It takes the row, and the buttons take what they need.** `.field` is `width: 100%`, which
+     in a flex row is a basis the four buttons then squeeze: the box ended up 113 pixels wide,
+     the French placeholder wrapped onto a second line and the box was too short to show it, so
+     the message field read as half-drawn. `min-width: 0` is the half people forget - without it
+     a flex item refuses to go below its content width and the row overflows instead. */
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   margin-bottom: 0;
   min-height: 38px;
   max-height: 112px;
@@ -15308,3 +15433,108 @@ body.inframe.dark .uichip.negative { color: var(--fruitos-red); }
   background-image: linear-gradient(180deg, rgba(255, 255, 255, .10), rgba(255, 255, 255, 0) 62%);
   color: var(--av-label);
 }
+
+/* VineMarket: photo-led classifieds with one static blue brand panel and light list work. */
+.market-home, .market-compose, .market-detail, .market-thread { padding: 12px 15px 24px; color: var(--app-label); }
+.market-hero { display: flex; align-items: center; gap: 11px; padding: 17px; margin-bottom: 13px;
+  border-radius: 22px; background: linear-gradient(135deg, #3268BD, #19386F); color: #fff; }
+.market-hero-icon { width: 43px; height: 43px; display: grid; place-items: center; flex: none;
+  border-radius: 15px; background: rgba(255,255,255,.16); }
+.market-hero-icon svg { width: 24px; height: 24px; }
+.market-hero strong { font-size: 18px; letter-spacing: -.03em; }
+.market-hero > span:last-child { margin-left: auto; max-width: 100px; text-align: right;
+  font-size: 11px; line-height: 1.3; opacity: .82; }
+.market-search { margin-bottom: 11px; }
+.market-filters, .market-form-pair { display: flex; gap: 8px; }
+.market-filters { margin-bottom: 15px; }
+.market-filters select, .market-compose select, .market-compose input:not([type=checkbox]),
+.market-compose textarea { min-width: 0; width: 100%; border: 0; border-radius: 12px;
+  background: var(--app-card); color: var(--app-label); font: inherit; outline: none; }
+.market-filters select { padding: 10px; flex: 1; font-size: 12px; }
+.market-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.market-card { position: relative; overflow: hidden; padding: 0; min-width: 0; text-align: left;
+  border: 0; border-radius: 17px; background: var(--app-card); color: var(--app-label); }
+.market-thumb { display: block; height: 124px; overflow: hidden; background: #DCE8F5; }
+.market-thumb-photo, .market-detail-image, .market-form-preview { display: block; width: 100%; height: 100%; object-fit: cover; }
+.market-thumb-empty { display: grid; place-items: center; height: 100%; color: #3268BD; }
+.market-thumb-empty svg { width: 38px; height: 38px; }
+.market-card-copy { display: block; padding: 9px 10px 12px; }
+.market-card-copy strong, .market-card-copy small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-card-copy strong { font-size: 13px; margin: 3px 0; }
+.market-card-copy small { color: var(--app-label2); font-size: 10px; }
+.market-card-price { color: #2357A3; font-size: 15px; font-weight: 750; letter-spacing: -.03em; }
+.screen.dark .market-card-price { color: #86B8FF; }
+.market-closed { position: absolute; top: 8px; right: 8px; padding: 4px 7px; border-radius: 8px;
+  background: rgba(0,0,0,.75); color: #fff; font-size: 10px; }
+.market-more, .market-refresh { display: block; margin: 14px auto 0; padding: 9px 15px;
+  border: 0; border-radius: 12px; background: var(--app-card); color: var(--app-label2); font: inherit; font-size: 12px; }
+.market-inbox { display: grid; gap: 7px; }
+.market-chat-row { display: flex; align-items: center; gap: 10px; padding: 11px;
+  min-width: 0; border: 0; border-radius: 15px; background: var(--app-card); color: var(--app-label); text-align: left; }
+.market-chat-icon, .market-seller > span { display: grid; place-items: center; width: 39px; height: 39px;
+  flex: none; border-radius: 13px; color: #3268BD; background: #DCE8F5; }
+.market-chat-row > span:nth-child(2) { min-width: 0; flex: 1; }
+.market-chat-row strong, .market-chat-row small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-chat-row strong { font-size: 13px; }
+.market-chat-row small { margin-top: 3px; color: var(--app-label2); font-size: 11px; }
+.market-chat-row i { display: grid; place-items: center; min-width: 20px; height: 20px;
+  border-radius: 10px; background: #3268BD; color: #fff; font: 11px inherit; }
+.market-compose { display: grid; gap: 13px; }
+.market-compose label { display: grid; gap: 6px; min-width: 0; font-size: 11px; font-weight: 650; }
+.market-compose input:not([type=checkbox]), .market-compose select, .market-compose textarea { padding: 11px; font-size: 13px; font-weight: 400; }
+.market-compose textarea { resize: vertical; min-height: 90px; }
+.market-form-pair > label { flex: 1; }
+.market-form-photo { display: grid; place-items: center; gap: 5px; height: 138px; overflow: hidden;
+  border-radius: 17px; background: #DCE8F5; color: #3268BD; font-size: 12px; }
+.market-form-photo svg { width: 28px; height: 28px; }
+.market-photo-pick, .market-secondary { border: 0; border-radius: 12px; padding: 11px;
+  background: var(--app-card); color: #2357A3; font: inherit; font-size: 12px; font-weight: 650; }
+.market-privacy { display: flex !important; align-items: flex-start; gap: 10px !important;
+  padding: 13px; border-radius: 15px; background: var(--app-card); }
+.market-privacy input { margin: 3px 0 0; accent-color: #3268BD; }
+.market-privacy strong, .market-privacy small { display: block; }
+.market-privacy small { margin-top: 4px; color: var(--app-label2); font-weight: 400; line-height: 1.35; }
+.market-posting-fee { padding: 11px 13px; border-radius: 12px; background: var(--app-card);
+  color: var(--app-label2); font-size: 12px; line-height: 1.4; }
+.market-submit { width: 100%; padding: 13px; border: 0; border-radius: 13px;
+  background: #3268BD; color: #fff; font: inherit; font-size: 13px; font-weight: 700; }
+.market-submit:disabled { opacity: .5; }
+.market-detail { padding: 0 0 26px; }
+.market-detail-photo { height: 215px; overflow: hidden; display: grid; place-items: center;
+  background: #DCE8F5; color: #3268BD; }
+.market-detail-photo > span svg { width: 54px; height: 54px; }
+.market-detail-body { padding: 18px 18px 0; }
+.market-kicker { color: var(--app-label2); font-size: 11px; }
+.market-detail h2 { margin: 7px 0; font-size: 22px; line-height: 1.15; letter-spacing: -.04em; }
+.market-detail-price { color: #2357A3; font-size: 24px; font-weight: 750; letter-spacing: -.04em; }
+.market-detail-area { display: flex; align-items: center; gap: 5px; margin-top: 10px;
+  color: var(--app-label2); font-size: 11px; }
+.market-detail-area svg { width: 14px; height: 14px; }
+.market-detail p { white-space: pre-wrap; overflow-wrap: anywhere; margin: 17px 0; font-size: 13px; line-height: 1.5; }
+.market-seller { display: flex; align-items: center; gap: 10px; margin-bottom: 17px; }
+.market-seller small, .market-seller strong { display: block; }
+.market-seller small { color: var(--app-label2); font-size: 10px; }
+.market-seller strong { font-size: 12px; }
+.market-secondary { width: 100%; margin-top: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.market-secondary svg { width: 16px; height: 16px; }
+.market-hidden { display: flex; align-items: center; justify-content: center; gap: 6px;
+  margin-top: 10px; color: var(--app-label2); font-size: 11px; line-height: 1.4; }
+.market-hidden svg { width: 13px; height: 13px; }
+.market-thread-listing { display: flex; align-items: center; gap: 9px; width: 100%; padding: 12px;
+  border: 0; border-radius: 14px; background: var(--app-card); color: var(--app-label); font: inherit; text-align: left; }
+.market-thread-listing svg { width: 18px; height: 18px; color: #3268BD; }
+.market-thread-listing span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.market-messages { display: flex; flex-direction: column; align-items: flex-start; gap: 7px;
+  padding: 18px 0; }
+.market-message { max-width: 85%; padding: 10px 12px; border-radius: 16px 16px 16px 5px;
+  background: var(--app-card); overflow-wrap: anywhere; white-space: pre-wrap; font-size: 12px; line-height: 1.4; }
+.market-message.mine { align-self: flex-end; border-radius: 16px 16px 5px 16px;
+  background: #3268BD; color: #fff; }
+.market-chat-form { display: flex; gap: 8px; }
+.market-chat-form input { flex: 1; min-width: 0; padding: 11px; border: 0; border-radius: 17px;
+  background: var(--app-card); color: var(--app-label); font: inherit; font-size: 12px; }
+.market-chat-form button { display: grid; place-items: center; width: 39px; height: 39px;
+  border: 0; border-radius: 50%; background: #3268BD; color: #fff; }
+.market-chat-form button svg { width: 18px; height: 18px; }
+.market-home button:focus-visible, .market-compose button:focus-visible,
+.market-detail button:focus-visible, .market-thread button:focus-visible { outline: 2px solid #86B8FF; outline-offset: 2px; }

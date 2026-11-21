@@ -94,12 +94,15 @@ end
 --- frame, all of it garbage a moment later. On a French server the old code already returned
 --- the shared table, so this changes nothing there.
 ---
---- The key is the LANGUAGE, so the state-bag handler that notices `lang` changing
---- invalidates this for free: the next call sees a different key and rebuilds.
+--- The key is the LANGUAGE, so a language change invalidates this for free: the next call
+--- sees a different key and rebuilds.
+---
+--- `stringsFor` takes the language as an argument because the state bag handler below has to
+--- build the table for the value it was handed, which `PhoneLang()` cannot be relied on to
+--- return while that handler is still running.
 local stringsCache, stringsCacheLang = nil, nil
 
-local function strings()
-    local lang = PhoneLang()
+local function stringsFor(lang)
     if stringsCache and stringsCacheLang == lang then return stringsCache end
     local chosen = Locales[lang]
     local built
@@ -116,32 +119,85 @@ local function strings()
     stringsCache, stringsCacheLang = built, lang
     return built
 end
+local function strings() return stringsFor(PhoneLang()) end
 local function L(k) return strings()[k] or k end
 
---- The same table, by a name another client file can reach. client/booth.lua sends it with
---- the payphone panel, which is the one screen reachable without opening the phone.
-PhoneStrings = strings
+--- The language the page is PROVEN to hold, or nil when that is not known.
+---
+--- The table is about 120 KB of JSON, and it used to ride on every message that could be the
+--- first thing the page draws: a pocketed text sent 255 KB to show a 300 byte banner. It now
+--- travels only when the page lacks the current language, and that needs a record of what the
+--- page holds.
+---
+--- **Written only from what the page itself says.** A message sent is not a message received:
+--- NUI drops one sent to a page that has not finished loading, silently, with nothing logged.
+--- So this is set by the page's own request for the table and by its acknowledgement of a
+--- pushed one, and by nothing that merely sends.
+local pageLang = nil
+
+--- Attach the table to a message, only when the page does not already hold this language.
+---
+--- Records nothing on purpose. Two messages in one frame both carry the table until the page
+--- has said it took one, because the first of them may be the one that was dropped.
+---
+--- Global because client/booth.lua raises the payphone panel, which is the one screen a
+--- player can reach without ever opening the phone.
+function PhoneWithStrings(msg)
+    local lang = PhoneLang()
+    if pageLang ~= lang then
+        msg.strings = stringsFor(lang)
+        msg.locale = lang
+    end
+    return msg
+end
+local withStrings = PhoneWithStrings
 
 --- The page asking for its own string table.
 ---
---- The table is sent with every `open` and that is not sufficient: the page can be drawn
---- before any open - a payphone, an incoming call, a banner - and NUI drops a message sent to
---- a page that has not finished loading, silently, with nothing logged. A page that ASKS
---- cannot be too early, because it only asks once it exists.
-RegisterNUICallback('strings', function(_, cb)
-    cb({ strings = strings(), locale = PhoneLang() })
+--- A page that ASKS cannot be too early, because it only asks once it exists: that covers
+--- every message dropped while it was still loading. Always answered with the full table.
+---
+--- `boot` marks the page's first request since it loaded. A page can reload on its own while
+--- this file keeps running, and `pageLang` then describes a page that no longer exists, so it
+--- is forgotten before answering. An empty table is not recorded as held: the page refuses one.
+RegisterNUICallback('strings', function(data, cb)
+    if type(data) == 'table' and data.boot == true then pageLang = nil end
+    local lang = PhoneLang()
+    local tbl = stringsFor(lang)
+    if next(tbl) ~= nil then pageLang = lang end
+    cb({ strings = tbl, locale = lang })
 end)
 
---- And when the language arrives after the page did.
+--- The page took a table that arrived on a message.
+---
+--- Believed only when it names the language this client would send now. A table overtaken on
+--- the way - the language moved again, or an older answer landed after a newer push - leaves
+--- the record unknown instead, so the next message carries the right one.
+RegisterNUICallback('stringsHeld', function(data, cb)
+    local lang = PhoneLang()
+    if type(data) == 'table' and data.locale == lang then
+        pageLang = lang
+    else
+        pageLang = nil
+    end
+    cb('ok')
+end)
+
+--- And when the language arrives after the page did, or changes under it.
 ---
 --- The server pushes the language onto a state bag as the character loads. If the page had
---- already asked, it holds the fallback language - correct English rather than raw keys, but
---- still not what the operator configured. This hands over the right table the moment it can
---- be known, rather than waiting for the next time the phone is opened.
+--- already asked, it holds the fallback language: readable, but still not what the operator
+--- configured. This hands over the right table the moment it can be known.
+---
+--- **Built from `value`, not from `PhoneLang()`.** FiveM runs a change handler BEFORE it stores
+--- the new value, so anything that reads the bag from in here answers with the old language.
+--- This used to send the previous language's table labelled with the new locale, and only the
+--- next `open` hid it, because `open` carried the table again. Pushed every time; the record is
+--- left to the page's acknowledgement, since this message can be dropped like any other.
 AddStateBagChangeHandler('lang', ('player:%s'):format(GetPlayerServerId(PlayerId())),
     function(_, _, value)
         if type(value) ~= 'string' or value == '' then return end
-        SendNUIMessage({ action = 'strings', strings = strings(), locale = value })
+        SendNUIMessage({ action = 'strings', strings = stringsFor(value), locale = value })
     end)
 
 --- The operator's palette, for the page to apply.
@@ -335,12 +391,14 @@ local function peek(kind, data)
 
     -- The archive is the notification centre, which is behind the lock: it keeps the real
     -- content either way.
-    SendNUIMessage({ action = 'archive', kind = kind, data = data or {}, strings = strings() })
+    SendNUIMessage(withStrings({ action = 'archive', kind = kind, data = data or {} }))
     if prefsCache.dnd then return end
     -- The peek itself is the handset rising out of a pocket. A player who does not want
     -- their phone announcing itself in the open turns it off and still gets the buzz.
+    -- No table on this one: NUI delivers in order, and the archive just above carried one
+    -- if the page needed it.
     if prefsCache.peek ~= false then
-        SendNUIMessage({ action = 'peek', kind = kind, data = shown, strings = strings() })
+        SendNUIMessage({ action = 'peek', kind = kind, data = shown })
     end
     buzz(false)
 end
@@ -439,12 +497,17 @@ local freeLook = false
 -- So the block outlives the phone by a fraction of a second. `swallowUntil` is set when the
 -- phone closes and a small thread keeps refusing the pause menu until it passes.
 local swallowUntil = 0
+-- One thread at a time. A second close inside the window moves the deadline instead of
+-- starting a second thread, which would only refuse the same controls twice a frame.
+local swallowing = false
 
 local function swallowPause(ms)
     swallowUntil = GetGameTimer() + (ms or 500)
+    if swallowing then return end
+    swallowing = true
     CreateThread(function()
         while GetGameTimer() < swallowUntil do
-            for _, group in ipairs({ 0, 1, 2 }) do
+            for group = 0, 2 do
                 DisableControlAction(group, 199, true)
                 DisableControlAction(group, 200, true)
             end
@@ -454,11 +517,32 @@ local function swallowPause(ms)
             end
             Wait(0)
         end
+        swallowing = false
     end)
 end
 
+local function blockHas(control)
+    for _, c in ipairs(Config.Hold.block) do
+        if c == control then return true end
+    end
+    return false
+end
+
+--- The wheel, and the radio controls it reaches from inside a vehicle. Always blocked while
+--- the phone is up; see the note in the guard loop below.
+local WHEEL_CONTROLS = { 14, 15, 81, 82, 85 }
+
 local function startGuard()
     freeLook = false
+    -- The block loop below refuses its list in group 0 only. When that list already names both
+    -- pause controls, as it does by default, the pause loop starts at group 1 instead of
+    -- refusing 199 and 200 in group 0 a second time every frame. Worked out once per open:
+    -- the list does not change while the phone is up.
+    local firstPauseGroup = (blockHas(199) and blockHas(200)) and 1 or 0
+    -- The hold animation is looked at a few times a second, not every frame. The check only
+    -- notices something else interrupting the clip, and a quarter of a second is shorter than
+    -- the blend that brings it back.
+    local animCheckAt = 0
     CreateThread(function()
         while isOpen do
             -- Controls 1 and 2 are look left/right and up/down. Blocking them is right
@@ -467,6 +551,22 @@ local function startGuard()
             -- camera. This is why Alt appeared to do nothing even once focus was released:
             -- the cursor was gone, the game had the mouse, and this line threw the movement
             -- away every frame.
+            -- **The mouse wheel, and the radio it drives.**
+            --
+            -- The phone keeps game input alive on purpose - `SetNuiFocusKeepInput` is what
+            -- lets a player walk while reading a message - and the wheel goes to both sides at
+            -- once. So scrolling a list on the phone also flicked through the car radio, which
+            -- is what somebody reported. 14 and 15 are the wheel, 81, 82 and 85 the radio it
+            -- reaches when the player is in a vehicle.
+            --
+            -- Blocked here rather than in `Config.Hold.block`, deliberately: an operator's
+            -- config.lua is kept across updates, so anything added to that list would only
+            -- reach a server that took the new file. This is the phone's own list and it is
+            -- not something a server has a reason to switch off.
+            for _, c in ipairs(WHEEL_CONTROLS) do
+                DisableControlAction(0, c, true)
+            end
+
             for _, c in ipairs(Config.Hold.block) do
                 -- 1 and 2 are look left/right and up/down. Blocked while browsing, released
                 -- for free look AND for the camera: a viewfinder the mouse cannot aim is a
@@ -484,7 +584,7 @@ local function startGuard()
             -- control - `SetFrontendActive(false)` is what actually dismisses it.
             -- `SetPauseMenuActive(false)` alone does not, which is why the first attempt
             -- here failed.
-            for _, group in ipairs({ 0, 1, 2 }) do
+            for group = firstPauseGroup, 2 do
                 DisableControlAction(group, 199, true)
                 DisableControlAction(group, 200, true)
             end
@@ -501,10 +601,15 @@ local function startGuard()
                 camModeOff()
             end
 
-            local ped = PlayerPedId()
-            if phoneAnim and not IsEntityPlayingAnim(ped, Config.Hold.dict, phoneAnim, 3) then
-                phoneAnim = nil
-                refreshPose()
+            if phoneAnim then
+                local now = GetGameTimer()
+                if now >= animCheckAt then
+                    animCheckAt = now + 250
+                    if not IsEntityPlayingAnim(PlayerPedId(), Config.Hold.dict, phoneAnim, 3) then
+                        phoneAnim = nil
+                        refreshPose()
+                    end
+                end
             end
             Wait(0)
         end
@@ -561,6 +666,9 @@ local function openPhone()
         -- The screen is what drains a phone, so the server has to know it is on.
         TriggerServerEvent('v-phone:server:screen', true)
         syncPrefsCache(state.prefs or {})
+        -- The colour the server resolved for this character's job. Kept for as long as the
+        -- phone is open, which is as long as it can set a waypoint. See Config.RouteColour.
+        RouteColour = tonumber(state.routeColour)
         syncSdkApps(state.apps)
         if state.call ~= nil and applyServerCall then applyServerCall(state.call, false) end
         power = {
@@ -569,8 +677,10 @@ local function openPhone()
             signal = tonumber(state.signal) or power.signal,
         }
         state.action  = 'open'
-        state.locale  = (LocalPlayer.state and LocalPlayer.state.lang) or 'fr'
-        state.strings = strings()
+        -- The same language every other path answers with, and the table only when the page
+        -- lacks it: `open` no longer carries 120 KB the page already holds.
+        state.locale  = PhoneLang()
+        withStrings(state)
         state.call    = call
         state.power   = power
         SendNUIMessage(state)
@@ -1016,7 +1126,7 @@ RegisterNetEvent('v-phone:client:emergency', function(alert)
 
     -- The page always hears about it, open or shut: it owns the sound and the notification
     -- shade, and it is loaded for as long as the resource is running.
-    SendNUIMessage({ action = 'emergency', alert = alert, strings = strings() })
+    SendNUIMessage(withStrings({ action = 'emergency', alert = alert }))
 
     -- Straight to the pad rather than through `buzz`, which stands down for Do Not Disturb.
     if prefsCache.vibrate ~= false then
@@ -1029,8 +1139,9 @@ RegisterNetEvent('v-phone:client:emergency', function(alert)
     -- The `peek` message on its own, not the `peek()` helper: that one also sends `archive`,
     -- and the page files its own card for this from `emergencyAlert` - going through the
     -- helper would leave two identical notifications in the centre for one alert.
+    -- No table on it: the `emergency` message above went first and carried one if needed.
     if not isOpen and prefsCache.peek ~= false then
-        SendNUIMessage({ action = 'peek', kind = 'banner', strings = strings(), data = {
+        SendNUIMessage({ action = 'peek', kind = 'banner', data = {
             app = 'settings', icon = 'warning',
             title = tostring(alert.kind or ''),
             body = tostring(alert.title or alert.body or ''),
@@ -1113,9 +1224,8 @@ RegisterNetEvent('v-phone:client:911', function(d)
 
     -- The page owns the sound and the notification centre, and it is loaded whether or not
     -- the handset is out.
-    SendNUIMessage({ action = 'emergencyAlert', alert = a, service = service,
-                     sound = d.sound ~= false, file = d.file, volume = d.volume,
-                     strings = strings() })
+    SendNUIMessage(withStrings({ action = 'emergencyAlert', alert = a, service = service,
+                     sound = d.sound ~= false, file = d.file, volume = d.volume }))
 
     -- Straight to the pad rather than through `buzz`, which stands down for Do Not Disturb.
     -- Somebody on duty asked to be reachable; that is what being on duty is.
@@ -1126,9 +1236,10 @@ RegisterNetEvent('v-phone:client:911', function(d)
 
     -- And the handset rises out of a pocket. The peek message on its own, not the `peek`
     -- helper: that one files its own notification and the page files one from the message
-    -- above, which would leave two cards for one alert.
+    -- above, which would leave two cards for one alert. No table on it either: that message
+    -- went first and carried one if the page needed it.
     if d.peek ~= false and not isOpen and prefsCache.peek ~= false then
-        SendNUIMessage({ action = 'peek', kind = 'banner', strings = strings(), data = {
+        SendNUIMessage({ action = 'peek', kind = 'banner', data = {
             app = 'emergency', icon = 'warning',
             title = L('ph.911_new'),
             -- Translated, for the same reason as the blip name: a reason is a locale key.
@@ -1162,7 +1273,7 @@ end)
 --- over it - so nothing sends this event in that mode.
 RegisterNetEvent('v-phone:client:zuber', function(d)
     if type(d) ~= 'table' then return end
-    SendNUIMessage({ action = 'zuberStatus', update = d, strings = strings() })
+    SendNUIMessage(withStrings({ action = 'zuberStatus', update = d }))
 
     local b = {
         app = 'zuber', icon = 'zuber',
@@ -1183,7 +1294,7 @@ end)
 RegisterNetEvent('v-phone:client:911status', function(d)
     if type(d) ~= 'table' then return end
     local service = d.service or {}
-    SendNUIMessage({ action = 'emergencyStatus', update = d, strings = strings() })
+    SendNUIMessage(withStrings({ action = 'emergencyStatus', update = d }))
 
     if d.vibrate ~= false and prefsCache.vibrate ~= false then
         SendNUIMessage({ action = 'buzz' })
@@ -1192,7 +1303,8 @@ RegisterNetEvent('v-phone:client:911status', function(d)
 
     if not isOpen and prefsCache.peek ~= false then
         local key = d.state == 'closed' and 'ph.911_c_closed' or 'ph.911_c_taken'
-        SendNUIMessage({ action = 'peek', kind = 'banner', strings = strings(), data = {
+        -- No table: the `emergencyStatus` message above carried one if the page needed it.
+        SendNUIMessage({ action = 'peek', kind = 'banner', data = {
             app = 'emergency', icon = 'shield',
             title = service.label and L(service.label) or L('ph.911_new'),
             body = d.by and (L(key .. '_by'):gsub('{n}', tostring(d.by))) or L(key),
@@ -1213,7 +1325,7 @@ RegisterNetEvent('v-phone:client:911locate', function(d)
 
     -- Always the exact spot, even for a service whose blip is a search area: a responder
     -- pressed a button that says "take me there".
-    if d.waypoint ~= false then SetNewWaypoint(x + 0.0, y + 0.0) end
+    if d.waypoint ~= false then PhoneSetWaypoint(x, y) end
 
     local b = d.blip
     if type(b) ~= 'table' then return end
@@ -1582,6 +1694,8 @@ local function relay(callback)
     end
 end
 
+RegisterNUICallback('marketplace', relay('v-phone:marketplace'))
+
 -- The bank's two writes. Relays on purpose: the amount, the recipient, the limits and the
 -- fee are all decided on the server, so there is nothing for this side to check and
 -- nothing it could usefully lie about.
@@ -1654,6 +1768,7 @@ RegisterNUICallback('fanCreator',   relay('v-phone:fan:creator'))
 RegisterNUICallback('fanFollow',    relay('v-phone:fan:follow'))
 RegisterNUICallback('fanUnlock',    relay('v-phone:fan:unlock'))
 RegisterNUICallback('fanSubscribe', relay('v-phone:fan:subscribe'))
+RegisterNUICallback('fanUnsub',     relay('v-phone:fan:unsub'))
 RegisterNUICallback('fanTip',       relay('v-phone:fan:tip'))
 RegisterNUICallback('fanPayout',    relay('v-phone:fan:payout'))
 RegisterNUICallback('groupLeave',    relay('v-phone:groupLeave'))
@@ -1817,10 +1932,43 @@ RegisterNUICallback('torch', function(data, cb)
     cb({ ok = true })
 end)
 
+--- **Set a waypoint, and colour the line to it.**
+---
+--- Every part of the phone that sends somebody somewhere comes through here: the Maps app, a
+--- 911 alert, a repair call, a taxi, a delivery. The colour is the server's answer for this
+--- character's job, so a city with five services navigating at once can tell whose route is
+--- on screen. Without one configured, the game keeps its own yellow and this is just a
+--- waypoint like any other.
+---
+--- The route is re-coloured on every call because the game resets it with the waypoint, and
+--- the blip is found by its sprite - 8 is the waypoint - because setting one hands nothing
+--- back.
+function PhoneSetWaypoint(x, y)
+    x, y = tonumber(x), tonumber(y)
+    if not x or not y then return false end
+    SetNewWaypoint(x + 0.0, y + 0.0)
+
+    local colour = tonumber(RouteColour)
+    if not colour then return true end
+    local blip = GetFirstBlipInfoId(8)
+    if blip and blip ~= 0 and DoesBlipExist(blip) then
+        SetBlipRoute(blip, true)
+        SetBlipRouteColour(blip, math.floor(colour))
+    end
+    return true
+end
+
+V.Sub('phonedebug', 'route', 'what colour this character draws its route in', function()
+    local colour = tonumber(RouteColour)
+    print(('[v-phone] route colour: %s'):format(colour and tostring(math.floor(colour))
+        or "the game's own - nothing is configured for this job, or the phone has not been opened yet"))
+    print('[v-phone] these are GTA blip colours, not RGB. See Config.RouteColour.')
+end)
+
 RegisterNUICallback('waypoint', function(data, cb)
     local x, y = tonumber(data and data.x), tonumber(data and data.y)
     if not x or not y then cb({ error = 'x' }) return end
-    SetNewWaypoint(x + 0.0, y + 0.0)
+    PhoneSetWaypoint(x, y)
     cb({ ok = true })
 end)
 
@@ -1908,7 +2056,7 @@ end)
 
 RegisterNUICallback('chargingWaypoint', function(data, cb)
     local x, y = tonumber(data and data.x), tonumber(data and data.y)
-    if x and y then SetNewWaypoint(x + 0.0, y + 0.0) end
+    if x and y then PhoneSetWaypoint(x, y) end
     cb({ ok = x ~= nil and y ~= nil })
 end)
 

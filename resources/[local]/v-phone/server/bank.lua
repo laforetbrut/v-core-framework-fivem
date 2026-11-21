@@ -915,8 +915,11 @@ CreateThread(function()
                 -- Read BEFORE the balance, so what follows can tell whether the phone moved
                 -- money while the balance was being fetched.
                 local mine = ownMoved[src] or 0
+                -- `true`: this poll is a clock, and sampling a held phone's balance is not the staff
+                -- member using it. Without it an idle admin view never ran out on ox_core or
+                -- standalone, where this poll runs every 30 seconds.
                 local balances = Bridge.Banking and Bridge.Banking.Balances
-                    and Bridge.Banking.Balances(PhoneActingSource and PhoneActingSource(src) or src)
+                    and Bridge.Banking.Balances(PhoneActingSource and PhoneActingSource(src, true) or src)
 
                 if type(balances) == 'table' then
                     local now = math.floor(num(balances.bank, 0))

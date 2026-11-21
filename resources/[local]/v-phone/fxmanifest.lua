@@ -15,8 +15,8 @@ node_version '22'
 
 name 'v-phone'
 author 'vyrriox'
-description 'iFruit - a complete smartphone for FiveM. 37 apps, framework agnostic: qb-core, qbx_core, ox_core, ESX or standalone.'
-version '1.6.4'
+description 'iFruit - a complete smartphone for FiveM. 38 apps, framework agnostic: qb-core, qbx_core, ox_core, ESX or standalone.'
+version '1.7.27'
 repository 'https://github.com/laforetbrut/v-phone-fivem'
 
 -- Detected by v-core's module registry, which lists it in the admin panel under this
@@ -174,6 +174,7 @@ server_scripts {
     -- Emptying an app from the console. Nothing here deletes without `confirm`.
     'server/adminclean.lua',
     'server/main.lua',
+    'server/marketplace.lua',
     -- Home screen widgets. Straight after main.lua, whose `prefsOf` and `PhoneHasApp` decide
     -- who is entitled to what, and BEFORE every file that registers a builder with it.
     'server/widgets.lua',
@@ -262,6 +263,8 @@ server_scripts {
     -- Asks GitHub whether a newer release exists and says so in the console. Reads its version
     -- and its repository out of this file, talks to nothing else, and answers no client.
     'server/update.lua',
+    -- The boot summary. Last, so every integration it names has already been detected.
+    'server/banner.lua',
     -- An app folder's optional `server.lua` goes here, one line each.
 }
 

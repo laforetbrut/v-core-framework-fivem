@@ -269,7 +269,7 @@ WidgetSource('reminders', 'reminders', function(src, p)
     if row then
         out.text = WidgetText(row.text, 48)
         out.list = tostring(row.list or 'personal')
-        out.flagged = (tonumber(row.flagged) or 0) == 1 or nil
+        out.flagged = (row.flagged == true or (tonumber(row.flagged) or 0) == 1) or nil
         -- Seconds since the epoch, so the page can say "in 20 minutes" without a second round
         -- trip and without needing the server's timezone.
         local y, mo, d, h, mi, s = tostring(row.due):match('(%d+)-(%d+)-(%d+) (%d+):(%d+):(%d+)')

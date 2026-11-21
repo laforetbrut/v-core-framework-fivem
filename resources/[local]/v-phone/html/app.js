@@ -1,4 +1,5 @@
 // v-phone — iFruit, FruitOS Glass shell
+// Author: vyrriox
 //
 // Every built-in app below is a VIEW. It renders what the owning module answered and
 // sends actions back to that module; it never keeps a copy. The moment an app caches a
@@ -140,6 +141,22 @@ let shadeManage = false;
 // only knows an icon, so it falls back to that.
 function notifApp(b) { return b.app || b.icon || 'dot'; }
 
+/// The text of a notification card, worked out when the card is PAINTED rather than when it came in.
+///
+/// A card's title or body may be a function, and every card the page words itself passes one.
+/// A card filed while this page held no string table - it reloaded while the client believed it
+/// still held one, and the answer was slow or lost - used to keep "Zuber St Preparing" for the
+/// rest of the session, because its text was a string computed from an empty table. Worded at
+/// paint, the same card reads correctly on the next paint after the table lands.
+///
+/// Holding such messages until a table arrived was the other way to do it, and was not taken: a
+/// lost answer costs seconds to recover, so a hold long enough to cover it hides an alert for
+/// that long, and a hold released at a shorter ceiling freezes the same wrong text anyway.
+function nText(v) {
+  const out = typeof v === 'function' ? v() : v;
+  return out == null ? '' : String(out);
+}
+
 // A player can silence an app from the shade. A muted app still runs; it just does not
 // light the island or land in the centre. The list lives in prefs, so it survives.
 // ══ Notifications, per app ═════════════════════════════════════
@@ -222,13 +239,17 @@ let warnedNoStrings = false;
 const L = (k) => {
   const hit = S[k];
   if (hit) return hit;
-  if (!warnedNoStrings && !Object.keys(S || {}).length) {
-    warnedNoStrings = true;
-    console.error('[v-phone] the string table is empty, so every label is a guess at its key. '
-      + 'The page asked the client for it on load; if this persists the client answered with '
-      + 'nothing - check that locales/*.lua are in fxmanifest.lua shared_scripts.');
-    // Ask again. The most likely reason for an empty table is that this page loaded before the
-    // client was ready to answer, and one more attempt costs nothing.
+  if (!hasStrings()) {
+    if (!warnedNoStrings) {
+      warnedNoStrings = true;
+      console.error('[v-phone] the string table is empty, so every label is a guess at its key. '
+        + 'The page asked the client for it on load; if this persists the client answered with '
+        + 'nothing - check that locales/*.lua are in fxmanifest.lua shared_scripts.');
+    }
+    // Ask again, on every miss against an empty table and not just the first. The client only
+    // attaches the table to a message when it believes this page lacks it, so a page that gave
+    // up after one attempt could stay blank all session. `requestStrings` is throttled, so a
+    // view full of misses still asks once.
     requestStrings();
   }
   return humaniseKey(k);
@@ -282,6 +303,23 @@ function phoneClock(at) {
   return new Intl.DateTimeFormat('en-GB', Object.assign(
     { hour: '2-digit', minute: '2-digit', hour12: false },
     zone ? { timeZone: zone } : {})).format(at || new Date());
+}
+
+/// **A time of day, in the format the server asked for.**
+///
+/// Every screen that prints an hour used to ask the browser with no locale at all, and CEF
+/// usually answers as American English - so a French server printed "10:37 PM" in its own
+/// emergency alerts while its status bar, which is forced to 24-hour, printed "22:37" two
+/// centimetres above. `Config.Clock.hour24` decides now, and 'auto' follows the phone's
+/// language: English keeps AM/PM, everything else this phone speaks is 24-hour.
+function hhmm(at) {
+  const d = (at instanceof Date) ? at : new Date(at);
+  const want = state.clock24;
+  const h24 = (want === 'auto' || want === undefined || want === null)
+    ? !String(state.locale || 'fr').toLowerCase().startsWith('en')
+    : want !== false;
+  return new Intl.DateTimeFormat(h24 ? 'en-GB' : 'en-US',
+    { hour: '2-digit', minute: '2-digit', hour12: !h24 }).format(d);
 }
 
 /// The lock clock, drawn in the same PARTS its own preview is drawn in.
@@ -1689,9 +1727,20 @@ function flushRefit() {
   if (refitPending) refitPages();
 }
 
+/// **Where the pointer is, in the phone's own pixels.**
+///
+/// A pointer event is in the window's pixels and the handset is drawn at a size, so the two only
+/// agree at 100%. What this returns is read back as CSS lengths - the drag ghost is positioned
+/// with it, and the page-flip edge compares it against `screen.clientWidth`, which is the phone's
+/// own 372 whatever size it is drawn at. Handing those outer pixels straight over is why
+/// dragging an app at any size but 100% put the ghost nowhere near the finger and made the
+/// screen think the pointer was at its right edge from about the middle onwards.
+///
+/// The ratio is measured rather than taken from the size, so it is right whether the size came
+/// from the size the player chose, from the shrink-to-fit, or from both at once.
 function ptOf(e) {
-  const r = byId('screen').getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  const p = screenPoint(e);
+  return { x: p.x, y: p.y };
 }
 function moveGhost(e) {
   const p = ptOf(e), g = byId('dragghost');
@@ -2078,8 +2127,12 @@ function initArrange() {
         if (slot) {
           const now = slot.getBoundingClientRect();
           const p = ptOf(e), g = byId('dragghost');
-          g.style.left = (p.x + (now.left - downBox.left)) + 'px';
-          g.style.top = (p.y + (now.top - downBox.top)) + 'px';
+          // Both rects are in the window's pixels and `p` is in the phone's, so the correction
+          // is converted before it is added to it. Mixed, it overshot by exactly the size the
+          // handset is drawn at.
+          const k = screenScale();
+          g.style.left = (p.x + (now.left - downBox.left) * k) + 'px';
+          g.style.top = (p.y + (now.top - downBox.top) * k) + 'px';
         }
       }
       // A held FOLDER can now be MOVED, which it could not before: this branch used to open the
@@ -2539,11 +2592,17 @@ async function renderWidgets() {
   if (!host) return;
 
   const ids = widgetIds();
+  const mine = ++widgetEpoch;
   // The strip can be empty, and that is a valid arrangement rather than a failure. Nothing is
   // asked for and nothing is drawn - except the add button, which is the way back.
-  if (!ids.length && !editing) { host.innerHTML = ''; return; }
+  if (!ids.length && !editing) {
+    const hadWidgets = !!host.childElementCount;
+    host.innerHTML = '';
+    host.dataset.layout = '';
+    if (hadWidgets) refitPages();
+    return;
+  }
 
-  const mine = ++widgetEpoch;
   // The server is only troubled when something on the strip actually needs it.
   const server = ids.some((id) => WIDGETS[id] && WIDGETS[id].srv);
   const d = await post('widgets', server ? { server: true } : { server: false });
@@ -2587,7 +2646,12 @@ function paintWidgets(host, d) {
       '</button>';
   }).join('');
 
+  // Refit only when the strip's geometry changes, after the async reply paints it.
+  // A balance or clock refresh keeps the cached icon sizing and its listeners.
+  const layout = widgetIds().map((id) => WIDGETS[id].units).join(',');
+  const layoutChanged = host.dataset.layout !== layout;
   host.innerHTML = html;
+  host.dataset.layout = layout;
 
   // **The add control is in the arrange bar, under the pages, not in this grid.**
   //
@@ -2602,6 +2666,7 @@ function paintWidgets(host, d) {
   if (add) add.disabled = !(widgetUnits(widgetIds()) < WIDGET_MAX_UNITS && widgetChoices().length);
   host.classList.toggle('jiggle', !!editing);
   wireWidgets(host);
+  if (layoutChanged) refitPages();
 }
 
 // ── Tapping, removing, and dragging ────────────────────────────
@@ -3458,14 +3523,16 @@ byId('appbody').addEventListener('pointerdown', (event) => {
 });
 byId('appbody').addEventListener('pointermove', (event) => {
   if (!appPull || appPull.pointerId !== event.pointerId) return;
-  const dy = event.clientY - appPull.y;
-  const dx = Math.abs(event.clientX - appPull.x);
+  const k = screenScale();
+  const dy = (event.clientY - appPull.y) * k;
+  const dx = Math.abs(event.clientX - appPull.x) * k;
   byId('appbody').classList.toggle('pull-ready', dy > 68 && dx < 45);
 });
 byId('appbody').addEventListener('pointerup', (event) => {
   if (!appPull || appPull.pointerId !== event.pointerId) return;
-  const dy = event.clientY - appPull.y;
-  const dx = Math.abs(event.clientX - appPull.x);
+  const k = screenScale();
+  const dy = (event.clientY - appPull.y) * k;
+  const dx = Math.abs(event.clientX - appPull.x) * k;
   appPull = null;
   byId('appbody').classList.remove('pull-ready');
   if (dy <= 68 || dx >= 45 || !openApp || openApp.page) return;
@@ -3945,7 +4012,7 @@ function shortWhen(at) {
   if (!Number.isFinite(ms)) return '';
   const d = new Date(ms);
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
-    + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    + ' ' + hhmm(d);
 }
 
 // ── Mail ───────────────────────────────────────────────────────
@@ -3964,6 +4031,7 @@ let mailImages = true;      // whether the server allows an attachment at all
 // that reads as "my mail went from the wrong account" and is impossible to spot in a diff.
 const mailPost = (op, extra) => post('mail', Object.assign({ op, address: mailAcc }, extra || {}));
 let mailMe = null;          // the last `me` answer, for the domain sheet
+let mailNoAccountFor = null;   // the address a `noaccount` refusal was last recovered from
 
 // Buying a domain of your own.
 //
@@ -4066,8 +4134,11 @@ async function mailList() {
   tabbar(MAIL_TABS, mailFolder, (t) => { mailFolder = t; mailList(); });
   // The address you are reading, and the way to the others. Already on screen; now it is the
   // control too, which is where somebody would look for it.
+  // Deleting lives in the account sheet too, so a server capped at one address still needs a
+  // way into it. The sheet keeps the share button, so nothing is lost by the extra tap.
   const many = ((mailMe && mailMe.accounts) || []).length > 1
-    || ((mailMe && mailMe.accounts) || []).length < (Number(mailMe && mailMe.maxAccounts) || 1);
+    || ((mailMe && mailMe.accounts) || []).length < (Number(mailMe && mailMe.maxAccounts) || 1)
+    || !!(mailMe && mailMe.canDelete);
   body('<button class="mailaddr' + (many ? ' pick' : '') + '" id="maddr" type="button">'
     + esc(mailAcc || '') + (many ? svg('chevron') : '') + '</button><div id="mlist"></div>');
   if (many) byId('maddr').addEventListener('click', () => mailAccountSheet());
@@ -4078,6 +4149,22 @@ async function mailList() {
     : await mailPost('list', { folder: mailFolder });
   const host = byId('mlist');
   if (!host) return;
+  // The address on screen is no longer one this character holds (deleted from here, from
+  // another session, or by staff). The server refuses to act as it; start again from a live one.
+  //
+  // Once per address. A `me` answer that keeps naming an address the list keeps refusing would
+  // otherwise have the two call each other for ever; the second refusal shows the error instead.
+  if (r && r.error === 'noaccount' && mailAcc) {
+    if (mailNoAccountFor !== mailAcc) {
+      mailNoAccountFor = mailAcc;
+      mailAcc = null;
+      RENDER.mail();
+      return;
+    }
+    host.innerHTML = UI.empty(L('ph.err_noaccount'), 'mail');
+    return;
+  }
+  if (r && !r.error) mailNoAccountFor = null;
   const list = (r && r.mail) || [];
   if (!list.length) { host.innerHTML = UI.empty(L('ph.mail_empty'), 'mail'); return; }
 
@@ -4159,7 +4246,9 @@ function mailAccountSheet() {
     UI.button(L('ph.mail_share'), 'macc_share', 'plain') +
     (accounts.length < cap
       ? UI.button(L('ph.mail_add_account'), 'macc_add', 'tinted')
-      : '<div class="groupfoot">' + esc(L('ph.mail_account_cap').replace('{max}', String(cap))) + '</div>'),
+      : '<div class="groupfoot">' + esc(L('ph.mail_account_cap').replace('{max}', String(cap))) + '</div>') +
+    // Only offered when the server says it will accept it. Ownership is still checked there.
+    (me.canDelete && mailAcc ? UI.button(L('ph.mail_delete_account'), 'macc_del', 'destructive') : ''),
     () => {
       const epoch = sheetEpoch;
       rows('.row[data-acc]', () => {});
@@ -4181,6 +4270,19 @@ function mailAccountSheet() {
         if (!closeSheet(false, epoch)) return;
         // The same screen that creates the first address creates the next one.
         mailSignup(me.domains || [], me.reserved || {}, me.owned || {}, me.buy || {});
+      });
+      if (byId('macc_del')) byId('macc_del').addEventListener('click', () => {
+        if (!closeSheet(false, epoch)) return;
+        const addr = mailAcc;
+        confirmSheet(L('ph.mail_delete_account_ask').replace('{address}', addr), L('ph.delete'), async () => {
+          const r = await post('mail', { op: 'deleteAccount', address: addr });
+          if (!r || !r.ok) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
+          toast(L('ph.mail_account_deleted'));
+          // `me` falls back to another address, or to the sign up screen when none is left.
+          mailAcc = null;
+          mailFolder = 'inbox';
+          RENDER.mail();
+        });
       });
     });
 }
@@ -4998,7 +5100,7 @@ function emergencyAlert(a) {
   banner({
     app: 'settings',
     icon: 'warning',
-    title: kind,
+    title: () => a.kind || L('ph.emergency_default'),
     body: [a.title, a.body].filter(Boolean).join(' - '),
   });
 
@@ -5120,29 +5222,137 @@ function emergencyKlaxon() {
 // exactly as before, and a copy still yields the real number - the problem being solved is
 // what sits on camera, not what the phone knows.
 // ══ Asking for the strings ═════════════════════════════════════
-// The client sends the string table with every `open`, which is right and is not enough: this
-// page can be drawn before an `open` ever arrives - a payphone panel, an incoming call, a
-// notification banner - and a message sent to a page that has not finished loading is dropped
-// silently by NUI, with no error anywhere. That is what "restart the resource and it works"
-// means: the restart reloads the page and re-sends.
+// The string table is about 120 KB, and the client attaches it to a message only when it does
+// not believe this page holds the player's language. That belief is built from what this page
+// says and nothing else - the request below, and `stringsHeld` once a table has been taken from
+// a message - because a message sent to a page that has not finished loading is dropped
+// silently by NUI, with no error anywhere.
 //
-// So the page asks. On load, and again if it ever finds itself rendering with nothing.
-let strungAt = 0;
-async function requestStrings() {
-  // Once every two seconds at most: `L` calls this on a miss, and a view full of misses would
-  // otherwise ask once per label.
-  const now = Date.now();
-  if (now - strungAt < 2000) return;
-  strungAt = now;
-  const r = await post('strings');
-  if (r && r.strings && Object.keys(r.strings).length) {
-    S = r.strings;
-    warnedNoStrings = false;
-    if (r.locale) state.locale = r.locale;
-    // Repaint whatever is on screen, or the labels drawn before the table arrived stay wrong.
-    if (openApp && RENDER[openApp.id]) RENDER[openApp.id]();
-    else if (typeof paintLockMeta === 'function') paintLockMeta();
+// So the page asks. On load, again if it ever finds itself rendering with nothing, and on a
+// backoff for as long as the table stays empty: the client may simply not be ready yet.
+
+/// Is there any string at all? Stops at the first key, because `L` asks this on every miss and
+/// `Object.keys` on the whole table would be an array of 2,700 strings each time.
+function hasStrings() {
+  for (const k in S) return k !== undefined;
+  return false;
+}
+
+/// Take a table that arrived on a message or an answer, if one did.
+///
+/// Taken even over a table this page already holds: the client attaches one only when it
+/// believes this page lacks the current language, which is exactly how a language change lands.
+/// Acknowledged every time, because that acknowledgement is the only thing that lets the client
+/// stop sending it.
+function adoptStrings(d) {
+  const t = d && d.strings;
+  if (!t || typeof t !== 'object') return false;
+  let any = false;
+  for (const k in t) { any = k !== undefined; break; }
+  if (!any) return false;
+  S = t;
+  warnedNoStrings = false;
+  if (d.locale) state.locale = d.locale;
+  post('stringsHeld', { locale: d.locale || '' });
+  scheduleRepaintStrings();
+  return true;
+}
+
+/// The labels that live outside every app and that nothing else repaints.
+///
+/// Painted by `open` and again after a table is adopted. An `open` can arrive without a table -
+/// after this page reloaded while the client believed it still held one - and a label set once
+/// from an empty table used to stay a humanised key ("Search" on a French phone) until the next
+/// `open`. The document language follows the table for the same reason.
+function paintChrome() {
+  const locale = String(state.locale || state.lang || 'en').trim().replace('_', '-');
+  document.documentElement.lang = locale || 'en';
+  byId('qtorch').setAttribute('aria-label', L('ph.torch'));
+  byId('qcam').setAttribute('aria-label', L('app.camera'));
+  byId('homebar').setAttribute('aria-label', L('ph.home'));
+  byId('arrangedone').setAttribute('aria-label', L('ph.arrange_done'));
+  byId('arrangedone').textContent = L('ph.arrange_done');
+  const sp = byId('spilltxt'); if (sp) sp.textContent = L('ph.search');
+}
+
+/// Repaint everything a table that has just arrived could have left worded wrongly.
+///
+/// Found by what paints a label outside the open app: the chrome above, the home screen and its
+/// app names, the lock screen line and its cards, the notification centre and the control
+/// centre when they are out, a showing peek or island card, and the payphone panel. Cards are
+/// worded when painted (see `nText`), so painting them again is enough. Two surfaces are left to
+/// their own next paint on purpose: the first-run assistant, whose inputs would be rebuilt under
+/// the player's typing, and the call screen, whose render also drives the ringtone.
+///
+/// Scheduled rather than called inline, so it runs after the handler that brought the table has
+/// finished - an `open` has replaced `state` by then - and once however many messages in one turn
+/// carried a table. That is also after this whole file has run, so the booth and peek state
+/// declared far below are initialised.
+let repaintQueued = false;
+function scheduleRepaintStrings() {
+  if (repaintQueued) return;
+  repaintQueued = true;
+  setTimeout(() => { repaintQueued = false; repaintStrings(); }, 0);
+}
+
+function repaintStrings() {
+  paintChrome();
+  if (openApp && RENDER[openApp.id]) RENDER[openApp.id]();
+  if (typeof paintLockMeta === 'function') paintLockMeta();
+  // Whatever is in front of it: the home screen keeps arrange mode across a repaint, and the grid
+  // fit stands down on a hidden, zero-sized grid.
+  if ((state.apps || []).length) renderHome();
+  paintNotifs();
+  if (byId('shade').classList.contains('on')) renderShade();
+  if (byId('cc').classList.contains('on')) renderCC();
+  if (boothState && !byId('booth').classList.contains('hidden')) {
+    byId('boothname').textContent = L('ph.booth_title');
+    boothRender();
   }
+  const device = byId('device');
+  const isl = byId('island');
+  if (peekShown && device.classList.contains('peeking')) {
+    paintPeekText(peekShown.kind, peekShown.data);
+  } else if (isl.classList.contains('notif') && isl.dataset.notif) {
+    const n = notifs.find((x) => String(x.id) === isl.dataset.notif);
+    if (n) {
+      byId('inTitle').textContent = nText(n.title);
+      byId('inBody').textContent = nText(n.body);
+    }
+  }
+}
+
+let strungAt = 0;
+let stringsAsking = false;    // one request at a time, so two failures cannot start two retry chains
+let stringsBooted = false;    // has an answer carried a table since this page loaded?
+let stringsRetry = null;
+let stringsRetryStep = 0;
+const STRINGS_BACKOFF = [1000, 2000, 4000];   // and every 10 s after that
+
+async function requestStrings(retry) {
+  // Once every two seconds at most: `L` calls this on a miss, and a view full of misses would
+  // otherwise ask once per label. A scheduled retry is exempt, because its delay is the throttle.
+  const now = Date.now();
+  if (stringsAsking || (retry !== true && now - strungAt < 2000)) return;
+  strungAt = now;
+  stringsAsking = true;
+  clearTimeout(stringsRetry);
+  stringsRetry = null;
+  // `boot` until an answer lands. This page may be a reload the client never noticed, and the
+  // client's record of what the page holds then describes a page that is gone.
+  const r = await post('strings', stringsBooted ? {} : { boot: true });
+  stringsAsking = false;
+  if (adoptStrings(r)) {
+    stringsBooted = true;
+    stringsRetryStep = 0;
+    return;
+  }
+  // Failed, or answered with nothing. Keep asking while there is nothing to draw with; a table
+  // that arrived on a message in the meantime ends it.
+  if (hasStrings()) return;
+  const wait = STRINGS_BACKOFF[stringsRetryStep] || 10000;
+  stringsRetryStep += 1;
+  stringsRetry = setTimeout(() => requestStrings(true), wait);
 }
 
 // As early as the page can ask. `post` needs nothing but the resource name, which is available
@@ -5242,8 +5452,10 @@ RENDER.messages = async () => {
     // player had typed - and this answer arrives a moment after Messages opens, which is
     // precisely when `messageTo()` has just prefilled a draft for them. So tapping "message" on
     // a contact card and starting to type lost what you typed, once, unpredictably.
+    // If the thread is still loading, paintThread reads this updated queue when it lands.
+    // Starting a second request here cancels the first one, whose timeout can later replace
+    // the loaded conversation with an error.
     if (byId('threadtail')) paintTail();
-    else openThread(thread);
   });
 
   // Re-read before drawing. `state.conversations` is a snapshot taken when the phone was
@@ -5378,7 +5590,7 @@ async function groupMembersSheet(id, name) {
 
 async function openGroup(id, name) {
   if (!openApp || openApp.id !== 'messages') return;
-  beginView();
+  const epoch = beginView();
   thread = null;
   threadGroup = { id, name };
   // The title is the way in, which is where a phone puts it: tapping the name of a group
@@ -5405,6 +5617,8 @@ async function openGroup(id, name) {
   navFace(name, null, () => groupMembersSheet(id, name));
   loading();
   const res = await post('conversation', { group: id });
+  if (epoch !== viewEpoch || !openApp || openApp.id !== 'messages' ||
+      !threadGroup || threadGroup.id !== id) return;
   if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
   paintThread(res.messages || []);
   // No unread to clear: a group row carries an id and a name and nothing else, so group
@@ -5437,7 +5651,7 @@ function messageTo(number, draft) {
 
 async function openThread(number, draft) {
   if (!openApp || openApp.id !== 'messages') return;
-  beginView();
+  const epoch = beginView();
   thread = number;
   threadGroup = null;
   // A service thread is opened by its `svc:Label` key rather than by a number. Show the
@@ -5459,6 +5673,8 @@ async function openThread(number, draft) {
   navFace(withWhom, isService ? null : photoOfNumber(number));
   loading();
   const res = await post('conversation', { number });
+  if (epoch !== viewEpoch || !openApp || openApp.id !== 'messages' ||
+      thread !== number || threadGroup) return;
   if (!res || res.error) { body(UI.empty(L('ph.err_' + ((res && res.error) || 'x')))); return; }
   paintThread(res.messages || [], res.service === true || isService);
   if (draft && byId('msg')) byId('msg').value = String(draft).slice(0, 250);
@@ -5641,7 +5857,7 @@ function dayLine(m, prev) {
   else if (d.toDateString() === yesterday.toDateString()) day = L('ph.yesterday');
   else day = d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
   return '<div class="mday"><b>' + esc(day) + '</b> ' +
-    esc(d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })) + '</div>';
+    esc(hhmm(d)) + '</div>';
 }
 
 /// Delivered, or read, under the last message you sent.
@@ -5829,8 +6045,9 @@ function wireBubble(b, m) {
     // A mouse that is merely passing over holds no button. Belt to the capture's braces: if a
     // release was missed for any reason at all, the next movement cancels rather than drags.
     if (e.pointerType === 'mouse' && e.buttons === 0) { stop(); return; }
-    const dx = e.clientX - sx;
-    const dy = e.clientY - sy;
+    const k = screenScale();
+    const dx = (e.clientX - sx) * k;
+    const dy = (e.clientY - sy) * k;
     if (Math.abs(dx) > 11 || Math.abs(dy) > 11) cancelHold();
     // Vertical wins. Dragging a thread up and down must not smear every bubble it passes.
     if (Math.abs(dy) > Math.abs(dx)) { b.style.removeProperty('--msg-drag'); return; }
@@ -5840,8 +6057,9 @@ function wireBubble(b, m) {
 
   b.addEventListener('pointerup', (e) => {
     if (!active) return;
-    const dx = e.clientX - sx;
-    const dy = e.clientY - sy;
+    const k = screenScale();
+    const dx = (e.clientX - sx) * k;
+    const dy = (e.clientY - sy) * k;
     stop();
     // A swipe to the right is REPLY, the gesture every messaging app uses for it. Forty pixels
     // rather than fifty-two: on a 372-wide screen the old distance was most of a short bubble,
@@ -5940,7 +6158,7 @@ function paintThread(messages, service) {
     // starts one line high and grows with the text, up to a ceiling, so the thread above it
     // is not pushed off the screen by somebody writing an essay.
     '<textarea class="field msgbox" id="msg" rows="1" maxlength="250" ' +
-      'placeholder="' + esc(L('ph.write')) + '" aria-label="' + esc(L('ph.write')) + '"></textarea>' +
+      'placeholder="' + esc(L('ph.write_ph')) + '" aria-label="' + esc(L('ph.write')) + '"></textarea>' +
     `<button class="sendbtn" id="sendmsg" type="button" aria-label="${esc(L('ph.send'))}">${svg('send')}</button></div>`);
   byId('attach').addEventListener('click', () => attachSheet());
   byId('msggif').addEventListener('click', () => gifSheet());
@@ -6871,7 +7089,7 @@ function fmtDate(ms) {
   if (!Number.isFinite(at) || at <= 0) return '';
   const d = new Date(at);
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' +
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    hhmm(d);
 }
 
 function txWhen(t) {
@@ -6886,14 +7104,14 @@ function txWhen(t) {
     if (!Number.isFinite(ms)) return String(t.at);
     const d = new Date(ms);
     return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' +
-      d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      hhmm(d);
   }
   if (!t.ts) return '';
   const ms2 = txEpochMs(t.ts);
   if (!Number.isFinite(ms2)) return '';
   const d = new Date(ms2);
   return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' }) + ' ' +
-    d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    hhmm(d);
 }
 
 // What a statement line is called. The server stores the sender's note and who it was
@@ -7195,7 +7413,6 @@ async function emergencySend(o) {
 function emergency911Alert(d) {
   const a = d.alert || {};
   const s = d.service || {};
-  const what = L(a.reason || '') || '';
 
   if (d.sound !== false) {
     // Straight to the file at the volume the config named rather than through `ui()`, which
@@ -7225,8 +7442,8 @@ function emergency911Alert(d) {
   archivePeek('notif', {
     app: 'emergency',
     icon: 'warning',
-    title: L('ph.911_new') + (s.label ? ' - ' + L(s.label) : ''),
-    body: [what, a.detail, a.street].filter(Boolean).join(' - '),
+    title: () => L('ph.911_new') + (s.label ? ' - ' + L(s.label) : ''),
+    body: () => [L(a.reason || '') || '', a.detail, a.street].filter(Boolean).join(' - '),
   });
 
   // And if they are looking at the queue, it appears in it - inserted rather than refetched,
@@ -7243,19 +7460,19 @@ function emergency911Alert(d) {
 function emergency911Status(d) {
   const s = d.service || {};
   const key = d.state === 'closed' ? 'ph.911_c_closed' : 'ph.911_c_taken';
-  const line = d.by ? L(key + '_by').replace('{n}', d.by) : L(key);
+  const line = () => (d.by ? L(key + '_by').replace('{n}', d.by) : L(key));
 
   if (d.sound !== false) ui(d.state === 'closed' ? 'received' : 'success');
 
   archivePeek('notif', {
     app: 'emergency',
     icon: 'shield',
-    title: s.label ? L(s.label) : L('app.emergency'),
+    title: () => (s.label ? L(s.label) : L('app.emergency')),
     body: line,
   });
   // A toast as well when they are holding the phone: the card is where it is FOUND, the toast
   // is what is seen. Only when they are looking, so it is never a second copy of the banner.
-  if (!byId('device').classList.contains('hidden')) toast(line);
+  if (!byId('device').classList.contains('hidden')) toast(line());
 
   if (openApp && openApp.id === 'emergency') RENDER.emergency();
 }
@@ -8190,11 +8407,13 @@ function settingsSection(id) {
     ], { footer: L('ph.set_widget_money_hint') + ' ' + L('ph.set_widget_hint') }) +
     // The device itself: how big, and which side it sits on.
     '<div class="grouphead">' + esc(L('ph.device')) + '</div>' +
-    // No size slider, on purpose. The phone is laid out in pixels at 372x784, so any size
-    // other than 100% is a `transform: scale()` over an already-rasterised image and every
-    // glyph goes soft. Locking it to 100% is the only setting that renders exactly, and a
-    // crisp phone at one size beats a fuzzy one at five. `Config.DeviceSize` is still there
-    // for an operator who wants a different fixed size and will accept the softness.
+    // Steps rather than a slider. The slider was removed because it stretched a finished
+    // image and blurred every glyph; these lay the page out again at the chosen size, so every
+    // one is as sharp as 100% ever was. A row that opens a list, because eight sizes and Auto
+    // do not fit side by side on a phone 372 pixels wide.
+    (p.sizePicker === false ? '' :
+      UI.group([UI.row({ icon: 'phone', tint: '#0A84FF', title: L('ph.size'),
+        value: deviceSizeLabel(p.size), chevron: true, data: { t: 'devsize' } })])) +
     '<div class="sliderow">' +
       '<div class="seg">' +
         '<button class="' + (p.side !== 'left' ? 'on' : '') + '" data-side="right">' + esc(L('ph.side_right')) + '</button>' +
@@ -8278,6 +8497,16 @@ function settingsSection(id) {
     // for the life of the character - a phone whose code cannot be changed is a phone whose
     // code is shared the first time somebody looks over a shoulder.
     UI.group([
+      // **The state, said once and plainly, at the top.**
+      //
+      // The rows below describe what each one DOES, and somebody reading "the phone opens
+      // without a passcode" under a row that turns security off read it as where things
+      // stood. So the section now opens with a line that is only about where things stand,
+      // and the row that acts says what it will do.
+      UI.row({ icon: p.securityEnabled ? 'lockshut' : 'lockopen',
+        tint: p.securityEnabled ? '#30D158' : '#8E8E93',
+        title: L('ph.sec_state'),
+        value: L(p.securityEnabled ? 'ph.sec_state_on' : 'ph.sec_state_off') }),
       UI.row({ icon: 'lockshut', tint: '#FF3B30', title: L('ph.sec_passcode'),
         subtitle: p.securityEnabled ? L('ph.sec_passcode_on') : L('ph.sec_passcode_off'),
         chevron: true, data: { t: 'passcode' } }),
@@ -8465,7 +8694,10 @@ function wireSettings() {
         const check = await post('unlock', { passcode: current });
         if (!check || !check.ok) { toast(L('ph.wrong_passcode')); return false; }
         const res = await post('prefs', { securityEnabled: false, faceUnlock: false });
-        if (res && res.ok) { state.prefs = res.prefs; settingsRedraw(); toast(L('ph.sec_off_done')); }
+        // The server proves the code itself before it takes a lock off, so a refusal here is
+        // worth saying out loud rather than closing the sheet as though it had worked.
+        if (!res || !res.ok) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return false; }
+        state.prefs = res.prefs; settingsRedraw(); toast(L('ph.sec_off_done'));
         return true;
       });
       return;
@@ -8590,6 +8822,30 @@ function wireSettings() {
             if (res && res.ok && closeSheet(false, epoch)) { state.prefs = res.prefs; settingsRedraw(); }
           });
         });
+      return;
+    } else if (r.dataset.t === 'devsize') {
+      const cur = (state.prefs || {}).size;
+      const isAuto = cur === 'auto' || Number(cur) === 0;
+      sheet(L('ph.size'),
+        UI.group([0].concat(DEVICE_SIZES).map((v) => UI.row({
+          title: v === 0 ? L('ph.size_auto') : Math.round(v * 100) + '%',
+          subtitle: v === 0 ? L('ph.size_auto_hint').replace('{n}', Math.round(autoSize() * 100) + '%')
+                  : (v === 1 ? L('ph.size_m') : ''),
+          value: (v === 0 ? isAuto : (!isAuto && deviceSize(cur) === v)) ? '✓' : '',
+          data: { v: String(v) },
+        }))),
+        () => [...byId('sheet').querySelectorAll('.row')].forEach((el) => el.addEventListener('click', async () => {
+          const epoch = sheetEpoch;
+          const res2 = await post('prefs', { size: Number(el.dataset.v) });
+          if (!closeSheet(false, epoch)) return;
+          if (res2 && res2.ok) {
+            state.prefs = res2.prefs;
+            // Everything measured through the old size has to go, and applyDevice clears
+            // those itself. The base box is the phone at 100%, which has not moved.
+            applyDevice();
+            settingsRedraw();
+          }
+        })));
       return;
     } else if (r.dataset.t === 'ringer') {
       sheet(L('ph.ringer'),
@@ -8789,6 +9045,47 @@ function applyMotion() {
   byId('device').classList.toggle('reducemotion', on);
 }
 
+/// The sizes the phone renders at. The same list as the server's, and the server has the last
+/// word: this one is so the picker can draw itself. `0` is Auto.
+const DEVICE_SIZES = [0.85, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5];
+
+function snapSize(want) {
+  return DEVICE_SIZES.reduce((best, step) =>
+    Math.abs(step - want) < Math.abs(best - want) ? step : best, 1);
+}
+
+/// **Auto: a size from the height of the game window.** The handset was designed for a 1080p
+/// screen, where 784 pixels is about three quarters of the height. The same proportion on any
+/// other screen is the same phone to the eye: 1440p gets 1.25, 4K gets 2. The window is the
+/// only thing that knows its own height, which is why Auto is decided here and not on the
+/// server. Never below 1: a small window is handled by the shrink-to-fit, not by a smaller step.
+function autoSize() {
+  const viewport = window.visualViewport;
+  const vh = (viewport && viewport.height) || window.innerHeight || 1080;
+  return Math.max(1, snapSize(vh / 1080));
+}
+
+function deviceSize(value) {
+  const want = Number(value);
+  if (value === 'auto' || want === 0) return autoSize();
+  return snapSize(want || 1);
+}
+
+function deviceSizeLabel(value) {
+  const auto = value === 'auto' || Number(value) === 0;
+  const pct = Math.round(deviceSize(value) * 100) + '%';
+  return auto ? L('ph.size_auto') + ' (' + pct + ')' : pct;
+}
+
+let deviceBaseBox = null;
+/// The handset at 100%. Nothing scales its layout any more, so this is simply its box.
+function deviceBase(d) {
+  if (!deviceBaseBox) {
+    deviceBaseBox = { w: d.offsetWidth || 372, h: d.offsetHeight || 784 };
+  }
+  return deviceBaseBox;
+}
+
 function applyDevice() {
   applyAdminView();
   applyMotion();
@@ -8798,32 +9095,74 @@ function applyDevice() {
   forgetScreenRect();
   const p = state.prefs || {};
   const d = byId('device');
-  const size = Math.max(0.75, Math.min(1.15, Number(p.size) || 1));
+  const size = deviceSize(p.size);
+
+  // **Two ways to be bigger, and the operator picks.**
+  //
+  // A transform stretches a phone that has already been drawn: hit-testing is exact, and text
+  // above 100% is resampled, which reads as soft in dense places like a conversation. `zoom`
+  // lays the page out again at the real size, so text is DRAWN at that size and stays crisp.
+  //
+  // `zoom` was the default once and was blamed for a phone where nothing worked above 100%.
+  // That was not `zoom`: the entrance animation ended on `transform: none` and threw the size
+  // away, so the handset was drawn at 100% while the page believed the chosen size, and every
+  // click landed beside its target. That bug is fixed - the keyframes carry the scale now - so
+  // `zoom` is offered again, as a choice rather than a default: a server that finds it misbehaves
+  // in its own CEF build switches back and loses nothing but sharpness.
+  const wantZoom = state.scaleMode === 'zoom'
+    && !!(window.CSS && CSS.supports && CSS.supports('zoom', '1.25'));
+  // **The size is carried by whichever one the operator chose.**
+  //
+  // `zoom` was the whole idea behind the handset sizes: it lays the page out again at the real
+  // size, so text is drawn rather than magnified, and it looked right in a desktop browser. In
+  // CEF it is not right. Everything that reads a position disagreed with everything that draws
+  // one, and the symptoms arrived one at a time: a top edge that could not be grabbed, a lock
+  // screen notification that swallowed its own tap, and finally nothing working at all above
+  // 100% on a 2K or 4K screen. Three fixes in a row moved the mismatch around rather than
+  // removing it, because the mismatch was `zoom` itself.
+  //
+  // A transform is the boring answer and it has always worked: the phone is drawn at one scale
+  // and the browser knows it, so a click lands where the pixel is. It is slightly softer than a
+  // relayout above 100%, and on the screens these sizes exist for - 1440p and 4K - there are
+  // enough device pixels that it is hard to see. A phone you can use beats a phone you cannot.
+  //
+  // Cleared rather than left alone when it is not wanted: a handset carrying a `zoom` from an
+  // earlier open would otherwise keep it.
+  const zoom = wantZoom ? size : 1;
+  d.style.zoom = (zoom === 1) ? '' : String(zoom);
   const viewport = window.visualViewport;
   const vw = (viewport && viewport.width) || window.innerWidth || 1280;
   const vh = (viewport && viewport.height) || window.innerHeight || 720;
-  const rawW = d.offsetWidth || 372;
-  const rawH = d.offsetHeight || 784;
-  const footprintW = landscape ? rawH : rawW;
-  const footprintH = landscape ? rawW : rawH;
+  const base = deviceBase(d);
+  const footprintW = (landscape ? base.h : base.w) * size;
+  const footprintH = (landscape ? base.w : base.h) * size;
   // Normally the phone never grows past the size the player chose - it only shrinks to fit a
   // small window. A photograph is the one thing worth breaking that for: turned sideways at
   // its usual size, a picture is a postage stamp in the corner of a 1080p screen, which is
   // what "on ne voit rien" meant. It goes back to the player's size the moment it closes.
   const cap = photoZoom ? 2.6 : 1;
   const fit = Math.max(0.10, Math.min(cap,
-    (vw - 24) / (footprintW * size),
-    (vh - 24) / (footprintH * size)));
-  const scale = size * fit;
+    (vw - 24) / footprintW,
+    (vh - 24) / footprintH));
+  // What the transform still has to carry: the shrink that keeps the handset inside the window,
+  // plus the size itself unless `zoom` already took it. The phone ends up at `size * fit` either
+  // way, which is what every measurement on this page divides back out.
+  const scale = (size / zoom) * fit;
   d.style.setProperty('--device-fit', String(fit));
+  // What the TRANSFORM should be, because the entrance animation rebuilds that property from
+  // it. With `zoom` carrying the size, this is only the fit.
   d.style.setProperty('--device-scale', String(scale));
   if (landscape) {
-    // The phone lies on its side, centred so it cannot swing off-screen.
+    // The phone lies on its side, centred so it cannot swing off-screen. The part before the
+    // scale is published too: the entrance animation rebuilds the whole transform from these
+    // two, because an animation owns `transform` outright and would otherwise drop them.
     d.style.left = '50%'; d.style.right = 'auto'; d.style.top = '50%'; d.style.bottom = 'auto';
     d.style.transformOrigin = 'center center';
+    d.style.setProperty('--device-rise', 'translate(-50%, -50%) rotate(-90deg)');
     d.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(' + scale + ')';
   } else {
     d.style.top = 'auto'; d.style.bottom = '2.5vh';
+    d.style.removeProperty('--device-rise');
     d.style.transformOrigin = (p.side === 'left') ? 'left bottom' : 'right bottom';
     d.style.transform = 'scale(' + scale + ')';
     d.style.right = (p.side === 'left') ? 'auto' : '3vw';
@@ -9743,12 +10082,12 @@ function musicRenderPlayer(model) {
   });
   player.addEventListener('pointermove', (event) => {
     if (!swipe || event.pointerId !== swipe.id) return;
-    const dy = Math.max(0, event.clientY - swipe.y);
+    const dy = Math.max(0, (event.clientY - swipe.y) * screenScale());
     player.style.setProperty('--player-y', Math.min(120, dy) + 'px');
   });
   player.addEventListener('pointerup', (event) => {
     if (!swipe || event.pointerId !== swipe.id) return;
-    const dy = Math.max(0, event.clientY - swipe.y);
+    const dy = Math.max(0, (event.clientY - swipe.y) * screenScale());
     swipe = null;
     player.style.removeProperty('--player-y');
     if (dy > 74) { musicPlayerOpen = false; RENDER.music(); }
@@ -10440,17 +10779,74 @@ let g = null;
 /// `applyDevice` or `setLandscape`, so it is read there instead: once per change rather than
 /// once per pixel of mouse travel.
 let screenRect = null;
+let screenRatio = null;
 
-function forgetScreenRect() { screenRect = null; }
+/// The box and the ratio go together: the ratio is derived from the box, so a box that is no
+/// longer true is a ratio that is no longer true.
+function forgetScreenRect() { screenRect = null; screenRatio = null; }
 
 function screenBox() {
-  if (!screenRect) screenRect = byId('screen').getBoundingClientRect();
+  if (!screenRect) {
+    const r = byId('screen').getBoundingClientRect();
+    // **A hidden phone is not measured.** A closed handset is `display: none`, so its box is
+    // all zeros - and caching that gives every later gesture an origin of 0,0 and a scale of
+    // nothing. It is remembered only once it has a size; until then each call asks again,
+    // which costs one layout on a screen nobody is looking at.
+    if (r.width > 0 && r.height > 0) screenRect = r;
+    return r;
+  }
   return screenRect;
 }
 
+/// **The screen's own size, as the stylesheet writes it down.**
+///
+/// `--screen-w` and `--screen-h` on `.screen`, unitless, which is the whole point: a custom
+/// property comes back exactly as authored, while a measured width on a scaled element has to
+/// be read in the right space to mean anything. Written down, it means the same thing to every
+/// browser and at every handset size.
+let screenNatural = null;
+
+function screenNaturalSize() {
+  if (screenNatural === null) {
+    const cs = getComputedStyle(byId('screen'));
+    screenNatural = {
+      w: parseFloat(cs.getPropertyValue('--screen-w')) || 352,
+      h: parseFloat(cs.getPropertyValue('--screen-h')) || 764,
+    };
+  }
+  return screenNatural;
+}
+
+/// **Window pixels to the phone's own pixels.**
+///
+/// The screen's real box against the size the stylesheet says it is. The handset is drawn by
+/// one transform, so the box carries the whole scale and this is the ratio back out of it.
+///
+/// **Measured rather than announced, and that is the point.** It was briefly published by
+/// `applyDevice`, which knows the size it draws at. That is true at the instant it runs and
+/// false afterwards: close the handset and take it out again and the window it is fitted to
+/// may have reported something different in between, so the figure it left behind no longer
+/// described what is on screen. Taking it from the box means it cannot drift: the box is
+/// re-measured whenever the handset is re-drawn, and the ratio with it.
+function screenScale() {
+  if (screenRatio === null) {
+    const r = screenBox();
+    // Turned sideways, the box's WIDTH is the screen's height: a rotated element reports the
+    // box its corners fit in, not the box it was laid out as.
+    const nat = screenNaturalSize();
+    screenRatio = r.width ? ((landscape ? nat.h : nat.w) / r.width) : 1;
+  }
+  return screenRatio;
+}
+
+/// Where the pointer is on the screen, and how big that screen is - both in the phone's pixels,
+/// because that is the space every threshold here was written in and the space a CSS length set
+/// from one of these lands in.
 function screenPoint(e) {
   const r = screenBox();
-  return { x: e.clientX - r.left, y: e.clientY - r.top, w: r.width, h: r.height };
+  const k = screenScale();
+  return { x: (e.clientX - r.left) * k, y: (e.clientY - r.top) * k,
+           w: r.width * k, h: r.height * k };
 }
 
 function anyOverlayOpen() {
@@ -10554,7 +10950,7 @@ byId('screen').addEventListener('pointerdown', (e) => {
   const p = screenPoint(e);
   const systemPanel = activeSystemPanel();
   const interactive = !!(e.target.closest && e.target.closest(
-    'button,input,textarea,select,[role="slider"],.ccslider,.ncard,.row'
+    'button,input,textarea,select,[role="slider"],.ccslider,.ncard,.lnotif,.row'
   ));
   g = { x0: p.x, y0: p.y, t0: Date.now(), w: p.w, h: p.h,
          // Whether this press began on the home indicator. Recorded here because the capture
@@ -10572,7 +10968,7 @@ byId('screen').addEventListener('pointerdown', (e) => {
          // The home bar is excluded deliberately: the swipe up from it IS a gesture that
          // starts on a button, and it is handled on its own terms below.
          tapTarget: (!(e.target.closest && e.target.closest('.homebar')) && interactive)
-           ? e.target.closest('button,input,textarea,select,[role="slider"],.ccslider,.ncard,.row')
+           ? e.target.closest('button,input,textarea,select,[role="slider"],.ccslider,.ncard,.lnotif,.row')
            : null,
          fromBottom: p.y > p.h - EDGE, fromTop: p.y < EDGE_TOP, fromLeft: p.x < 18,
          insideOverlay: !!(e.target.closest && e.target.closest(
@@ -10959,8 +11355,8 @@ function renderShade() {
     const cards = byApp[appId].map((n) =>
       '<div class="ncard" data-nid="' + n.id + '">' +
         '<span class="nic">' + UI.appIcon(n.icon) + '</span>' +
-        '<span class="nbody"><span class="nt">' + esc(n.title) + '</span>' +
-        '<span class="nb">' + esc(n.body) + '</span></span>' +
+        '<span class="nbody"><span class="nt">' + esc(nText(n.title)) + '</span>' +
+        '<span class="nb">' + esc(nText(n.body)) + '</span></span>' +
         '<span class="nw">' + esc(relTime(n.at)) + '</span>' +
         '<button class="nx" data-x="' + n.id + '" type="button" aria-label="' +
           esc(L('ph.close')) + '">' + svg('xmark') + '</button></div>').join('');
@@ -12177,7 +12573,7 @@ function remWhen(r) {
   const now = Date.now();
   const today = new Date();
   const tomorrow = new Date(today.getTime() + 86400000);
-  const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const time = hhmm(d);
   let day;
   if (d.toDateString() === today.toDateString()) day = L('ph.today');
   else if (d.toDateString() === tomorrow.toDateString()) day = L('ph.tomorrow');
@@ -14837,6 +15233,305 @@ function exportArrived(a) {
   if (openApp && openApp.id === 'export' && !exportOpenItem) RENDER.export(true);
 }
 
+// VineMarket keeps the browse result in one bounded page and never polls in the background.
+let marketTab = 'all';
+let marketKind = '';
+let marketDeal = '';
+let marketQuery = '';
+let marketNext = null;
+let marketRows = [];
+let marketSearchTimer = null;
+let marketFeedRequest = 0;
+let marketInboxRequest = 0;
+
+function marketKindIcon(kind) {
+  return { vehicles: 'garage', apartments: 'house', houses: 'house',
+    furniture: 'house', services: 'jobs' }[kind] || 'store';
+}
+
+function marketThumbPhoto(value) {
+  // A card tap opens its listing, including when it lands on the image.
+  // The gallery helper otherwise installs a full-screen photo tap on every image it draws.
+  return photoImg(value, 'market-thumb-photo').replace(/\sdata-full="[^"]*"/, '');
+}
+
+function marketError(res) {
+  toast(L('ph.market_e_' + ((res && res.error) || 'off')));
+}
+
+function marketPrice(row) {
+  const period = row.deal === 'rent' && row.period !== 'once'
+    ? ' ' + L('ph.market_period_' + row.period) : '';
+  return money(row.price) + period;
+}
+
+function marketCard(row) {
+  const kind = L('ph.market_' + row.kind);
+  return '<button type="button" class="market-card" data-id="' + Number(row.id) + '">' +
+    '<span class="market-thumb">' + (row.image
+      ? marketThumbPhoto(row.image)
+      : '<span class="market-thumb-empty">' + svg(marketKindIcon(row.kind)) + '</span>') + '</span>' +
+    '<span class="market-card-copy"><span class="market-card-price">' +
+      esc(marketPrice(row)) + '</span><strong>' + esc(row.title) + '</strong>' +
+      '<small>' + esc(kind) + ' · ' + esc(L('ph.market_' + row.deal)) +
+        (row.area ? ' · ' + esc(row.area) : '') + '</small></span>' +
+    (row.status !== 'active' ? '<span class="market-closed">' +
+      esc(L('ph.market_closed')) + '</span>' : '') + '</button>';
+}
+
+function marketWireCards() {
+  rows('.market-card[data-id]', (el) => el.addEventListener('click', () =>
+    marketDetail(Number(el.dataset.id))));
+}
+
+async function marketLoadFeed(append) {
+  const host = byId('market-results');
+  if (!host) return;
+  const request = ++marketFeedRequest;
+  if (!append) { marketRows = []; marketNext = null; host.innerHTML = UI.spinner(L('ph.loading')); }
+  const current = marketTab;
+  const res = await post('marketplace', { op: current === 'mine' ? 'mine' : 'feed',
+    kind: marketKind, deal: marketDeal, query: marketQuery,
+    before: append ? marketNext : null });
+  if (!host.isConnected || marketTab !== current || request !== marketFeedRequest) return;
+  if (!res || !res.ok) { host.innerHTML = UI.empty(L('ph.market_e_off')); return; }
+  marketRows = append ? marketRows.concat(res.listings || []) : (res.listings || []);
+  marketNext = current === 'all' ? res.next : null;
+  host.innerHTML = marketRows.length ? '<div class="market-grid">' +
+    marketRows.map(marketCard).join('') + '</div>' +
+    (marketNext ? '<button class="market-more" id="market-more" type="button">' +
+      esc(L('ph.market_more')) + '</button>' : '')
+    : UI.empty(L(current === 'mine' ? 'ph.market_empty_mine' : 'ph.market_empty'), 'store');
+  marketWireCards();
+  const more = byId('market-more');
+  if (more) more.addEventListener('click', () => marketLoadFeed(true));
+}
+
+async function marketLoadInbox() {
+  const host = byId('market-results');
+  if (!host) return;
+  const request = ++marketInboxRequest;
+  host.innerHTML = UI.spinner(L('ph.loading'));
+  const res = await post('marketplace', { op: 'inbox' });
+  if (!host.isConnected || marketTab !== 'inbox' || request !== marketInboxRequest) return;
+  if (!res || !res.ok) { host.innerHTML = UI.empty(L('ph.market_e_off')); return; }
+  const threads = res.threads || [];
+  host.innerHTML = threads.length ? '<div class="market-inbox">' + threads.map((t) =>
+    '<button class="market-chat-row" type="button" data-thread="' + Number(t.id) + '">' +
+    '<span class="market-chat-icon">' + svg('messages') + '</span>' +
+    '<span><strong>' + esc(t.title) + '</strong><small>' + esc(t.last ||
+      L(t.role === 'seller' ? 'ph.market_seller' : 'ph.market_you')) + '</small></span>' +
+    (Number(t.unread) > 0 ? '<i>' + Math.min(99, Number(t.unread)) + '</i>' : '') +
+    '</button>').join('') + '</div>' : UI.empty(L('ph.market_empty_inbox'), 'messages');
+  rows('.market-chat-row[data-thread]', (el) => el.addEventListener('click', () =>
+    marketThread(Number(el.dataset.thread))));
+}
+
+RENDER.marketplace = () => {
+  setNav(L('app.marketplace'), null,
+    { icon: 'add', label: L('ph.market_new'), onClick: marketCompose });
+  tabbar([
+    { id: 'all', icon: 'store', label: 'ph.market_all' },
+    { id: 'mine', icon: 'note', label: 'ph.market_mine' },
+    { id: 'inbox', icon: 'messages', label: 'ph.market_inbox' },
+  ], marketTab, (tab) => { marketTab = tab; RENDER.marketplace(); });
+  body('<div class="market-home">' + (marketTab === 'all'
+    ? '<div class="market-hero"><span class="market-hero-icon">' + svg('store') +
+        '</span><strong>VineMarket</strong><span>' + esc(L('ph.market_new')) + '</span></div>' +
+      '<div class="market-search">' + UI.search('market-search', L('ph.market_search'), marketQuery) + '</div>' +
+      '<div class="market-filters"><select id="market-kind" aria-label="' + esc(L('ph.market_items')) + '">' +
+        '<option value="">' + esc(L('ph.market_all')) + '</option>' +
+        ['items', 'vehicles', 'furniture', 'apartments', 'houses', 'services'].map((k) =>
+          '<option value="' + k + '"' + (marketKind === k ? ' selected' : '') + '>' +
+            esc(L('ph.market_' + k)) + '</option>').join('') + '</select>' +
+        '<select id="market-deal" aria-label="' + esc(L('ph.market_sale')) + '">' +
+          '<option value="">' + esc(L('ph.market_all')) + '</option>' +
+          ['sale', 'rent'].map((k) => '<option value="' + k + '"' +
+            (marketDeal === k ? ' selected' : '') + '>' + esc(L('ph.market_' + k)) +
+            '</option>').join('') + '</select></div>'
+    : '') + '<div id="market-results"></div>' +
+    '<button class="market-refresh" id="market-refresh" type="button">' +
+      esc(L('ph.refresh')) + '</button></div>');
+  if (marketTab === 'inbox') marketLoadInbox();
+  else marketLoadFeed(false);
+  const search = byId('market-search');
+  if (search) search.addEventListener('input', () => {
+    marketQuery = search.value;
+    clearTimeout(marketSearchTimer);
+    marketSearchTimer = setTimeout(() => marketLoadFeed(false), 280);
+  });
+  const kind = byId('market-kind');
+  if (kind) kind.addEventListener('change', () => { marketKind = kind.value; marketLoadFeed(false); });
+  const deal = byId('market-deal');
+  if (deal) deal.addEventListener('change', () => { marketDeal = deal.value; marketLoadFeed(false); });
+  byId('market-refresh').addEventListener('click', () =>
+    marketTab === 'inbox' ? marketLoadInbox() : marketLoadFeed(false));
+};
+
+function marketCompose() {
+  beginView();
+  foot('');
+  setNav(L('ph.market_new'), L('app.marketplace'), null, () => RENDER.marketplace());
+  body('<form class="market-compose" id="market-form">' +
+    '<div class="market-form-photo" id="market-photo">' + svg('camera') +
+      '<span>' + esc(L('ph.market_photo')) + '</span></div>' +
+    '<button class="market-photo-pick" id="market-pick" type="button">' +
+      esc(L('ph.market_photo_hint')) + '</button>' +
+    '<div class="market-form-pair"><label>' + esc(L('ph.market_items')) + '<select id="market-form-kind">' +
+      ['items', 'vehicles', 'furniture', 'apartments', 'houses', 'services'].map((k) =>
+        '<option value="' + k + '">' + esc(L('ph.market_' + k)) + '</option>').join('') +
+      '</select></label><label>' + esc(L('ph.market_sale')) + '<select id="market-form-deal">' +
+      '<option value="sale">' + esc(L('ph.market_sale')) + '</option>' +
+      '<option value="rent">' + esc(L('ph.market_rent')) + '</option></select></label></div>' +
+    '<label>' + esc(L('ph.market_title')) + '<input id="market-form-title" maxlength="80" required></label>' +
+    '<label>' + esc(L('ph.market_description')) + '<textarea id="market-form-description" maxlength="1000" required></textarea></label>' +
+    '<div class="market-form-pair"><label>' + esc(L('ph.market_price')) +
+      '<input id="market-form-price" type="number" min="0" max="100000000" step="1" required></label>' +
+      '<label id="market-period-wrap" class="hidden">' + esc(L('ph.market_rent')) +
+      '<select id="market-form-period">' + ['day', 'week', 'month'].map((k) =>
+        '<option value="' + k + '">' + esc(L('ph.market_period_' + k)) + '</option>').join('') +
+      '</select></label></div>' +
+    '<label>' + esc(L('ph.market_area')) + '<input id="market-form-area" maxlength="64"></label>' +
+    '<label class="market-privacy"><input type="checkbox" id="market-form-phone"><span><strong>' +
+      esc(L('ph.market_show_phone')) + '</strong><small>' + esc(L('ph.market_private_hint')) +
+      '</small></span></label>' +
+    '<div class="market-posting-fee" id="market-posting-fee">' +
+      esc(L('ph.loading')) + '</div>' +
+    '<button class="market-submit" type="submit">' + esc(L('ph.market_publish')) + '</button>' +
+    '</form>');
+  let photo = '';
+  const requestId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+  let pricingReady = false;
+  const submit = byId('market-form').querySelector('.market-submit');
+  const fee = byId('market-posting-fee');
+  submit.disabled = true;
+  post('marketplace', { op: 'pricing' }).then((pricing) => {
+    if (!fee.isConnected) return;
+    if (!pricing || !pricing.ok) { fee.textContent = L('ph.market_e_payment'); return; }
+    pricingReady = true;
+    submit.disabled = false;
+    fee.textContent = pricing.fee > 0
+      ? L('ph.market_posting_fee').replace('{amount}', money(pricing.fee)) +
+        (pricing.label ? ' · ' + pricing.label : '')
+      : L('ph.market_posting_free');
+  });
+  byId('market-pick').addEventListener('click', () => pickPhoto((url) => {
+    photo = url;
+    byId('market-photo').innerHTML = photoImg(url, 'market-form-preview');
+  }));
+  byId('market-form-deal').addEventListener('change', (e) =>
+    byId('market-period-wrap').classList.toggle('hidden', e.target.value !== 'rent'));
+  byId('market-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!pricingReady) return;
+    const form = byId('market-form');
+    submit.disabled = true;
+    const deal = byId('market-form-deal').value;
+    const res = await post('marketplace', { op: 'create',
+      requestId,
+      kind: byId('market-form-kind').value, deal,
+      title: byId('market-form-title').value, description: byId('market-form-description').value,
+      price: Number(byId('market-form-price').value), period: deal === 'rent'
+        ? byId('market-form-period').value : 'once',
+      area: byId('market-form-area').value, image: photo,
+      showPhone: byId('market-form-phone').checked });
+    if (!form.isConnected) return;
+    submit.disabled = false;
+    if (!res || !res.ok) { marketError(res); return; }
+    toast(L('ph.market_published'));
+    marketTab = 'mine';
+    RENDER.marketplace();
+  });
+}
+
+async function marketDetail(id) {
+  foot('');
+  setNav(L('app.marketplace'), L('app.marketplace'), null, () => RENDER.marketplace());
+  loading();
+  const epoch = beginView();
+  const res = await post('marketplace', { op: 'detail', id });
+  if (epoch !== viewEpoch || !openApp || openApp.id !== 'marketplace') return;
+  if (!res || !res.ok) { body(UI.empty(L('ph.market_e_missing'))); return; }
+  const row = res.listing;
+  setNav(row.title, L('app.marketplace'), null, () => RENDER.marketplace());
+  body('<div class="market-detail">' +
+    '<div class="market-detail-photo">' + (row.image ? photoImg(row.image, 'market-detail-image')
+      : '<span>' + svg(marketKindIcon(row.kind)) + '</span>') + '</div>' +
+    '<div class="market-detail-body"><div class="market-kicker">' +
+      esc(L('ph.market_' + row.kind)) + ' · ' + esc(L('ph.market_' + row.deal)) + '</div>' +
+    '<h2>' + esc(row.title) + '</h2><div class="market-detail-price">' +
+      esc(marketPrice(row)) + '</div>' +
+    (row.area ? '<div class="market-detail-area">' + svg('map') + esc(row.area) + '</div>' : '') +
+    '<p>' + esc(row.description) + '</p><div class="market-seller">' +
+      '<span>' + svg('contacts') + '</span><div><small>' + esc(L('ph.market_seller')) +
+      '</small><strong>' + esc(row.seller) + '</strong></div></div>' +
+    (row.mine ? (row.status === 'active' ? '<button id="market-close" class="market-submit" type="button">' +
+      esc(L('ph.market_close')) + '</button>' : '')
+      : '<button id="market-contact" class="market-submit" type="button">' +
+        esc(L('ph.market_contact')) + '</button>' +
+        '<button id="market-call" class="market-secondary" type="button">' +
+          svg('phone') + esc(L('ph.market_private_call')) + '</button>' +
+        '<div class="market-hidden">' + (row.phone ? esc(row.phone) :
+          svg('lockshut') + esc(L('ph.market_number_hidden'))) + '</div>') + '</div></div>');
+  const contact = byId('market-contact');
+  if (contact) contact.addEventListener('click', async () => {
+    const reply = await post('marketplace', { op: 'contact', id });
+    if (!reply || !reply.ok) { marketError(reply); return; }
+    marketThread(Number(reply.thread));
+  });
+  const call = byId('market-call');
+  if (call) call.addEventListener('click', async () => {
+    const reply = await post('marketplace', { op: 'call', id });
+    if (!reply || !reply.ok) marketError(reply);
+  });
+  const close = byId('market-close');
+  if (close) close.addEventListener('click', () => confirmSheet(
+    L('ph.market_close_ask'), L('ph.market_close'), async () => {
+      const reply = await post('marketplace', { op: 'close', id });
+      if (!reply || !reply.ok) { marketError(reply); return; }
+      toast(L('ph.market_done')); marketTab = 'mine'; RENDER.marketplace();
+    }));
+}
+
+async function marketThread(id) {
+  foot('');
+  setNav(L('ph.market_inbox'), L('app.marketplace'), null, () => {
+    marketTab = 'inbox'; RENDER.marketplace();
+  });
+  loading();
+  const epoch = beginView();
+  const res = await post('marketplace', { op: 'thread', id });
+  if (epoch !== viewEpoch || !openApp || openApp.id !== 'marketplace') return;
+  if (!res || !res.ok) { body(UI.empty(L('ph.market_e_missing'))); return; }
+  const thread = res.thread;
+  setNav(thread.title, L('ph.market_inbox'), { icon: 'more', label: L('ph.refresh'),
+    onClick: () => marketThread(id) }, () => { marketTab = 'inbox'; RENDER.marketplace(); });
+  body('<div class="market-thread"><button class="market-thread-listing" id="market-thread-listing" ' +
+    'type="button">' + svg('store') + '<span>' + esc(thread.title) + '</span></button>' +
+    '<div class="market-messages">' + (res.messages || []).map((m) =>
+      '<div class="market-message ' + (m.mine ? 'mine' : '') + '">' +
+        esc(m.body) + '</div>').join('') + '</div>' +
+    (thread.status === 'active'
+      ? '<form id="market-chat-form" class="market-chat-form"><input id="market-chat-input" ' +
+        'maxlength="400" placeholder="' + esc(L('ph.market_write')) + '" required>' +
+        '<button type="submit" aria-label="' + esc(L('ph.market_send')) + '">' +
+          svg('send') + '</button></form>'
+      : '<div class="market-hidden">' + esc(L('ph.market_thread_closed')) + '</div>') +
+    '</div>');
+  byId('market-thread-listing').addEventListener('click', () => marketDetail(thread.listingId));
+  const form = byId('market-chat-form');
+  if (form) form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = byId('market-chat-input');
+    const value = input.value.trim();
+    if (!value) return;
+    const res = await post('marketplace', { op: 'send', id, body: value });
+    if (!form.isConnected) return;
+    if (!res || !res.ok) { marketError(res); return; }
+    marketThread(id);
+  });
+}
+
 RENDER.repair = async (cached) => {
   if (!cached || !repairData) {
     loading();
@@ -17105,7 +17800,7 @@ function cipherError(result) {
 function cipherTime(value) {
   const ms = whenMs(value);
   if (!Number.isFinite(ms)) return '';
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return hhmm(ms);
 }
 
 function cipherInitial(peer) {
@@ -17971,13 +18666,24 @@ function socWhen(at) {
 // those two apps has always read.
 function postCard(pst, appId) {
   const photoFirst = appId === 'snap';
+  // The header is a row of two siblings, not one button. The name opens the profile and the
+  // three dots open your own post's actions; nesting the second inside the first would be a
+  // button in a button, which is invalid markup whose inner press the browser may hand to the
+  // outer one. The dots are the one place a player looks for "delete this", which the footer's
+  // small trash glyph never was.
   const head =
-    '<button class="phead" data-who="' + esc(pst.handle) + '" type="button">' +
-      socAvatar(pst) +
-      '<span class="pnames">' +
-        (pst.displayname ? '<span class="pdn">' + esc(pst.displayname) + socVerified(pst) + '</span>' : '') +
-        '<span class="ph">@' + esc(pst.handle) + '</span></span>' +
-      '<span class="pt">' + esc(socWhen(pst.at)) + '</span></button>';
+    '<div class="pheadrow">' +
+      '<button class="phead" data-who="' + esc(pst.handle) + '" type="button">' +
+        socAvatar(pst) +
+        '<span class="pnames">' +
+          (pst.displayname ? '<span class="pdn">' + esc(pst.displayname) + socVerified(pst) + '</span>' : '') +
+          '<span class="ph">@' + esc(pst.handle) + '</span></span>' +
+        '<span class="pt">' + esc(socWhen(pst.at)) + '</span></button>' +
+      (pst.mine
+        ? '<button class="pact pmore" type="button" aria-label="' + esc(L('ph.soc_post_actions')) + '">' +
+            svg('more') + '</button>'
+        : '') +
+    '</div>';
 
   // A clip renders as a looping muted video; photographs as a grid. Both fill the card.
   //
@@ -18009,6 +18715,14 @@ function postCard(pst, appId) {
   // Linkified AFTER escaping, never before: the tags and mentions are built out of text that
   // is already safe, so a post containing markup stays a post containing markup.
   const text = pst.body ? '<div class="pbody">' + socLinkify(esc(pst.body)) + '</div>' : '';
+  const x = Number(pst.loc_x), y = Number(pst.loc_y);
+  const location = appId === 'bleeter' && pst.loc_x != null && pst.loc_y != null &&
+    Number.isFinite(x) && Number.isFinite(y)
+    ? '<button class="postlocation" type="button" data-x="' + x + '" data-y="' + y +
+        '" aria-label="' + esc(L('ph.soc_location_route')) + '">' + svg('location') +
+        '<span><b>' + esc(L('ph.soc_location_shared')) + '</b><small>' +
+        esc(L('ph.soc_location_route')) + '</small></span>' + svg('chevron') + '</button>'
+    : '';
 
   const actions =
     '<div class="pfoot">' +
@@ -18037,7 +18751,7 @@ function postCard(pst, appId) {
     '</div>';
 
   return '<article class="post' + (photoFirst ? ' snapstyle' : '') + '" data-id="' + pst.id + '">' +
-    head + (photoFirst ? image + actions + text : text + image + actions) + '</article>';
+    head + (photoFirst ? image + actions + text : text + image + location + actions) + '</article>';
 }
 
 // Every card in a list answers the same way, so the wiring is written once. `reload` is
@@ -18058,12 +18772,21 @@ function popHeart(card) {
 /// thumbnail puts it in the sheet, and every selector here used to query `#appbody` only - so
 /// none of the thirteen matched, and every control on that card was dead. Not one handler bound,
 /// silently.
-function wirePosts(appId, reload, root) {
+///
+/// `reopen` is for a card in a sheet: it raises that sheet again, and it is what Cancel on the
+/// post's actions or on its delete confirmation goes back to. Both of those replace the sheet the
+/// card was in, so without it a Cancel dropped the player on whatever was underneath.
+function wirePosts(appId, reload, root, reopen) {
   // **Scoped to where the card actually is.** `rows` at the top of this file always queries
   // `#appbody`; a post opened from a profile thumbnail lives in `#sheet`, so not one of the
   // selectors below matched and every control on that card was dead. `qrows` already exists
   // for exactly this and was simply not used here.
   const rows = (sel, fn) => qrows(root || 'appbody', sel, fn);
+  rows('.post .postlocation', (b) => b.addEventListener('click', async () => {
+    const r = await post('waypoint', { x: Number(b.dataset.x), y: Number(b.dataset.y) });
+    if (r && r.ok) { ui('waypoint'); toast(L('ph.waypoint_set')); }
+    else toast(L('ph.err_x'));
+  }));
   rows('.post .plike', (b) => b.addEventListener('click', async () => {
     const id = Number(b.closest('.post').dataset.id);
     const r = await post('social', { op: 'like', id, app: appId });
@@ -18177,14 +18900,68 @@ function wirePosts(appId, reload, root) {
     e.stopPropagation();
     leaveCard(() => socialProfile(appId, b.dataset.who));
   }));
-  rows('.post .pdel', (b) => b.addEventListener('click', () => {
-    const card = b.closest('.post');
+  // ── Deleting your own post ──
+  // Two ways in, one way through: the footer's trash and the header's three dots both end on
+  // the same confirmation.
+  //
+  // Going back to the card after a Cancel. `sheet()` clears `sheetReturn`, so this is set after
+  // each sheet raised here, never before. The reopen waits a microtask and runs only if no sheet
+  // was closed or raised in between, because `alertSheet` closes itself - which is what calls
+  // this - BEFORE it runs the confirm handler: reopening at once would put the post back on the
+  // screen for as long as the delete request takes. The confirm handler closes the sheet first
+  // thing, which moves the epoch on and so cancels the reopen.
+  const backToCard = () => {
+    if (!reopen) return;
+    sheetReturn = () => {
+      const at = sheetEpoch;
+      queueMicrotask(() => { if (sheetEpoch === at) reopen(); });
+    };
+  };
+  const askDelete = (card) => {
+    const id = Number(card.dataset.id);
     confirmSheet(L('ph.soc_delete_post'), L('ph.delete'), async () => {
-      const r = await post('social', { op: 'delete', id: Number(card.dataset.id) });
+      // With a `reopen` the confirmation is still on screen here (see `backToCard`). A plain
+      // close rather than a forced one: `sheetReturn` is already spent, and forcing would also
+      // throw away any prompt queued behind this sheet.
+      if (reopen) closeSheet();
+      const r = await post('social', { op: 'delete', id });
       if (r && r.ok) { card.remove(); toast(L('ph.soc_deleted')); if (reload) reload(); }
       else toast(L('ph.err_' + ((r && r.error) || 'x')));
     });
+    backToCard();
+  };
+  rows('.post .pdel', (b) => b.addEventListener('click', () => askDelete(b.closest('.post'))));
+  // The actions sheet, on the model of a message's long press: the destructive action as a
+  // button, with a line under it saying what it takes with it, before the confirmation.
+  rows('.post .pmore', (b) => b.addEventListener('click', () => {
+    const card = b.closest('.post');
+    const text = card.querySelector('.pbody');
+    const excerpt = text ? text.textContent.trim().slice(0, 90) : '';
+    sheet(L('ph.soc_post_actions'),
+      UI.button(L('ph.soc_delete_post_action'), 'socpostdel', 'destructive') +
+      '<div class="groupfoot">' + esc(L('ph.soc_delete_post_hint')) + '</div>',
+      () => byId('socpostdel').addEventListener('click', () => askDelete(card)),
+      'post-actions', excerpt ? { subtitle: excerpt } : undefined);
+    backToCard();
   }));
+}
+
+/// What a card in a sheet says now, written back into the post it was drawn from.
+///
+/// A like, a save or a comment changes the card, not the object behind it. A sheet raised again
+/// from that object - after a Cancel, or from the same grid tile - would quietly take the like
+/// back, so the live state is read off the card first.
+function socCardState(host, pst) {
+  const card = host && host.querySelector('.post');
+  if (!card || !pst) return pst;
+  const on = (sel) => { const el = card.querySelector(sel); return el ? el.classList.contains('on') : undefined; };
+  const count = (sel) => { const el = card.querySelector(sel + ' span'); return el ? Number(el.textContent) || 0 : undefined; };
+  const live = {
+    liked: on('.plike'), likes: count('.plike'), saved: on('.psave'),
+    reposted: on('.prepost'), reposts: count('.prepost'), comments: count('.pcomment'),
+  };
+  Object.keys(live).forEach((k) => { if (live[k] !== undefined) pst[k] = live[k]; });
+  return pst;
 }
 
 // A small yes/no, because deleting a post from a feed you are scrolling should take one
@@ -18698,11 +19475,14 @@ async function socialProfile(appId, handle) {
   if (grid) rows('.socthumb', (b) => b.addEventListener('click', () => {
     const one = posts.find((p) => String(p.id) === b.dataset.id);
     if (!one) return;
-    sheet(L('app.snap'), '<div class="socone">' + postCard(one, appId) + '</div>', () => {
+    const open = () => sheet(L('app.snap'), '<div class="socone">' + postCard(one, appId) + '</div>', () => {
+      const host = byId('sheet').querySelector('.socone');
       // In the SHEET, not the app body. Without saying so, none of wirePosts' selectors match
       // and every control on this card is dead - like, comment, repost, save, the grid cells.
-      wirePosts(appId, () => socialRender(appId), 'sheet');
+      // `open` again is where a Cancel on this post's actions goes back to.
+      wirePosts(appId, () => socialRender(appId), 'sheet', () => { socCardState(host, one); open(); });
     });
+    open();
   }));
   else wirePosts(appId, () => socialProfile(appId, handle));
 }
@@ -18895,9 +19675,16 @@ function socialRender(appId) {
 // of pictures quickly and open the one you want.
 function socGrid(appId, list, emptyKey, reload) {
   if (!list.length) { body(UI.empty(L(emptyKey), APP_ICON[appId])); return; }
-  body('<div class="shots socgrid">' + list.map((pst, i) =>
-    '<div class="shot" data-gi="' + i + '" style="' +
-      inlineBackground(pst.image) + '"></div>').join('') + '</div>');
+  body('<div class="shots socgrid">' + list.map((pst, i) => {
+    const pic = pst.image || postImages(pst)[0] || '';
+    // A post with no picture is drawn as its opening words. Bleeter's Saved tab comes through
+    // here too, and a background of nothing drew every saved bleet as an empty square.
+    return pic
+      ? '<div class="shot" data-gi="' + i + '" style="' + inlineBackground(pic) + '"></div>'
+      : '<div class="shot socgridtext" data-gi="' + i + '"><span>' +
+          esc(String(pst.body || (pst.loc_x != null && pst.loc_y != null
+            ? L('ph.soc_location_shared') : '')).slice(0, 160)) + '</span></div>';
+  }).join('') + '</div>');
   // A tile opens the post on its own, where the caption, the likes and the comments are.
   rows('.shot[data-gi]', (el) => el.addEventListener('click', () =>
     socPostSheet(appId, list[Number(el.dataset.gi)], reload)));
@@ -18918,26 +19705,18 @@ function postImages(pst) {
 function socPostSheet(appId, pst, reload) {
   if (!pst) return;
   sheet('@' + (pst.handle || ''), '<div id="socone">' + postCard(pst, appId) + '</div>', () => {
-    // The card's own handlers, so a like or a save from here behaves as it does in the feed.
-    qrows('sheet', '.post .plike', (b) => b.addEventListener('click', async () => {
-      const r = await post('social', { op: 'like', id: pst.id, app: appId });
-      if (!r || !r.ok) return;
-      b.classList.toggle('on', r.liked);
-      b.querySelector('span').textContent = r.likes;
-      ui(r.liked ? 'toggleon' : 'toggleoff');
-    }));
-    qrows('sheet', '.post .psave', (b) => b.addEventListener('click', async () => {
-      const r = await post('social', { op: 'save', id: pst.id, app: appId });
-      if (!r || !r.ok) return;
-      b.classList.toggle('on', r.saved);
-      toast(L(r.saved ? 'ph.soc_saved_added' : 'ph.soc_saved_removed'));
-    }));
-    qrows('sheet', '.post .pcomment', (b) => b.addEventListener('click', () =>
-      commentSheet(appId, pst.id, b.querySelector('span'))));
-    qrows('sheet', '.post .phead', (b) => b.addEventListener('click', () => {
-      closeSheet(true);
-      socialProfile(appId, b.dataset.who);
-    }));
+    const one = byId('socone');
+    // The same wiring as every other card. This sheet used to bind like, save, comment and the
+    // header by hand, and so missed everything else - the trash above all, which drew, took
+    // the press and did nothing, on the only path to a single post from Saved or Explore.
+    //
+    // `reload` runs after a delete. The confirmation has closed the sheet by then; the close
+    // here is for the case where this post is somehow still showing, and it checks, so it
+    // cannot shut a sheet that has replaced this one.
+    wirePosts(appId, () => {
+      if (one.isConnected && byId('sheet').classList.contains('on')) closeSheet(true);
+      if (reload) reload();
+    }, 'sheet', () => socPostSheet(appId, socCardState(one, pst), reload));
   });
 }
 
@@ -19074,6 +19853,7 @@ function socCompose(appId) {
   // fifth photograph and have it silently dropped on the way out.
   const cap = Math.max(1, Number(SOC.maxImages) || 4);
   let images = [];
+  let shareLocation = false;
 
   // The attachments, drawn under the field. Repainted in place rather than by rebuilding the
   // sheet, so the caption already typed survives picking - and re-picking - a photograph.
@@ -19115,6 +19895,9 @@ function socCompose(appId) {
              'maxlength="' + (isSnap ? 140 : 280) + '"') +
     UI.button('😊 ' + L('ph.emoji'), 'bemoji', 'plain') +
     UI.button(L('ph.pick_photo'), 'bpick', 'plain') +
+    (isSnap ? '' : '<button class="soclocpick" id="bloc" type="button" aria-pressed="false">' +
+      svg('location') + '<span>' + esc(L('ph.soc_attach_location')) + '</span></button>' +
+      '<div class="soclochint">' + esc(L('ph.soc_location_hint')) + '</div>') +
     UI.button(L(isSnap ? 'ph.snap_share' : 'ph.bleet_send'), 'bgo'),
     () => {
       byId('bemoji').addEventListener('click', () => emojiOpen(textId));
@@ -19127,24 +19910,40 @@ function socCompose(appId) {
         paintAttach();
         ui('attach');
       }));
+      if (!isSnap) byId('bloc').addEventListener('click', () => {
+        shareLocation = !shareLocation;
+        const button = byId('bloc');
+        button.classList.toggle('on', shareLocation);
+        button.setAttribute('aria-pressed', String(shareLocation));
+        button.querySelector('span').textContent = L(shareLocation
+          ? 'ph.soc_location_attached' : 'ph.soc_attach_location');
+        ui(shareLocation ? 'attach' : 'detach');
+      });
       byId('bgo').addEventListener('click', async () => {
         const bodyText = byId(textId).value;
         // Nothing at all to send: say so here rather than making the server answer 'empty'.
-        if (!images.length && bodyText.replace(/\s/g, '') === '') {
+        if (!images.length && bodyText.replace(/\s/g, '') === '' && !shareLocation) {
           toast(L(isSnap ? 'ph.snap_needphoto' : 'ph.err_empty'));
           return;
         }
         const epoch = sheetEpoch;
+        byId('bgo').disabled = true;
         const r = await post('social', {
           op: 'post', app: appId,
           kind: images.length ? 'photo' : 'text',
           // `image` as well as `images`: it is the cover, and a server that has not been
           // restarted since this page loaded still reads that field alone.
-          body: bodyText, image: images[0] || '', images,
+          body: bodyText, image: images[0] || '', images, shareLocation,
         });
+        if (epoch !== sheetEpoch) return;
+        if (!r || !r.ok) {
+          byId('bgo').disabled = false;
+          toast(L('ph.err_' + ((r && r.error) || 'x')));
+          return;
+        }
         if (!closeSheet(false, epoch)) return;
-        if (r && r.ok) { ui('sent'); socialRender(appId); }
-        else toast(L('ph.err_' + ((r && r.error) || 'x')));
+        ui('sent');
+        socialRender(appId);
       });
       paintAttach();
     });
@@ -20708,6 +21507,13 @@ function fanCard(o, showBuy) {
       ? '<button class="bigbtn tinted fanbuy" type="button" data-unlock="' + esc(String(o.id)) + '">' +
           esc(L('ph.fan_unlock')) + ' ' + esc(money(o.price)) + '</button>'
       : '') +
+    // Your own picture, on your own page: the way to take it down. The server had always
+    // accepted the request and nothing on screen ever made it, so a posted picture was
+    // permanent by accident.
+    (o.mine
+      ? '<button class="bigbtn plain fandel" type="button" data-del="' + esc(String(o.id)) + '">' +
+          esc(L('ph.fan_delete')) + '</button>'
+      : '') +
     '</article>';
 }
 
@@ -20817,6 +21623,9 @@ RENDER.onlyfruits = async () => {
   }));
   rows('[data-creator]', (b) => b.addEventListener('click', () => fanCreator(b.dataset.creator)));
   rows('[data-unlock]', (b) => b.addEventListener('click', () => fanUnlock(b.dataset.unlock, b)));
+  // Your own posts, on your own tab and in the feed. This is the screen the button was
+  // reported dead on: it was drawn by the card and wired only inside a creator's page.
+  rows('[data-del]', (b) => b.addEventListener('click', () => fanDeletePost(b.dataset.del)));
   if (byId('fannew')) byId('fannew').addEventListener('click', fanNewPost);
   if (byId('fanedit')) byId('fanedit').addEventListener('click', () => fanEdit(fanData.me));
   if (byId('fanout')) byId('fanout').addEventListener('click', fanPayout);
@@ -21025,6 +21834,29 @@ function fanNewPost() {
     });
 }
 
+/// **Taking a post down, from wherever the card is drawn.**
+///
+/// The card appears on three screens - your own tab, the feed and a creator's page - and the
+/// first version of this wired the button on one of them only. A button that is drawn and does
+/// nothing is worse than no button, so there is one handler and every screen calls it.
+function fanDeletePost(id, after) {
+  // The question carries the warning; the button carries the verb. Passed the other way
+  // round, the whole sentence became the label on the button.
+  confirmSheet(L('ph.fan_delete_ask'), L('ph.delete'), async () => {
+    const res = await post('fanDelete', { id: Number(id) });
+    if (!res || !res.ok) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+    toast(L('ph.fan_deleted'));
+    RENDER.onlyfruits();
+    if (after) after();
+  });
+}
+
+/// When a subscription runs out, as a date a player reads rather than a stamp.
+function fanUntil(ts) {
+  const d = new Date(Number(ts) * 1000);
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'long' });
+}
+
 async function fanCreator(handle) {
   const r = await post('fanCreator', { handle });
   if (!r || !r.ok) { toast(L('ph.err_' + ((r && r.error) || 'x'))); return; }
@@ -21039,7 +21871,12 @@ async function fanCreator(handle) {
         ? UI.button(L('ph.fan_subscribe') + ' ' + money(c.subPrice), 'fcsub', 'tinted') +
           '<div class="groupfoot">' +
             esc(L('ph.fan_sub_hint').replace('{n}', String(lim.subDays || 30))) + '</div>'
-        : (c.subscribed ? '<div class="groupfoot">' + esc(L('ph.fan_subscribed')) + '</div>' : '')) +
+        : (c.subscribed
+            ? UI.button(L('ph.fan_unsub'), 'fcunsub', 'plain') +
+              '<div class="groupfoot">' + esc(c.subUntil
+                ? L('ph.fan_sub_until').replace('{n}', fanUntil(c.subUntil))
+                : L('ph.fan_subscribed')) + '</div>'
+            : '')) +
       UI.button(L('ph.fan_tip'), 'fctip', 'plain')) +
     '<div class="fanbody">' +
       ((r.posts || []).length ? (r.posts || []).map((o) => fanCard(o, !c.me)).join('')
@@ -21049,6 +21886,19 @@ async function fanCreator(handle) {
       const epoch = sheetEpoch;
       qrows('sheet', '[data-unlock]', (b) =>
         b.addEventListener('click', () => fanUnlock(b.dataset.unlock, b)));
+      qrows('sheet', '[data-del]', (b) =>
+        b.addEventListener('click', () => fanDeletePost(b.dataset.del, () => fanCreator(c.handle))));
+      if (byId('fcunsub')) byId('fcunsub').addEventListener('click', () => {
+        // What it costs is said before it is asked, because nothing is refunded: a
+        // subscription is a month bought up front, and cancelling ends the access now.
+        confirmSheet(L('ph.fan_unsub_ask'), L('ph.fan_unsub'), async () => {
+          const res = await post('fanUnsub', { handle: c.handle });
+          if (!res || !res.ok) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
+          toast(L('ph.fan_unsubbed'));
+          RENDER.onlyfruits();
+          fanCreator(c.handle);
+        });
+      });
       if (byId('fcfollow')) byId('fcfollow').addEventListener('click', async () => {
         const res = await post('fanFollow', { handle: c.handle, on: !c.following });
         if (!res || !res.ok) { toast(L('ph.err_' + ((res && res.error) || 'x'))); return; }
@@ -22376,6 +23226,19 @@ function buzzDevice() {
   buzzTimer = setTimeout(() => d.classList.remove('buzz'), 700);
 }
 
+/// What the risen handset is showing, kept while it is up so a string table that lands late can
+/// repaint its words instead of leaving them humanised keys.
+let peekShown = null;
+
+function paintPeekText(kind, data) {
+  const title = kind === 'message'
+    ? (nameOfNumber(data.from) || L('ph.new_message_t'))
+    : (data.title || L('ph.notification'));
+  const bodyTxt = kind === 'message' ? (data.body || L('ph.attach')) : (data.body || '');
+  byId('inTitle').textContent = title;
+  byId('inBody').textContent = bodyTxt;
+}
+
 function showPeek(kind, data) {
   const d = byId('device');
   if (call || (state.prefs || {}).dnd) return;
@@ -22383,16 +23246,12 @@ function showPeek(kind, data) {
   // repeated here so the rule holds whoever sends the message.
   if (data && data.hasItem === false) return;
   if (!d.classList.contains('hidden') && !d.classList.contains('peeking')) return; // it is open
-  const title = kind === 'message'
-    ? (nameOfNumber(data.from) || L('ph.new_message_t'))
-    : (data.title || L('ph.notification'));
-  const bodyTxt = kind === 'message' ? (data.body || L('ph.attach')) : (data.body || '');
 
   d.classList.remove('hidden');
   d.classList.add('peeking');
   byId('inicon').innerHTML = UI.appIcon(kind === 'message' ? 'messages' : (data.app || data.icon || 'dot'));
-  byId('inTitle').textContent = title;
-  byId('inBody').textContent = bodyTxt;
+  peekShown = { kind, data };
+  paintPeekText(kind, data);
   setIslandMode('notif');
   buzzDevice();
 
@@ -22402,6 +23261,7 @@ function showPeek(kind, data) {
     d.classList.remove('peeking');
     d.classList.add('hidden');
     peekTimer = null;
+    peekShown = null;
   }, 4600);
 }
 
@@ -22409,10 +23269,11 @@ function archivePeek(kind, data) {
   data = data || {};
   const app = kind === 'message' ? 'messages' : notifApp(data);
   if (appMuted(app)) return;
-  const title = kind === 'message'
+  // Functions, so the card is worded when it is painted: see `nText`.
+  const title = () => (kind === 'message'
     ? (data.groupName || nameOfNumber(data.from) || L('ph.new_message_t'))
-    : (data.title || L('ph.notification'));
-  const bodyText = kind === 'message' ? (data.body || L('ph.attach')) : (data.body || '');
+    : (nText(data.title) || L('ph.notification')));
+  const bodyText = () => (kind === 'message' ? (nText(data.body) || L('ph.attach')) : nText(data.body));
   const onClick = () => {
     const target = (state.apps || []).find((entry) => entry.id === app);
     if (!target) return;
@@ -22646,12 +23507,23 @@ byId('emojipanel').addEventListener('pointercancel', () => {
     // because the sideways strips it exists for are a handful of elements out of thousands.
     // One `closest()` decides that without touching layout at all.
     if (!e.target.closest || !e.target.closest('.seg.scroll, [data-hscroll], .exmovers, '
-        + '.excats, .musiccarousel, .cards, .lotgrid, .proll, .exmarkets')) return;
+        + '.excats, .musiccarousel, .cards, .lotgrid, .proll, .exmarkets, .stshelf')) return;
     const s = stripOf(e.target);
-    // A strip that also scrolls vertically keeps the wheel for that: turning it sideways there
-    // would take away the gesture that already worked.
-    if (!s || s.scrollHeight > s.clientHeight + 1) return;
-    if (s.clientHeight > WHEEL_MAX_STRIP_HEIGHT) return;
+    if (!s) return;
+    // **Shift and the wheel pans anything sideways.**
+    //
+    // The two rules below are what keeps a tall shelf from stealing the page's own scrolling,
+    // and they are right: a shelf sits in the middle of a page you scroll THROUGH. But they
+    // also mean the wheel does nothing at all over the store's shelf, and the only way across
+    // was to drag - which somebody reported as the wheel being broken there. Shift is the
+    // convention for sideways in a browser, it cannot be pressed by accident, and the plain
+    // wheel keeps scrolling the page exactly as it does now.
+    if (!e.shiftKey) {
+        // A strip that also scrolls vertically keeps the wheel for that: turning it sideways
+        // there would take away the gesture that already worked.
+        if (s.scrollHeight > s.clientHeight + 1) return;
+        if (s.clientHeight > WHEEL_MAX_STRIP_HEIGHT) return;
+    }
     const before = s.scrollLeft;
     s.scrollLeft += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
     if (s.scrollLeft !== before) e.preventDefault();
@@ -22826,13 +23698,15 @@ byId('sheet').addEventListener('pointerdown', (e) => {
 });
 byId('sheet').addEventListener('pointermove', (e) => {
   if (!sheetDrag || sheetDrag.pointerId !== e.pointerId) return;
-  const dy = Math.max(0, e.clientY - sheetDrag.y);
+  // The drag is measured in window pixels and written back as a CSS length inside the handset,
+  // so it is converted: unconverted, a sheet at 200% ran away from the finger at twice its speed.
+  const dy = Math.max(0, (e.clientY - sheetDrag.y) * screenScale());
   byId('sheet').style.transform = 'translateY(' + dy + 'px)';
   byId('sheet').style.opacity = String(Math.max(.35, 1 - dy / 360));
 });
 byId('sheet').addEventListener('pointerup', (e) => {
   if (!sheetDrag || sheetDrag.pointerId !== e.pointerId) return;
-  const dy = Math.max(0, e.clientY - sheetDrag.y);
+  const dy = Math.max(0, (e.clientY - sheetDrag.y) * screenScale());
   sheetDrag = null;
   const host = byId('sheet');
   host.classList.remove('dragging');
@@ -22895,8 +23769,8 @@ function islandNotify(n) {
   if (call) return;
   const isl = byId('island');
   byId('inicon').innerHTML = UI.appIcon(n.icon);
-  byId('inTitle').textContent = n.title;
-  byId('inBody').textContent = n.body;
+  byId('inTitle').textContent = nText(n.title);
+  byId('inBody').textContent = nText(n.body);
   setIslandMode('notif');
   isl.dataset.notif = n.id;
   clearTimeout(islandTimer);
@@ -22953,8 +23827,8 @@ function paintNotifs() {
     shown.map((n, i) =>
       `<div class="lnotif glass" style="animation-delay:${i * 50}ms" data-nid="${n.id}">` +
       `<span class="lic">${UI.appIcon(n.icon)}</span>` +
-      `<span class="lbody"><span class="lt">${esc(n.title || '')}</span>` +
-      `<span class="lb">${esc(n.body || '')}</span></span>` +
+      `<span class="lbody"><span class="lt">${esc(nText(n.title))}</span>` +
+      `<span class="lb">${esc(nText(n.body))}</span></span>` +
       `<button class="lx" data-x="${n.id}" type="button" aria-label="${esc(L('ph.close'))}">${svg('xmark')}</button></div>`).join('');
 
   // Clear one, or clear the stack. A notification you have read is one you should be able
@@ -23089,6 +23963,7 @@ function renderCall() {
   // FaceTime: a real voice call presented as a video call. FiveM cannot stream a live
   // face, so the layout is the difference, not a video feed - honest, and it reads right.
   ui.classList.toggle('facetime', !!call.video);
+  faceSelfCard(!!call.video);
   const conference = isConference();
   const others = rosterOthers();
   const one = call.number ? nameOfNumber(call.number) : L('ph.unknown');
@@ -23103,6 +23978,13 @@ function renderCall() {
   const avPhoto = (!conference && call.number) ? photoOfNumber(call.number) : null;
   av.classList.toggle('hasphoto', !!avPhoto);
   av.style.backgroundImage = avPhoto ? 'url("' + avPhoto + '")' : '';
+  // **The other person's photograph, behind the whole call.** A FaceTime screen is a picture of
+  // somebody, and with no live feed there is still one thing the phone knows about them. Blurred
+  // and darkened by the stylesheet, so the name and the buttons stay readable over it; with no
+  // photograph on file the screen keeps its plain gradient.
+  ui.classList.toggle('haspeer', !!(call.video && avPhoto));
+  if (call.video && avPhoto) ui.style.setProperty('--peer-photo', 'url("' + cssUrl(avPhoto) + '")');
+  else ui.style.removeProperty('--peer-photo');
   av.textContent = avPhoto ? '' : (conference ? String(others.length + 1) : name.slice(0, 1).toUpperCase());
   byId('callnum').textContent = name;
   byId('callstate').textContent = call.video
@@ -24080,7 +24962,10 @@ window.addEventListener('message', (e) => {
     // host may have come back, the player may have fixed their connection, and taking the phone
     // out again is the moment they expect to find out.
     shotAliveReset();
-    S = d.strings || {};
+    // The table rides on `open` only when the client does not believe this page holds the
+    // player's language, so an `open` without one keeps the table already here. Replacing it
+    // with nothing, as this line used to, would blank every label an earlier message had filled.
+    if (!adoptStrings(d) && !hasStrings()) requestStrings();
     // A different character is holding this phone - a switch, or staff looking at somebody
     // else's. Their notifications go, and so do the badges an app set for the last one:
     // a count belonging to one character on another character's home screen is a new bug
@@ -24095,13 +24980,8 @@ window.addEventListener('message', (e) => {
     state.sounds = d.sounds || state.sounds || {};
     call = d.call || null;
     dialed = ''; thread = null; threadGroup = null; openApp = null; page = 0;
-    const locale = String(d.locale || d.lang || 'en').trim().replace('_', '-');
-    document.documentElement.lang = locale || 'en';
     byId('device').classList.remove('hidden');
-    byId('qtorch').setAttribute('aria-label', L('ph.torch'));
-    byId('qcam').setAttribute('aria-label', L('app.camera'));
-    byId('homebar').setAttribute('aria-label', L('ph.home'));
-    byId('arrangedone').setAttribute('aria-label', L('ph.arrange_done'));
+    paintChrome();
     // The number, and the temporary server id beside it when the player wants it there. Staff
     // ask for that id constantly and it is the one thing a player cannot look up on their own
     // phone, so the lock screen is the right place for it: visible without unlocking.
@@ -24116,11 +24996,19 @@ window.addEventListener('message', (e) => {
     primeNowPlaying();
     tick();
     paintNotifs();
-    const sp = byId('spilltxt'); if (sp) sp.textContent = L('ph.search');
     hideAuth();
-    byId('lock').classList.remove('out');
-    byId('lockquick').classList.remove('hidden');
-    byId('home').classList.add('behind');
+    // **The lock screen, unless there is nothing to unlock.**
+    //
+    // A phone with no passcode and no Face Unlock still opened on the lock screen, and a swipe
+    // took it away without asking anything. It is a real screen - the clock, the notifications,
+    // the torch and the camera are on it - so that is the default and it stays. But a server
+    // that turned both off meant the swipe to be gone too, which is what somebody asked about.
+    // `Config.Settings.lockScreen = false` opens straight on the home screen for a character
+    // with no security set; a character who has a passcode always gets it.
+    const skipLock = state.lockScreen === false && !(state.prefs || {}).securityEnabled;
+    byId('lock').classList.toggle('out', skipLock);
+    byId('lockquick').classList.toggle('hidden', skipLock);
+    byId('home').classList.toggle('behind', !skipLock);
     closeApp(true);
     renderCall();
     if (!(state.prefs || {}).setupComplete) {
@@ -24180,7 +25068,8 @@ window.addEventListener('message', (e) => {
       // this the banner ran the raw `svc:Dispatch` through the number formatter and announced
       // the message as coming from something that is not a phone number.
       banner({ app: 'messages', icon: 'messages',
-        title: groupId ? groupName : (m.service || nameOfNumber(m.from)), body: m.body || L('ph.attach'),
+        title: () => (groupId ? (m.groupName || L('ph.groups')) : (m.service || nameOfNumber(m.from))),
+        body: () => m.body || L('ph.attach'),
         onClick: () => {
           const a = (state.apps || []).find((x) => x.id === 'messages');
           if (!a) return;
@@ -24286,32 +25175,28 @@ window.addEventListener('message', (e) => {
     // the point of an emergency alert is that it reaches somebody who was not looking at their
     // phone. That is also exactly why it is behind an ace and a config switch - a channel that
     // ignores a player's own silence settings is one that has to be hard to reach.
+    adoptStrings(d);
     emergencyAlert(d.alert || {});
   } else if (d.action === 'emergencyAlert') {
     // A 911 alert for a service this player answers for. A different thing entirely from the
     // staff broadcast above, despite the neighbouring name: that one goes to a whole city.
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     emergency911Alert(d);
   } else if (d.action === 'emergencyStatus') {
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     emergency911Status(d.update || {});
   } else if (d.action === 'emergencyUpdate') {
     // Somebody took an alert or closed one. Nothing to show; the queue just stops being wrong.
     if (openApp && openApp.id === 'emergency') RENDER.emergency();
   } else if (d.action === 'strings') {
-    // Pushed by the client when the language lands after this page loaded.
-    if (d.strings && Object.keys(d.strings).length) {
-      S = d.strings;
-      warnedNoStrings = false;
-      if (d.locale) state.locale = d.locale;
-      if (openApp && RENDER[openApp.id]) RENDER[openApp.id]();
-      else paintLockMeta();
-    }
+    // Pushed by the client when the language lands after this page loaded, or changes. The
+    // repaint is scheduled by the adoption itself.
+    adoptStrings(d);
   } else if (d.action === 'peek') {
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     showPeek(d.kind, d.data || {});
   } else if (d.action === 'archive') {
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     archivePeek(d.kind, d.data || {});
   } else if (d.action === 'voicemailOffer') {
     enqueuePrompt(() => voicemailOffer(d.number || ''), d.ttlMs);
@@ -24374,14 +25259,14 @@ window.addEventListener('message', (e) => {
     }
   } else if (d.action === 'taxi') {
     // The config provider's own ride events, which carry what happened.
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     const u = d.update || {};
     const kind = String(u.kind || '');
     if (kind !== 'taken' && kind !== 'cancelled') {
       archivePeek('notif', {
         app: 'taxi', icon: 'taxi',
-        title: L('app.taxi'),
-        body: L('ph.taxi_ev_' + kind),
+        title: () => L('app.taxi'),
+        body: () => L('ph.taxi_ev_' + kind),
       });
       ui(kind === 'done' || kind === 'paid' ? 'success' : 'received');
     }
@@ -24565,12 +25450,12 @@ window.addEventListener('message', (e) => {
   } else if (d.action === 'zuberStatus') {
     // An order moved along in the kitchen. The card and the sound are the client's; this keeps
     // the app honest if it happens to be open on the tracker.
-    if (d.strings && !Object.keys(S || {}).length) S = d.strings;
+    adoptStrings(d);
     const u = d.update || {};
     archivePeek('notif', {
       app: 'zuber', icon: 'zuber',
-      title: u.restaurant || L('app.zuber'),
-      body: L('ph.zuber_st_' + String(u.status || 'pending')),
+      title: () => u.restaurant || L('app.zuber'),
+      body: () => L('ph.zuber_st_' + String(u.status || 'pending')),
     });
     if (u.sound !== false) ui(String(u.status) === 'completed' ? 'success' : 'received');
     if (openApp && openApp.id === 'zuber') RENDER.zuber();
@@ -25483,8 +26368,8 @@ window.addEventListener('message', (e) => {
   const d = e.data || {};
   if (d.action === 'booth:open') {
     // A payphone can be the FIRST thing this page ever draws - it is reachable without
-    // opening the phone at all - so the strings arrive with it rather than being assumed.
-    if (d.strings && Object.keys(d.strings).length) S = d.strings;
+    // opening the phone at all - so the client attaches the strings when this page lacks them.
+    adoptStrings(d);
     boothOpen(d.data, d.call);
   }
   else if (d.action === 'booth:close') boothClose();
@@ -25535,12 +26420,47 @@ function faceShrink(dataUri) {
   img.src = dataUri;
 }
 
+/// **Your own corner of a FaceTime call, when there is no live picture.**
+///
+/// The live feed is off by default - it is opt-in, and most servers leave it that way - and
+/// what was drawn in its place was an empty dark rectangle in the corner, which reads as
+/// something that failed to load rather than as a deliberate design. It carries what the phone
+/// actually knows about you now: the photograph on your own card, or your initial.
+///
+/// Removed the moment a real frame arrives, so the two never stack.
+function faceSelfCard(on) {
+  const ui = byId('callui');
+  if (!ui) return;
+  const had = byId('faceselfcard');
+  if (!on || byId('faceself')) { if (had) had.remove(); return; }
+
+  const p = state.prefs || {};
+  const photo = String(p.cardPhoto || '');
+  const name = String(p.ownerName || L('ph.me'));
+  const el = had || document.createElement('div');
+  if (!had) {
+    el.id = 'faceselfcard';
+    el.setAttribute('aria-hidden', 'true');
+    ui.appendChild(el);
+  }
+  el.className = 'faceself selfcard' + (photo ? ' hasphoto' : '');
+  el.style.backgroundImage = photo ? 'url("' + cssUrl(photo) + '")' : '';
+  el.textContent = photo ? '' : name.slice(0, 1).toUpperCase();
+}
+
 // Put a frame into one of the two panels, creating it the first time.
 function faceShow(id, dataUri) {
   const ui = byId('callui');
   if (!ui) return;
   let el = byId(id);
-  if (!dataUri) { if (el) el.remove(); return; }
+  if (!dataUri) {
+    if (el) el.remove();
+    // The live picture has stopped, so the card belongs back in the corner.
+    if (id === 'faceself' && call && call.video) faceSelfCard(true);
+    return;
+  }
+  // A real frame wins over the card standing in for it.
+  if (id === 'faceself') { const card = byId('faceselfcard'); if (card) card.remove(); }
   if (!el) {
     el = document.createElement('img');
     el.id = id;

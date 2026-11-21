@@ -88,7 +88,12 @@ local function onLoaded(src)
         -- builds; one short wait is cheaper than a retry loop everywhere else.
         Wait(500)
         local p = Core.GetPlayer(src)
-        if p then Bridge.SyncCharacter(src, p.citizenid) end
+        if p then
+            Bridge.SyncCharacter(src, p.citizenid)
+            -- Tell the phone, so it routes the number and loads the battery now rather than on
+            -- the player's first open. See `hydrateReal` in server/main.lua.
+            TriggerEvent('v-phone:internal:playerLoaded', src)
+        end
     end)
 end
 

@@ -528,8 +528,11 @@ exports('SendMail', function(toCitizenid, fromAddress, subject, body)
 
     -- Mail is addressed to an ADDRESS, not to a character: somebody who has never opened
     -- the Mail app has nowhere to receive it.
+    -- A retired (deleted) address receives nothing, and the oldest live one is chosen so the
+    -- answer is the same on every call.
     local address = MySQL.scalar.await(
-        'SELECT address FROM vphone_mail_accounts WHERE citizenid = ? LIMIT 1', { toCitizenid })
+        'SELECT address FROM vphone_mail_accounts WHERE citizenid = ? AND deleted_at IS NULL ORDER BY id ASC LIMIT 1',
+        { toCitizenid })
     if not address or address == '' then return false, 'nomailbox' end
 
     -- Two rows, exactly as a mail the app itself sends: the letter, then a line in the
@@ -575,7 +578,9 @@ end)
 --- diagnostics command, or for a script that wants to adapt to the server it is on.
 exports('GetPhoneInfo', function()
     return {
-        version = GetResourceMetadata(GetCurrentResourceName(), 'version', 0),
+        -- From the file rather than the parsed metadata, which can be a restart behind.
+        version = PhoneVersion and PhoneVersion()
+                  or GetResourceMetadata(GetCurrentResourceName(), 'version', 0),
         framework = Bridge.framework,
         frameworkResource = Bridge.frameworkResource,
         inventory = Bridge.InventoryResource and Bridge.InventoryResource() or nil,

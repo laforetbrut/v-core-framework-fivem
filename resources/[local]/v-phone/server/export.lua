@@ -531,7 +531,7 @@ V.Callback('v-phone:export:open', function(src, resolve, data)
             item = tostring(r.item or ''),
             kind = tostring(r.kind or 'above'),
             value = math.floor(num(r.value, 0)),
-            armed = math.floor(num(r.armed, 1)) == 1,
+            armed = r.armed == true or (r.armed ~= false and math.floor(num(r.armed, 1)) == 1),
         }
     end
 

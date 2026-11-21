@@ -38,6 +38,13 @@
 local CFG = Config.Fundraise or {}
 
 local function num(v, d) return tonumber(v) or d or 0 end
+--- A TINYINT(1) column, read as on or off. oxmysql hands these back as booleans, and
+--- `tonumber(true)` is nil, so reading one through `num` always fell to the default: an
+--- anonymous gift showed its giver's name, and a closed page still took gifts.
+local function flag(v, d)
+    if type(v) == 'boolean' then return v end
+    return num(v, d) == 1
+end
 local function enabled() return CFG.enabled ~= false end
 
 local function minGift() return math.max(1, math.floor(num(CFG.minGift, 1))) end
@@ -328,9 +335,9 @@ local function cardOf(row, viewerCid)
         raised = math.floor(num(row.raised, 0)),
         gifts = math.floor(num(row.gifts, 0)),
         tiers = decodeTiers(row.tiers),
-        anon = num(row.anon, 1) == 1,
-        msgs = num(row.msgs, 1) == 1,
-        closed = num(row.closed, 0) == 1,
+        anon = flag(row.anon, 1),
+        msgs = flag(row.msgs, 1),
+        closed = flag(row.closed, 0),
         owner = ownerName(row.citizenid),
         mine = viewerCid ~= nil and row.citizenid == viewerCid,
         ts = row.at,
@@ -347,7 +354,7 @@ local function giftsFor(pageId, limit)
         { pageId, math.max(1, math.min(50, math.floor(num(limit, 20)))) }) or {}
     local out = {}
     for _, r in ipairs(rows) do
-        local hidden = num(r.anon, 0) == 1
+        local hidden = flag(r.anon, 0)
         out[#out + 1] = {
             id = math.floor(num(r.id, 0)),
             amount = math.floor(num(r.amount, 0)),
@@ -575,7 +582,7 @@ V.Callback('v-phone:fund:give', function(src, resolve, data)
 
     local row = pageBySlug(cleanSlug(data.slug))
     if not row then resolve({ error = 'gone' }) return end
-    if num(row.closed, 0) == 1 then resolve({ error = 'closed' }) return end
+    if flag(row.closed, 0) then resolve({ error = 'closed' }) return end
     if row.citizenid == cid then resolve({ error = 'self' }) return end
 
     -- The amount comes from the giver, which is what giving means - and is exactly why it is
@@ -584,8 +591,8 @@ V.Callback('v-phone:fund:give', function(src, resolve, data)
     local amount = giftAmount(data.amount)
     if not amount then resolve({ error = 'amount', min = minGift(), max = maxGift() }) return end
 
-    local body = messagesOn() and num(row.msgs, 1) == 1 and clean(data.body, 200) or ''
-    local anon = anonOn() and num(row.anon, 1) == 1 and (data.anon == true)
+    local body = messagesOn() and flag(row.msgs, 1) and clean(data.body, 200) or ''
+    local anon = anonOn() and flag(row.anon, 1) and (data.anon == true)
 
     if tooSoon(cid) then resolve({ error = 'toosoon' }) return end
 
@@ -671,7 +678,7 @@ exports('GetFundPage', function(slug)
     return {
         slug = tostring(row.slug), title = tostring(row.title),
         goal = math.floor(num(row.goal, 0)), raised = math.floor(num(row.raised, 0)),
-        gifts = math.floor(num(row.gifts, 0)), closed = num(row.closed, 0) == 1,
+        gifts = math.floor(num(row.gifts, 0)), closed = flag(row.closed, 0),
     }
 end)
 

@@ -99,6 +99,16 @@ local adminHolding = nil
 
 RegisterNetEvent('v-phone:client:adminView', function(view)
     adminHolding = (type(view) == 'table' and view.name ~= '' ) and view.name or nil
+    if view then return end
+
+    -- **The session is over: put the handset away.** Released, run out or the target gone, the
+    -- page only learns whose phone it is when it opens, so a phone left open went on naming the
+    -- target while every request from it acted as the staff member's own character. Closing is
+    -- the same teardown the phone key does, and the next open asks the server again.
+    TriggerEvent('v-phone:client:close')
+    -- Then say so. The server refuses the first request after a session it ended on its own, in
+    -- case one was already on its way; once the handset is closed there is nothing left to refuse.
+    TriggerServerEvent('v-phone:server:adminViewClosed')
 end)
 
 local openTargetMenu   -- forward declaration: the two menus open each other

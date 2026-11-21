@@ -2,7 +2,33 @@
 
 A FruitOS style phone for FiveM that runs on **your** framework. qb-core, qbx_core, ox_core, ESX or no framework at all: the phone detects what is running and adapts, and every one of those decisions is a line in the config file when you want it to be different.
 
-Thirty-seven apps, a real FruitStore, three social networks, an app SDK so other resources can ship their own apps, and a first run setup with a passcode and Face Unlock.
+Thirty-eight apps, a real FruitStore, three social networks, an app SDK so other resources can ship their own apps, and a first run setup with a passcode and Face Unlock.
+
+Release 1.7.12 adds optional VineMarket posting fees. Server owners choose the fee and its
+recipient society account in `Config.Marketplace`; the posting form displays the amount before
+submission. Free posting remains the default. Browser and Lua tests cover successful payments,
+failed credits, refunds and repeated submissions. The banking flow still needs an in-game check
+with the server's actual banking resource.
+
+Release 1.7.11 adds **VineMarket**, a free classifieds download for selling or renting items,
+vehicles, furniture, apartments, houses and services. Buyers and sellers can discuss each
+listing in a private in-app thread. Seller numbers are hidden by default; an optional private
+call keeps both numbers out of the call screen and history. Listings arrange deals between
+players; payment and ownership transfer remain in game. The feed is paginated, messages are
+bounded per read, and the app does no background polling. Browser and Lua checks cover the
+interface and authorization; gameplay and frame times still need an in-game check.
+
+Release 1.7.10 lets Bleeter authors explicitly attach their current position to a post. Readers
+can set a waypoint from the location card. The Control Center and Notification Center now use
+an opaque, static tinted material for clearer controls without adding blur or background work.
+The position is read by the server only when a location post is published. FiveM frame times
+still need an in-game check on the target server and client.
+
+Release 1.7.9 fixes SMS conversations that could show a server timeout after they had loaded.
+Late replies from an older conversation view no longer replace the messages on screen.
+
+Release 1.7.7 refines the home screen with rounder icons, a cool glass dock, softer widget shadows and shorter transitions. These are CSS changes with no added dependency, blur layer or background task. In-game frame times still depend on the server and client setup.
+It also fixes icon rows overlapping after widgets load by fitting the grid when the widget layout changes.
 
 ## Screenshots
 
@@ -45,6 +71,12 @@ Pull down from the top right for the toggles, the brightness and volume slabs, a
 | The deck | Premium | Who liked you | Your profile |
 | --- | --- | --- | --- |
 | ![Hush](docs/images/43-hush.png) | ![Hush Premium](docs/images/44-hush-premium.png) | ![Liked you](docs/images/45-hush-liked.png) | ![Profile](docs/images/46-hush-profile.png) |
+
+### VineMarket
+
+| Browse | Listing | Post |
+| --- | --- | --- |
+| ![Browse listings](docs/images/47-vinemarket-feed.png) | ![Private listing contact](docs/images/48-vinemarket-detail.png) | ![Post a listing](docs/images/49-vinemarket-compose.png) |
 
 
 ## Features
@@ -92,15 +124,23 @@ Pull down from the top right for the toggles, the brightness and volume slabs, a
 - **FaceTime**: a real video call. With `Config.FaceTime.videoFeed` on, the front camera goes up and a shrunk, cropped frame of each player is relayed to the other a few times a second, over the normal voice call. Needs [screenshot-basic](https://github.com/citizenfx/screenshot-basic); off by default.
 
 ### The apps
-Twenty-two are installed to begin with: Phone, Messages, Contacts, **911**, **Alerts**, Mail, Maps, Camera, Gallery, Music, Bank, Garage, Property, Wallet, Jobs, Health, Notes, Reminders, Calculator, MDT, FruitStore and Settings. Fifteen more are downloads from the store: **Bank Pro**, Bleeter, Snapmatic, Hush, Cipher, Zuber, Taxi, **Repair**, **Export**, FruitCharge, the Lottery, OnlyFruits, FruitBrawl, FlappyFruit and Fruitee. Four of those are paid.
+Twenty-two are installed to begin with: Phone, Messages, Contacts, **911**, **Alerts**, Mail, Maps, Camera, Gallery, Music, Bank, Garage, Property, Wallet, Jobs, Health, Notes, Reminders, Calculator, MDT, FruitStore and Settings. Sixteen more are downloads from the store: **Bank Pro**, Bleeter, Snapmatic, Hush, Cipher, Zuber, Taxi, **Repair**, **Export**, **VineMarket**, FruitCharge, the Lottery, OnlyFruits, FruitBrawl, FlappyFruit and Fruitee. Four of those are paid.
+
+- **VineMarket** (free download): local classifieds with sale and rental categories, optional
+  gallery photo, neighborhood, bounded search and private buyer-seller messages. The seller
+  can expose their number explicitly or leave it hidden. Private calls mask both numbers.
+  `Config.Marketplace` controls listing limits, price ceiling, page size and expiry. Set
+  `postingFee` above zero and `revenueAccount` to an existing society account to charge the
+  seller's bank when publishing. `revenueLabel` optionally names that recipient in the form.
+  The default fee is zero; purchases and ownership transfers remain in game.
 
 - **Phone**: keypad, favourites, history, voicemail, speaker mode heard by nearby players, and group calls of up to five. On one bar the line breaks up - the voice really cuts out, both ends - and a bad enough line can drop the call.
 - **911**: pick a service, pick a reason, and everybody working that service gets it on their own phone with a map pin they can drive to. Installed by default and not removable. The caller is told when somebody takes it, so silence never has to be guessed at. Anonymous reporting, per-service duty and grade rules, and an API so a shop till or a downed player can raise one.
 - **Messages**: private and group threads, photos, GIFs, location sharing, reactions, forwarding and emoji.
 - **Bank**: the balance your framework already keeps, a statement, transfers to another character by phone number, saved beneficiaries, and a notification when money arrives - a salary, a society payout, a transfer. No companion resource - it reads qb-core, qbx, ESX, ox or your banking script through the bridge. Limits, an optional fee and offline transfers are configurable.
 - **Camera**: no interface of its own, on purpose. Opening it goes straight into the game's own phone camera, which draws the framing and names the keys in its own help box - **Enter photographs, arrow up flips to the selfie, Backspace leaves** - and the app closes itself the moment the engine hands the camera back. A NUI page is an overlay and can never show the game inside itself, so anything the app painted would sit over the shot and land in the photograph with it. There is no video recording and no mode strip: photo is the whole app.
-- **Bleeter** (Twitter): two timelines, likes, comments, reposts, a searchable directory, follows, direct messages and profiles. **Up to four photographs on one post**, reordered in the composer; `Config.Social.maxImages` is the ceiling and the server truncates a longer list rather than refusing it, so setting it to 1 turns the feature off without breaking anything.
-- **Snapmatic** (Instagram): stories with a 24 hour life, a photo feed, a profile grid, search and direct messages. Four photographs to a post here too, from the same setting.
+- **Bleeter** (Twitter): two timelines, likes, comments, reposts, a searchable directory, follows, direct messages and profiles. **Up to four photographs on one post**, reordered in the composer; `Config.Social.maxImages` is the ceiling and the server truncates a longer list rather than refusing it, so setting it to 1 turns the feature off without breaking anything. **Your own post can be deleted** from the **...** button beside your name: **Post options** says what goes with it (its likes, comments and reposts) and asks you to confirm. It works from the feed, a profile, a hashtag feed and Saved, and the trash in the card's footer leads to the same confirmation.
+- **Snapmatic** (Instagram): stories with a 24 hour life, a photo feed, a profile grid, search and direct messages. Four photographs to a post here too, from the same setting. Deleting your own post works the same way, from Explore as well.
 - **Hush** (Tinder): a card you throw with your finger, matches kept in their own tab, an editable profile.
 - **What's new on Bleeter and Snapmatic**: at most one banner an hour, per app, telling that player how many posts have appeared since they last opened it. Never sent on a feed they have already read, and the same posts are never announced twice, so ignoring one does not mean receiving it again every hour. Somebody who has never opened the app is marked where the feed stands and told nothing, rather than handed the whole history as a number. The hour is a ceiling rather than a schedule and every player carries their own clock, so a restart does not make every handset on the server buzz at once. Do not disturb, an app silenced in Settings, an app they uninstalled, a flat battery and a phone they are not carrying all stop it. On by default; `Config.Social.nudge` has an on/off switch and an interval for each of the two apps, and `set phone_socialNudge false` turns the whole thing off without a restart.
 - **Cipher**: an encrypted messenger. The server routes sealed envelopes and keeps neither the clear text nor a private key.
@@ -162,7 +202,7 @@ Everything below is detected automatically. Naming one explicitly in `Config.Com
 |---|---|
 | Framework | qb-core, qbx_core, ox_core, es_extended, standalone |
 | Inventory | ox_inventory, qs-inventory (Quasar), ps-inventory, qb-inventory, origen_inventory, codem-inventory |
-| Banking | qs-banking, Renewed-Banking, qb-banking, okokBanking, esx_banking |
+| Banking | qs-banking, Renewed-Banking, qb-banking, okokBanking, esx_banking, ox_banking |
 | Garage | qs-advancedgarages, jg-advancedgarages, qb-garages, cd_garage, okokGarage |
 | Housing | qs-housing, ps-housing, qb-houses, ox_property, loaf_housing, esx_property |
 | Voice | pma-voice, saltychat, mumble-voip |
@@ -252,7 +292,12 @@ file itself explains each setting where the setting is.
 an image from), `DefaultGlass`, `Clock`, `Theme` (the accent and the system palette).
 
 **Talking**
-`Messages`, `Cipher`, `Calls` (including `badSignal`, which is what makes one bar sound like one
+`CatchUp` (what the phone says a short while after a character loads: unread messages, missed
+calls, unread mail and social notifications that arrived while they were offline, counted from
+their last disconnect; `enabled`, `delaySeconds`, `firstRunHours`),
+`Messages`, `Mail` (addresses, reserved and bought domains, and `deleteAccounts`: whether a
+player may delete an address, which is then retired so nobody else can take it and receive its
+replies), `Cipher`, `Calls` (including `badSignal`, which is what makes one bar sound like one
 bar), `RingOut`, `Booth` (payphones), `FruitDrop` (sharing between two phones in the room),
 `Blocking` (what a blocked number can and cannot do), `FaceTime` (video calls, off by default),
 `RequiredContacts` (numbers in every phone - 911 is one, and calling it opens the app).
@@ -1073,7 +1118,7 @@ phoneclean bleeter             what WOULD go, counted table by table. Nothing is
 phoneclean bleeter confirm     it goes
 ```
 
-The bare call is a help line: it prints the twenty-four names in alphabetical order plus `media`
+The bare call is a help line: it prints the twenty-five names in alphabetical order plus `media`
 and `all`, and runs no count at all. Naming a target is what counts the rows.
 
 **Nothing deletes on the first call, ever.** These commands destroy content players made and
@@ -1093,11 +1138,12 @@ social feed.
 | `messages` | Text messages, groups, members, reactions. |
 | `calls` | Call history and voicemail. |
 | `contacts` | Every contact list. |
-| `mail` | Mail messages, mailboxes and addresses. |
+| `mail` | Mail messages, mailboxes and addresses, including the ones players deleted. A deleted address is retired rather than freed, so nobody else can take it; this, or the `WipePhone` export for one character, is what frees it again. |
 | `notes`, `reminders`, `pins` | Notes, Reminders, map pins. |
 | `alerts` | Civil alerts. |
 | `bank` | Bank statements, pending transfers, the Bank Pro log. |
 | `lottery`, `zuber`, `repair`, `export`, `arcade` | Tickets and draws, orders, call-outs and reviews, watchlists and price alerts, arcade scores and brawl stats. |
+| `marketplace` | VineMarket listings, conversations and messages. |
 | `cipher` | Cipher profiles and encrypted messages. |
 | `reviews` | FruitStore reviews. |
 | `appdata` | Storage belonging to dropped-in apps. |
@@ -1180,7 +1226,36 @@ Bleeter, Snapmatic and Hush are brands from Grand Theft Auto V.
 
 Un téléphone au style FruitOS pour FiveM qui tourne sur **votre** framework. qb-core, qbx_core, ox_core, ESX ou aucun framework : le téléphone détecte ce qui tourne et s'y adapte, et chacune de ces décisions est une ligne du fichier de configuration quand vous voulez en changer.
 
-Trente-sept applications, un vrai FruitStore, trois réseaux sociaux, un SDK pour que d'autres ressources livrent leurs propres applications, et une configuration au premier démarrage avec code et Face Unlock.
+Trente-huit applications, un vrai FruitStore, trois réseaux sociaux, un SDK pour que d'autres ressources livrent leurs propres applications, et une configuration au premier démarrage avec code et Face Unlock.
+
+La version 1.7.12 ajoute des frais facultatifs pour publier sur VineMarket. Le serveur choisit
+le montant et le compte d'entreprise bénéficiaire dans `Config.Marketplace` ; le formulaire
+affiche le tarif avant l'envoi. La gratuité reste le réglage par défaut. Les tests navigateur
+et Lua couvrent le paiement, les crédits refusés, les remboursements et les envois répétés.
+Le parcours bancaire reste à vérifier en jeu avec la ressource bancaire du serveur.
+
+La version 1.7.11 ajoute **VineMarket**, une application gratuite d'annonces pour vendre ou louer
+des objets, véhicules, meubles, appartements, maisons et services. Acheteur et vendeur échangent
+dans une conversation privée propre à l'annonce. Le numéro du vendeur est masqué par défaut ;
+un appel privé facultatif masque les deux numéros dans l'écran et l'historique des appels.
+L'annonce sert à organiser l'échange entre joueurs : paiement et transfert de propriété se font
+en jeu. Le fil est paginé, les lectures de messages sont limitées et l'application ne sonde
+pas le serveur en arrière-plan. Les contrôles navigateur et Lua couvrent l'interface et les
+autorisations ; le gameplay et les temps de frame restent à vérifier en jeu.
+
+La version 1.7.10 permet aux auteurs Bleeter de joindre explicitement leur position actuelle
+à un post. Les lecteurs peuvent poser un repère depuis la carte de position. Le Centre de
+contrôle et le Centre de notifications utilisent une matière teintée, opaque et statique pour
+rendre les commandes plus lisibles sans ajouter de flou ni de tâche de fond. Le serveur ne lit
+la position que lors de la publication d'un post qui la partage. Les temps de rendu dans FiveM
+restent à vérifier en jeu sur le serveur et le client visés.
+
+La version 1.7.9 corrige les conversations SMS qui pouvaient afficher une erreur de délai après
+leur chargement. Les réponses tardives d'une ancienne conversation ne remplacent plus les
+messages à l'écran.
+
+La version 1.7.7 affine l'accueil avec des icônes plus arrondies, un dock en verre aux tons froids, des ombres de widgets plus douces et des transitions plus courtes. Ces changements CSS n'ajoutent aucune dépendance, couche de flou ou tâche en arrière-plan. Les temps de rendu en jeu restent à mesurer selon la configuration du serveur et du client.
+Elle corrige aussi le chevauchement des rangées d'icônes après le chargement des widgets en recalculant la grille quand leur disposition change.
 
 ## Captures d'écran
 
@@ -1224,6 +1299,12 @@ Tirez depuis le coin haut droit pour les interrupteurs, les curseurs de luminosi
 | --- | --- | --- | --- |
 | ![Hush](docs/images/43-hush.png) | ![Hush Premium](docs/images/44-hush-premium.png) | ![Vous a aimé](docs/images/45-hush-liked.png) | ![Profil](docs/images/46-hush-profile.png) |
 
+### VineMarket
+
+| Découvrir | Annonce | Publier |
+| --- | --- | --- |
+| ![Parcourir les annonces](docs/images/47-vinemarket-feed.png) | ![Contacter en privé](docs/images/48-vinemarket-detail.png) | ![Déposer une annonce](docs/images/49-vinemarket-compose.png) |
+
 ## Caractéristiques
 
 ### Le téléphone
@@ -1254,15 +1335,24 @@ Tirez depuis le coin haut droit pour les interrupteurs, les curseurs de luminosi
 - **FaceTime** : un vrai appel vidéo. Avec `Config.FaceTime.videoFeed` activé, la caméra frontale se lève et une image réduite et recadrée de chaque joueur est relayée à l'autre plusieurs fois par seconde, par-dessus l'appel vocal normal. Nécessite [screenshot-basic](https://github.com/citizenfx/screenshot-basic) ; désactivé par défaut.
 
 ### Les applications
-Vingt-deux sont installées au départ : Téléphone, Messages, Contacts, **911**, **Alertes**, Mail, Plans, Appareil photo, Galerie, Musique, Banque, Garage, Logement, Portefeuille, Emplois, Santé, Notes, Rappels, Calculatrice, MDT, FruitStore et Réglages. Quinze autres se téléchargent depuis la boutique : **Bank Pro**, Bleeter, Snapmatic, Hush, Cipher, Zuber, Taxi, **Dépannage**, **Export**, FruitCharge, la Loterie, OnlyFruits, FruitBrawl, FlappyFruit et Fruitee. Quatre d'entre elles sont payantes.
+Vingt-deux sont installées au départ : Téléphone, Messages, Contacts, **911**, **Alertes**, Mail, Plans, Appareil photo, Galerie, Musique, Banque, Garage, Logement, Portefeuille, Emplois, Santé, Notes, Rappels, Calculatrice, MDT, FruitStore et Réglages. Seize autres se téléchargent depuis la boutique : **Bank Pro**, Bleeter, Snapmatic, Hush, Cipher, Zuber, Taxi, **Dépannage**, **Export**, **VineMarket**, FruitCharge, la Loterie, OnlyFruits, FruitBrawl, FlappyFruit et Fruitee. Quatre d'entre elles sont payantes.
+
+- **VineMarket** (téléchargement gratuit) : annonces locales de vente et de location, photo
+  facultative depuis la galerie, quartier, recherche limitée et messagerie privée entre
+  acheteur et vendeur. Le vendeur peut afficher son numéro explicitement ou le garder masqué.
+  Les appels privés masquent les deux numéros. `Config.Marketplace` règle les limites
+  d'annonces, le prix maximal, la taille du fil et l'expiration. Définissez `postingFee`
+  au-dessus de zéro et `revenueAccount` sur un compte d'entreprise existant pour débiter
+  la banque du vendeur à la publication. `revenueLabel` affiche facultativement le nom du
+  bénéficiaire. Le tarif vaut zéro par défaut ; achats et transferts restent en jeu.
 
 - **Téléphone** : clavier, favoris, historique, répondeur, haut-parleur entendu par les joueurs autour, et appels de groupe jusqu'à cinq. À une barre de réseau la ligne coupe — la voix se coupe vraiment, des deux côtés — et une ligne assez mauvaise peut faire raccrocher.
 - **911** : on choisit un service, un motif, et toutes les personnes en poste dans ce service reçoivent l'alerte sur leur téléphone avec un point sur la carte. Installée par défaut, impossible à supprimer. L'appelant est prévenu quand quelqu'un prend l'appel, pour ne jamais avoir à interpréter le silence. Signalement anonyme, règles de service et de grade par service, et une API pour qu'une caisse de magasin ou un joueur à terre puisse lancer une alerte.
 - **Messages** : conversations privées et groupées, photos, GIF, partage de position, réactions, transfert et emoji.
 - **Banque** : le solde que votre framework tient déjà, un relevé, des virements vers un autre personnage par numéro de téléphone, des bénéficiaires enregistrés, et une notification quand de l'argent arrive — salaire, versement de société, virement. Aucune ressource compagnon : elle lit qb-core, qbx, ESX, ox ou votre script bancaire via le bridge. Limites, frais optionnels et virements hors ligne configurables.
 - **Appareil photo** : aucune interface à elle, volontairement. L'ouvrir passe directement dans la caméra de téléphone du jeu, qui dessine le cadrage et nomme les touches dans sa propre boîte d'aide - **Entrée photographie, flèche haut retourne en selfie, retour arrière quitte** - et l'application se ferme dès que le moteur rend la caméra. Une page NUI est une surcouche et ne peut jamais afficher le jeu à l'intérieur d'elle-même : tout ce que l'application peindrait se poserait sur la prise en cours et finirait dans la photo avec elle. Il n'y a plus d'enregistrement vidéo ni de bande de modes : le mode photo est toute l'application.
-- **Bleeter** (Twitter) : deux fils, likes, commentaires, republications, annuaire cherchable, abonnements, messages privés et profils. **Jusqu'à quatre photos sur une publication**, réordonnables dans le compositeur ; `Config.Social.maxImages` est le plafond et le serveur tronque une liste plus longue au lieu de la refuser, donc le régler sur 1 désactive la fonctionnalité sans rien casser d'autre.
-- **Snapmatic** (Instagram) : stories d'une journée, fil photo, profil en grille, recherche et messages privés. Quatre photos par publication ici aussi, depuis le même réglage.
+- **Bleeter** (Twitter) : deux fils, likes, commentaires, republications, annuaire cherchable, abonnements, messages privés et profils. **Jusqu'à quatre photos sur une publication**, réordonnables dans le compositeur ; `Config.Social.maxImages` est le plafond et le serveur tronque une liste plus longue au lieu de la refuser, donc le régler sur 1 désactive la fonctionnalité sans rien casser d'autre. **Vos propres publications se suppriment** depuis le bouton **...** à côté de votre nom : **Options de la publication** indique ce qui part avec elle (ses J'aime, ses commentaires et ses republications) et demande confirmation. Cela fonctionne depuis le fil, un profil, un fil de hashtag et les Enregistrés, et la corbeille du pied de carte mène à la même confirmation.
+- **Snapmatic** (Instagram) : stories d'une journée, fil photo, profil en grille, recherche et messages privés. Quatre photos par publication ici aussi, depuis le même réglage. Supprimer sa propre publication fonctionne de la même façon, depuis Explorer aussi.
 - **Hush** (Tinder) : une carte qu'on lance au doigt, les matchs conservés dans leur onglet, un profil modifiable.
 - **Du nouveau sur Bleeter et Snapmatic** : au plus une bannière par heure et par application, qui dit à ce joueur combien de publications sont parues depuis sa dernière visite. Jamais envoyée sur un fil qu'il a déjà lu, et les mêmes publications ne sont jamais annoncées deux fois : en ignorer une ne signifie pas la recevoir de nouveau toutes les heures. Celui qui n'a jamais ouvert l'application est repéré là où en est le fil et ne reçoit rien, plutôt que tout l'historique sous forme de nombre. L'heure est un plafond et non un horaire, et chaque joueur porte sa propre horloge : un redémarrage ne fait pas vibrer tous les téléphones du serveur en même temps. Ne pas déranger, une application coupée dans les Réglages, une application désinstallée, une batterie à plat et un téléphone qu'on n'a pas sur soi l'arrêtent tous. Activé par défaut ; `Config.Social.nudge` porte un interrupteur et un intervalle pour chacune des deux applications, et `set phone_socialNudge false` désactive l'ensemble sans redémarrer.
 - **Cipher** : messagerie chiffrée. Le serveur route des enveloppes scellées et ne conserve ni le texte clair ni la clé privée.
@@ -1414,7 +1504,12 @@ en `auto`), `Settings`, `PhoneItem`, `PowerbankItem`, `DeviceSize`, `DeviceSide`
 joueur peut coller une image), `DefaultGlass`, `Clock`, `Theme` (l'accent et la palette système).
 
 **Communication**
-`Messages`, `Cipher`, `Calls` (dont `badSignal`, ce qui fait qu'une barre s'entend comme une barre),
+`CatchUp` (ce que le téléphone annonce peu après le chargement d'un personnage : messages non
+lus, appels manqués, mails non lus et notifications sociales arrivés pendant son absence, comptés
+depuis sa dernière déconnexion ; `enabled`, `delaySeconds`, `firstRunHours`),
+`Messages`, `Mail` (adresses, domaines réservés et achetés, et `deleteAccounts` : si un joueur
+peut supprimer une adresse, qui est alors retirée pour que personne d'autre ne puisse la prendre
+et recevoir ses réponses), `Cipher`, `Calls` (dont `badSignal`, ce qui fait qu'une barre s'entend comme une barre),
 `RingOut`, `Booth` (cabines), `FruitDrop` (partage entre deux téléphones proches),
 `Blocking` (ce qu'un numéro bloqué peut et ne peut pas faire), `FaceTime` (appels vidéo, désactivés
 par défaut), `RequiredContacts` (numéros présents dans tous les téléphones — le 911 en est un, et
@@ -2262,7 +2357,7 @@ phoneclean bleeter             ce qui PARTIRAIT, compté table par table. Rien n
 phoneclean bleeter confirm     ça part
 ```
 
-L'appel nu est une ligne d'aide : il affiche les vingt-quatre noms par ordre alphabétique plus
+L'appel nu est une ligne d'aide : il affiche les vingt-cinq noms par ordre alphabétique plus
 `media` et `all`, et ne compte rien du tout. C'est le fait de nommer une cible qui compte les
 lignes.
 
@@ -2283,11 +2378,12 @@ console ne doit pas coûter six mois de fil social à un serveur.
 | `messages` | SMS, groupes, membres, réactions. |
 | `calls` | Historique d'appels et répondeur. |
 | `contacts` | Tous les répertoires. |
-| `mail` | Messages, boîtes et adresses Mail. |
+| `mail` | Messages, boîtes et adresses Mail, y compris celles que les joueurs ont supprimées. Une adresse supprimée est retirée plutôt que libérée, pour que personne d'autre ne puisse la prendre ; c'est cette commande, ou l'export `WipePhone` pour un seul personnage, qui la libère de nouveau. |
 | `notes`, `reminders`, `pins` | Notes, Rappels, points de carte. |
 | `alerts` | Alertes civiles. |
 | `bank` | Relevés bancaires, virements en attente, journal Bank Pro. |
 | `lottery`, `zuber`, `repair`, `export`, `arcade` | Tickets et tirages, commandes, demandes et avis, listes de suivi et alertes de prix, scores d'arcade et statistiques de brawl. |
+| `marketplace` | Annonces, conversations et messages VineMarket. |
 | `cipher` | Profils Cipher et messages chiffrés. |
 | `reviews` | Avis du store d'applications. |
 | `appdata` | Le stockage des applications déposées. |

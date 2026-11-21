@@ -5,6 +5,377 @@ one coming back.
 
 ---
 
+## [2026-09-23 08:42] - Release list query used a view-only JSON field
+
+**Context:** Checking existing releases before publishing 1.7.11.
+**Error:** `gh release list --json tagName,name,isDraft,url` rejected `url`.
+**Root cause:** `gh release list` offers a smaller JSON field set than `gh release view`.
+**Fix:** Queried `tagName,name,isDraft`; the 1.7.11 release was absent.
+**Prevention:** Use each `gh release` subcommand's own listed JSON fields.
+
+---
+
+## [2026-09-23 08:39] - French locale spelling check found inconsistent accents
+
+**Context:** Running the full 1.7.11 release suite after adding VineMarket strings.
+**Error:** `tools/check-fr.py` reported both accented and unaccented forms of two verbs.
+**Root cause:** New VineMarket labels used the correct accents while older 911 and Bank Pro
+labels still spelled the same words without them.
+**Fix:** Corrected the three older labels and reran the French locale and static checks.
+**Prevention:** Run `tools/check-fr.py` after adding French strings and reconcile existing
+spellings instead of weakening its consistency rule.
+
+---
+
+## [2026-09-23 08:29] - VineMarket browser and Lua fixtures fell behind the source
+
+**Context:** Checking the private-call detail screen and closed-listing rules for 1.7.11.
+**Error:** The screenshot assertion did not find the new call button, and four Lua checks
+initially failed after calling related operations in sequence.
+**Root cause:** The browser preview still embedded JavaScript from before the private-call
+change. The Lua fixture also kept its thread status active after closing the listing and
+advanced no time between requests, so deliberate rate limits masked the later assertions.
+**Fix:** Rebuilt the preview, then made the fixture advance time and mirror the listing status
+onto the joined thread. The detail screenshot and all targeted Lua checks pass.
+**Prevention:** Rebuild `preview/index.html` after each source edit before a browser capture;
+keep joined mock rows and rate-limit clocks consistent with the operation under test.
+
+---
+
+## [2026-09-23 07:46] - GitHub release query used an unsupported JSON field
+
+**Context:** Checking whether the 1.7.10 release already existed before publication.
+**Error:** `gh release view --json title` rejected `title` as an unknown field.
+**Root cause:** The CLI exposes the release title as `name` in this command.
+**Fix:** Queried `--json name,tagName,url,isDraft,isPrerelease`; the release was absent as expected.
+**Prevention:** Use the fields listed by `gh release view --json` rather than assuming the API's field names.
+
+---
+
+## [2026-09-23 07:05] - release creation rejected an abbreviated target SHA
+
+**Context:** creating the GitHub release for the SMS fix from its commit.
+**Error:** GitHub returned HTTP 422 with `Release.target_commitish is invalid` and an invalid tag.
+**Root cause:** the release command received a short commit id where its target accepts a branch
+or a full commit SHA.
+**Fix:** retry with the full commit SHA; the release was published successfully.
+**Prevention:** use `git rev-parse HEAD` for a release target, or a verified branch name.
+
+---
+
+## [2026-09-23 06:49] - an older SMS read replaced a loaded conversation with a timeout
+
+**Context:** a conversation was opened while the Messages app's outbox read was still pending.
+**Error:** after the thread loaded, the page could replace it with the server timeout message.
+**Root cause:** the outbox answer reopened a thread that had no painted tail yet. This cancelled
+the first conversation request, but its page timeout still resolved later and `openThread` painted
+the error without checking whether its view was current. Group reads had the same stale reply risk.
+**Fix:** let the in-flight thread paint the updated outbox and reject late direct or group replies
+after a newer view starts.
+**Prevention:** simulate overlapping conversation reads, delayed outbox answers and late errors
+in the browser regression checks.
+
+---
+
+## [2026-09-20 09:23] - widget replies left the home grid fitted to its previous height
+
+**Context:** visual review of the home-screen refresh, including the four-widget screenshot.
+**Error:** icon labels overlapped the next row after the widget area grew. The previous release's screenshot showed the same defect. The new widget-grid assertion reproduced it before the fix.
+**Root cause:** renderHome fitted the app grid before the asynchronous widget response painted a taller strip. The successful paint did not request another fit. Clearing the strip also returned without invalidating an older pending response.
+**Fix:** compare the rendered widget unit layout with the new layout and request the existing deferred-safe refit only when that layout changes. Clearing widgets invalidates pending replies and refits if the strip was populated. Ordinary clock and balance updates keep the grid cache.
+**Prevention:** test transitions between empty and full widget strips and measure label-to-next-row clearance after the asynchronous reply, not just control hit targets.
+
+**Validation follow-up:** the first post-fix capture still used the old embedded JavaScript in preview/index.html. Rebuild with tools/make-preview.py after each source change before running a standalone browser probe; the preview embeds both CSS and JavaScript rather than loading the source files live.
+
+---
+
+## [2026-09-13 14:10] - text worded from an empty string table stayed wrong after the table arrived
+
+**Context:** the string table stopped riding on every NUI message (it is attached only when the
+client does not believe the page holds the player's language). A player-side verification then
+reloaded the page while the client still believed it held a table.
+
+**Error:** no message. On a French phone the home screen's search pill read "Search", the
+aria-labels of the torch, camera, home bar and Done button stayed humanised keys until the next
+open, and notification centre cards filed in that window read "Zuber St Preparing", "911 S Police"
+and "911 C Taken By" for the rest of the session. After a mid-session language change the app
+names and `document.lang` stayed in the old language until the home screen was redrawn.
+
+**Root cause:** two kinds of text were computed once and stored. The chrome labels were set only
+by the `open` handler, and `repaintStrings` repainted only the open app and the lock line. Card
+titles and bodies were strings built with `L()` when the message arrived. Both were safe while
+every `open`, `archive` and status message carried the table; once an `open` could arrive before
+the strings answer, whatever was worded in that window was frozen.
+
+**Fix:** cards now store a function for page-worded text and `nText()` evaluates it at paint
+(archivePeek, the Zuber, 911, taxi, staff broadcast and message cards; shade, lock cards and island
+read through it). The chrome labels and `document.lang` moved into `paintChrome()`, called by
+`open` and by the repaint. Adopting a table schedules one repaint after the current handler that
+covers the chrome, the home screen, the lock line and cards, the shade, the control centre, a
+peek or island card and the payphone panel. Holding messages until a table arrives was rejected:
+a lost answer takes seconds to recover, which would hide an alert or freeze the text anyway.
+
+**Prevention:** when a change removes a guarantee ("every message carries the table"), grep
+for everything that relied on it, and store localisable content as keys or functions rather than
+as the words they produced at one moment.
+
+---
+
+## [2026-09-13 12:40] - the expiry fix let a clock spend the refusal, and a message went out as staff
+
+**Context:** a review of the admin view expiry fix (the two entries below) before release 1.7.0.
+
+**Error:** no message. A staff member opens a target's phone, reads for longer than `viewSeconds`
+without triggering a callback, then sends a message. It is sent as the staff member's own
+character, while the banner on screen still names the target.
+
+**Root cause:** two faults that only met once sessions could finally run out. `Core.HasPlayer` in
+the state tick copied `Core.GetPlayer` step for step, including `justExpired`, so within two seconds
+of the expiry a clock set the one-call refusal and spent it at once. And nothing tore the handset
+down. Only client/admin.lua listened to `v-phone:client:adminView`, and only to update its menu;
+the page learns whose phone it is from the `v-phone:open` payload, so it went on drawing the target.
+Before the fix the tick extended every session every two seconds, which hid both.
+
+**Fix:** a clock never spends the refusal. `playerFor` reads `justExpired` only for a request, and
+`Core.HasPlayer`, `Core.PeekPlayer` and `PhoneActingSource(src, true)` answer for the real character
+once a session is over. Every end the staff member did not ask for leaves the refusal through
+`endUnasked`: expiry, the 15-second sweep, a target found gone by a clock, a target disconnecting.
+client/admin.lua closes the phone on `adminView` false, the same teardown as the phone key, and then
+sends `v-phone:server:adminViewClosed`, which clears the refusal only when no session is open. A
+request already in flight arrives ahead of it on the same event channel and is refused; the reopen
+is not. The page needed no change, because `close` shuts the open app and `open` redraws the banner.
+tools/test-hotpath.py had asserted the wrong intent ("next call is their own phone, not a refusal"),
+and now asserts the refusal. The same pass pinned it to `lupa.lua54` and added a test for the
+FruitBrawl payout.
+
+**Prevention:** a copy of a function "for a clock" must be written against the invariant, not
+against the original's steps. Here the invariant is that only a genuine request consumes the marker.
+And an end that removes a redirection must reach whatever is drawing the redirected data, not just
+the server's table: grep for every listener of the event before trusting that "the phone is told".
+
+---
+
+## [2026-09-13 11:05] - a new Lua test ran under Lua 5.5, and a probe failed on its own harness
+
+**Context:** tools/test-strings.py loads the whole of client/main.lua under lupa, and a scratch
+CDP probe drives the preview through the string table scenarios.
+
+**Error:** three separate symptoms. The traceback named `lupa.lua55`; loading main.lua raised
+`attempt to call a table value (global 'exports')`; and the probe reported "opened mail" for a
+tap on another tile, and "the page holds a table" in a state built to have none.
+
+**Root cause:** a bare `import lupa` picks the newest bundled Lua, which is 5.5 on a current
+install, not the 5.4 FiveM runs. main.lua calls `exports(...)` as a function as well as indexing
+it, so the fake needed `__call`. In the probe, a tap aimed at the lock screen landed on a home tile
+because the phone was already unlocked, and the preview's own boot loop re-posts a full `open`
+(carrying the table) every 50 ms for three seconds, which refilled the page the scenario had
+emptied.
+
+**Fix:** `import lupa.lua54 as lupa`; `__call` on the fake `exports`; the probe taps the lock only
+while it is not `.out`, and drops only the harness's `open` messages that carry a table.
+
+**Prevention:** pin `lupa.lua54` in every new Lua test. Before trusting a probe failure, check
+whether the harness itself sent the message that broke the scenario.
+
+**Follow-up, same session:** the scratch probe was given `--remote-debugging-port=9397`, which is
+the port tools/run-probe.js hard-codes. Run beside `test-all.py --fast`, it read run-probe's own
+browser from `/json/list` and drove that page, and run-probe waited for over ten minutes without
+printing anything. The probe now uses 9399. Ports already taken by the tools: probe-input 9391,
+run-probe 9397. A new CDP script gets a port that neither of them uses.
+
+---
+
+## [2026-09-13 10:40] - test-all.py crashed on an emoji while reporting a failure
+
+**Context:** `python tools/test-all.py --fast` with its output redirected to a file, after the
+string table work.
+
+**Error:** `UnicodeEncodeError: 'charmap' codec can't encode character '\U0001f600'` raised from
+`print` inside `run()`, while it was printing the tail of a failing `probe-input` step (the emoji
+picker section). The suite stopped there, so the real failure line was never shown.
+
+**Root cause:** redirected to a file on Windows, Python's stdout is cp1252, and the probe output
+it echoes contains emoji. The step that failed did not fail again in two standalone runs of
+`node tools/probe-input.js` or in the next suite run, so it reads as a timing flake that the crash
+turned into an unreadable one.
+
+**Fix:** tools/test-all.py now reconfigures stdout and stderr to UTF-8 with `errors='replace'`
+before it prints anything, so a redirected run reports the failure instead of raising.
+Until that landed, runs were made with `PYTHONIOENCODING=utf-8`.
+
+**Prevention:** capture suite output with `PYTHONIOENCODING=utf-8`. A reporter that can raise
+while reporting hides exactly the failure it was about to show.
+
+---
+
+## [2026-09-13 10:15] - mail went out from an address the player did not choose
+
+**Context:** review of mail address deletion (GitHub issue #11) before 1.7.0.
+
+**Error:** with the page still showing a deleted address X (the delete answered but the reply was
+lost, or staff deleted X while the owner's page showed it), the list showed another mailbox under
+X's header and a send left from the character's first address Y.
+
+**Root cause:** `mailPick` falls back to the first live address when the named one is not held.
+That fallback was written so an older page that names no address keeps working, and every op in
+`v-phone:mail` used it. Before deletion existed a named address could only stop being yours by a
+wipe, so the fallback was never reached with a real name. Retiring an address made it reachable.
+
+**Fix:** the callback refuses with `noaccount` any op except `me` that names an address the
+caller does not hold as a live one. Naming none still means the first address. The FruitDrop email
+share uses the new `mailPickStrict`. The mail list answers `noaccount` by dropping the stale address
+and reloading from `me`, which still falls back. Also found here: tools/test-mail-delete.py used a
+bare `import lupa`, which loads Lua 5.5 with lupa 2.8; it is now pinned to `lupa.lua54`.
+
+**Prevention:** a fallback that is safe for a MISSING value is not safe for a WRONG one. When a
+feature makes a previously permanent thing removable, find every place that silently substitutes
+for it. Pin the Lua version in every new lupa test.
+
+---
+
+## [2026-09-13 03:35] - a probe for Bleeter could not open Bleeter in the preview
+
+**Context:** a scratch CDP probe (port 9401) driving post deletion with real mouse input in every
+place a Bleeter or Snapmatic post is shown (GitHub issue #12).
+
+**Error:** every scenario stopped at once with `TypeError: Cannot read properties of undefined
+(reading 'id') at enterApp`, before a single check ran, on the old preview and the new one alike.
+
+**Root cause:** Bleeter and Snapmatic are `optional = true` in config.lua, so a fresh preview has
+not installed them and `state.apps.find((a) => a.id === 'bleeter')` is undefined. The probe handed
+that straight to `enterApp`.
+
+**Fix:** the probe falls back to the app's config row when it is not in `state.apps`. The same
+fallback is in the new `socialDelete` section of tools/probe-input.js.
+
+**Prevention:** before a probe opens an app by id, check whether that app is optional. An error
+that hits every scenario identically, on both the old and the new code, is the harness and not the
+change.
+
+---
+
+## [2026-09-13 01:30] - two more clocks kept an admin view alive, and a dropped id kept its refusal
+
+**Context:** finishing the admin view expiry fix below by auditing every caller of
+`PhoneActingSource`, `AdminViewTarget` and `hasBars` and sorting each into clock or request.
+
+**Error:** no message. With the battery ticks fixed, an idle session still never ran out on ox_core and
+standalone: the bank balance poll samples every player every 30 seconds through `PhoneActingSource`,
+which extended the session. A staff member on a call held it open the same way, through `hasBars` in
+the state tick. Separately, when a money request found a session over, the one-call refusal marker
+stayed behind after that staff member disconnected, and the next player given that server id had
+their first call refused.
+
+**Root cause:** the same one as below, in two more places: a timer calling a function whose only
+mode was "this is a request". The marker had no owner once its player left: `playerDropped` closed
+the session but never cleared `Expired`.
+
+**Fix:** `PhoneActingSource(src, fromClock)` and `hasBars(src, fromClock)` give the same answer with
+`fromClock` and do not extend. `Core.PeekPlayer` is `Core.GetPlayer` without the extension. Converted,
+and only these: the bank balance poll, the state tick's call check, and brawl's `payPot`, which runs
+from the round clock and otherwise only pays the other fighter after a forfeit or a drop, never the
+caller. Every other call site is a callback, a net event from the client or an export, and still
+extends as before. `playerDropped` in server/adminview.lua clears `Expired[src]`. tools/test-hotpath.py
+asserts expiry at 600 s with the poll running and with both players on calls, a request through each
+function still carrying the session to 900 s, and the reused id answered with its new player.
+
+**Prevention:** when a function gains a "this is activity" side effect, list its callers and mark
+every one reached from a thread before merging. Per-player state keyed on a server id is cleared in
+`playerDropped`, with no exceptions for state that "clears itself on the next call".
+
+---
+
+## [2026-09-13 00:40] - an admin view that never ran out while the staff member stayed connected
+
+**Context:** making the state tick ask whether a player exists instead of building the player.
+Measuring it showed what the battery clocks did to a held phone.
+
+**Error:** no message. `Config.Admin.viewSeconds` is 600, and a session opened and left alone was
+still held after 700 seconds of ticks. It would have lasted until the staff member disconnected.
+
+**Root cause:** one flag doing two jobs. `AdminViewTarget(src, true)` meant both "refuse the call
+that finds an expiry" and "this is staff activity, push the clock back". `Core.GetPlayer` passes it
+because every callback is a use, and the state tick and the drain tick called `Core.GetPlayer` for
+every player every 2 and 20 seconds, so the clock was pushed back every 2 seconds for ever.
+
+**Fix:** `heldBy(src, use, extend)` in server/adminview.lua takes the two separately and
+`AdminViewTarget` keeps passing both. The state tick asks `Core.HasPlayer`, whose admin view wrapper
+is `Core.GetPlayer`'s step for step but does not extend. The drain tick no longer goes through the
+redirect at all (see the next entry). tools/test-hotpath.py asserts a session runs out at 600 s and
+that a real call at 300 s still carries it to 900 s.
+
+Two more clocks still extended it through other functions, the bank balance poll and the state
+tick's call check. Both are fixed in the entry above.
+
+**Prevention:** anything on a timer must never pass the "this is a use" flag, directly or through a
+function that does. When a clock needs an answer from an impersonation layer, give it a read that
+cannot change the layer's state.
+
+---
+
+## [2026-09-13 00:30] - a staff member's battery written into the row of the phone they held
+
+**Context:** same measurement, the drain tick with an admin view open.
+
+**Error:** no message. In one drain pass the target's `vphone_kv` battery row received 87 (their
+own) and then 36 (the staff member's), and the staff member's own row received nothing. The shutdown
+save did the same, racing the target's own save, so whichever ran last decided the target's battery
+after a restart.
+
+**Root cause:** the pattern the 2026-07-27 entry warned about. The battery is keyed on the SOURCE,
+and the drain tick, the shutdown save and the drop save took the character to persist it into from
+`Core.GetPlayer(src)`, which returns the held character for a staff source.
+
+**Fix:** those three sites ask `Core.GetPlayerReal`. What the staff member sees does not change:
+`pushPower` already sent their own source's level to their own screen.
+
+**Prevention:** every write keyed on `source` that takes its character from a player object must use
+the real player. Grep for `Battery[src]`, `[src]` and `SetMetadata` beside `Core.GetPlayer` whenever
+the redirect gains a new caller.
+
+---
+
+## [2026-09-13 00:20] - ox_core players choosing a character shared the citizen id "nil"
+
+**Context:** checking `Bridge.GetPlayer` branch by branch while writing `Bridge.HasPlayer`.
+
+**Error:** no message. ox_core returns a player object during character selection with no `charId`,
+and the ox branch passed `tostring(player.charId)` to `wrap`, which is the string "nil". Every player
+on that screen got the same citizen id, and the drain tick wrote all of their batteries into one
+`vphone_kv` row. `GetPlayerByCitizenId('nil')` could find any of them.
+
+**Root cause:** `tostring` turned an absent id into a present one, and `wrap`'s own nil guard never
+saw it. The bridge's integrations already refused a player without `charId`; the one function
+everything hangs off did not.
+
+**Fix:** the ox branch returns nil without a `charId`, and `Bridge.HasPlayer` answers false. Nothing
+legitimate relied on the wrapper: every ox call in bridge/server/integrations.lua already stops on a
+missing `charId`, and a character's data is hydrated on `onPlayerLoaded`, after selection.
+
+**Prevention:** never `tostring` an id before checking that it exists. A key built from `nil` is not
+an error, it is a very popular key.
+
+---
+
+## [2026-09-12 14:30] - a correctly accented new string failed check-fr
+
+**Context:** adding the French locale strings for deleting a mail address (GitHub issue #11).
+
+**Error:** `python tools/check-fr.py` reported `supprimee x2 is also written supprimée
+(ph.photo_deleted, ph.soc_deleted)`.
+
+**Root cause:** the new toast `ph.mail_account_deleted` was written `Adresse supprimée`, the only
+accented spelling of that word in fr.lua. Two older keys spell it without the accent, and the
+check asks that one word be spelled one way across the file.
+
+**Fix:** the new toast was reworded to `Adresse effacée`, a word with no unaccented spelling in the
+file. The two older keys were left alone because they belong to other features.
+
+**Prevention:** grep fr.lua for the stem of every French word a new string uses before writing it,
+and run check-fr.py right after a locale edit, not at the end.
+
+---
+
 ## [2026-08-05 22:40] - Two sweeps over one table, and the shorter clock won in silence
 
 **Context:** wiring `socialRetentionS3` into `socKeep` so the social retentions follow the media
@@ -2516,3 +2887,31 @@ The brackets truncate the return to one value, which is what "am I at a desk" ac
 it is compared against `None` from Python. Checking the falsy case as well as the truthy one is
 what exposed it: the wrong answer was truthy, so a suite that only asserted the success path
 would have been green.
+
+---
+
+## [2026-09-23 20:07] — marketplace flow asserted before pricing loaded
+
+**Context:** browser preview for posting a VineMarket listing after adding the publication fee quote.
+
+**Error:** the flow assertion reported that the published listing did not appear.
+
+**Root cause:** the form now waits for a server pricing response before enabling submission. The preview script submitted immediately after opening the form.
+
+**Fix:** the preview checks wait for the pricing response before submitting or capturing the form.
+
+**Prevention:** when a form adds an asynchronous prerequisite, browser flows must wait for that state rather than assume a synchronous submit path.
+
+---
+
+## [2026-09-23 20:09] — French spelling check flagged a real verb pair
+
+**Context:** running the full fast suite after adding publication payment messages.
+
+**Error:** `check-fr` flagged `conserve` and `conservé` as inconsistent.
+
+**Root cause:** one string uses the present-tense verb, while the new payment message uses the past participle. Both spellings are correct in context.
+
+**Fix:** listed `conserve` with the other verb pairs in the spelling check's homograph set.
+
+**Prevention:** inspect each spelling conflict in context before changing user-facing French or extending the homograph set.

@@ -225,7 +225,12 @@ function Bridge.GetPlayer(src)
 
     elseif Bridge.framework == 'ox' then
         local player = oxPlayer(src)
-        if not player then return nil end
+        -- **A connected player is not a loaded character.** ox_core hands back a player object
+        -- while somebody is still on the character selection screen, and it carries no
+        -- `charId` until they pick one. `tostring(nil)` is the string "nil", so every player
+        -- choosing a character used to share the citizen id "nil": one vphone_kv row, one
+        -- battery, each of them writing over the others. No charId means nobody is here yet.
+        if not player or not player.charId then return nil end
         -- ox hands the player object across the export boundary as DATA: the fields
         -- survive, the methods do not. Anything that needs a method goes back through
         -- `CallPlayer`, which is what that export is for.
@@ -375,6 +380,8 @@ end
 -- ══════════════════════════════════════════════════════════════
 Core = {
     GetPlayer = function(src) return Bridge.GetPlayer(src) end,
+    -- Whether GetPlayer would answer, without building what it answers. See Bridge.HasPlayer.
+    HasPlayer = function(src) return Bridge.HasPlayer(src) end,
     GetPlayerByCitizenId = function(cid) return Bridge.GetPlayerByCitizenId(cid) end,
     -- Upstream's core carries a notifier and server/main.lua calls it. It was missing here,
     -- so every `Core.Notify` reached a nil field: the power bank raised an error instead of
@@ -396,3 +403,39 @@ CreateThread(function()
     loadFramework()
     V.MarkReady()
 end)
+
+--- **Is a character loaded on this source?** The truthiness of `Bridge.GetPlayer(src)`, without
+--- building the player.
+---
+--- A clock that only has to decide whether to look at somebody was asking for the whole wrapper:
+--- a name, a job, three closures and a locale convar, every two seconds for every player, all of
+--- it dropped on the next line. This asks the framework the one question that makes GetPlayer
+--- return nil and stops there.
+---
+--- It must never disagree with GetPlayer about who exists, so each branch is the nil test of the
+--- matching branch above and nothing else. tools/test-hotpath.py holds the two side by side on
+--- every framework: change one, change both. The one place they can differ is a malformed record
+--- that makes GetPlayer RAISE while building the job or the name; this does not read those.
+function Bridge.HasPlayer(src)
+    src = tonumber(src)
+    if not src then return false end
+
+    if Bridge.framework == 'qb' then
+        local player = qbPlayer(src)
+        if not player then return false end
+        return player.PlayerData.citizenid and true or false
+
+    elseif Bridge.framework == 'ox' then
+        local player = oxPlayer(src)
+        return (player and player.charId) and true or false
+
+    elseif Bridge.framework == 'esx' then
+        local player = esxPlayer(src)
+        if not player then return false end
+        return player.identifier and true or false
+    end
+
+    -- Standalone: the licence falls back to the source id itself, so GetPlayer always has an id
+    -- to wrap and always answers.
+    return true
+end

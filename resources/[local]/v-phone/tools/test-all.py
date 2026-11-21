@@ -2,7 +2,7 @@
 """Every check this resource has, in one command.
 
     python tools/test-all.py
-    python tools/test-all.py --fast     everything except the 71 screenshots
+    python tools/test-all.py --fast     everything except screenshots and UI assertions
 
 There were six ways to test this phone and no way to run them, so each one was run when
 somebody remembered it existed. This is the list, in the order that fails cheapest first: a
@@ -22,15 +22,21 @@ syntax error should not cost five minutes of screenshots to discover.
     check-fr         no French word spelled two ways in the same locale file
     test-alert-caller who a dispatch alert says called it in, which is not its subject
     test-multiphoto  four photographs on one post, and the host gate on every one
+    test-location    Bleeter shares only the server ped position, when explicitly selected
     test-nudge       when the social apps may say what is new, and when they must stay quiet
     test-retention   how long a social row lives, and that both sweeps ask the one function
     test-mediaref    who still shows a photograph, before the sweep deletes it
     test-verify      who may buy the blue tick, and that the orange one never moves with it
     test-camera      what a photograph does when the upload host is slow or dead
+    test-mail-delete a deleted mail address is retired, never handed to somebody else
+    test-catchup     what the phone says about the time a character was offline
+    test-whois       who a script means by "this player", a source, a number or a citizen id
     preview          the page built for a browser
-    run-probe        can a cursor reach every control in all 37 apps
+    run-probe        can a cursor reach every control in all 38 apps
     probe-input      real mouse input through the compositor
-    make-shots       71 screenshots, some of which are assertions
+    probe-size-xl    every control still reachable at the largest handset size (250%)
+    probe-zoom       the same, with the handset laid out again rather than stretched
+    make-shots       browser screenshots and UI assertions
 
 Exit code 1 if anything fails. Nothing here needs a database or a running server.
 """
@@ -39,6 +45,15 @@ import os
 import subprocess
 import sys
 import time
+
+# **UTF-8 out, whatever the console says.** Redirected into a file on Windows, stdout falls back
+# to the ANSI code page, and the first character outside it - a box-drawing rule, an accent in a
+# French label a test echoes, a tick mark - raised UnicodeEncodeError and ended the run. A suite
+# that passed then read as a crash, which is worse than one that fails honestly. `errors` is
+# `replace` so an unencodable character becomes a marker rather than a traceback.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, 'reconfigure'):
+        _stream.reconfigure(encoding='utf-8', errors='replace')
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FAST = '--fast' in sys.argv
@@ -142,21 +157,34 @@ run('test-oxjob', [sys.executable, 'tools/test-oxjob.py'])
 run('test-poll', [sys.executable, 'tools/test-poll.py'])
 run('test-alert-caller', [sys.executable, 'tools/test-alert-caller.py'])
 run('test-multiphoto', [sys.executable, 'tools/test-multiphoto.py'])
+run('test-location', [sys.executable, 'tools/test-social-location.py'])
+run('test-marketplace', [sys.executable, 'tools/test-marketplace.py'])
 run('test-nudge', [sys.executable, 'tools/test-nudge.py'])
 run('test-retention', [sys.executable, 'tools/test-social-retention.py'])
 run('test-mediaref', [sys.executable, 'tools/test-mediaref.py'])
 run('test-verify', [sys.executable, 'tools/test-verify.py'])
 run('test-camera', [sys.executable, 'tools/test-camera.py'])
+run('test-mail-delete', [sys.executable, 'tools/test-mail-delete.py'])
+run('test-catchup', [sys.executable, 'tools/test-catchup.py'])
+run('test-whois', [sys.executable, 'tools/test-whois.py'])
+run('test-hotpath', [sys.executable, 'tools/test-hotpath.py'])
+run('test-strings', [sys.executable, 'tools/test-strings.py'])
 run('check-fr', [sys.executable, 'tools/check-fr.py'])
 
 # ── The ones that need a browser ──────────────────────────────────────────
 run('preview', [sys.executable, 'tools/make-preview.py', '--lang', 'fr'])
-run('run-probe', ['node', 'tools/run-probe.js'], 'every control reachable, 37 apps')
+run('run-probe', ['node', 'tools/run-probe.js'], 'every control reachable, 38 apps')
 run('probe-input', ['node', 'tools/probe-input.js'], 'real mouse through the compositor')
+# The largest of the four handset sizes. It lays the page out again rather than stretching
+# it, so every box the probe measures is a different box - and a control that only falls off
+# the screen at 150% is a control nobody would have found at the default size.
+run('probe-size-xl', ['node', 'tools/run-probe.js', '--size', '2.5'], 'every control at 250%')
+run('probe-zoom', ['node', 'tools/run-probe.js', '--size', '1.75', '--mode', 'zoom'],
+    'every control at 175% laid out again')
 if FAST:
     print('%-16s %-4s        skipped by --fast' % ('make-shots', '--'))
 else:
-    run('make-shots', ['node', 'tools/make-shots.js'], '71 screenshots and assertions')
+    run('make-shots', ['node', 'tools/make-shots.js'], 'screenshots and UI assertions')
 
 print('')
 failed = [n for n, ok in results if not ok]

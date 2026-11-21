@@ -4,6 +4,1199 @@ All notable changes to v-phone are documented here.
 
 ---
 
+## [1.7.27] - 2026-11-10
+
+### Fixed
+
+- **The wallet printed whatever the framework had instead of a date of birth.** The value was
+  passed through as text, so a character creator that writes `none` when the player skips the
+  field put that word on the identity card, under "Date of birth". A date is now recognised in
+  the shapes a framework or a driver can hand over - `YYYY-MM-DD`, with a time after it,
+  `DD/MM/YYYY`, or an epoch in seconds or milliseconds - and anything that is not one takes the
+  line off the card rather than showing a value nobody wrote.
+
+### Correctifs
+
+- **Le portefeuille affichait ce que le framework avait, à la place d'une date de naissance.**
+  La valeur était transmise telle quelle, donc un créateur de personnage qui écrit `none` quand
+  le joueur saute le champ mettait ce mot sur la carte d'identité, sous « Date de naissance ».
+  Une date est désormais reconnue dans les formes qu'un framework ou un pilote peut renvoyer -
+  `AAAA-MM-JJ`, avec une heure à la suite, `JJ/MM/AAAA`, ou un horodatage en secondes ou en
+  millisecondes - et tout ce qui n'en est pas une retire la ligne de la carte au lieu d'afficher
+  une valeur que personne n'a écrite.
+
+---
+
+## [1.7.26] - 2026-11-10
+
+### Fixed
+
+- **A social account could not be created on a server whose folder is not named `v-phone`.**
+  The phone called itself through `exports['v-phone']` and gave up when a resource by that name
+  was not started - which is every server that cloned the repository, since that gives a folder
+  called `v-phone-fivem`. Sign-up asked for the player's number, got nothing back and answered
+  "that number does not exist", with the verification text silently going nowhere. The phone
+  now calls itself by its own name, in all thirteen places. The boot summary warns when the
+  folder is not `v-phone`, because other scripts and every example in the docs use that name.
+- **Company accounts on ox_core were never credited or debited.** `AddSociety` and
+  `RemoveSociety` had a branch for every banking script and none for ox, so a tax on a Fruitee
+  gift, a VineMarket posting fee or any payout aimed at a society answered false on an ox
+  server. Nothing was lost - a failed credit is treated as a sink, and the seller is refunded -
+  but nothing arrived either. Both go through ox_core's own accounts now, found by group the
+  same way their balance already was.
+
+### Correctifs
+
+- **Impossible de créer un compte social si le dossier ne s'appelle pas `v-phone`.** Le
+  téléphone s'appelait lui-même via `exports['v-phone']` et abandonnait si aucune ressource de
+  ce nom n'était démarrée, ce qui est le cas de tout serveur ayant cloné le dépôt, puisque cela
+  donne un dossier `v-phone-fivem`. L'inscription demandait le numéro du joueur, n'obtenait
+  rien et répondait « Ce numéro n'existe pas », le SMS de vérification partant dans le vide. Le
+  téléphone s'appelle désormais par son vrai nom, aux treize endroits concernés. Le résumé de
+  démarrage prévient quand le dossier n'est pas `v-phone`, car les autres scripts et tous les
+  exemples de la doc utilisent ce nom.
+- **Les comptes d'entreprise n'étaient ni crédités ni débités sur ox_core.** `AddSociety` et
+  `RemoveSociety` avaient une branche pour chaque script bancaire et aucune pour ox : la taxe
+  d'un don Fruitee, les frais de publication VineMarket ou tout versement vers une société
+  répondaient faux sur un serveur ox. Rien n'était perdu, un crédit échoué est traité comme un
+  puits et le vendeur est remboursé, mais rien n'arrivait non plus. Les deux passent maintenant
+  par les comptes d'ox_core, trouvés par groupe comme l'était déjà leur solde.
+
+---
+
+## [1.7.25] - 2026-11-05
+
+### Changed
+
+- **A FaceTime call looks like one.** The other person's photograph now sits behind the whole
+  screen, blurred and darkened until it is a mood rather than a portrait, with their avatar
+  large above it, the name and timer under that, and your own card in the corner. A contact
+  with no photograph on file keeps the plain gradient, so nothing looks half-loaded. The live
+  picture, when a server turns it on, still covers all of it.
+
+### Modifications
+
+- **Un appel FaceTime ressemble à un appel FaceTime.** La photo du correspondant occupe
+  maintenant tout le fond, floutée et assombrie jusqu'à n'être qu'une ambiance plutôt qu'un
+  portrait, avec son avatar en grand par-dessus, le nom et le chrono en dessous, et votre propre
+  carte dans le coin. Un contact sans photo garde le dégradé sobre, donc rien n'a l'air
+  à moitié chargé. L'image en direct, quand un serveur l'active, recouvre toujours le tout.
+
+---
+
+## [1.7.24] - 2026-11-05
+
+### Fixed
+
+- **The message box was half the row and its placeholder was cut in two.** `.field` is
+  `width: 100%`, which in a flex row is a basis the four buttons then squeeze: the box ended up
+  108 pixels of text width while the French placeholder alone needs 127, so it wrapped onto a
+  second line the box was too short to show. The box takes the row now, the buttons give back
+  what they do not need, and the composer has its own short placeholder rather than borrowing
+  the one written for a button.
+
+### Added
+
+- **A choice of how a size above 100% is drawn, `Config.DeviceScaleMode`.** `transform`, the
+  default, draws the handset once and stretches it: exact where clicks land, slightly soft text
+  where it is dense. `zoom` lays the page out again at the real size, so text is drawn at that
+  size and stays crisp. `zoom` was blamed once for a handset where nothing worked above 100%;
+  that was the entrance animation throwing the size away, fixed in 1.7.17, so it is offered
+  again as a choice. The control probe now runs over all 38 apps in both modes.
+
+### Correctifs
+
+- **La zone de saisie prenait la moitié de la rangée et son texte d'invite était coupé en
+  deux.** `.field` est en `width: 100%`, ce qui dans une rangée flex est une base que les quatre
+  boutons compriment : il restait 108 pixels de texte alors que « Écrire un message » en demande
+  127, donc l'invite passait à la ligne et la boîte était trop courte pour l'afficher. La boîte
+  prend la rangée, les boutons rendent ce dont ils n'ont pas besoin, et la barre d'écriture a son
+  propre texte d'invite au lieu d'emprunter celui d'un bouton.
+
+### Ajouts
+
+- **Un choix pour la façon dont une taille supérieure à 100% est dessinée,
+  `Config.DeviceScaleMode`.** `transform`, par défaut, dessine le téléphone une fois puis
+  l'étire : les clics tombent au pixel près, le texte dense est légèrement adouci. `zoom` refait
+  la mise en page à la taille réelle, donc le texte est dessiné à cette taille et reste net.
+  `zoom` avait été accusé d'un téléphone où plus rien ne marchait au-dessus de 100% ; c'était
+  l'animation d'entrée qui jetait la taille, corrigée en 1.7.17, donc il revient comme option.
+  La sonde des contrôles parcourt les 38 apps dans les deux modes.
+
+---
+
+## [1.7.23] - 2026-10-26
+
+### Fixed
+
+- **A tap just above the message box closed the app.** The home indicator's invisible hit area
+  reached 26 pixels above the pill, which inside Messages is the composer: a tap meant for the
+  text field went to the home indicator instead. It reaches 10 pixels now, and the swipe up is
+  untouched - that gesture is read from the bottom edge of the screen, not from this halo.
+- **The update check could announce the version already running.** Both ways of reading the
+  version can be a build behind, in opposite situations, and one stale reading was enough to
+  report an update to the version installed. The newer of the two is taken now, so a stale
+  reading can only be ignored. The manifest's `version` line is also found when it opens the
+  file, which the pattern could never match.
+
+### Correctifs
+
+- **Un clic juste au-dessus de la zone de saisie fermait l'app.** La zone cliquable invisible de
+  la barre d'accueil montait 26 pixels au-dessus du trait, ce qui, dans Messages, correspond à
+  la barre d'écriture : un clic destiné au champ de texte partait sur la barre d'accueil. Elle
+  monte maintenant de 10 pixels, et le geste de balayage ne change pas, puisqu'il est lu depuis
+  le bord bas de l'écran et non depuis cette zone.
+- **La vérification de version pouvait annoncer la version déjà installée.** Les deux façons de
+  lire la version peuvent être en retard d'une build, dans des situations opposées, et une seule
+  lecture périmée suffisait à annoncer une mise à jour vers la version en place. On prend
+  désormais la plus avancée des deux. La ligne `version` du manifeste est aussi trouvée quand
+  elle ouvre le fichier, ce que le motif ne savait pas faire.
+
+---
+
+## [1.7.22] - 2026-10-26
+
+### Added
+
+- **A route colour per job, `Config.RouteColour`.** The line the game draws to a waypoint the
+  phone set is yellow for everybody, which stops being useful the moment five services are
+  navigating at once. Each job can have its own GTA blip colour; a job with no entry takes the
+  default, and no default leaves the game's own colour alone, so nothing changes until it is
+  filled in. The colour is decided on the server from the job the framework reports, so it
+  follows a character who clocks on as something else. `/phonedebug route` prints what this
+  character resolves to.
+- Every part of the phone that sends somebody somewhere now goes through one function, so the
+  route is coloured whether it came from Maps, a 911 alert, a repair call, a taxi or a
+  delivery.
+
+### Ajouts
+
+- **Une couleur de tracé par métier, `Config.RouteColour`.** La ligne que le jeu dessine vers un
+  point posé par le téléphone est jaune pour tout le monde, ce qui ne sert plus à grand-chose
+  quand cinq services naviguent en même temps. Chaque métier peut avoir sa couleur de blip GTA ;
+  un métier sans entrée prend la valeur par défaut, et sans valeur par défaut la couleur du jeu
+  est laissée telle quelle : rien ne change tant que ce n'est pas rempli. La couleur est décidée
+  sur le serveur à partir du métier rapporté par le framework, donc elle suit un personnage qui
+  prend son service ailleurs. `/phonedebug route` affiche ce que ce personnage obtient.
+- Tout ce qui envoie quelqu'un quelque part passe désormais par une seule fonction, donc le
+  tracé est coloré qu'il vienne de Plans, d'une alerte 911, d'un appel mécano, d'un taxi ou
+  d'une livraison.
+
+---
+
+## [1.7.21] - 2026-10-26
+
+### Fixed
+
+- **Message bubbles no longer animate `transform`.** A bubble that does gets its own layer, and
+  a layer inside a handset drawn above 100% is rastered once and then stretched, which is the
+  likeliest reason the text inside a conversation read as soft while the list of conversations
+  beside it did not. The entrance uses the standalone `translate` and `scale` properties now
+  and leaves nothing behind. A browser without them fades the bubble in instead.
+
+### Correctifs
+
+- **Les bulles de message n'animent plus `transform`.** Une bulle qui le fait obtient sa propre
+  couche, et une couche dans un téléphone dessiné au-dessus de 100% est rendue une fois puis
+  étirée : c'est l'explication la plus probable du texte flou dans une conversation alors que la
+  liste juste à côté restait nette. L'entrée utilise maintenant les propriétés `translate` et
+  `scale` et ne laisse rien derrière elle. Un navigateur qui ne les a pas se contente d'un
+  fondu.
+
+---
+
+## [1.7.20] - 2026-10-26
+
+### Fixed
+
+- **The FaceTime screen was piling its own controls on top of each other.** One rule gave every
+  child of the call screen `position: relative` so it would sit above the video panes, which
+  also dropped the three that are positioned - the speaker row, the hang-up row and the corner
+  button - back into the flow, landing them on the name and the timer. Only the stacking is
+  changed now; nothing is moved.
+- **The corner of a FaceTime call is no longer an empty rectangle.** With the live picture off,
+  which is the default, it showed a blank dark frame that reads as something that failed to
+  load. It carries the photograph from your own card, or your initial, and a real frame still
+  replaces it the moment one arrives.
+
+### Correctifs
+
+- **L'écran FaceTime empilait ses propres commandes.** Une règle donnait `position: relative` à
+  tous les enfants de l'écran d'appel pour qu'ils passent au-dessus des images, ce qui remettait
+  aussi dans le flux les trois qui sont positionnés : la rangée du haut-parleur, celle de
+  raccrochage et le bouton de coin. Ils atterrissaient sur le nom et le chrono. Seul l'ordre
+  d'empilement change désormais, plus rien n'est déplacé.
+- **Le coin d'un appel FaceTime n'est plus un rectangle vide.** Sans image en direct, ce qui est
+  le réglage par défaut, il affichait un cadre sombre vide qui ressemble à un chargement raté.
+  Il porte maintenant la photo de votre carte, ou votre initiale, et une vraie image la remplace
+  dès qu'elle arrive.
+
+---
+
+## [1.7.19] - 2026-10-26
+
+### Fixed
+
+- **A social account could not be finished on ox_core: the sign-up code never arrived.** The
+  phone turns whatever identifier a script holds - a source, a phone number, a citizen id -
+  into the citizen id everything else is keyed on, and it recognised sources first because a
+  source is a small integer and a citizen id is not. On qb and ESX that holds. On ox_core a
+  character id IS a small integer, so a character id was read as a server slot and the text
+  went to whoever was connected on it, or nowhere. The phone's own tables are asked first now,
+  and the source is the last guess rather than the first. It affected every export that texts a
+  character by id on ox, not only the sign-up code. A test covers both framework shapes.
+
+### Correctifs
+
+- **Impossible de finaliser un compte social sur ox_core : le code d'inscription n'arrivait
+  jamais.** Le téléphone convertit l'identifiant qu'un script a sous la main - un id serveur, un
+  numéro, un citizenid - vers le citizenid dont tout dépend, et il reconnaissait les id serveur
+  en premier, au motif qu'un id serveur est un petit entier et pas un citizenid. Sur qb et ESX
+  c'est vrai. Sur ox_core un identifiant de personnage EST un petit entier : il était donc lu
+  comme un numéro de slot et le SMS partait vers le joueur connecté sur ce slot, ou nulle part.
+  Les tables du téléphone sont désormais interrogées d'abord, et l'id serveur n'est tenté qu'en
+  dernier. Cela touchait tous les exports qui écrivent à un personnage par son id sur ox, pas
+  seulement le code d'inscription. Un test couvre les deux familles de framework.
+
+---
+
+## [1.7.18] - 2026-10-26
+
+### Fixed
+
+- **The index at the top of `config.lua` was cutting its own section titles.** It was rebuilt
+  as two columns when the fold markers moved every line, and a title cut at thirty-three
+  characters loses exactly the part in brackets that says what the section is for. One title
+  per line now, in full, and every line number was checked against the title it points at.
+- **A section header that had been broken for a long time.** `POLICE FORENSICS` and
+  `THE HEALTH RECORD` shared one frame, so the forensics title sat above the health record and
+  its own section, two hundred lines further down, had a bare rule and no name. The title is
+  back where its content is.
+
+### Correctifs
+
+- **L'index en tête de `config.lua` coupait ses propres titres de section.** Il avait été
+  reconstruit sur deux colonnes quand les marqueurs de pliage ont décalé toutes les lignes, et
+  un titre coupé à trente-trois caractères perd justement la partie entre parenthèses qui dit à
+  quoi sert la section. Un titre par ligne désormais, en entier, et chaque numéro de ligne a été
+  vérifié contre le titre qu'il désigne.
+- **Un en-tête de section cassé depuis longtemps.** `POLICE FORENSICS` et `THE HEALTH RECORD`
+  partageaient un même encadré : le titre des enquêtes se retrouvait au-dessus du dossier
+  médical, et sa propre section, deux cents lignes plus bas, n'avait qu'un trait sans nom. Le
+  titre est revenu là où est son contenu.
+
+---
+
+## [1.7.17] - 2026-10-21
+
+### Fixed
+
+- **Handset sizes above 100% are usable again, and `zoom` is gone.** The sizes were built on
+  CSS `zoom`, which lays the page out again rather than magnifying it, and in a desktop browser
+  that is exactly right. In CEF it is not: what reads a position and what draws one disagreed,
+  and the symptoms came one at a time - a top edge that could not be grabbed, a lock screen
+  notification that swallowed its own tap, then nothing working at all above 100% on 2K and 4K.
+  Three fixes in a row moved the mismatch about instead of removing it, because the mismatch
+  was `zoom` itself. The size is a plain transform now, which the browser hit-tests correctly,
+  so a click lands where the pixel is.
+- **The entrance animation was throwing the size away.** `ph-rise` animates `transform`, and an
+  animation owns that property outright: its last keyframe said `transform: none`, so every
+  handset settled back to 100% however it was configured, and the page then believed a size the
+  screen did not have. The keyframes carry the handset's own scale now.
+- **Auto was picked and then lost** to the same two faults, so a 4K screen ended up with a
+  phone drawn at 100%.
+
+### Changed
+
+- Text above 100% is scaled rather than laid out again, so it is very slightly softer than it
+  was with `zoom`. On the screens these sizes exist for there are enough device pixels that it
+  is hard to see, and a phone whose buttons are where the cursor is beats a crisper one that
+  cannot be used.
+
+### Correctifs
+
+- **Les tailles au-dessus de 100% sont de nouveau utilisables, et le `zoom` a disparu.** Les
+  tailles reposaient sur le `zoom` CSS, qui refait la mise en page au lieu d'agrandir, et dans
+  un navigateur de bureau c'est exactement ce qu'il faut. Dans CEF, non : ce qui lit une
+  position et ce qui en dessine une n'étaient pas d'accord, et les symptômes sont arrivés un par
+  un, le bord supérieur impossible à attraper, la notification de l'écran verrouillé qui avalait
+  son propre clic, puis plus rien du tout au-dessus de 100% en 2K et 4K. Trois correctifs
+  successifs ont déplacé le désaccord au lieu de le supprimer, parce que le désaccord, c'était
+  le `zoom`. La taille est maintenant une simple transformation, que le navigateur sait
+  localiser, donc un clic tombe là où est le pixel.
+- **L'animation d'entrée jetait la taille.** `ph-rise` anime `transform`, et une animation
+  possède cette propriété entièrement : sa dernière image disait `transform: none`, donc chaque
+  téléphone revenait à 100% quelle que soit la configuration, et la page croyait alors à une
+  taille que l'écran n'avait pas. Les images clés portent maintenant l'échelle du téléphone.
+- **Le mode auto était choisi puis perdu** par les deux mêmes défauts : un écran 4K se
+  retrouvait avec un téléphone dessiné à 100%.
+
+### Modifications
+
+- Au-dessus de 100%, le texte est agrandi au lieu d'être remis en page, donc très légèrement
+  moins net qu'avec le `zoom`. Sur les écrans auxquels ces tailles s'adressent, il y a assez de
+  pixels pour que ça ne se voie quasiment pas, et un téléphone dont les boutons sont là où est
+  le curseur vaut mieux qu'un téléphone plus net mais inutilisable.
+
+---
+
+## [1.7.16] - 2026-10-20
+
+### Fixed
+
+- **Turning the lock off did nothing.** The server only ever handled security being switched
+  ON: a phone asking for it to be switched off was read and dropped, the stored digest stayed,
+  and the lock was computed back from it on the next read - so the phone kept asking for a code
+  somebody had just been told they no longer needed. Switching it off now clears the passcode
+  with it, and the server proves the current code itself before it does, rather than trusting
+  the page that asked.
+
+### Changed
+
+- **The Security screen says where things stand.** Its first line is now the lock, on or off,
+  and the row that turns it off describes what it will do rather than reading like the state.
+  A report said it was impossible to tell whether security was on, and it was right.
+- A Question form was added to the issue chooser, for setup help and "how is this meant to
+  work" - the place Discussions used to be.
+
+### Correctifs
+
+- **Désactiver le verrouillage ne faisait rien.** Le serveur ne traitait que l'activation : une
+  demande de désactivation était lue puis jetée, l'empreinte du code restait en base et le
+  verrouillage était recalculé à partir d'elle à la lecture suivante. Le téléphone continuait
+  donc de réclamer un code dont on venait d'annoncer au joueur qu'il n'en avait plus besoin. La
+  désactivation supprime maintenant le code avec elle, et le serveur vérifie lui-même le code
+  actuel avant de le faire, au lieu de croire la page qui le demande.
+
+### Modifications
+
+- **L'écran Sécurité dit où on en est.** Sa première ligne est désormais le verrouillage, activé
+  ou désactivé, et la ligne qui le désactive décrit ce qu'elle va faire au lieu de ressembler à
+  un état. Un rapport disait qu'on ne pouvait pas savoir si la sécurité était active, et c'était
+  vrai.
+- Un formulaire Question a été ajouté au menu d'ouverture de ticket, pour l'aide à
+  l'installation et les « comment c'est censé marcher », à la place des Discussions.
+
+---
+
+## [1.7.15] - 2026-10-20
+
+### Fixed
+
+- **Edge gestures still went wrong above 100% after the phone was put away and taken out
+  again.** 1.7.14 replaced a measured scale with one announced by the code that draws the
+  handset, which is true at the instant it runs and can stop being true afterwards: close the
+  phone straight after changing the size and take it out again, and the figure left behind no
+  longer described what was on screen, so the top edge split and the shade went with it. The
+  scale is taken from the screen's live box against a size written down in the stylesheet
+  (`--screen-w`), so it is re-measured whenever the handset is re-drawn and cannot drift. A
+  hidden handset, whose box is all zeros, is never remembered as a measurement either.
+
+### Correctifs
+
+- **Les gestes de bord étaient encore faux au-dessus de 100% après avoir rangé puis ressorti le
+  téléphone.** La 1.7.14 remplaçait une échelle mesurée par une échelle annoncée par le code qui
+  dessine le téléphone : vraie à l'instant où il tourne, elle peut cesser de l'être ensuite.
+  Fermez le téléphone juste après avoir changé la taille, ressortez-le, et le chiffre laissé
+  derrière ne décrivait plus ce qui était à l'écran : le partage du bord supérieur et le panneau
+  des notifications suivaient. L'échelle est maintenant prise sur la boîte réelle de l'écran,
+  comparée à une taille écrite dans la feuille de style (`--screen-w`), donc elle est remesurée
+  à chaque fois que le téléphone est redessiné et ne peut plus dériver. Un téléphone rangé, dont
+  la boîte ne vaut que des zéros, n'est jamais retenu comme mesure non plus.
+
+---
+
+## [1.7.14] - 2026-10-16
+
+### Added
+
+- **The lock screen can be skipped, `Config.Settings.lockScreen`.** A phone with no passcode and
+  no Face Unlock still opened on the lock screen and a swipe took it away without asking
+  anything. Off, that character opens straight on the home screen. A character who set a
+  passcode is always asked for it, whatever this says.
+
+### Fixed
+
+- **Taps and edge gestures went wrong above 100%.** Every gesture on the page is measured in
+  the phone's own pixels, and the conversion from window pixels was worked out as
+  `clientWidth / rect.width` - which is only right where a browser reports an unzoomed
+  `clientWidth` for an element with `zoom`. Where it reports the zoomed one the conversion came
+  back as 1, so the top edge band shrank to nothing and a press on a lock screen notification
+  was read as starting inside it and had its tap swallowed. The scale is published by the code
+  that draws the handset now, which knows it exactly, instead of being measured. A lock screen
+  notification is also treated as the control it is, so a captured press hands it its tap.
+
+- **The phone no longer fits underglow to a car that has none.** There is no neon kit in the
+  engine: a strip is on or it is off, so picking a colour in the Vehicle app did not change
+  underglow, it gave the car underglow - free, on a server where the mechanic sells it. The app
+  now drives only the neons a vehicle already has, and says so when there are none. Switching
+  them off is still allowed, and so is switching back on what the phone itself switched off.
+  `Config.VehicleRemote.neonFitting = true` restores the old behaviour for a server with no
+  mechanic script.
+- Four French strings were missing their accents.
+
+### Ajouts
+
+- **L'écran de verrouillage peut être sauté, `Config.Settings.lockScreen`.** Un téléphone sans
+  code et sans Face Unlock sortait quand même sur l'écran de verrouillage, et un swipe le
+  faisait disparaître sans rien demander. Désactivé, ce personnage ouvre directement sur
+  l'accueil. Un personnage qui a mis un code se le voit toujours demander, quel que soit ce
+  réglage.
+
+### Correctifs
+
+- **Les clics et les gestes de bord étaient faux au-dessus de 100%.** Chaque geste de la page
+  est mesuré dans les pixels du téléphone, et la conversion depuis les pixels de la fenêtre
+  était calculée avec `clientWidth / rect.width`, ce qui n'est juste que si le navigateur
+  renvoie un `clientWidth` non zoomé pour un élément avec `zoom`. Quand il renvoie le zoomé, la
+  conversion valait 1 : la bande du bord supérieur se réduisait à rien et un clic sur une
+  notification de l'écran verrouillé était pris pour un geste qui y commençait, donc avalé.
+  L'échelle est maintenant publiée par le code qui dessine le téléphone, qui la connaît
+  exactement, au lieu d'être mesurée.
+- **Le téléphone ne pose plus de néons sur une voiture qui n'en a pas.** Le moteur n'a pas de
+  kit de néons : un tube est allumé ou éteint, donc choisir une couleur dans l'app Véhicule ne
+  changeait pas les néons, elle en donnait à la voiture, gratuitement, là où le mécano les
+  vend. L'app ne pilote plus que les néons déjà présents et le dit quand il n'y en a pas.
+  Éteindre reste possible, rallumer ce que le téléphone a éteint aussi.
+  `Config.VehicleRemote.neonFitting = true` remet l'ancien comportement.
+- Quatre chaînes françaises avaient perdu leurs accents.
+
+---
+
+## [1.7.13] - 2026-09-25
+
+### Added
+
+- **ox_banking, and a bank history on ox in general.** ox_banking is a face on ox_core's
+  accounts rather than a bank of its own, so the balance and the transfers already worked; what
+  was missing was the history, and a player on an ox server saw a balance with no movements
+  under it. Both the personal statement and a company's in Bank Pro are read from ox_core's
+  `accounts_transactions` now, whether or not ox_banking is installed.
+- **A 12 or 24 hour setting, `Config.Clock.hour24`.** Every screen that printed a time asked the
+  browser with no locale, and CEF usually answers as American English, so a French server showed
+  "10:37 PM" in its own emergency alerts while the status bar two centimetres above showed
+  "22:37". One setting decides now: `true` for 24 hour, `false` for AM/PM, `'auto'` to follow the
+  phone's language.
+- **An emergency alert says who took it and who closed it.** `takenBy`, `takenByCid`, `takenAt`,
+  `closedBy`, `closedByCid` and `closedAt` are on the alert itself, so `GetAlerts` and
+  `GetEmergencyQueue` carry them. Two server events go with it, `v-phone:emergency:taken` and
+  `v-phone:emergency:closed`, each with the alert id, the service, the citizen id and the name,
+  so a bridge to another dispatch script hears about it instead of polling.
+- **`config.lua` folds by section.** Every one of its 47 sections is wrapped in a `--#region`,
+  so the whole file collapses to a list of its own titles in an editor and a section opens on
+  its own. They are comments, so nothing about how the file is read changes. The index at the
+  top was regenerated with the line numbers this moved.
+
+### Fixed
+
+- **No state bag is written from the client any more.** The one that was, `phoneAtHome`, is how
+  the phone knew you were inside your property. `sv_stateBagStrictMode` is on by default and
+  refuses those, so on a strict server charging at home did not work at all and every player's
+  console took a warning once a minute. The client reports it to the server now, rate limited,
+  and the server still reads the old state bag underneath so a mixed build keeps working.
+- **The mouse wheel no longer flicks through the car radio.** The phone keeps game input alive
+  on purpose, which is what lets a player walk while reading a message, so the wheel reached
+  both the page and the game: scrolling a list in the phone also changed the station. The wheel
+  and the radio controls are blocked while the phone is up, by the phone rather than through
+  `Config.Hold.block`, so a server that keeps its own config.lua gets it.
+- **Shift and the wheel pans a shelf sideways.** The store's Discover shelf answered the wheel
+  with nothing: a tall shelf deliberately leaves the wheel to the page it sits in, so the only
+  way across was to drag it. Shift is the browser's own convention for sideways, it cannot be
+  pressed by accident, and the plain wheel still scrolls the page exactly as before.
+- **The version could stay a build behind until a full reboot.** `GetResourceMetadata` answers
+  from what the server parsed at start-up, and a refresh plus restart does not always replace
+  it. The manifest is read from disk instead, with the metadata as the fallback.
+
+### Ajouts
+
+- **ox_banking, et l'historique bancaire sur ox en général.** ox_banking est une interface sur
+  les comptes d'ox_core plutôt qu'une banque à part, donc le solde et les virements
+  fonctionnaient déjà ; il manquait l'historique, et un joueur sur un serveur ox voyait un solde
+  sans aucun mouvement en dessous. Le relevé personnel et celui d'une entreprise dans Bank Pro
+  sont lus dans `accounts_transactions` d'ox_core, qu'ox_banking soit installé ou non.
+- **Un réglage 12 ou 24 heures, `Config.Clock.hour24`.** Chaque écran affichant une heure
+  interrogeait le navigateur sans langue, et CEF répond le plus souvent en anglais américain :
+  un serveur français affichait « 10:37 PM » dans ses propres alertes pendant que la barre
+  d'état, deux centimètres plus haut, affichait « 22:37 ». Un seul réglage décide désormais :
+  `true` pour 24 heures, `false` pour AM/PM, `'auto'` pour suivre la langue du téléphone.
+- **Une alerte 911 dit qui l'a prise et qui l'a clôturée.** `takenBy`, `takenByCid`, `takenAt`,
+  `closedBy`, `closedByCid` et `closedAt` sont portés par l'alerte, donc `GetAlerts` et
+  `GetEmergencyQueue` les transmettent. Deux events serveur les accompagnent,
+  `v-phone:emergency:taken` et `v-phone:emergency:closed`, avec l'id de l'alerte, le service, le
+  citizenid et le nom, pour qu'un pont vers un autre script de dispatch soit prévenu au lieu
+  d'interroger en boucle.
+- **`config.lua` se replie par section.** Chacune de ses 47 sections est encadrée par un
+  `--#region`, donc le fichier entier se replie en une liste de ses propres titres et une
+  section s'ouvre seule. Ce sont des commentaires : la façon dont le fichier est lu ne change
+  pas. L'index en tête a été régénéré avec les lignes que cela a décalées.
+
+### Correctifs
+
+- **Plus aucun state bag n'est écrit depuis le client.** Le seul qui l'était, `phoneAtHome`,
+  servait à savoir si vous étiez chez vous. `sv_stateBagStrictMode` est actif par défaut et
+  refuse ces écritures : sur un serveur strict, la recharge à la maison ne fonctionnait pas du
+  tout et la console de chaque joueur recevait un avertissement par minute. Le client le
+  signale au serveur, à fréquence limitée, et le serveur lit toujours l'ancien state bag en
+  second recours pour qu'une mise à jour en deux temps ne casse rien.
+- **La molette ne fait plus défiler la radio de la voiture.** Le téléphone garde volontairement
+  les commandes du jeu actives, ce qui permet de marcher en lisant un message, donc la molette
+  partait des deux côtés : faire défiler une liste changeait aussi de station. La molette et les
+  commandes de radio sont bloquées tant que le téléphone est ouvert, par le téléphone lui-même
+  et non via `Config.Hold.block`, pour que les serveurs gardant leur config.lua en profitent.
+- **Maj et la molette font défiler une étagère latéralement.** L'étagère « Découvrir » du store
+  ne répondait pas à la molette : une étagère haute laisse volontairement la molette à la page
+  qui la contient, et il ne restait que le glisser. Maj est la convention du navigateur pour le
+  défilement horizontal, ne peut pas être pressé par accident, et la molette seule fait défiler
+  la page exactement comme avant.
+- **La version affichée pouvait rester en retard jusqu'à un redémarrage complet.**
+  `GetResourceMetadata` répond avec ce que le serveur a lu au démarrage, et un refresh suivi
+  d'un restart ne le remplace pas toujours. Le manifeste est lu sur le disque, l'ancienne
+  méthode servant de secours.
+
+---
+
+## [1.7.12] - 2026-09-23
+
+### Added
+
+- **Optional VineMarket posting fees.** The server sets the publication fee and the recipient
+  society account; the form shows the fee before posting. A failed recipient credit refunds
+  the seller, and listings stay hidden until payment and publication succeed. Retrying the
+  same form within ten minutes returns the original listing without another charge. Free
+  posting remains the default.
+
+### Ajouts
+
+- **Frais de publication facultatifs sur VineMarket.** Le serveur définit le montant et le
+  compte d'entreprise bénéficiaire ; le formulaire affiche le tarif avant publication. Si
+  le crédit échoue, le vendeur est remboursé et l'annonce reste invisible jusqu'à la réussite
+  du paiement et de la publication. Un nouvel essai depuis le même formulaire dans les dix
+  minutes retrouve l'annonce sans nouveau débit. La gratuité reste le réglage par défaut.
+
+---
+
+## [1.7.11] - 2026-09-23
+
+### Added
+
+- **VineMarket classifieds for local sales and rentals.** The free FruitStore download supports
+  items, vehicles, furniture, apartments, houses and services. Listings can include a gallery
+  photo, neighborhood, price and rental period. Search and filters use bounded pages; authors
+  can close their own listings. Payment and ownership transfer are arranged in game.
+- **Private buyer-seller conversations and calls.** Each listing has separate conversations
+  with interested buyers, with unread counts and phone notifications. Seller numbers are hidden
+  by default and appear only after explicit opt-in. A server-routed private call hides both
+  numbers on the call screen, in history, on reconnect and in the call roster; it cannot be
+  turned into a conference or voicemail that exposes the contact.
+
+### Performance
+
+- **Bounded marketplace reads with no background polling.** The feed loads at most 18 listings
+  per page by default, a conversation loads its 60 most recent messages, and listing images
+  are decoded lazily. Limits and authorization are enforced on every server request.
+
+### Ajouts
+
+- **Annonces VineMarket pour les ventes et locations locales.** Cette application gratuite du
+  FruitStore accepte objets, véhicules, meubles, appartements, maisons et services. Une annonce
+  peut contenir une photo de la galerie, un quartier, un prix et une durée de location. La
+  recherche et les filtres utilisent des pages limitées ; l'auteur peut clôturer ses annonces.
+  Paiement et transfert de propriété s'organisent en jeu.
+- **Conversations et appels privés entre acheteur et vendeur.** Chaque annonce possède une
+  conversation distincte par acheteur, avec compteur de messages non lus et notification sur
+  le téléphone. Le numéro du vendeur est masqué par défaut et n'apparaît qu'après un choix
+  explicite. Un appel privé routé par le serveur masque les deux numéros sur l'écran, dans
+  l'historique, après reconnexion et dans la liste des participants ; il ne peut pas devenir
+  une conférence ni un message vocal qui dévoile le contact.
+
+### Performance
+
+- **Lectures VineMarket limitées, sans interrogation en arrière-plan.** Le fil charge au plus
+  18 annonces par page par défaut, une conversation charge ses 60 derniers messages et les
+  images sont décodées à la demande. Limites et autorisations sont revérifiées côté serveur
+  pour chaque requête.
+
+---
+
+## [1.7.10] - 2026-09-23
+
+### Added
+
+- **Bleeter posts can share the author's current position.** Location sharing is an explicit
+  composer choice, available with text, photos, or by itself. The server reads coordinates from
+  the author's ped when the post is published; submitted coordinates are ignored. Readers can
+  tap the location card to set a waypoint. Older posts and Snapmatic remain unchanged.
+
+### Changed
+
+- **Clearer iOS 27 inspired system panels.** Control Center and Notification Center now use an
+  opaque, static tinted material, so home screen icons no longer show through the controls.
+  No blur layer, animation loop, or background request was added.
+
+### Ajouts
+
+- **Les posts Bleeter peuvent partager la position actuelle de leur auteur.** Le partage est
+  un choix explicite dans l'éditeur, avec du texte, des photos ou seul. Le serveur lit les
+  coordonnées sur le personnage au moment de publier ; les coordonnées envoyées par la page
+  sont ignorées. Les lecteurs peuvent toucher la carte de position pour poser un repère. Les
+  anciens posts et Snapmatic restent inchangés.
+
+### Modifications
+
+- **Panneaux système plus lisibles, inspirés d'iOS 27.** Le Centre de contrôle et le Centre de
+  notifications utilisent maintenant une matière teintée, opaque et statique : les icônes de
+  l'accueil ne transparaissent plus derrière les commandes. Aucune couche de flou, boucle
+  d'animation ou requête en arrière-plan n'a été ajoutée.
+
+---
+
+## [1.7.9] - 2026-09-23
+
+### Fixed
+
+- **SMS conversations no longer turn into a server timeout after loading.** When an outbox
+  reply arrived while a conversation was still loading, the page started the same read again.
+  The cancelled read could then time out and replace the loaded messages with an error. The
+  outbox now waits for the existing read to paint its queue, and late replies from older direct
+  or group conversation views cannot repaint the current one.
+
+### Correctifs
+
+- **Les conversations SMS ne se changent plus en erreur de délai après le chargement.** Une
+  réponse de la boîte d'envoi reçue pendant le chargement relançait la lecture de la conversation.
+  La lecture annulée pouvait ensuite expirer et remplacer les messages affichés par une erreur.
+  La boîte d'envoi attend désormais la fin de la lecture en cours pour afficher sa file, et les
+  réponses tardives des anciennes conversations privées ou de groupe ne remplacent plus la vue
+  actuelle.
+
+---
+
+## [1.7.8] - 2026-09-20
+
+### Fixed
+
+- **Rearranging the home screen was broken at any size but 100%.** A pointer is in the window's
+  pixels and the handset is drawn at a size, and the two were mixed: the dragged icon was placed
+  at the raw window offset, so it sat far from the finger, and the page-flip edge compared that
+  offset against the screen's own 372, so the screen thought the pointer was at its right edge
+  from about the middle onwards and kept flipping or making pages. Pointer positions are now
+  converted once, wherever they are read. The same mix affected dragging a sheet down, pulling
+  the music player away, swiping a message to reply and pulling an app to refresh.
+- **The Delete button on an OnlyFruits post did nothing.** The card is drawn on three screens
+  and the button was only wired inside a creator's page, so on your own tab - where you would
+  actually use it - clicking it did nothing at all. There is one handler now and every screen
+  calls it. The confirmation also had its two arguments the wrong way round, which put the
+  whole warning sentence on the button; it reads "Delete" now, with the warning above it.
+
+### Correctifs
+
+- **Réorganiser l'accueil était cassé à toute taille autre que 100%.** La position de la souris
+  est en pixels de la fenêtre et le téléphone est dessiné à une taille : les deux étaient
+  mélangés. L'icône déplacée était posée à la position brute, donc loin du curseur, et le bord
+  qui change de page comparait cette position aux 372 pixels de l'écran du téléphone, si bien
+  qu'à partir du milieu l'écran croyait le curseur sur son bord droit et enchaînait les
+  changements et créations de pages. La conversion se fait désormais une fois, partout où la
+  position est lue. Le même mélange touchait le glissement d'une feuille vers le bas, le
+  lecteur de musique tiré vers le bas, le balayage d'un message pour répondre et le tirer vers
+  le bas pour actualiser une app.
+- **Le bouton Supprimer d'une publication OnlyFruits ne faisait rien.** La carte est dessinée sur
+  trois écrans et le clic n'était branché que dans la page d'un créateur, donc sur votre propre
+  onglet, là où on s'en sert, il ne se passait rien. Il n'y a plus qu'un seul gestionnaire,
+  appelé par chaque écran. La confirmation avait aussi ses deux arguments inversés, ce qui
+  mettait toute la phrase d'avertissement sur le bouton : il affiche « Supprimer », et
+  l'avertissement est au-dessus.
+
+---
+
+## [1.7.7] - 2026-09-20
+
+### Changed
+
+- **Refined glass home screen.** Rounder app icons scale with the selected grid, the dock uses a cooler static glass finish, and widgets have softer shadows, a deeper weather palette and a quieter calendar heading. Existing layouts, wallpaper choices and glass preferences remain available.
+- App and home transitions use 220/320 ms timings. Icon presses use a smaller scale change; icon and widget hover feedback no longer animates filters or shadows. Reduced-motion settings still apply.
+
+### Performance
+
+- Simplified icon and dock paint layers without adding dependencies, backdrop filters or timers. No gameplay or server callback changes. Browser regression checks do not establish FiveM frame-time performance; an in-game check remains necessary.
+
+### Fixed
+
+- Refit home icons after an asynchronous widget response changes the strip layout, preventing labels from overlapping the next row. Ordinary widget data refreshes retain the cached grid. Removing every widget also invalidates pending replies.
+
+### Modifications
+
+- **Accueil en verre affiné.** Les icônes plus arrondies suivent la grille choisie, le dock adopte un verre statique aux tons froids et les widgets présentent des ombres plus douces, une météo aux bleus plus profonds et un titre de calendrier plus discret. Les dispositions, fonds d'écran et préférences de transparence restent disponibles.
+- Les transitions des applications et de l'accueil utilisent des durées de 220/320 ms. La réduction des icônes au clic est plus discrète ; le survol des icônes et widgets n'anime plus les filtres ou les ombres. Les réglages de réduction des animations restent respectés.
+
+### Performance (français)
+
+- Simplification des couches graphiques des icônes et du dock sans ajout de dépendance, de filtre de flou ou de minuterie. Aucun changement du gameplay ou des callbacks serveur. Les contrôles dans le navigateur ne mesurent pas les temps de rendu FiveM ; une vérification en jeu reste nécessaire.
+
+### Correctifs
+
+- Recalcul de la taille des icônes après une réponse asynchrone modifiant la disposition des widgets, pour éviter le chevauchement des libellés avec la rangée suivante. Les simples actualisations de données conservent la grille en cache. Retirer tous les widgets invalide aussi les réponses en attente.
+
+---
+
+## [1.7.6] - 2026-09-20
+
+### Added
+
+- **More handset sizes, and Auto.** Eight sizes from 85% to 250%, and an Auto setting that
+  picks one from the height of the game window: 1080p gets 100%, 1440p 125%, 4K 200%. Auto is
+  now the default for a new character (`Config.DeviceSize = 'auto'`), because a 4K player
+  reported that even 150% was only just enough. Every size still uses `zoom`, so all of them
+  are as sharp as 100%. The picker moved to a single row in Display that opens the list,
+  because nine choices do not fit side by side.
+- **OnlyFruits: take a post down.** A creator's own post now has a Delete button on their page.
+  The server had always accepted the request and nothing on screen ever made it, so a picture
+  posted by mistake was permanent. The unlocks of everybody who bought it go with it.
+- **OnlyFruits: cancel a subscription.** A subscriber can end it from the creator's page. There
+  is no recurring charge to stop, so what ends is the access, and the app says so before it
+  asks: nothing is refunded. The page also shows the date the subscription runs to.
+
+### Fixed
+
+- **A battery that goes back up after a restart.** The drain tick assumed 100% for a player
+  whose saved level had not been read yet, and it persists what it computes, so reaching
+  somebody before their row was loaded wrote a full battery over their real one. On a resource
+  restart no load event fires and the catch-up pass waits ten seconds, so the tick could get
+  there first - which is why it hit some players and not others. The tick now loads that player
+  instead, and writes nothing at all if it still has no level for them.
+- Four French strings were missing their accents.
+
+### Changed
+
+- The test suite runs the control probe at 250%, the largest size, instead of 150%.
+
+---
+
+## [1.7.5] - 2026-09-17
+
+### Added
+
+- **Four handset sizes.** Compact, normal, large and extra large, chosen in Settings. They use
+  `zoom`, so the page is laid out again at the chosen size and the text is drawn rather than
+  stretched: all four are as sharp as 100% was. This is the answer to a phone that looks tiny
+  on a 2K or 4K screen. `Config.DeviceSize` sets what a new character starts on, and
+  `Config.DeviceSizePlayer = false` keeps the choice with the operator.
+- `node tools/run-probe.js --size 1.5` runs the control probe at a chosen handset size, and
+  the test suite now runs it at the largest one.
+
+## [1.7.4] - 2026-09-17
+
+### Added
+
+- **A boot summary in the console.** One framed block at start: the version, the framework,
+  the database, how many apps are configured, and which inventory, banking, garage and housing
+  scripts the phone picked. A missing oxmysql or a standalone start is flagged as a warning.
+
+### Fixed
+
+- **v-park compatibility.** v-park only spawns a parked car near a player, so the Garage app
+  could not find a car left across the map. With v-park started, the phone asks it where the
+  car stands before searching the world.
+
+## [1.7.3] - 2026-09-16
+
+### Fixed
+
+- **Anonymous gifts on Fruitee are anonymous again.** oxmysql returns `TINYINT(1)` columns as
+  booleans, and those flags were read as numbers, so every one fell back to its default. An
+  anonymous gift showed the giver's name, a closed page still took gifts, and a page could not
+  turn off messages or anonymous gifts.
+- The same reading fixed for OnlyFruits subscriber-only posts, disarmed exports and flagged
+  reminders.
+
+## [1.7.2] - 2026-09-16
+
+### Added
+
+- **The phone says what you missed.** A short while after a character loads, it announces what
+  arrived while they were offline: unread messages, missed calls, unread mail and social
+  notifications. One card per app, so tapping it opens the app it is about. Only what landed
+  **after their last disconnect** is counted, so nothing a player has already read is announced
+  again at every connect. It obeys Do Not Disturb, a muted app and needing the handset on you,
+  like any other notification. `Config.CatchUp` sets whether it runs, how long after the load
+  (45 seconds by default) and the window used for a character with no recorded disconnect yet.
+
+### Performance
+
+- **The network and charging tick stops allocating.** It measured every player against every dead
+  zone and every charger by building a position for each row, for each player, twice a minute:
+  a few hundred short-lived objects a second on a busy server, all of which the collector pays
+  for. The rows do not move, so their positions are built once and kept.
+
+---
+
+### Ajouts (miroir francais)
+
+- **Le telephone dit ce que vous avez manque.** Peu apres le chargement d'un personnage, il
+  annonce ce qui est arrive pendant son absence : messages non lus, appels manques, mails non lus
+  et notifications sociales. Une carte par application, donc un appui ouvre l'application
+  concernee. Seul ce qui est arrive **apres sa derniere deconnexion** est compte, donc rien de
+  deja lu n'est reannonce a chaque connexion. Le mode ne pas deranger, une application muette et
+  l'obligation d'avoir le combine sur soi sont respectes comme pour toute notification.
+  `Config.CatchUp` regle son activation, le delai apres le chargement (45 secondes par defaut) et
+  la fenetre utilisee pour un personnage dont aucune deconnexion n'est encore enregistree.
+
+### Performances (miroir francais)
+
+- **La boucle reseau et recharge n'alloue plus.** Elle mesurait chaque joueur contre chaque zone
+  morte et chaque chargeur en construisant une position par ligne, pour chaque joueur, deux fois
+  par minute : quelques centaines d'objets ephemeres par seconde sur un serveur charge, tous a la
+  charge du ramasse-miettes. Ces lignes ne bougent pas : leurs positions sont construites une
+  fois et gardees.
+
+---
+
+## [1.7.1] - 2026-09-13
+
+### Fixed
+
+- **The phone works from the moment the character loads, not from its first open.** On qb-core,
+  qbx_core, ESX and ox_core the phone only prepared a player when they opened it: until then their
+  number was not routed, so calls and messages could not reach them, their language was not set
+  and their saved battery was not loaded. Players were being told to open the phone once after
+  connecting. The bridge now tells the phone as soon as the framework loads a character, and a
+  resource restart prepares everybody already connected.
+
+### Performance
+
+- **The network and charging tick no longer asks the framework about every player every two
+  seconds.** Checking that a character is loaded crossed into qb-core and serialised the whole
+  player object, for every player, on every pass: it was the phone's largest share of server
+  time in a live profile. The answer is now remembered for thirty seconds and updated at once when
+  a character loads or a player leaves. The staff admin view check is not cached, so a session
+  still ends at the exact second it runs out.
+
+---
+
+### Correctifs (miroir francais)
+
+- **Le telephone fonctionne des le chargement du personnage, plus seulement a sa premiere
+  ouverture.** Sur qb-core, qbx_core, ESX et ox_core, le telephone ne preparait un joueur qu'a
+  l'ouverture : jusque-la son numero n'etait pas route, donc appels et messages ne le trouvaient
+  pas, sa langue n'etait pas definie et sa batterie enregistree n'etait pas chargee. Le pont
+  previent maintenant le telephone des que le framework charge un personnage, et un redemarrage
+  de la ressource prepare tous les joueurs deja connectes.
+
+### Performances (miroir francais)
+
+- **La boucle reseau et recharge ne demande plus au framework, toutes les deux secondes, si chaque
+  joueur est la.** Cette verification passait par qb-core et serialisait l'objet joueur complet,
+  pour chaque joueur, a chaque passe : c'etait la plus grosse part du temps serveur du telephone
+  dans un profil reel. La reponse est gardee trente secondes et mise a jour aussitot au chargement
+  d'un personnage ou au depart d'un joueur. La verification de la vue admin n'est pas mise en
+  cache : une session se termine toujours a la seconde exacte.
+
+---
+
+## [1.7.0] - 2026-09-13
+
+### Added
+
+- **A mail address can be deleted (#11).** In Mail, tap the address at the top of the inbox, then
+  **Delete this address** at the bottom of the accounts sheet, and confirm. The mail in that address
+  goes with it. A copy of the same mail somebody else holds stays where it is, because it is theirs.
+  **A deleted address is retired, not freed.** Nobody else can register it, and mail sent to it is
+  refused exactly like mail to an address that never existed: whoever took it next would otherwise
+  receive every reply still meant for the previous owner, which is an easy way to impersonate
+  somebody. Its owner can create it again, and it then counts against `Config.Mail.maxAccounts` like
+  a new one; while it is retired it counts against nothing. The only thing that frees it is a staff
+  data wipe, the `WipePhone` export or `phoneclean mail confirm`, which remove every row, retired
+  ones included.
+  `Config.Mail.deleteAccounts` switches it, on by default. Off hides the button and the server
+  refuses the request, so a forged one gets nowhere either. The address at the top of the inbox now
+  opens the accounts sheet on a server that allows a single address too, because that sheet is
+  where the button lives; it keeps its share button, so nothing is lost by the extra tap.
+  The database needs one new column, `deleted_at` on `vphone_mail_accounts`, and it is added on
+  boot. Every existing address stays live and no row is rewritten. If your database user may not
+  alter tables, the console prints the one statement to run by hand.
+
+- **A post can be deleted from every place a post is shown (#12).** Your own posts carry a
+  **...** button beside your name. It opens **Post options**, where **Delete post** sits above a
+  line saying what goes with it, its likes, comments and reposts, and then it asks you to confirm.
+  It is there in nine places: the Bleeter feed, a profile, a hashtag feed and Saved, and the
+  Snapmatic feed, a profile, a hashtag feed, Saved and Explore. A post that is not yours offers
+  neither the dots nor the trash. The small trash in the card's footer stays and leads to the same
+  confirmation; the dots are simply where a player looks for "delete this", which that glyph never
+  was.
+
+### Fixed
+
+- **Deleting a post opened from Saved or Explore did nothing.** A tile in those tabs opens the post
+  on its own in a sheet, and that sheet wired the like, the save, the comments and the name by hand
+  and nothing else: the trash drew, took the press and did nothing, on the only path to a single
+  post from those two tabs. It now gets the same wiring as every other card, so delete works there,
+  and so do repost, share, hashtags and mentions.
+  **Cancel goes back to the post.** Cancel on the post options or on the delete confirmation of a
+  post shown in a sheet closed it and dropped you on whatever was underneath. It now raises the post
+  again, with the like or the save you just gave it still showing.
+- **Bleeter's Saved tab drew text posts as empty squares.** The grid paints a post's picture as the
+  tile, and a bleet with no picture had nothing to paint. A post without a picture now shows its
+  opening words.
+- **Mail acted as an address the page named but the character does not hold.** The server fell back
+  to the character's first address instead of refusing, so a page still showing a deleted address
+  listed a different mailbox under its header and sent mail from an address nobody chose. A request
+  naming an address this character does not hold, a retired one included, is now refused, and the
+  app starts again from a live address. The FruitDrop email share follows the same rule and can no
+  longer share a different address from the one asked for. A request naming no address at all still
+  acts as the first one, so an older page keeps working.
+- **An admin view never ran out while the staff member stayed connected.** `viewSeconds` is there so
+  a forgotten session does not last all night, but the server's state tick asked every two seconds
+  who each player was, that question counted as the session being used, and use pushed the clock
+  back. A clock no longer counts: the state tick, its call check, the bank balance poll and a
+  FruitBrawl payout all read a held phone without extending the session. It now runs out at
+  `viewSeconds`, and a genuine request from the staff member still extends it.
+  **And a session that ends without being asked closes the handset.** Run out, caught by the sweep,
+  or the viewed player disconnecting: the staff member's phone is closed at once, and the first
+  request after an end nobody noticed is refused, so an action can never land on the staff member's
+  own character under a banner still naming somebody else. That refusal is cleared when a player
+  disconnects, so the next player given the same server id is not refused for nothing.
+- **An admin view wrote the staff member's battery into the viewed player's saved row.** The drain
+  tick found the player through the same redirect every request uses, so a staff member holding
+  somebody's phone saved their own level into that character's row, and the save on resource stop
+  did the same. The disconnect save had its own version: a staff member who left at the moment a
+  session ran out had no level saved at all. Battery is always saved to the real character on that
+  source now.
+- **ox_core: every player still on the character selection screen shared one battery.** ox_core
+  hands back a player object before a character is chosen, with no `charId`, and the missing id
+  became the string "nil": one saved row for all of them, each writing over the others. A player
+  with no character id is no longer treated as a loaded character.
+- **Changing language pushed the old strings.** FiveM runs a state bag change handler before it
+  stores the new value, and the handler read the bag, so the page received the previous language's
+  table labelled with the new one until the next time the phone opened hid it. The table is built
+  from the value the handler is handed.
+- **`tools/test-all.py` crashed on Windows when its output was redirected to a file.** Redirected
+  output falls back to the ANSI code page, and the first character outside it ended the run, so a
+  suite that passed read as a crash. It writes UTF-8 whatever the console says.
+
+### Performance
+
+Every figure below was measured from the repository with the real files. Frame times in game were
+not measured, and nothing here claims a number of milliseconds on your server. To see what this
+release changes there, compare `resmon` before and after the update with the phone closed, with it
+open, and while notifications are arriving.
+
+- **The string table stopped riding on messages that did not need it.** The whole locale table,
+  127 KB of JSON in French and 117 KB in English, was attached to most messages sent to the page,
+  which almost always already held it and threw the copy away. It is now sent only until the page
+  confirms it holds the current language, and that belief is built from what the page itself says,
+  because NUI drops a message sent to a page that is still loading without a word. Bytes sent to
+  the page:
+  - a notification received with the phone away: 255,169 to 325
+  - a Zuber order update with the phone away: 382,688 to 349
+  - a 911 alert with its banner: 255,233 to 395
+  - opening the phone: about 127,500 to 124
+
+  Each copy saved is an estimated half millisecond of JSON encoding on the game thread, plus a
+  similar parse in the page. That half millisecond is an estimate, because FiveM's encoder is
+  written in C and its absolute time differs. The byte counts are not estimates.
+
+- **A translation stopped re-reading the state bag.** Every lookup read the player's language from
+  the state bag again: 592 bytes of garbage and a decoded native read per call, 60 times a second
+  near a payphone or a verification desk and 240 times a second in the selfie camera. After the
+  first lookup it reads nothing, and a change handler keeps the value current.
+
+- **The open phone allocates nothing per frame.** The loop that holds the controls while the phone
+  is open built a table every frame, 60 a second; it builds none. The hold animation is checked
+  every 250 ms instead of every frame, which is still shorter than the blend that brings it back,
+  and closing the phone twice quickly no longer starts a second pause guard.
+
+- **The server's state tick, every two seconds, does less per player.** Per minute, for 64 players:
+  - player wrappers built only to find out whether a player exists: 1,920 to 0, and with them 5,760
+    closures and 1,920 convar reads to 0
+  - cross-resource calls: ox_core 3,840 to 1,920, ESX 5,760 to 1,920
+  - natives for a player on foot: 13,470 to 7,770 (standalone 21,150 to 7,770)
+  - whether v-world is started, for the dead zones, is read once per pass instead of once per
+    player: 3,840 natives to 60
+  - the charger check stopped calling an export back into the phone itself for a battery level it
+    already holds: 1,920 calls to 0 for players in a car or at home
+
+  The players ticked and every value pushed are identical to 1.6.4, and a test runs the old code and
+  the new side by side on one fixture to check it.
+
+### Notes
+
+- **Upgrading from 1.6.4.** Nothing to import: the `deleted_at` column is added on boot.
+  `Config.Mail.deleteAccounts` is new, and an edited `config.lua` that does not have it behaves as
+  `true`. To keep the old behaviour, where an address could not be deleted, set it to `false`.
+
+- **Three new suites, each shown to fail when the code it guards is broken.**
+  `tools/test-mail-delete.py` runs the Mail code under real Lua against a database that stores rows,
+  and holds that a deleted address is retired and never handed to somebody else.
+  `tools/test-strings.py` holds that the string table travels only when the page lacks it and that a
+  language change pushes the new one. `tools/test-hotpath.py` counts what the state tick costs
+  against the previous code, and covers the admin view clocks and whose row a battery is saved to.
+  All three run from `tools/test-all.py`. `tools/probe-input.js` gains a section that presses the
+  footer trash and the three dots for real, in a feed and in the post sheet, and ends on Cancel
+  every time.
+
+---
+
+### Ajouts (miroir francais)
+
+- **Une adresse mail peut être supprimée (#11).** Dans Mail, touchez l'adresse en haut de la boîte
+  de réception, puis **Supprimer cette adresse** en bas de la feuille des comptes, et confirmez. Les
+  mails de cette adresse partent avec elle. La copie d'un même mail que détient quelqu'un d'autre
+  reste où elle est, parce que c'est la sienne.
+  **Une adresse supprimée est retirée, pas libérée.** Personne d'autre ne peut l'enregistrer, et un
+  mail qui lui est envoyé est refusé exactement comme un mail vers une adresse qui n'a jamais
+  existé : sinon, celui qui la prendrait ensuite recevrait toutes les réponses encore destinées à
+  l'ancien titulaire, ce qui est un moyen facile de se faire passer pour quelqu'un. Son titulaire
+  peut la recréer, et elle compte alors dans `Config.Mail.maxAccounts` comme une nouvelle ; tant
+  qu'elle est retirée, elle ne compte nulle part. La seule chose qui la libère est un effacement de
+  données par le staff, l'export `WipePhone` ou `phoneclean mail confirm`, qui retirent toutes les
+  lignes, adresses retirées comprises.
+  `Config.Mail.deleteAccounts` l'active, activé par défaut. Désactivé, le bouton disparaît et le
+  serveur refuse la requête, donc une requête forgée n'aboutit pas non plus. L'adresse en haut de
+  la boîte de réception ouvre désormais la feuille des comptes aussi sur un serveur qui n'autorise
+  qu'une adresse, parce que c'est là que se trouve le bouton ; la feuille garde son bouton de
+  partage, donc l'appui de plus ne fait rien perdre.
+  La base de données a besoin d'une nouvelle colonne, `deleted_at` sur `vphone_mail_accounts`, et
+  elle est ajoutée au démarrage. Toutes les adresses existantes restent actives et aucune ligne
+  n'est réécrite. Si votre utilisateur de base de données n'a pas le droit de modifier une table,
+  la console affiche l'unique requête à lancer à la main.
+
+- **Une publication peut être supprimée partout où une publication s'affiche (#12).** Vos propres
+  publications portent un bouton **...** à côté de votre nom. Il ouvre **Options de la
+  publication**, où **Supprimer la publication** est suivi d'une ligne qui dit ce qui part avec
+  elle, ses J'aime, ses commentaires et ses republications, puis une confirmation est demandée. Il
+  est présent à neuf endroits : le fil Bleeter, un profil, un fil de hashtag et les Enregistrés,
+  puis le fil Snapmatic, un profil, un fil de hashtag, les Enregistrés et Explorer. Une publication
+  qui n'est pas la vôtre n'offre ni les points ni la corbeille. La petite corbeille du pied de
+  carte reste et mène à la même confirmation ; les points sont simplement l'endroit où un joueur
+  cherche « supprimer », ce que ce petit pictogramme n'a jamais été.
+
+### Correctifs (miroir francais)
+
+- **Supprimer une publication ouverte depuis les Enregistrés ou Explorer ne faisait rien.** Une
+  vignette de ces onglets ouvre la publication seule dans une feuille, et cette feuille branchait à
+  la main le J'aime, l'enregistrement, les commentaires et le nom, et rien d'autre : la corbeille
+  s'affichait, prenait l'appui et ne faisait rien, sur le seul chemin vers une publication isolée
+  depuis ces deux onglets. Elle reçoit maintenant le même branchement que toutes les autres cartes :
+  la suppression y fonctionne, tout comme la republication, le partage, les hashtags et les
+  mentions.
+  **Annuler ramène à la publication.** Annuler sur les options ou sur la confirmation de
+  suppression d'une publication affichée dans une feuille la fermait et laissait le joueur sur ce
+  qu'il y avait dessous. La publication revient désormais, avec le J'aime ou l'enregistrement qu'on
+  vient de lui donner toujours affiché.
+- **Les Enregistrés de Bleeter dessinaient les publications texte comme des carrés vides.** La
+  grille peint l'image d'une publication comme vignette, et un bleet sans image n'avait rien à
+  peindre. Une publication sans image affiche maintenant ses premiers mots.
+- **Mail agissait au nom d'une adresse que la page nommait mais que le personnage ne détient pas.**
+  Le serveur se rabattait sur la première adresse du personnage au lieu de refuser : une page qui
+  affichait encore une adresse supprimée listait une autre boîte sous son en-tête et envoyait des
+  mails depuis une adresse que personne n'avait choisie. Une requête qui nomme une adresse que ce
+  personnage ne détient pas, adresse retirée comprise, est maintenant refusée, et l'application
+  repart d'une adresse active. Le partage d'adresse par FruitDrop suit la même règle et ne peut plus
+  partager une autre adresse que celle demandée. Une requête qui ne nomme aucune adresse agit
+  toujours au nom de la première, pour qu'une page plus ancienne continue de fonctionner.
+- **Une consultation admin n'expirait jamais tant que le membre du staff restait connecté.**
+  `viewSeconds` existe pour qu'une session oubliée ne dure pas toute la nuit, mais la boucle d'état
+  du serveur demandait toutes les deux secondes qui était chaque joueur, cette question comptait
+  comme une utilisation de la session, et une utilisation repoussait l'échéance. Une horloge ne
+  compte plus : la boucle d'état, sa vérification d'appel, le relevé du solde bancaire et un gain
+  FruitBrawl lisent un téléphone consulté sans prolonger la session. Elle expire maintenant à
+  `viewSeconds`, et une vraie requête du membre du staff la prolonge toujours.
+  **Et une session qui se termine sans qu'on l'ait demandé ferme le téléphone.** Expirée, relevée
+  par le balayage, ou le joueur consulté qui se déconnecte : le téléphone du membre du staff se
+  ferme aussitôt, et la première requête après une fin que personne n'a remarquée est refusée, pour
+  qu'une action ne puisse jamais toucher le propre personnage du membre du staff sous un bandeau
+  qui nomme encore quelqu'un d'autre. Ce refus est effacé quand un joueur se déconnecte, pour que le
+  joueur suivant qui reçoit le même identifiant serveur ne soit pas refusé pour rien.
+- **Une consultation admin écrivait la batterie du membre du staff dans la ligne du joueur
+  consulté.** La boucle de décharge trouvait le joueur par la même redirection que chaque requête,
+  donc un membre du staff qui tenait le téléphone de quelqu'un enregistrait son propre niveau dans
+  la ligne de ce personnage, et la sauvegarde à l'arrêt de la ressource faisait de même. La
+  sauvegarde à la déconnexion avait sa propre variante : un membre du staff parti au moment où une
+  session expirait n'avait aucun niveau enregistré. La batterie est désormais toujours enregistrée
+  pour le vrai personnage de cette source.
+- **ox_core : tous les joueurs encore sur l'écran de sélection de personnage partageaient une seule
+  batterie.** ox_core renvoie un objet joueur avant qu'un personnage soit choisi, sans `charId`, et
+  l'identifiant manquant devenait la chaîne "nil" : une seule ligne enregistrée pour tous, chacun
+  écrasant les autres. Un joueur sans identifiant de personnage n'est plus traité comme un
+  personnage chargé.
+- **Changer de langue envoyait les anciens textes.** FiveM exécute un gestionnaire de changement de
+  state bag avant d'enregistrer la nouvelle valeur, et ce gestionnaire relisait le state bag : la
+  page recevait la table de la langue précédente étiquetée avec la nouvelle, jusqu'à ce que la
+  prochaine ouverture du téléphone le masque. La table est construite à partir de la valeur transmise
+  au gestionnaire.
+- **`tools/test-all.py` plantait sous Windows quand sa sortie était redirigée vers un fichier.** Une
+  sortie redirigée retombe sur la page de code ANSI, et le premier caractère hors de celle-ci
+  arrêtait l'exécution : une suite qui passait ressemblait à un plantage. La sortie est en UTF-8
+  quoi qu'en dise la console.
+
+### Performances (miroir francais)
+
+Tous les chiffres ci-dessous ont été mesurés depuis le dépôt, avec les vrais fichiers. Les temps
+d'image en jeu n'ont pas été mesurés, et rien ici n'annonce un nombre de millisecondes sur votre
+serveur. Pour voir ce que cette version y change, comparez `resmon` avant et après la mise à jour,
+téléphone fermé, téléphone ouvert, et pendant que des notifications arrivent.
+
+- **La table des textes ne voyage plus avec des messages qui n'en avaient pas besoin.** Toute la
+  table de locale, 127 Ko de JSON en français et 117 Ko en anglais, accompagnait la plupart des
+  messages envoyés à la page, qui la détenait presque toujours déjà et jetait la copie. Elle n'est
+  plus envoyée que jusqu'à ce que la page confirme détenir la langue en cours, et cette certitude
+  ne se fonde que sur ce que dit la page elle-même, parce que NUI jette sans rien dire un message
+  envoyé à une page encore en chargement. Octets envoyés à la page :
+  - une notification reçue téléphone rangé : de 255 169 à 325
+  - une mise à jour de commande Zuber téléphone rangé : de 382 688 à 349
+  - une alerte 911 avec sa bannière : de 255 233 à 395
+  - ouvrir le téléphone : d'environ 127 500 à 124
+
+  Chaque copie évitée représente environ une demi-milliseconde estimée d'encodage JSON sur le fil du
+  jeu, plus une analyse comparable dans la page. Cette demi-milliseconde est une estimation, parce
+  que l'encodeur de FiveM est écrit en C et que son temps absolu diffère. Les nombres d'octets n'en
+  sont pas.
+
+- **Une traduction ne relit plus le state bag.** Chaque recherche relisait la langue du joueur dans
+  le state bag : 592 octets de déchets et une lecture native décodée par appel, 60 fois par seconde
+  près d'une cabine ou d'un guichet de certification et 240 fois par seconde dans la caméra selfie.
+  Après la première recherche, plus rien n'est lu, et un gestionnaire de changement tient la valeur
+  à jour.
+
+- **Le téléphone ouvert n'alloue plus rien à chaque image.** La boucle qui retient les commandes
+  pendant que le téléphone est ouvert construisait une table à chaque image, 60 par seconde ; elle
+  n'en construit plus aucune. L'animation de tenue est vérifiée toutes les 250 ms au lieu de chaque
+  image, ce qui reste plus court que la transition qui la rétablit, et fermer le téléphone deux fois
+  rapidement ne lance plus une seconde garde de pause.
+
+- **La boucle d'état du serveur, toutes les deux secondes, en fait moins par joueur.** Par minute,
+  pour 64 joueurs :
+  - objets joueur construits seulement pour savoir si un joueur existe : de 1 920 à 0, et avec eux
+    5 760 closures et 1 920 lectures de convar à 0
+  - appels entre ressources : ox_core de 3 840 à 1 920, ESX de 5 760 à 1 920
+  - natives pour un joueur à pied : de 13 470 à 7 770 (standalone de 21 150 à 7 770)
+  - l'état de v-world, pour les zones mortes, est lu une fois par passage au lieu d'une fois par
+    joueur : de 3 840 natives à 60
+  - la vérification du chargeur n'appelle plus un export du téléphone lui-même pour un niveau de
+    batterie qu'il détient déjà : de 1 920 appels à 0 pour les joueurs en voiture ou chez eux
+
+  Les joueurs traités et chaque valeur envoyée sont identiques à la 1.6.4, et un test exécute
+  l'ancien code et le nouveau côte à côte sur le même jeu de données pour le vérifier.
+
+### Notes (miroir francais)
+
+- **Mise à jour depuis la 1.6.4.** Rien à importer : la colonne `deleted_at` est ajoutée au
+  démarrage. `Config.Mail.deleteAccounts` est nouveau, et un `config.lua` modifié qui ne le contient
+  pas se comporte comme `true`. Pour garder l'ancien comportement, où une adresse ne pouvait pas
+  être supprimée, réglez-le sur `false`.
+
+- **Trois nouvelles suites, chacune montrée en échec quand le code qu'elle protège est cassé.**
+  `tools/test-mail-delete.py` exécute le code de Mail sous un vrai Lua contre une base qui stocke
+  réellement des lignes, et vérifie qu'une adresse supprimée est retirée et jamais donnée à
+  quelqu'un d'autre. `tools/test-strings.py` vérifie que la table des textes ne voyage que lorsque
+  la page ne l'a pas et qu'un changement de langue envoie la nouvelle. `tools/test-hotpath.py`
+  compte ce que coûte la boucle d'état face à l'ancien code, et couvre les horloges de la
+  consultation admin et la ligne dans laquelle une batterie est enregistrée. Les trois tournent
+  depuis `tools/test-all.py`. `tools/probe-input.js` gagne une section qui appuie pour de vrai sur
+  la corbeille du pied de carte et sur les trois points, dans un fil et dans la feuille d'une
+  publication, et termine chaque fois sur Annuler.
+
+---
+
 ## [1.6.4] - 2026-08-06
 
 ### Changed

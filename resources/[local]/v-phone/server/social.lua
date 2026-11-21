@@ -306,14 +306,19 @@ AddEventHandler('playerDropped', function()
     ResetTry[src] = nil
 end)
 
+-- **No resource-name guard, because this IS the resource.**
+--
+-- These two asked `GetResourceState('v-phone')` first and gave up when the answer was not
+-- `started` - which is every server whose folder is named anything else, and cloning the
+-- repository gives `v-phone-fivem`. The number came back nil, sign-up answered "that number
+-- does not exist", and no app could be finished. The phone is the one calling, so there is
+-- nothing to check.
 local function phoneNumberOf(src)
-    if GetResourceState('v-phone') ~= 'started' then return nil end
-    local ok, n = pcall(function() return exports['v-phone']:NumberOf(src) end)
+    local ok, n = pcall(function() return exports[GetCurrentResourceName()]:NumberOf(src) end)
     return ok and n or nil
 end
 
 local function smsCode(src, app, code)
-    if GetResourceState('v-phone') ~= 'started' then return end
     local name = APP_NAME[app] or 'iFruit'
     local text = (LP(src, 'ph.soc_code_sms')):format(code)
 
@@ -323,14 +328,14 @@ local function smsCode(src, app, code)
     pcall(function()
         local p = Core and Core.GetPlayer and Core.GetPlayer(src)
         if p and p.citizenid then
-            exports['v-phone']:SendServiceMessage(p.citizenid, name:sub(1, 12), text)
+            exports[GetCurrentResourceName()]:SendServiceMessage(p.citizenid, name:sub(1, 12), text)
         end
     end)
 
     -- And the banner as well, because the code is wanted immediately and the player is
     -- already looking at the sign-up screen rather than at Messages.
     pcall(function()
-        exports['v-phone']:Notify(src, app, name, text)
+        exports[GetCurrentResourceName()]:Notify(src, app, name, text)
     end)
 end
 
@@ -581,7 +586,7 @@ end
 --- are subselects, so a feed stays a single round trip however long it is. The four
 --- placeholders are the caller's own citizen id, in order.
 local POST_COLUMNS = [[
-    s.id, s.kind, s.body, s.image, s.images, s.at,
+    s.id, s.kind, s.body, s.image, s.images, s.loc_x, s.loc_y, s.at,
     a.handle, a.displayname, a.avatar, a.verified, a.official,
     (SELECT COUNT(*) FROM vphone_social_likes l WHERE l.post_id = s.id) AS likes,
     (SELECT COUNT(*) FROM vphone_social_comments c WHERE c.post_id = s.id) AS comments,
@@ -1179,20 +1184,42 @@ V.Callback('v-phone:soc:post', function(src, resolve, data)
     end
     local image = list[1] or ''
 
+    local shareLocation = mediaApp == 'bleeter' and data and data.shareLocation == true
     if kind == 'photo' or kind == 'video' then
         -- The media is the post; a caption is optional.
         if image == '' then resolve({ error = 'noimage' }) return end
     else
-        if body:gsub('%s', '') == '' and image == '' then resolve({ error = 'empty' }) return end
+        if body:gsub('%s', '') == '' and image == '' and not shareLocation then
+            resolve({ error = 'empty' }) return
+        end
     end
 
     -- A clip is one file. Four videos in a card is a frame-rate problem rather than a feature,
     -- and nothing in the page draws a grid of them.
     if kind == 'video' then list = { image } end
 
-    local id = MySQL.insert.await(
-        'INSERT INTO vphone_social_posts (citizenid, app, kind, body, image, images) VALUES (?,?,?,?,?,?)',
-        { p.citizenid, mediaApp, kind, body, image, #list > 1 and json.encode(list) or nil })
+    local locX, locY
+    if shareLocation then
+        local ped = GetPlayerPed(src)
+        if not ped or ped == 0 then resolve({ error = 'nowhere' }) return end
+        local coords = GetEntityCoords(ped)
+        if not coords or not coords.x or not coords.y then
+            resolve({ error = 'nowhere' }) return
+        end
+        locX, locY = coords.x, coords.y
+    end
+
+    local id
+    if shareLocation then
+        id = MySQL.insert.await(
+            'INSERT INTO vphone_social_posts (citizenid, app, kind, body, image, images, loc_x, loc_y) VALUES (?,?,?,?,?,?,?,?)',
+            { p.citizenid, mediaApp, kind, body, image, #list > 1 and json.encode(list) or '',
+              locX, locY })
+    else
+        id = MySQL.insert.await(
+            'INSERT INTO vphone_social_posts (citizenid, app, kind, body, image, images) VALUES (?,?,?,?,?,?)',
+            { p.citizenid, mediaApp, kind, body, image, #list > 1 and json.encode(list) or nil })
+    end
     Core.Log('social', ('%s posted %s #%d'):format(p.citizenid, kind, id), nil, p.citizenid)
     -- Hashtags into their own table, and anybody the post named gets told. Both read the
     -- body that was actually stored, not the one that arrived, so a truncated post cannot
@@ -2027,11 +2054,11 @@ V.Callback('v-phone:soc:hushSay', function(src, resolve, data)
     -- The notification carries the FIRST NAME, which is all Hush ever shows of anybody. Not a
     -- handle - there is none - and certainly not a number.
     local target = Core.GetPlayerByCitizenId and Core.GetPlayerByCitizenId(other)
-    if target and target.source and GetResourceState('v-phone') == 'started' then
+    if target and target.source and true then
         local me = MySQL.single.await(
             'SELECT firstname FROM vphone_characters WHERE citizenid = ?', { p.citizenid })
         pcall(function()
-            exports['v-phone']:Notify(target.source, 'hush', me and me.firstname or '?',
+            exports[GetCurrentResourceName()]:Notify(target.source, 'hush', me and me.firstname or '?',
                 body ~= '' and body or (Locales.fr or {})['soc.dm_photo'] or 'Photo')
         end)
     end
@@ -3218,9 +3245,9 @@ V.Callback('v-phone:soc:dmSend', function(src, resolve, data)
     -- not arrive. Tell the phone, which knows how to put it on their screen.
     local me = accountOf(p.citizenid, app)
     local target = Core.GetPlayerByCitizenId and Core.GetPlayerByCitizenId(cid)
-    if target and target.source and GetResourceState('v-phone') == 'started' then
+    if target and target.source and true then
         pcall(function()
-            exports['v-phone']:Notify(target.source, app, '@' .. (me and me.handle or '?'),
+            exports[GetCurrentResourceName()]:Notify(target.source, app, '@' .. (me and me.handle or '?'),
                 body ~= '' and body or (Locales.fr or {})['soc.dm_photo'] or 'Photo')
         end)
     end
@@ -3404,6 +3431,8 @@ function SocialBoot(core)
         -- before this column existed, which decodes to "just the cover" - a faithful reading,
         -- because one is all those posts ever had.
         `images`    TEXT NULL DEFAULT NULL,
+        `loc_x`     DECIMAL(9,1) NULL DEFAULT NULL,
+        `loc_y`     DECIMAL(9,1) NULL DEFAULT NULL,
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (`id`), KEY `app_idx` (`app`, `id`), KEY `kind_idx` (`kind`, `id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
@@ -3431,6 +3460,16 @@ function SocialBoot(core)
     if not hasImages then
         MySQL.query.await('ALTER TABLE `vphone_social_posts` ADD COLUMN `images` TEXT NULL DEFAULT NULL')
         print('[v-phone] social: added posts.images for multi-photo posts')
+    end
+
+    local hasLocation = MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_social_posts'
+          AND COLUMN_NAME = 'loc_x' LIMIT 1]])
+    if not hasLocation then
+        MySQL.query.await([[ALTER TABLE `vphone_social_posts`
+            ADD COLUMN `loc_x` DECIMAL(9,1) NULL DEFAULT NULL,
+            ADD COLUMN `loc_y` DECIMAL(9,1) NULL DEFAULT NULL]])
+        print('[v-phone] social: added optional location to posts')
     end
 
     -- What somebody did to your post, or to you. The one thing a social app cannot be

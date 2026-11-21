@@ -145,6 +145,9 @@ V.Module({
         { key = 'customWallpaper', label = 'Allow linked wallpapers', type = 'bool', default = true,
           hint = 'Off leaves only the built-in gradients, which cost nothing to load.' },
 
+        { key = 'lockScreen', label = 'Show the lock screen', type = 'bool', default = true,
+          hint = 'Off, a phone with no passcode and no Face Unlock opens straight on the home screen. A character who set a passcode is always asked for it.' },
+
         { key = 'camera', label = 'Camera app enabled', type = 'bool', default = false,
           hint = 'The camera writes to a gallery. Uploading anywhere is an operator decision, so it has no default destination and stays off until one is set.' },
 
@@ -495,7 +498,11 @@ local function appsFor(src, p)
 
         if w and tonumber(w.enabled) == 0 then ok = false end
         -- An app that opens onto a stopped module is worse than an app that is not there.
-        if ok and a.owner and a.owner ~= 'v-phone' and GetResourceState(a.owner) ~= 'started' then ok = false end
+        -- `v-phone` is the sentinel for "the phone itself", and so is whatever this folder is
+        -- really called: a server that renamed it would otherwise have its own apps hidden for
+        -- naming a resource that is, from here, started by definition.
+        if ok and a.owner and a.owner ~= 'v-phone' and a.owner ~= GetCurrentResourceName()
+            and GetResourceState(a.owner) ~= 'started' then ok = false end
         -- The operator's own switch for the apps this resource answers for. Same function
         -- the server callbacks use, so an icon never opens onto "not available here".
         if ok and Bridge_AppEnabled and not Bridge_AppEnabled(id) then ok = false end
@@ -841,6 +848,42 @@ function PhoneBlocksOf(citizenid) return blocksOf(citizenid) end
 
 function PhoneBlockable(number) return blockable(number) end
 
+--- The handset sizes, and the only values the phone ever renders at. `0` is Auto: the page
+--- picks a step from the height of the game window, which is the one thing it can see and the
+--- server cannot.
+---
+--- A size is snapped to the nearest step rather than clamped to a range: the page lays itself
+--- out again at one of these with `zoom`, and a number in between would be a size nobody chose
+--- and nobody can get back from. `nil` means "whatever the operator set".
+local DEVICE_SIZES = { 0.85, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5 }
+
+function deviceSize(value)
+    if value == nil then value = Config.DeviceSize end
+    if value == 'auto' or tonumber(value) == 0 then return 0 end
+    local want = tonumber(value) or 1.0
+    local best, gap = 1.0, math.huge
+    for _, step in ipairs(DEVICE_SIZES) do
+        local d = math.abs(step - want)
+        if d < gap then best, gap = step, d end
+    end
+    return best
+end
+
+--- **The colour of the route line for this character's job.**
+---
+--- Decided here rather than on the page: the job is the framework's to answer, and the client
+--- is never told what anybody's job is until it needs to be. nil means "leave the game alone",
+--- which is also what an unconfigured server gets.
+function routeColourFor(player)
+    local cfg = Config.RouteColour
+    if type(cfg) ~= 'table' or cfg.enabled ~= true then return nil end
+    local job = player and player.job and tostring(player.job.name or '') or ''
+    local byJob = type(cfg.byJob) == 'table' and cfg.byJob or {}
+    local colour = tonumber(byJob[job]) or tonumber(cfg.default)
+    if not colour then return nil end
+    return math.max(0, math.min(85, math.floor(colour)))
+end
+
 local function cleanLayout(value)
     if type(value) ~= 'table' or type(value.items) ~= 'table' then return nil end
     local items = {}
@@ -1043,10 +1086,13 @@ prefsOf = function(p, includeSecrets)
                        and m.wallpaperUrl and tostring(m.wallpaperUrl) or nil,
         wallFit   = (m.wallFit == 'contain') and 'contain' or Config.WallpaperFit,
         wallFocus = tonumber(m.wallFocus) or nil,
-        -- The operator's size, not the player's, and the stored value is ignored rather
-        -- than clamped: a character who had set 80% before this was locked would otherwise
-        -- keep a permanently soft phone with no control left to fix it.
-        size      = math.max(0.75, math.min(1.15, tonumber(Config.DeviceSize) or 1.0)),
+        -- One of the four sizes, the player's own where the operator allows it. Anything
+        -- else - an old slider value, a number from a page that made one up - snaps to the
+        -- nearest step rather than being honoured.
+        size      = deviceSize(Config.DeviceSizePlayer ~= false and m.size or nil),
+        -- Whether Settings shows the four sizes at all. An operator who fixed the size gets
+        -- no picker rather than a picker that silently refuses.
+        sizePicker = Config.DeviceSizePlayer ~= false,
         side      = (m.side == 'left') and 'left' or 'right',
         -- The home screen: the player's own order, and any folders they made.
         layout    = cleanLayout(m.layout),
@@ -1416,8 +1462,11 @@ end
 
 --- Nothing leaves the phone without a signal. Checked here rather than in the client so
 --- that standing in a tunnel actually means something.
-local function hasBars(src)
-    local p = Core and Core.GetPlayer(src)
+local function hasBars(src, fromClock)
+    -- `fromClock`: the state tick checking a player on a call. Same answer through
+    -- `Core.PeekPlayer`, which does not count as a staff member using a held phone. Requests
+    -- leave it out, and a request is what keeps an admin view session alive.
+    local p = Core and (fromClock and Core.PeekPlayer or Core.GetPlayer)(src)
     if not p then return false end
     -- A handset staff took out of service. Not an outage - the network is fine, this phone
     -- is not - but it fails at exactly the same place, so nothing downstream has to learn
@@ -1847,25 +1896,37 @@ end)
 --- twice - a job script has the source, a dispatch has the number, a database job has the id.
 --- Making the caller convert first is how an export ends up unused.
 ---
---- Order matters. A source is a small integer and a citizen id is not, so sources are recognised
---- first and only when the player is actually connected; a number is checked before a citizen id
---- because the number FORMAT is the narrower of the two.
+--- **Order matters, and it used to be wrong on ox_core.**
+---
+--- A source id was recognised first, on the grounds that it is a small integer and a citizen id
+--- is not. That is true of qb and ESX, where a citizen id looks like `ABC12345`. On ox_core a
+--- character id IS a small integer - 1, 2, 3 - so every one of them was read as a server id and
+--- answered with whoever happened to be connected on that slot, or with nothing at all. A
+--- script texting a character on ox texted a stranger or the void, and the sign-up code for the
+--- social apps is sent exactly that way: the code never arrived and the account could not be
+--- finished.
+---
+--- So what the phone's own tables CONFIRM comes first, and the guess comes last: a citizen id
+--- that owns a line, then a phone number, then - only if neither matched - a connected source.
 function PhoneWhoIs(target)
     if target == nil then return nil end
 
+    local text = tostring(target)
+
+    -- A citizen id, confirmed against the phone's own character table rather than taken on
+    -- trust, so a typo becomes "no such player" instead of a message written to a row nobody
+    -- owns. Checked first because on ox it is the one that collides.
+    if numberOfCid(text) then return text end
+
+    local cid = cidOfNumber(text)
+    if cid then return cid end
+
+    -- A source, last, and only while that player is actually connected.
     local asNumber = tonumber(target)
     if asNumber and asNumber > 0 and asNumber < 1024 and math.floor(asNumber) == asNumber then
         local p = Core.GetPlayer(math.floor(asNumber))
         if p then return p.citizenid end
     end
-
-    local text = tostring(target)
-    local cid = cidOfNumber(text)
-    if cid then return cid end
-
-    -- A citizen id, then: confirmed against the phone's own character table rather than taken on
-    -- trust, so a typo becomes "no such player" instead of a message written to a row nobody owns.
-    if numberOfCid(text) then return text end
     return nil
 end
 
@@ -1946,8 +2007,8 @@ end
 -- that were never answered - the app colours them, the table does not need to.
 local function logCall(c, answered)
     local rows = {
-        { cid = cidOfNumber(c.aNum), other = c.bNum, dir = 'out' },
-        { cid = cidOfNumber(c.bNum), other = c.anonymous and '' or c.aNum, dir = 'in' },
+        { cid = cidOfNumber(c.aNum), other = c.private and '' or c.bNum, dir = 'out' },
+        { cid = cidOfNumber(c.bNum), other = (c.private or c.anonymous) and '' or c.aNum, dir = 'in' },
     }
     for _, r in ipairs(rows) do
         if r.cid then
@@ -2142,7 +2203,7 @@ local function rosterFor(c, src)
     local list = {}
     for _, s in ipairs(callMembers(c)) do
         local m = c.live[s]
-        local hide = c.anonymous and s == c.a and src ~= c.a
+        local hide = (c.private and s ~= src) or (c.anonymous and s == c.a and src ~= c.a)
         list[#list + 1] = {
             src = s,
             number = hide and '' or m.num,
@@ -2168,7 +2229,7 @@ end
 local function canAddFrom(c, src)
     local cfg = groupCfg()
     if cfg.enabled == false then return false end
-    if c.booth then return false end
+    if c.booth or c.private then return false end
     if c.state ~= 'active' then return false end
     if not (c.live and c.live[src] and c.live[src].state == 'active') then return false end
     if cfg.hostOnly ~= false and c.a ~= src then return false end
@@ -2221,7 +2282,7 @@ local function endCall(id, reason)
     -- Nobody picked up: offer the caller the voicemail, which is the whole point of one.
     -- Not from a booth, though: leaving a voicemail needs the phone's own recorder, and the
     -- caller at a payphone has no phone open to record into.
-    if c.state ~= 'active' and reason == 'noanswer' and c.a and not c.booth
+    if c.state ~= 'active' and reason == 'noanswer' and c.a and not c.booth and not c.private
         and V.SettingBool('voicemail', true) then
         TriggerClientEvent('v-phone:client:voicemailOffer', c.a, { number = c.bNum })
     end
@@ -2285,7 +2346,7 @@ local function allocateCallId()
     return nil
 end
 
-local function startCall(src, p, toNumber, anonymous, video)
+local function startCall(src, p, toNumber, anonymous, video, private)
     if CallOf[src] then return nil, 'busy' end
     -- **A booth cannot be rung.** The number resolves to no character, so the check below
     -- would refuse it regardless; this one exists to refuse it for the RIGHT reason, and
@@ -2318,7 +2379,8 @@ local function startCall(src, p, toNumber, anonymous, video)
     local callRecord = {
         a = src, b = target, state = 'ringing', at = os.time(),
         aNum = numberOfCid(p.citizenid), bNum = toNumber,
-        anonymous = anonymous and V.SettingBool('anonymous', false) or false,
+        anonymous = private or (anonymous and V.SettingBool('anonymous', false) or false),
+        private = private == true,
         -- FaceTime: a normal voice call, presented as a video call on both phones. The
         -- game cannot stream a live face, so there is no video stream - the flag only
         -- changes how the call is drawn. Both ends see it, so it reads as a real call.
@@ -2344,7 +2406,8 @@ local function startCall(src, p, toNumber, anonymous, video)
         silent = not known
     end
 
-    TriggerClientEvent('v-phone:client:callOut', src, { id = id, number = toNumber, video = callRecord.video })
+    TriggerClientEvent('v-phone:client:callOut', src, {
+        id = id, number = private and '' or toNumber, video = callRecord.video })
     -- Heard in the room, unless the recipient silenced their phone.
     if not silent then ringOut(target, true) end
 
@@ -2449,6 +2512,17 @@ function PhoneStartCall(src, toNumber, opts)
     opts = type(opts) == 'table' and opts or {}
     local id, err = startCall(src, p, tostring(toNumber or ''),
         opts.anonymous == true, opts.video == true)
+    if not id then return false, err or 'x' end
+    return true, id
+end
+
+-- For a listing's server-verified contact only. Both numbers stay out of events, the roster,
+-- call history and voicemail; ordinary anonymous calls continue to hide one side only.
+function PhoneStartPrivateCall(src, toNumber)
+    src = tonumber(src)
+    local p = src and Core.GetPlayer(src)
+    if not p then return false, 'noplayer' end
+    local id, err = startCall(src, p, tostring(toNumber or ''), true, false, true)
     if not id then return false, err or 'x' end
     return true, id
 end
@@ -2578,6 +2652,23 @@ end
 -- Both are decided here, from the player's real position, for the same reason calls are:
 -- a client that reported its own signal would report five bars from inside a tunnel.
 
+--- **Is this player inside their property?** Reported by the client, which is the only side
+--- that can ask the housing script, and kept here rather than in a state bag the client writes:
+--- `sv_stateBagStrictMode` refuses those by default. Cleared when they drop.
+local AtHome = {}        -- [source] = true while the client says it is inside a property
+local AtHomeAt = {}      -- [source] = game time of the last report, to rate limit the event
+
+--- The client's report. Nothing here is trusted beyond what the state bag was trusted for
+--- before it - a client saying "I am home" charges its own battery and nothing else - but it is
+--- rate limited, because an event a client can send is an event a client can send in a loop.
+RegisterNetEvent('v-phone:server:atHome', function(inside)
+    local src = source
+    local now = os.clock()
+    if AtHomeAt[src] and (now - AtHomeAt[src]) < 0.5 then return end
+    AtHomeAt[src] = now
+    AtHome[src] = inside == true
+end)
+
 local Battery = {}       -- [source] = level 0..100
 Signal = {}             -- [source] = bars 0..4
 local Charging = {}      -- [source] = true while in reach of something that charges
@@ -2600,7 +2691,8 @@ local function currentCallFor(src)
     return {
         id = id,
         state = c.state == 'active' and 'active' or (mineIsCaller and 'out' or 'in'),
-        number = mineIsCaller and c.bNum or (c.anonymous and '' or c.aNum),
+        number = c.private and '' or
+            (mineIsCaller and c.bNum or (c.anonymous and '' or c.aNum)),
         -- Carried so a client resyncing after a restart knows not to draw a booth call on
         -- the handset. Only the caller is at the box; the person he rang is on a normal phone.
         booth = (c.booth == true) and mineIsCaller or false,
@@ -2671,16 +2763,38 @@ exports('HasSignal',  function(src) return hasBars(src) end)
 
 --- The ceiling from any dead zone the player is standing in. Zones overlap on purpose:
 --- the WORST one wins, so a tunnel inside a weak-signal desert is still a tunnel.
-local function signalAt(coords)
+---
+--- `worldLive` is whether v-world counts as started, read once by a caller that asks for many
+--- players in a row. Through compat.lua's override that read is two natives, and it answers the
+--- same for every player in a pass. Left nil, it is read here.
+--- The position of a configured row, built once and kept.
+---
+--- The state tick measures every player against every dead zone and every charger, twice a
+--- minute each. Building a `vector3` per row per player per pass is a few hundred short-lived
+--- objects a second on a busy server, and the collector pays for all of them. The rows
+--- themselves do not move: they come from `config.lua` (or from v-world), and a server that
+--- edits one restarts. Weak keys, so a provider that hands back fresh tables does not leak.
+local rowVec = setmetatable({}, { __mode = 'k' })
+local function vecOf(row)
+    local v = rowVec[row]
+    if not v then
+        v = vector3((row.x or 0) + 0.0, (row.y or 0) + 0.0, (row.z or 0) + 0.0)
+        rowVec[row] = v
+    end
+    return v
+end
+
+local function signalAt(coords, worldLive)
     -- A staff outage is a ceiling like any dead zone, and it applies whether or not the
     -- map has any zones of its own - which is why it is read BEFORE the early return.
     -- Putting it after would have made every outage silently do nothing on a server with
     -- no v-world, which is most of them.
     local bars = OutageCeiling and OutageCeiling(coords) or 4
-    if GetResourceState('v-world') ~= 'started' then return bars end
+    if worldLive == nil then worldLive = GetResourceState('v-world') == 'started' end
+    if not worldLive then return bars end
     for _, z in ipairs(V.Use('v-world').GetDeadZones() or {}) do
         if z.enabled ~= false and z.enabled ~= 0 then
-            local d = #(coords - vector3(z.x + 0.0, z.y + 0.0, z.z + 0.0))
+            local d = #(coords - vecOf(z))
             if d <= (z.radius or 60.0) then
                 bars = math.min(bars, math.floor(tonumber(z.bars) or 0))
             end
@@ -2758,10 +2872,29 @@ local function chargeRateAt(src, ped, coords)
         return 1.0
     end
 
-    -- Inside a property is decided on the CLIENT, because only the housing script knows,
-    -- and reported up a replicated state bag. See bridge/client/charging.lua, which knows
-    -- how to ask qs-housing, ps-housing, qb-houses and the rest.
-    local state = Player(src) and Player(src).state
+    -- Inside a property is decided on the CLIENT, because only the housing script knows, and
+    -- reported up. See bridge/client/charging.lua, which knows how to ask qs-housing,
+    -- ps-housing, qb-houses and the rest.
+    --
+    -- **An event, not a state bag written by the client.** `sv_stateBagStrictMode` is on by
+    -- default and refuses those, so on a strict server the write never landed: charging at home
+    -- did not work at all, and every player's console took a warning every minute from the
+    -- re-assert. The state bag is still READ underneath, so a server running an older client
+    -- build, or one with strict mode off, keeps working while it updates.
+    if AtHome[src] == true then
+        ChargeSource[src] = 'property'
+        if not pluggedIn(src, 'property') then
+            ChargeReason[src] = 'unplugged:property'
+            return 0.0
+        end
+        ChargeReason[src] = 'property'
+        return 1.0
+    end
+
+    -- The old path, for a client that has not been updated yet. One proxy: every `Player(src)`
+    -- builds a fresh one, and this runs per player every tick.
+    local player = Player(src)
+    local state = player and player.state
     if state and state.phoneAtHome == true then
         ChargeSource[src] = 'property'
         if not pluggedIn(src, 'property') then
@@ -2775,7 +2908,7 @@ local function chargeRateAt(src, ped, coords)
     -- Public chargers, from Config.Chargers.
     for _, c in ipairs(Config.Chargers or {}) do
         if c.enabled ~= false and c.enabled ~= 0 then
-            if #(coords - vector3(c.x + 0.0, c.y + 0.0, c.z + 0.0)) <= (c.radius or 3.0) then
+            if #(coords - vecOf(c)) <= (c.radius or 3.0) then
                 -- A charger with a price gives nothing until it has been paid for. A free one
                 -- answers true without anything being stored, so a server that never sets a
                 -- price behaves exactly as it did before paid charging existed.
@@ -2830,16 +2963,25 @@ CreateThread(function()
     while true do
         Wait(STATE_TICK * 1000)
         if Core then
+            local worldLive   -- read on the first player who needs it, then shared by the pass
             for _, raw in ipairs(GetPlayers()) do
                 local src = tonumber(raw)
-                local p = src and Core.GetPlayer(src)
-                if p then
+                -- Existence only. Nothing below reads the player: signal and charging follow the
+                -- source's own ped, so building the whole player object here was a wrapper, three
+                -- closures and a convar read per player every two seconds, thrown away. HasPlayer
+                -- answers what GetPlayer's truthiness would, admin view included, without
+                -- counting as a staff member's use of a held phone.
+                local here = src and Core.HasPlayer(src)
+                if here then
                     local ped = GetPlayerPed(src)
                     if ped and ped ~= 0 then
                         local coords = GetEntityCoords(ped)
                         local oldSignal, oldCharging = Signal[src], Charging[src]
 
-                        Signal[src] = signalAt(coords)
+                        if worldLive == nil then
+                            worldLive = GetResourceState('v-world') == 'started'
+                        end
+                        Signal[src] = signalAt(coords, worldLive)
                         -- Cached for the drain loop below, so the two never disagree about
                         -- whether this player is on a charger - and so the expensive half of
                         -- this work happens once rather than in both loops.
@@ -2878,7 +3020,7 @@ CreateThread(function()
                         -- A call cannot survive a phone with no service. Checked here rather
                         -- than on the drain tick so it ends when the signal goes, not up to
                         -- twenty seconds afterwards.
-                        if CallOf[src] and not hasBars(src) then
+                        if CallOf[src] and not hasBars(src, true) then
                             endCall(CallOf[src], 'nosignal')
                         end
                     end
@@ -2902,7 +3044,30 @@ CreateThread(function()
 
             for _, src in ipairs(GetPlayers()) do
                 src = tonumber(src)
-                local p = Core.GetPlayer(src)
+                -- The REAL character on this source, never the one an admin view redirects to.
+                -- The battery is this source's handset, and the row it persists into below must
+                -- be this character's: through the redirect, a staff member holding somebody's
+                -- phone wrote their own level into the target's vphone_kv row every tick. Same
+                -- rule as ensureNumber: a write keyed on the source must not take its identity
+                -- from the redirected player object. Not a use of the session either.
+                local p = (Core.GetPlayerReal or Core.GetPlayer)(src)
+                -- **A level that was never loaded is not a level, and must never be written.**
+                --
+                -- `batteryRaw` answers 100 for a player this file has not loaded yet, which is
+                -- the right answer for a phone to DRAW and the wrong one to SAVE. This loop
+                -- persists what it computes, so reaching a player before their row was read
+                -- wrote a full battery over whatever they really had. It is a race, so it hit
+                -- some players and not others, and the place it hit was a restart: on a
+                -- resource restart nobody fires a load event, the catch-up pass that hydrates
+                -- everyone already connected waits ten seconds, and this tick could get there
+                -- first. That is "sometimes our battery goes back up after a reboot".
+                --
+                -- Load them here rather than skipping for ever: a player whose load event was
+                -- missed would otherwise keep a battery that never moves.
+                if p and Battery[src] == nil then
+                    if HydrateBattery then HydrateBattery(src) end
+                    if Battery[src] == nil then p = nil end
+                end
                 if p then
                     -- Whatever the state tick last measured. Not re-measured here: two answers
                     -- to "is this player on a charger" would eventually disagree, and the way
@@ -3306,6 +3471,19 @@ V.Callback('v-phone:open', function(src, resolve)
         -- what it always did - and which shows a player in another country their time rather
         -- than the city's. See Config.Clock.
         clockZone = tostring((Config.Clock and Config.Clock.timezone) or ''),
+        -- Twelve hours or twenty-four, everywhere else a time is printed. 'auto' is decided on
+        -- the page, against the language it is running in. See Config.Clock.hour24.
+        clock24 = (Config.Clock and Config.Clock.hour24 ~= nil) and Config.Clock.hour24 or true,
+        -- Whether a phone with no security of its own still opens on the lock screen.
+        -- See Config.Settings.lockScreen.
+        lockScreen = V.SettingBool('lockScreen', true),
+        -- The colour of the line the game draws to a waypoint this phone sets, decided from
+        -- the job the framework reports. nil leaves the game's own colour alone.
+        -- See Config.RouteColour.
+        routeColour = routeColourFor(p),
+        -- How the handset is made bigger: a transform, or a relayout with `zoom`.
+        -- See Config.DeviceScaleMode.
+        scaleMode = (tostring(Config.DeviceScaleMode or 'transform') == 'zoom') and 'zoom' or 'transform',
         -- Whose phone this actually is, when it is not yours.
         --
         -- `src` and not the wrapped player: `Core.GetPlayer` has already answered with the
@@ -3951,6 +4129,11 @@ V.Callback('v-phone:contactDelete', function(src, resolve, data)
     resolve({ ok = true })
 end)
 
+--- **Who has just proved they know their own code.** `[source] = expiry`, two minutes, written
+--- by `v-phone:unlock` when a passcode checks out and spent by the one write that needs it:
+--- turning the lock off. Cleared when they drop, with everything else keyed on a source.
+local SecurityProven = {}
+
 V.Callback('v-phone:prefs', function(src, resolve, data)
     local p = Core.GetPlayer(src)
     if not p then resolve(false) return end
@@ -3979,6 +4162,29 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
         end
         if data.securityEnabled ~= nil and data.securityEnabled == true then
             prefs.securityEnabled = tostring(prefs.passcodeHash or '') ~= ''
+        end
+        -- **Switching it OFF, which this never did.**
+        --
+        -- Only `== true` was ever handled, so a page saying "turn the lock off" was read and
+        -- dropped: the stored digest stayed, `securityEnabled` was recomputed from it on the
+        -- next read, and the phone kept asking for a code somebody had just been told they no
+        -- longer needed. The digest goes with it, because leaving a code behind that nothing
+        -- can reach is how it comes back on its own later.
+        --
+        -- The current code is proven first, on the server. The page asks for it before it gets
+        -- here, but a page is not a check: `v-phone:unlock` is the only thing that knows the
+        -- real digest, and it leaves `SecurityProven` behind for a couple of minutes when it
+        -- answers yes.
+        if data.securityEnabled == false then
+            local proven = SecurityProven[src]
+            if tostring(prefs.passcodeHash or '') ~= '' and not (proven and proven > os.time()) then
+                resolve({ error = 'passcode' })
+                return
+            end
+            SecurityProven[src] = nil
+            prefs.securityEnabled = false
+            prefs.passcodeHash = ''
+            prefs.faceUnlock = false
         end
         if data.faceUnlock ~= nil then
             prefs.faceUnlock = prefs.securityEnabled and data.faceUnlock == true
@@ -4092,9 +4298,12 @@ V.Callback('v-phone:prefs', function(src, resolve, data)
             local n = tonumber(data.wallFocus)
             prefs.wallFocus = n and math.floor(math.max(0, math.min(100, n))) or nil
         end
-        -- `size` is deliberately not accepted from the page any more. The slider is gone
-        -- because anything but 100% scales a rasterised phone and blurs every glyph, so
-        -- there is nothing for a client to set and no reason to trust it if there were.
+        -- One of the four sizes, and only if the operator left the choice to the player.
+        -- Whatever arrives is snapped to a step, so a page that invents a number gets the
+        -- nearest real size rather than a phone drawn at a size that does not exist.
+        if data.size ~= nil and Config.DeviceSizePlayer ~= false then
+            prefs.size = deviceSize(data.size)
+        end
         if data.side ~= nil then prefs.side = (data.side == 'left') and 'left' or 'right' end
         if data.layout ~= nil then
             prefs.layout = cleanLayout(data.layout)
@@ -4157,6 +4366,7 @@ V.Callback('v-phone:unlock', function(src, resolve, data)
         and passcodeDigest(p, code) == tostring(prefs.passcodeHash or '')
     if valid then
         UnlockAttempts[src] = nil
+        SecurityProven[src] = os.time() + 120
         resolve({ ok = true, method = 'passcode' })
         return
     end
@@ -4773,7 +4983,9 @@ V.Callback('v-phone:fruitdropSend', function(src, resolve, data)
         --
         -- `data.address` only chooses WHICH of your addresses, and is checked against the ones
         -- you actually hold.
-        local chosen = mailPick(me.citizenid, data and data.address)
+        -- Strict: sharing an address the page named but you no longer hold must not quietly
+        -- share a different one of yours instead.
+        local chosen = mailPickStrict(me.citizenid, data and data.address)
         if not chosen then resolve({ error = 'noaccount' }) return end
         local prefs = prefsOf(me)
         local who = tostring((prefs and prefs.ownerName) or ''):gsub('[%c]', '')
@@ -5476,9 +5688,15 @@ end)
 -- your copy never touches anybody else's.
 --- Every address this character holds, oldest first so the list is stable between reads.
 --- Global for the same reason as `mailPick` below: it is reached from code earlier in the file.
+---
+--- A deleted address is RETIRED, not removed: its row stays with `deleted_at` set, so the UNIQUE
+--- key keeps any other player from taking it (they would receive every reply meant for the
+--- previous owner). Only a staff data wipe removes the row and frees it. Retired rows are not
+--- addresses the character holds, so they are skipped here.
 function mailAccountsOf(cid)
     local rows = MySQL.query.await(
-        'SELECT address FROM vphone_mail_accounts WHERE citizenid = ? ORDER BY id ASC', { cid }) or {}
+        'SELECT address FROM vphone_mail_accounts WHERE citizenid = ? AND deleted_at IS NULL ORDER BY id ASC',
+        { cid }) or {}
     local out = {}
     for _, r in ipairs(rows) do out[#out + 1] = r.address end
     return out
@@ -5490,7 +5708,8 @@ end
 --- "active address": a pointer in a preferences row is one more thing that can disagree with
 --- the truth, and checking ownership per request is both simpler and stricter. An unnamed or
 --- unowned address falls back to the first one rather than failing, so an older page that knows
---- nothing of this keeps working exactly as it did.
+--- nothing of this keeps working exactly as it did. Only `op me` and the contact card rely on
+--- that fallback for a NAMED address; anything that acts as an address uses `mailPickStrict`.
 --- Global, not local, and the reason matters: FruitDrop's `email` kind is defined ABOVE this
 --- point in the file, and a `local` declared later is not in scope there - the call would have
 --- read a nil global and failed at runtime with nothing to explain it. Same trap that once bound
@@ -5504,6 +5723,20 @@ function mailPick(cid, wanted)
     return accounts[1], accounts
 end
 
+--- `mailPick` for a request that acts AS the address it names.
+---
+--- Answers nil when the request names an address this character does not hold as a live one,
+--- a retired address included. Falling back there is how a page still showing a deleted address
+--- listed another mailbox under its header and sent mail from an address nobody chose. Naming
+--- no address at all still means the first one, for an older page. Global for the same reason
+--- as `mailPick`.
+function mailPickStrict(cid, wanted)
+    local chosen, accounts = mailPick(cid, wanted)
+    local named = tostring(wanted or '')
+    if named ~= '' and chosen ~= named then return nil, accounts end
+    return chosen, accounts
+end
+
 --- The domains this character has bought.
 local function mailOwnedDomains(cid)
     local rows = MySQL.query.await(
@@ -5513,8 +5746,11 @@ local function mailOwnedDomains(cid)
     return out
 end
 
+--- Who holds a live address. A retired one answers nil, so mail sent to it is refused with
+--- `noaddr` exactly like an address that never existed.
 local function cidOfAddress(addr)
-    return MySQL.scalar.await('SELECT citizenid FROM vphone_mail_accounts WHERE address = ?', { addr })
+    return MySQL.scalar.await(
+        'SELECT citizenid FROM vphone_mail_accounts WHERE address = ? AND deleted_at IS NULL', { addr })
 end
 
 --- Rows in a folder, newest first, with the mail they point at.
@@ -5647,9 +5883,19 @@ V.Callback('v-phone:mail', function(src, resolve, data)
             domains = domains, reserved = reserved, owned = owned,
             images = Config.Mail.images ~= false,
             buy = { enabled = custom.enabled == true, price = math.floor(num(custom.price, 0)) },
+            -- So the page does not offer what `deleteAccount` below would refuse.
+            canDelete = Config.Mail.deleteAccounts ~= false,
         })
         return
     end
+
+    -- Every op below acts AS an address, so one the request NAMES has to be a live address of
+    -- this character. Falling back to the first one here listed another mailbox under the header
+    -- of a deleted address and sent mail from an address nobody chose. Naming none still means
+    -- the first, for an older page; `me` above keeps its fallback so the page can recover.
+    -- `mine` equals the named address exactly when `mailPick` found it among the live ones.
+    local named = tostring((data and data.address) or '')
+    if named ~= '' and mine ~= named then resolve({ error = 'noaccount' }) return end
 
     -- Register a domain of your own, by paying for it.
     if op == 'buyDomain' then
@@ -5734,12 +5980,49 @@ V.Callback('v-phone:mail', function(src, resolve, data)
         if not mailDomainUsable(p, domain) then resolve({ error = 'domain' }) return end
 
         local addr = localpart .. '@' .. domain
-        if MySQL.scalar.await('SELECT 1 FROM vphone_mail_accounts WHERE address = ?', { addr }) then
-            resolve({ error = 'taken' }) return
+        -- A retired address is taken for everybody except the character who retired it: they
+        -- get it back, and it has already been counted against the cap above like a new one.
+        local existing = MySQL.query.await(
+            'SELECT citizenid, deleted_at FROM vphone_mail_accounts WHERE address = ? LIMIT 1', { addr }) or {}
+        local row = existing[1]
+        if row then
+            if row.deleted_at == nil or tostring(row.citizenid) ~= tostring(p.citizenid) then
+                resolve({ error = 'taken' }) return
+            end
+            MySQL.update.await([[UPDATE vphone_mail_accounts SET deleted_at = NULL, `at` = NOW()
+                WHERE address = ? AND citizenid = ? AND deleted_at IS NOT NULL]], { addr, p.citizenid })
+            Core.Log('mail', ('%s restored the address %s'):format(p.citizenid, addr), nil, p.citizenid)
+            resolve({ ok = true, address = addr })
+            return
         end
         MySQL.insert.await('INSERT INTO vphone_mail_accounts (citizenid, address) VALUES (?,?)',
             { p.citizenid, addr })
         resolve({ ok = true, address = addr })
+        return
+    end
+
+    -- Delete one of your own addresses. It is RETIRED rather than freed: the row stays so the
+    -- UNIQUE key keeps anybody else from taking it and receiving the replies meant for its owner.
+    -- Only this address's mailbox rows go, which are this character's copies; the same mail in
+    -- anybody else's box is untouched.
+    if op == 'deleteAccount' then
+        if Config.Mail.deleteAccounts == false then resolve({ error = 'disabled' }) return end
+        -- Checked against the caller's live addresses, never taken from the page. `mine` is not
+        -- used here on purpose: it falls back to the first address when the named one is not
+        -- owned, and a fallback is the wrong answer to "delete this one".
+        local wanted = tostring((data and data.address) or '')
+        local owned = false
+        for _, a in ipairs(accounts) do
+            if a == wanted then owned = true break end
+        end
+        if wanted == '' or not owned then resolve({ error = 'noaccount' }) return end
+
+        MySQL.update.await(
+            'UPDATE vphone_mail_accounts SET deleted_at = NOW() WHERE address = ? AND citizenid = ? AND deleted_at IS NULL',
+            { wanted, p.citizenid })
+        MySQL.update.await('DELETE FROM vphone_mail_box WHERE address = ?', { wanted })
+        Core.Log('mail', ('%s deleted the address %s'):format(p.citizenid, wanted), nil, p.citizenid)
+        resolve({ ok = true })
         return
     end
 
@@ -6303,6 +6586,7 @@ V.Callback('v-phone:callAdd', function(src, resolve, data)
     -- A payphone is one handset bolted to a wall. There is no screen on it to run a
     -- conference from, and the person at the box is the one who cannot be added to.
     if c.booth then resolve({ error = 'booth' }) return end
+    if c.private then resolve({ error = 'private' }) return end
     if cfg.hostOnly ~= false and c.a ~= src then resolve({ error = 'nothost' }) return end
     if #callMembers(c) >= groupMax() then resolve({ error = 'callfull' }) return end
 
@@ -6803,6 +7087,88 @@ local function pushLocale(src, player)
     state:set('lang', GetConvar('phone_locale', LOCALE_FALLBACK or 'fr'), true)
 end
 
+-- ══════════════════════════════════════════════════════════════
+-- While you were away
+-- ══════════════════════════════════════════════════════════════
+-- [source] = true once this session has been told, so a second hydration (a reconnect handled
+-- twice, the restart pass meeting a load event) does not announce the same thing again.
+local CaughtUp = {}
+
+--- What arrived for this character since they last disconnected.
+---
+--- **Only what landed after the last disconnect.** Counting every unread row would re-announce
+--- the same message at every connect until it was opened, which is how a notification becomes
+--- something people learn to ignore. The disconnect time is written by the drop handler below.
+---
+--- One pass of four counting queries, once per session, on an already indexed column. It costs
+--- nothing next to what the player is about to do anyway.
+local function catchUp(src, p)
+    local cfg = Config.CatchUp or {}
+    if cfg.enabled == false then return end
+    if not p or not p.citizenid then return end
+
+    local since = tonumber(Bridge.KvGet(p.citizenid, 'lastOut')) or 0
+    if since <= 0 then
+        since = os.time() - math.max(1, math.floor(tonumber(cfg.firstRunHours) or 24)) * 3600
+    end
+
+    local cid = p.citizenid
+    local function count(sql, args)
+        local ok, n = pcall(function() return MySQL.scalar.await(sql, args) end)
+        return (ok and tonumber(n)) or 0
+    end
+
+    local msgs = count([[SELECT COUNT(*) FROM vphone_messages
+        WHERE to_cid = ? AND seen = 0 AND at > FROM_UNIXTIME(?)]], { cid, since })
+    local calls = count([[SELECT COUNT(*) FROM vphone_calls
+        WHERE citizenid = ? AND direction = 'in' AND answered = 0 AND at > FROM_UNIXTIME(?)]],
+        { cid, since })
+    local mail = count([[SELECT COUNT(*) FROM vphone_mail_box b
+        JOIN vphone_mail m ON m.id = b.mail_id
+        JOIN vphone_mail_accounts a ON a.address = b.address
+         AND a.citizenid = ? AND a.deleted_at IS NULL
+        WHERE b.folder = 'inbox' AND b.seen = 0 AND m.at > FROM_UNIXTIME(?)]], { cid, since })
+    local social = count([[SELECT COUNT(*) FROM vphone_social_notifs
+        WHERE to_cid = ? AND seen = 0 AND at > FROM_UNIXTIME(?)]], { cid, since })
+
+    if msgs + calls + mail + social == 0 then return end
+
+    local has = requireItem(src)
+    local away = L(src, 'ph.away_title')
+    local function tell(app, key, n)
+        if n <= 0 then return end
+        TriggerClientEvent('v-phone:client:banner', src, {
+            app = app, title = away,
+            body = (L(src, key)):format(n), hasItem = has,
+        })
+    end
+    -- One card per app, rather than one summary: each opens the app it is about, which is what
+    -- somebody reading "three messages" wants to do next.
+    tell('messages', 'ph.away_messages', msgs)
+    tell('phone', 'ph.away_calls', calls)
+    tell('mail', 'ph.away_mail', mail)
+    tell('bleeter', 'ph.away_social', social)
+end
+
+--- Scheduled rather than immediate: a banner during the spawn or the character selection is a
+--- banner nobody sees.
+local function scheduleCatchUp(src, p)
+    if CaughtUp[src] then return end
+    CaughtUp[src] = true
+    local cfg = Config.CatchUp or {}
+    if cfg.enabled == false then return end
+    local wait = math.max(1, math.floor(tonumber(cfg.delaySeconds) or 45)) * 1000
+    CreateThread(function()
+        Wait(wait)
+        -- Gone in the meantime, or swapped character: nothing to say to them.
+        if GetPlayerName(src) == nil then return end
+        local still = (Core.GetPlayerReal or Core.GetPlayer)(src)
+        if not still or still.citizenid ~= p.citizenid then return end
+        local ok, err = pcall(catchUp, src, still)
+        if not ok then print('[v-phone] catch-up: ' .. tostring(err)) end
+    end)
+end
+
 local function hydratePlayer(src, player)
     if not player then return end
     pushLocale(src, player)
@@ -6821,19 +7187,59 @@ local function hydratePlayer(src, player)
     end
     TriggerClientEvent('v-phone:client:prefsSync', src, prefsOf(player))
     pushPower(src)
+    scheduleCatchUp(src, player)
 end
 
 AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
     if Core then hydratePlayer(src, player) end
 end)
 
+--- **A phone works from the moment the character loads, not from its first open.**
+---
+--- Nothing fires `v-core:server:onPlayerLoaded` on qb-core, qbx_core, ESX or ox_core, so
+--- hydration only ever happened when the phone was opened: until then the number was not routed
+--- (calls and messages could not reach the player), the language was not pushed and the saved
+--- battery was not loaded. The bridge now announces every framework's load here.
+local function hydrateReal(src)
+    if not Core then return end
+    local p = (Core.GetPlayerReal or Core.GetPlayer)(src)
+    if not p then return end
+    if Bridge.SetHere then Bridge.SetHere(src, true) end
+    hydratePlayer(src, p)
+end
+--- Reachable from the battery tick, which is written above this file's locals and has to be
+--- able to load a player it finds unhydrated rather than assume they are full. Declared here,
+--- after the local it calls: a body written above it would find a nil global instead.
+function HydrateBattery(src) return hydrateReal(src) end
+
+AddEventHandler('v-phone:internal:playerLoaded', function(src) hydrateReal(tonumber(src)) end)
+
+-- And everybody already connected when the resource (re)starts, who will fire no load event.
+CreateThread(function()
+    while not Core do Wait(500) end
+    Wait(10000)
+    for _, raw in ipairs(GetPlayers()) do
+        local src = tonumber(raw)
+        if src and not Battery[src] then hydrateReal(src) end
+    end
+end)
+
 AddEventHandler('playerDropped', function()
     local src = source
-    local p = Core.GetPlayer(src)
+    -- The real character, for the same reason as the drain tick: this row is the source's own
+    -- battery. Through the redirect a pending admin view expiry answered nil and the level of a
+    -- staff member who left at that moment was never saved.
+    local p = (Core.GetPlayerReal or Core.GetPlayer)(src)
     if p and Battery[src] then
         Bridge.KvSetSync(p.citizenid, 'battery', math.floor(Battery[src]))
     end
+    -- The moment "while you were away" starts counting from. Written for every character who
+    -- leaves, with or without a battery level to save.
+    if p then Bridge.KvSetSync(p.citizenid, 'lastOut', os.time()) end
+    CaughtUp[src] = nil
+    AtHome[src], AtHomeAt[src] = nil, nil
     BatterySaved[src] = nil
+    if Bridge.SetHere then Bridge.SetHere(src, nil) end
     Battery[src], Signal[src], Charging[src], Open[src] = nil, nil, nil, nil
     -- Cleared, so the next player to be handed this source id is measured rather than
     -- inheriting whether the last one was standing on a charger.
@@ -6853,6 +7259,7 @@ AddEventHandler('playerDropped', function()
     CipherUnlocked[src], CipherAttempts[src], CipherLastSend[src] = nil, nil, nil
     AirLastSend[src] = nil
     UnlockAttempts[src] = nil
+    SecurityProven[src] = nil
     LookupLast[src] = nil
     VoicemailLast[src] = nil
     for offerId, offer in pairs(AirOffers) do
@@ -6880,7 +7287,9 @@ AddEventHandler('onResourceStop', function(resource)
     -- read nothing and fell back to full.
     for _, raw in ipairs(GetPlayers()) do
         local src = tonumber(raw)
-        local player = src and Core.GetPlayer(src)
+        -- The real character: through the admin view redirect a staff member's level was written
+        -- into the row of the character they were holding, racing that player's own save.
+        local player = src and (Core.GetPlayerReal or Core.GetPlayer)(src)
         if player and Battery[src] then
             Bridge.KvSetSync(player.citizenid, 'battery', math.floor(Battery[src]))
         end
@@ -7073,6 +7482,9 @@ CreateThread(function()
         `citizenid` VARCHAR(64) NOT NULL,
         `address`   VARCHAR(64) NOT NULL,
         `at`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        -- Set when the owner deletes the address. The row is kept so the UNIQUE key keeps the
+        -- address retired: nobody else may take it and read the replies meant for its owner.
+        `deleted_at` TIMESTAMP NULL DEFAULT NULL,
         PRIMARY KEY (`id`), UNIQUE KEY `address` (`address`), KEY `owner` (`citizenid`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4]])
 
@@ -7097,6 +7509,21 @@ CreateThread(function()
             .. '  ALTER TABLE vphone_mail_accounts DROP PRIMARY KEY,\n'
             .. '    ADD COLUMN id INT UNSIGNED NOT NULL AUTO_INCREMENT FIRST,\n'
             .. '    ADD PRIMARY KEY (id), ADD KEY owner (citizenid);')
+    end
+
+    -- `deleted_at` on a table that predates deleting an address. After the id migration above,
+    -- and guarded the same way so it runs exactly once. Nullable with a NULL default, so every
+    -- existing address stays live and no row is rewritten.
+    if not MySQL.scalar.await([[SELECT 1 FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'vphone_mail_accounts'
+          AND COLUMN_NAME = 'deleted_at' LIMIT 1]]) then
+        local ok = pcall(function()
+            MySQL.query.await([[ALTER TABLE `vphone_mail_accounts`
+                ADD COLUMN `deleted_at` TIMESTAMP NULL DEFAULT NULL]])
+        end)
+        print(ok and '[v-phone] mail: vphone_mail_accounts can now retire a deleted address'
+            or '[v-phone] mail: could NOT alter vphone_mail_accounts. Run this once by hand:\n'
+            .. '  ALTER TABLE vphone_mail_accounts ADD COLUMN deleted_at TIMESTAMP NULL DEFAULT NULL;')
     end
 
     -- A domain a player registered. Unique on the domain, because the whole point of buying

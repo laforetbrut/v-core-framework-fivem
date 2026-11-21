@@ -126,6 +126,21 @@ const AT = (sel) => `
   return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height };
 `;
 
+/// The centre of an element AFTER it has been scrolled to the middle and every picture on the
+/// page has decoded. A picture that finishes loading between the measurement and the press moves
+/// everything below it, and the press lands on whatever slid into its place.
+const SETTLED = (sel) => `
+  const el = ${sel};
+  if (!el) return null;
+  el.scrollIntoView({ block: 'center', behavior: 'instant' });
+  await Promise.all([...document.images].map((i) => (i.decode ? i.decode().catch(() => {}) : 0)));
+  await new Promise((r) => setTimeout(r, 250));
+  const r = el.getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const hit = document.elementFromPoint(x, y);
+  return { x, y, hit: !!hit && (hit === el || el.contains(hit)) };
+`;
+
 async function widgetStrip(cdp) {
   console.log('the widget strip');
 
@@ -533,6 +548,143 @@ async function appGrid(cdp) {
   await cdp.eval('try { exitArrange(); } catch (e) {}');
 }
 
+/// Deleting your own post, pressed for real.
+///
+/// A player reported that posts could not be deleted, and from Saved and Explore that was true:
+/// the single post sheet bound its controls by hand and never bound the trash. It was drawn, it
+/// was the element under its own centre, and a press did nothing - which no in-page assertion
+/// could see, because the handler that was missing was never the thing being called.
+///
+/// So this presses the footer trash and the header's three dots, in the feed and in that sheet,
+/// and each must reach the delete confirmation. Cancel in a sheet must leave the post on screen
+/// rather than drop the player back on the grid, and a post that is not yours offers neither.
+/// Nothing is confirmed: every run ends on Cancel, so the stub's posts never change.
+async function socialDelete(cdp) {
+  console.log('');
+  console.log('deleting a social post');
+
+  await cdp.eval(`
+    try { if (typeof unlock === 'function') unlock(); } catch (e) {}
+    if (typeof editing !== 'undefined' && editing) exitArrange();
+    try { closeSheet(true); } catch (e) {}
+    const mk = (id, handle, mine, body) => ({ id, handle, displayname: handle, mine, body,
+      image: '', images: [], kind: 'text', at: Date.now() - 300000, likes: 1, comments: 0,
+      reposts: 0, liked: false, saved: true, reposted: false });
+    const posts = [mk(9101, 'probe', true, 'Mine, and mine to delete'),
+                   mk(9102, 'someone', false, 'Somebody else wrote this')];
+    // Kept so it can be put back. A wrapper left on the preview's handler changes the answer to
+    // every call made after this section, in whatever runs next.
+    window.__probeUnder = window.__VPHONE_PREVIEW_POST__;
+    window.__VPHONE_PREVIEW_POST__ = (name, b) => {
+      b = b || {};
+      if (name !== 'social') return window.__probeUnder(name, b);
+      if (b.op === 'me') return { ok: true, authed: true, account: { handle: 'probe' } };
+      if (b.op === 'feed' || b.op === 'saved') return { ok: true, posts: JSON.parse(JSON.stringify(posts)) };
+      if (b.op === 'notifCount') return { ok: true, unread: 0 };
+      return { ok: true };
+    };
+    // Bleeter is an optional app, so a fresh preview has not installed it: the config row stands in.
+    const app = (state.apps || []).find((a) => a.id === 'bleeter')
+      || { id: 'bleeter', label: 'app.bleeter', icon: 'bleet', owner: 'v-phone', category: 'social' };
+    SOC.tab.bleeter = 'feed';
+    await enterApp(app, null);
+    await new Promise((r) => setTimeout(r, 1200));
+  `);
+
+  const pressOn = async (sel, what) => {
+    const t = await cdp.eval(SETTLED(sel));
+    if (!t || !t.hit) {
+      check(false, what, t ? 'something else is under its centre' : 'not drawn');
+      return false;
+    }
+    await cdp.press(t.x, t.y, 70);
+    await sleep(550);
+    return true;
+  };
+  const sheetNow = () => cdp.eval(`
+    const s = document.getElementById('sheet');
+    return { on: s.classList.contains('on'), alert: s.dataset.shape === 'alert',
+             yes: !!document.getElementById('socyes'),
+             actions: !!document.getElementById('socpostdel'),
+             post: !!s.querySelector('.post[data-id="9101"]') };
+  `);
+  const offers = (scope, id) => cdp.eval(`
+    const c = document.querySelector('${scope} .post[data-id="${id}"]');
+    return c ? { trash: !!c.querySelector('.pdel'), more: !!c.querySelector('.pmore') } : null;
+  `);
+  const MINE = (scope, ctl) => `document.querySelector('${scope} .post[data-id="9101"] ${ctl}')`;
+  const NO = "document.getElementById('socno')";
+
+  try {
+    // ── The feed ──
+    let other = await offers('#appbody', 9102);
+    check(!!other && !other.trash && !other.more, 'a post that is not yours offers no delete in the feed',
+      JSON.stringify(other));
+
+    if (await pressOn(MINE('#appbody', '.pdel'), 'the trash in the feed is pressable')) {
+      const s = await sheetNow();
+      check(s.alert && s.yes, 'the trash in the feed opens the delete confirmation', JSON.stringify(s));
+      await pressOn(NO, 'Cancel is pressable');
+    }
+    if (await pressOn(MINE('#appbody', '.pmore'), 'the three dots in the feed are pressable')) {
+      let s = await sheetNow();
+      check(s.on && s.actions, 'the three dots open the post actions', JSON.stringify(s));
+      if (s.actions && await pressOn("document.getElementById('socpostdel')", 'Delete post is pressable')) {
+        s = await sheetNow();
+        check(s.alert && s.yes, 'and Delete post opens the delete confirmation', JSON.stringify(s));
+        await pressOn(NO, 'Cancel is pressable');
+      }
+    }
+
+    // ── One post in a sheet, opened from Saved ──
+    await cdp.eval(`
+      try { closeSheet(true); } catch (e) {}
+      socialSaved('bleeter');
+      await new Promise((r) => setTimeout(r, 900));
+    `);
+    const TILE = (i) => `document.querySelector('#appbody .socgrid .shot[data-gi="${i}"]')`;
+    if (await pressOn(TILE(0), 'a Saved tile is pressable')) {
+      let s = await sheetNow();
+      check(s.on && s.post, 'the Saved tile opens the post in a sheet', JSON.stringify(s));
+      // The press that did nothing before.
+      if (s.post && await pressOn(MINE('#sheet', '.pdel'), 'the trash in the post sheet is pressable')) {
+        s = await sheetNow();
+        check(s.alert && s.yes, 'the trash in the post sheet opens the delete confirmation', JSON.stringify(s));
+        if (s.yes && await pressOn(NO, 'Cancel is pressable')) {
+          s = await sheetNow();
+          check(s.on && !s.alert && s.post, 'Cancel leaves the post sheet open', JSON.stringify(s));
+        }
+      }
+      if (s.post && await pressOn(MINE('#sheet', '.pmore'), 'the three dots in the post sheet are pressable')) {
+        s = await sheetNow();
+        check(s.on && s.actions, 'the three dots in the post sheet open the post actions', JSON.stringify(s));
+        if (s.actions && await pressOn("document.getElementById('socpostdel')", 'Delete post is pressable')) {
+          s = await sheetNow();
+          check(s.alert && s.yes, 'and Delete post opens the delete confirmation', JSON.stringify(s));
+          if (s.yes && await pressOn(NO, 'Cancel is pressable')) {
+            s = await sheetNow();
+            check(s.on && !s.alert && s.post, 'Cancel from there also goes back to the post sheet',
+              JSON.stringify(s));
+          }
+        }
+      }
+    }
+    await cdp.eval("try { closeSheet(true); } catch (e) {} await new Promise((r) => setTimeout(r, 400));");
+    if (await pressOn(TILE(1), 'the other Saved tile is pressable')) {
+      other = await offers('#sheet', 9102);
+      check(!!other && !other.trash && !other.more, 'a post that is not yours offers no delete in the sheet',
+        JSON.stringify(other));
+    }
+  } finally {
+    await cdp.eval(`
+      try { closeSheet(true); } catch (e) {}
+      window.__VPHONE_PREVIEW_POST__ = window.__probeUnder;
+      try { goHome(); } catch (e) {}
+      return true;
+    `);
+  }
+}
+
 (async () => {
   if (!fs.existsSync(PREVIEW)) {
     console.error('no preview - run: python tools/make-preview.py --lang fr');
@@ -568,6 +720,7 @@ async function appGrid(cdp) {
     await homeBand(cdp);
     await copyLink(cdp);
     await emojiPicker(cdp);
+    await socialDelete(cdp);
   } catch (e) {
     check(false, 'the probe ran to the end', e.message);
   }

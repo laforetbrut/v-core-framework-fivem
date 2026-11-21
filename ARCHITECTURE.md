@@ -1070,7 +1070,7 @@ the garage, a property, a licence, a job - the app is a read-only view and the c
 that module rather than going through the phone: `server/apps.lua` is nothing but those
 views. Proxying a balance would put a second copy of the bank's rules in the phone, and a
 second copy is a second answer. Where nothing else holds it, the phone owns it outright, and
-that is most of it: 37 apps, 36 server files and **61 tables**, all prefixed `vphone_`.
+that is most of it: 38 apps, 38 server files and **64 tables**, all prefixed `vphone_`.
 Bleeter, Snapmatic and Hush, a creator economy, donation pages, an arcade with a shared
 scoreboard, payphones, a police forensics terminal, reminders, store reviews and mail have no
 module behind them because there is no other module they could belong to.
@@ -1762,7 +1762,7 @@ ship. What's missing is the depth and the **risk** side that makes them a game r
 
 | Module | Priority | Responsibility |
 |--------|----------|----------------|
-| `v-phone` | high | **iFruit** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
+| ✅ **`v-phone`** (**shipped**, v-phone 1.7.27) | high | **iFruit** - the phone. The primary interaction surface, and a shell over modules that already own the data. |
 | `v-radial` | high | Radial menu (context actions) - the other main interaction surface. |
 | `v-forgery` | medium | Fake papers and fake plates. The illegal counterpart of `v-licenses` and the plate registry. |
 | `v-chat` | medium | Local, OOC and emote text. **Not** a command surface: the no-player-commands rule stands. |

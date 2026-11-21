@@ -1,5 +1,6 @@
 /**
  * The README's screenshots, taken from the real page.
+ * Author: vyrriox
  *
  *   python tools/make-preview.py     # build the browser preview first
  *   node tools/make-shots.js         # then shoot it
@@ -116,6 +117,59 @@ const MUSIC_FIXTURE = `
 
 const SHOTS = [
   {
+    name: 'marketplace-feed', file: '47-vinemarket-feed.png',
+    script: `${SETUP}
+      await open('marketplace', 800);
+      if (document.querySelectorAll('.market-card').length < 4)
+        throw new Error('VineMarket feed is empty');`,
+  },
+  {
+    name: 'marketplace-detail', file: '48-vinemarket-detail.png',
+    script: `${SETUP}
+      await open('marketplace', 400);
+      await marketDetail(4);
+      if (!document.getElementById('market-contact') || !document.getElementById('market-call'))
+        throw new Error('private contact controls are missing: ' +
+          document.getElementById('appbody').innerText.slice(0, 160));`,
+  },
+  {
+    name: 'marketplace-compose', file: '49-vinemarket-compose.png',
+    script: `${SETUP}
+      await open('marketplace', 400);
+      marketCompose();
+      await new Promise((r) => setTimeout(r, 200));
+      if (!document.getElementById('market-form-phone'))
+        throw new Error('number privacy choice is missing');
+      document.getElementById('appbody').scrollTop =
+        document.getElementById('appbody').scrollHeight;`,
+  },
+  {
+    name: 'marketplace-flow', assert: true,
+    script: `${SETUP}
+      await open('marketplace', 300);
+      marketCompose();
+      await new Promise((r) => setTimeout(r, 200));
+      if (byId('market-form-phone').checked) throw new Error('number was public by default');
+      byId('market-form-title').value = 'Local listing';
+      byId('market-form-description').value = 'Available today';
+      byId('market-form-price').value = '150';
+      byId('market-form').requestSubmit();
+      await new Promise((r) => setTimeout(r, 200));
+      if (marketTab !== 'mine' || !document.querySelector('.market-card'))
+        throw new Error('published listing did not appear');
+      await marketDetail(4);
+      if (!byId('market-contact') || !byId('market-call'))
+        throw new Error('private contact controls are missing');
+      byId('market-contact').click();
+      await new Promise((r) => setTimeout(r, 200));
+      if (!byId('market-chat-form')) throw new Error('conversation did not open');
+      byId('market-chat-input').value = 'Need details';
+      byId('market-chat-form').requestSubmit();
+      await new Promise((r) => setTimeout(r, 200));
+      if (!document.querySelector('.market-message.mine'))
+        throw new Error('sent message did not appear');`,
+  },
+  {
     // **The nine below were the last hand-taken pictures in the README.**
     //
     // They were shot in a browser in July and never again, so they showed a phone two
@@ -177,7 +231,89 @@ const SHOTS = [
       await new Promise((r) => setTimeout(r, 800));
       if (!document.getElementById('cc').classList.contains('on')) {
         throw new Error('the quick settings did not open');
+      }
+      for (const id of ['cc', 'shade']) {
+        const style = getComputedStyle(document.getElementById(id));
+        if (style.backgroundColor !== 'rgb(17, 19, 27)' || style.backdropFilter !== 'none') {
+          throw new Error(id + ' needs an opaque, blur-free system material');
+        }
       }`,
+  },
+  {
+    name: 'bleeter-location', file: null, scratch: true, assert: true,
+    script: `${SETUP}
+      try { unlock(); } catch (e) {}
+      socCompose('bleeter');
+      const choice = byId('bloc');
+      if (!choice || choice.getAttribute('aria-pressed') !== 'false') {
+        throw new Error('the location choice must start off');
+      }
+      choice.click();
+      if (choice.getAttribute('aria-pressed') !== 'true' || !choice.classList.contains('on')) {
+        throw new Error('the composer did not attach the selected location');
+      }
+      const under = window.__VPHONE_PREVIEW_POST__;
+      let submitted, waypoint, refuse = true;
+      window.__VPHONE_PREVIEW_POST__ = (name, payload) => {
+        if (name === 'social' && payload.op === 'post') {
+          submitted = payload;
+          return refuse ? { error: 'nowhere' } : { ok: true, id: 42 };
+        }
+        if (name === 'waypoint') { waypoint = payload; return { ok: true }; }
+        return under(name, payload);
+      };
+      byId('btext').value = 'Draft';
+      byId('bgo').click();
+      await new Promise((r) => setTimeout(r, 100));
+      if (byId('btext')?.value !== 'Draft' || byId('bgo')?.disabled ||
+          choice.getAttribute('aria-pressed') !== 'true') {
+        throw new Error('a rejected location post lost the draft or the selected location');
+      }
+      refuse = false;
+      byId('btext').value = '';
+      byId('bgo').click();
+      await new Promise((r) => setTimeout(r, 100));
+      if (!submitted || submitted.shareLocation !== true || submitted.body !== '') {
+        throw new Error('a location-only post did not submit the opt-in');
+      }
+      const fixture = { id: 42, handle: 'test', body: '', kind: 'text',
+                        loc_x: 123.4, loc_y: -67.9 };
+      const host = document.createElement('div');
+      host.id = 'locationtest';
+      host.innerHTML = postCard(fixture, 'bleeter');
+      document.body.appendChild(host);
+      const card = host.querySelector('.postlocation');
+      if (!card || postCard({ id: 43, handle: 'old', body: '' }, 'bleeter')
+          .includes('postlocation')) {
+        throw new Error('the location card is missing or appears on an older post');
+      }
+      wirePosts('bleeter', null, 'locationtest');
+      card.click();
+      await new Promise((r) => setTimeout(r, 50));
+      if (!waypoint || waypoint.x !== 123.4 || waypoint.y !== -67.9) {
+        throw new Error('the shared location did not set the reader waypoint');
+      }
+      host.remove();
+      window.__VPHONE_PREVIEW_POST__ = under;`,
+  },
+  {
+    name: 'bleeter-compose-location', file: 'zz-bleeter-compose-location.png', scratch: true,
+    script: `${SETUP}
+      try { unlock(); } catch (e) {}
+      socCompose('bleeter');
+      byId('btext').value = 'Retrouvez-moi ici';
+      byId('bloc').click();
+      await new Promise((r) => setTimeout(r, 600));`,
+  },
+  {
+    name: 'bleeter-post-location', file: 'zz-bleeter-post-location.png', scratch: true,
+    script: `${SETUP}
+      await open('bleeter', 500);
+      setNav('Bleeter', '', null);
+      body(postCard({ id: 42, handle: 'route', displayname: 'Route', kind: 'text',
+                      body: 'Retrouvez-moi ici', loc_x: 123.4, loc_y: -67.9,
+                      at: Date.now(), likes: 2, comments: 1 }, 'bleeter'));
+      await new Promise((r) => setTimeout(r, 500));`,
   },
   {
     // The pill, mid-notification. It collapses after 4.2 seconds, so this one is a race the
@@ -427,6 +563,68 @@ const SHOTS = [
       ];
       paintPins();
       await new Promise((r) => setTimeout(r, 500));`,
+  },
+  {
+    // A cancelled read may still answer after a newer SMS view has painted. Its late timeout
+    // must not replace either a direct thread or a group with the error screen.
+    name: 'message-race', file: null, scratch: true, assert: true,
+    script: `${SETUP}
+      await open('messages', 700);
+      const under = window.__VPHONE_PREVIEW_POST__;
+      const pending = [];
+      window.__VPHONE_PREVIEW_POST__ = (name, payload) => {
+        if (name === 'conversation') return new Promise((resolve) => pending.push({ payload, resolve }));
+        return under(name, payload);
+      };
+
+      const first = openThread('svc:Care');
+      await new Promise((r) => setTimeout(r, 0));
+      const second = openThread('svc:Care');
+      await new Promise((r) => setTimeout(r, 0));
+      if (pending.length !== 2) throw new Error('direct thread did not make two reads');
+      pending[1].resolve({ ok: true, service: true,
+        messages: [{ id: 2, body: 'Current message', mine: false, kind: 'text', at: Date.now() }] });
+      await second;
+      pending[0].resolve({ error: 'timeout' });
+      await first;
+      if (!document.querySelector('#thread')?.textContent.includes('Current message')) {
+        throw new Error('the cancelled direct read replaced the loaded SMS');
+      }
+
+      const oldGroup = openGroup(1, 'Old group');
+      await new Promise((r) => setTimeout(r, 0));
+      const currentGroup = openGroup(2, 'Current group');
+      await new Promise((r) => setTimeout(r, 0));
+      if (pending.length !== 4) throw new Error('group views did not make two reads');
+      pending[3].resolve({ ok: true,
+        messages: [{ id: 4, body: 'Current group message', mine: false,
+                     kind: 'text', at: Date.now() }] });
+      await currentGroup;
+      pending[2].resolve({ error: 'timeout' });
+      await oldGroup;
+      if (threadGroup?.id !== 2 ||
+          !document.querySelector('#thread')?.textContent.includes('Current group message')) {
+        throw new Error('the cancelled group read replaced the loaded conversation');
+      }
+
+      let answerOutbox;
+      window.__VPHONE_PREVIEW_POST__ = (name, payload) => {
+        if (name === 'conversation') return new Promise((resolve) => pending.push({ payload, resolve }));
+        if (name === 'outbox') return new Promise((resolve) => { answerOutbox = resolve; });
+        return under(name, payload);
+      };
+      await RENDER.messages();
+      const loadingThread = openThread('svc:Care');
+      await new Promise((r) => setTimeout(r, 0));
+      const reads = pending.length;
+      answerOutbox({ ok: true, items: [] });
+      await new Promise((r) => setTimeout(r, 0));
+      if (pending.length !== reads) {
+        throw new Error('the outbox answer restarted a thread that was still loading');
+      }
+      pending[reads - 1].resolve({ ok: true, service: true, messages: [] });
+      await loadingThread;
+      window.__VPHONE_PREVIEW_POST__ = under;`,
   },
   {
     // The conversation header on its own: the chevron, the face, the name and the call button.
@@ -2114,8 +2312,30 @@ const SHOTS = [
   // timeout above exists because of this shot: one screen that would not capture used to hang
   // the whole batch of twelve with no output at all.
   {
-    // The strip, full. For the README, and for looking at: twelve tiles that have to read as
-    // one family is a claim only a picture can settle.
+    // Async widget layout changes must leave room for every icon label.
+    name: 'widget-grid', file: null, scratch: true, assert: true,
+    script: `${SETUP}
+      ['messages', 'bank'].forEach((id) => need(id));
+      state.prefs.gridCols = 4; state.prefs.gridRows = 4;
+      for (const widgets of [[], ['weather', 'calendar', 'messages', 'bank'], []]) {
+        state.prefs.widgets = widgets;
+        renderHome();
+        await renderWidgets();
+        await new Promise((r) => setTimeout(r, 400));
+        const tiles = [...document.querySelectorAll('#pages .page:first-child .tile')];
+        for (let i = 0; i + 4 < tiles.length; i++) {
+          const label = tiles[i].querySelector('.nm').getBoundingClientRect();
+          const next = tiles[i + 4].querySelector('.wrap').getBoundingClientRect();
+          if (label.bottom > next.top - 1) throw new Error('widget update overlaps icon rows');
+        }
+        await renderWidgets();
+        if (tiles[0] !== document.querySelector('#pages .page:first-child .tile')) {
+          throw new Error('unchanged widget layout rebuilt the app grid');
+        }
+      }`,
+  },
+  {
+    // The full widget strip, captured from the same view the player uses.
     name: 'widgets', file: '40-widgets.png',
     script: `${SETUP}
       ['messages', 'music', 'bank', 'health', 'garage', 'reminders', 'export', 'alerts']
