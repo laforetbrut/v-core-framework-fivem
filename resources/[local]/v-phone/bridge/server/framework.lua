@@ -393,6 +393,15 @@ end
 function Bridge.GetPlayerByCitizenId(cid)
     cid = tostring(cid or '')
     if cid == '' then return nil end
+    -- v-core indexes its loaded characters itself: ask it which source holds this one and build
+    -- that player only, rather than every connected one with four module calls each.
+    if Bridge.framework == 'vcore' and VC and VC.GetPlayerByCitizenId then
+        local ok, player = pcall(VC.GetPlayerByCitizenId, cid)
+        if ok then
+            local src = type(player) == 'table' and tonumber(player.source)
+            return src and Bridge.GetPlayer(src) or nil
+        end
+    end
     for _, src in ipairs(GetPlayers()) do
         local p = Bridge.GetPlayer(tonumber(src))
         if p and p.citizenid == cid then return p end

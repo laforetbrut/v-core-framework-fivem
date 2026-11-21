@@ -331,7 +331,12 @@ FRAMEWORK_SETUP = {
                 job = { name = 'police', grade = 2 } }
         end
         EXPORTS['v-core'] = { GetCore = function()
-            return { GetPlayer = funcref(function(src) return PLAYERS[src] end) }
+            return { GetPlayer = funcref(function(src) return PLAYERS[src] end),
+                     GetPlayerByCitizenId = funcref(function(cid)
+                         for _, p in pairs(PLAYERS) do
+                             if p.citizenid == cid then return p end
+                         end
+                     end) }
         end }
     ''',
     'standalone': '',
@@ -545,6 +550,19 @@ def existence_cases(fw):
          '2', 2, ('yes no S', 'yes yes nil')),
     ]
     return cases
+
+
+def test_vcore_lookup():
+    print('v-core: a citizen id is looked up through the framework, not by building everybody')
+    w = World('vcore')
+    w.ex('resetC()')
+    found = w.ev('function() local p = Bridge.GetPlayerByCitizenId("VC5") '
+                 'return p and (tostring(p.source) .. " " .. p.citizenid) or "nil" end')()
+    wraps = int(w.ev('C.wraps'))
+    check(found == '5 VC5', 'the character is found on its own source', found)
+    check(wraps == 1, 'only that player is built', 'wraps %d for %d players' % (wraps, PLAYERS))
+    gone = w.ev('function() local p = Bridge.GetPlayerByCitizenId("VC999") return p and "found" or "nil" end')()
+    check(gone == 'nil', 'a character nobody plays is nobody', gone)
 
 
 def test_existence():
@@ -1017,6 +1035,8 @@ def main():
     version = getattr(lupa.LuaRuntime(), 'lua_version', None)
     check(version == (5, 4), 'running under Lua 5.4, as FiveM does', 'lua_version %s' % (version,))
     test_existence()
+    print('')
+    test_vcore_lookup()
     print('')
     test_cost()
     test_same_as_base()
