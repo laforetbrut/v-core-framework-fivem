@@ -23,7 +23,19 @@ local FRAMEWORKS = {
     { id = 'qb',   resources = { 'qbx_core', 'qb-core' } },
     { id = 'ox',   resources = { 'ox_core' } },
     { id = 'esx',  resources = { 'es_extended' } },
+    -- v-core, the framework this copy ships inside. Last, so a server that also runs one of the
+    -- three above keeps the detection it had.
+    { id = 'vcore', resources = { 'v-core' } },
 }
+
+--- Is this framework resource really running? compat.lua answers `started` for every v-* name it
+--- stubs, v-core included, so only the real state counts for those - and without it, never.
+local function frameworkStarted(res)
+    if res:sub(1, 2) == 'v-' then
+        return RealGetResourceState ~= nil and RealGetResourceState(res) == 'started'
+    end
+    return GetResourceState(res) == 'started'
+end
 
 --- Which framework is running. `Config.Framework` may name one explicitly; `auto` looks.
 local function detectFramework()
@@ -32,7 +44,7 @@ local function detectFramework()
         for _, f in ipairs(FRAMEWORKS) do
             if f.id == wanted then
                 for _, res in ipairs(f.resources) do
-                    if GetResourceState(res) == 'started' then return f.id, res end
+                    if frameworkStarted(res) then return f.id, res end
                 end
                 print(('[v-phone] framework "%s" was named in the config but is not started'):format(wanted))
                 return wanted, nil
@@ -42,7 +54,7 @@ local function detectFramework()
     end
     for _, f in ipairs(FRAMEWORKS) do
         for _, res in ipairs(f.resources) do
-            if GetResourceState(res) == 'started' then return f.id, res end
+            if frameworkStarted(res) then return f.id, res end
         end
     end
     return 'standalone', nil
@@ -52,7 +64,7 @@ Bridge.framework, Bridge.frameworkResource = 'standalone', nil
 
 -- The framework's own object, fetched once. qb hands out a shared table; ox and ESX are
 -- reached through exports.
-local QB, ESX
+local QB, ESX, VC
 
 local function loadFramework()
     Bridge.framework, Bridge.frameworkResource = detectFramework()
@@ -66,6 +78,9 @@ local function loadFramework()
     elseif Bridge.framework == 'esx' then
         local ok, obj = pcall(function() return exports['es_extended']:getSharedObject() end)
         ESX = ok and obj or nil
+    elseif Bridge.framework == 'vcore' then
+        local ok, core = pcall(function() return exports['v-core']:GetCore() end)
+        VC = ok and core or nil
     end
     V.Info(('[v-phone] framework: %s%s'):format(Bridge.framework,
         Bridge.frameworkResource and (' (' .. Bridge.frameworkResource .. ')') or ''))
@@ -163,6 +178,22 @@ local function oxPlayer(src)
 end
 
 local function esxPlayer(src) return ESX and ESX.GetPlayerFromId(src) or nil end
+
+--- v-core's own player. Its methods survive the export boundary - FiveM hands an exported
+--- function across as a callable - which is how every module of the framework reaches it.
+local function vcorePlayer(src)
+    if not VC or not VC.GetPlayer then return nil end
+    local ok, player = pcall(VC.GetPlayer, src)
+    return ok and player or nil
+end
+
+--- One v-core module's answer, or nil when it is not running or the call fails.
+local function vcoreAsk(resource, method, ...)
+    if GetResourceState(resource) ~= 'started' then return nil end
+    local ok, value = pcall(function(...) return exports[resource][method](exports[resource], ...) end, ...)
+    if ok then return value end
+    return nil
+end
 
 --- A phone player: the same fields upstream's v-core hands out.
 ---
@@ -295,6 +326,36 @@ function Bridge.GetPlayer(src)
               -- server running esx_service points `Config.Compat.hooks.onDuty` at the real
               -- answer; see the hook below.
               onDuty = true })
+
+    elseif Bridge.framework == 'vcore' then
+        -- **The character, not the account.** v-core is multi-character: one licence holds
+        -- several `characters` rows and the one in play is the one loaded on this source. The
+        -- phone used to fall through to standalone here and key everything on the licence, so
+        -- two characters of one player shared a number, a battery and a message history, and
+        -- every hook that asks v-core by citizen id - the Wallet, the Garage, the licences, the
+        -- bank statement - was handed a licence and found nobody.
+        local player = vcorePlayer(src)
+        if not player or not player.citizenid then return nil end
+        local info = player.charinfo or {}
+        local job = player.job or {}
+        local jobName = tostring(job.name or 'unemployed')
+        local grade = math.floor(tonumber(job.grade) or 0)
+        local name = ((info.firstname or '') .. ' ' .. (info.lastname or '')):gsub('^%s+', '')
+        local p = wrap(src, tostring(player.citizenid), name ~= '' and name or nil,
+            { name = jobName,
+              label = vcoreAsk('v-jobs', 'GetJobLabel', jobName) or jobName,
+              grade = grade,
+              gradeLabel = vcoreAsk('v-jobs', 'GetGradeLabel', jobName, grade) or '',
+              -- v-factions decides who leads a job - an explicit isboss grade, or the highest one
+              -- when the data has no opinion - and v-bossmenu asks it the same question.
+              boss = vcoreAsk('v-factions', 'IsBoss', src, jobName, 'job') == true,
+              -- v-jobs keeps duty, and answers true for a job just given.
+              onDuty = vcoreAsk('v-jobs', 'IsOnDuty', src) ~= false })
+        -- The language the player picked in v-core, which it carries on their state bag.
+        local bag = Player(src) and Player(src).state
+        local lang = bag and bag.lang
+        if type(lang) == 'string' and lang ~= '' then p.lang = lang end
+        return p
     end
 
     -- Standalone: the phone still works, it simply has no job and no character name.
@@ -356,7 +417,10 @@ function Bridge.Notify(src, message, kind)
     local mode = (Config.Compat.notify or 'auto'):lower()
 
     if mode == 'auto' then
-        if GetResourceState('ox_lib') == 'started' then mode = 'ox_lib'
+        -- v-core first: its toasts are the framework's own, and a server running ox_lib beside
+        -- it still wants those. Before this the phone notified a v-core player in the chat.
+        if Bridge.framework == 'vcore' then mode = 'vcore'
+        elseif GetResourceState('ox_lib') == 'started' then mode = 'ox_lib'
         elseif Bridge.framework == 'qb' then mode = 'qb'
         elseif Bridge.framework == 'esx' then mode = 'esx'
         else mode = 'chat' end
@@ -368,6 +432,10 @@ function Bridge.Notify(src, message, kind)
         TriggerClientEvent('QBCore:Notify', src, message, kind == 'error' and 'error' or 'primary')
     elseif mode == 'esx' then
         TriggerClientEvent('esx:showNotification', src, message)
+    elseif mode == 'vcore' then
+        -- v-notify draws success, error, warning and info, and reads anything else as info,
+        -- which is what the phone's `inform` means.
+        V.Notify(src, message, kind)
     elseif mode == 'custom' then
         TriggerClientEvent(Config.Compat.notifyEvent, src, message, kind)
     else
@@ -433,6 +501,10 @@ function Bridge.HasPlayer(src)
         local player = esxPlayer(src)
         if not player then return false end
         return player.identifier and true or false
+
+    elseif Bridge.framework == 'vcore' then
+        local player = vcorePlayer(src)
+        return (player and player.citizenid) and true or false
     end
 
     -- Standalone: the licence falls back to the source id itself, so GetPlayer always has an id

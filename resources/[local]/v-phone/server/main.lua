@@ -7190,9 +7190,10 @@ local function hydratePlayer(src, player)
     scheduleCatchUp(src, player)
 end
 
-AddEventHandler('v-core:server:onPlayerLoaded', function(src, player)
-    if Core then hydratePlayer(src, player) end
-end)
+-- `v-core:server:onPlayerLoaded` used to hydrate straight from the object it carries, which is
+-- v-core's own player: its GetMetadata reads the framework's character metadata, not this phone's
+-- storage, so every load pushed a full battery and default preferences. bridge/server/characters.lua
+-- answers that event like every other framework's and ends at `hydrateReal` below.
 
 --- **A phone works from the moment the character loads, not from its first open.**
 ---

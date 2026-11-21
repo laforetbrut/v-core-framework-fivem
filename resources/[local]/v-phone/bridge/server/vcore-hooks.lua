@@ -272,10 +272,15 @@ Config.Compat.hooks.identity = function(citizenid, _)
     local n = tonumber(row.sex)
     if n == 0 then sex = 'm' elseif n == 1 then sex = 'f' end
 
+    -- A date of birth is shown only when it is one, as the bridge's own branches do since 1.7.27.
+    -- v-spawn writes `YYYY-MM-DD` from a date input, but the value comes from the client, so
+    -- anything else is left out rather than drawn on the card.
+    local dob = tostring(row.dob or ''):match('^%d%d%d%d%-%d%d%-%d%d$')
+
     return {
         first = row.firstname,
         last = row.lastname,
-        dob = row.dob,
+        dob = dob,
         sex = sex,
         id = citizenid,
     }

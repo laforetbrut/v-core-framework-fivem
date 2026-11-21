@@ -1089,6 +1089,14 @@ Two places where being a shell still means shipping **less**, not faking more:
   do, and the `V.Module` registration declares `false`, which is what this framework does -
   the panel answers first, so `false` is what an operator here starts from.
 
+**The character is v-core's.** The phone detects qb-core, ox_core and ESX, and has a `vcore`
+branch in `bridge/server/framework.lua` for this framework: the citizen id is the loaded
+character's, the job label, boss rank and duty come from `v-jobs` and `v-factions`, and its toasts
+go through `V.Notify`. Detection reads `RealGetResourceState`, because `bridge/shared/compat.lua`
+stubs every `v-*` name and answers `started` for them. Everything else the apps read from a
+v-core module goes through the hooks in `bridge/server/vcore-hooks.lua`, the seam `config.lua`
+documents, so an upstream update merges without touching them.
+
 **A number is a row in `vphone_characters`**, keyed on the citizen id and minted server-side
 in a configurable format. Two characters made in the same second cannot share an inbox
 because the column carries a `UNIQUE` key: the database refuses the collision rather than the

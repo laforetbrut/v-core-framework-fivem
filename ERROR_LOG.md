@@ -241,3 +241,17 @@
 **Root cause:** two things at once. The database here is on-demand by design (`start-db.bat`, never a Windows service), so it is off unless somebody starts it. And oxmysql logs that failure at `[ info]`, not `[error]`, so a filter matching `SCRIPT ERROR|Failed to load|error parsing` cannot see it. The boot test was answering "do the resources load" and being read as "does the server work".
 **Fix:** start the database first, and match the connection line explicitly. With it running the same boot reports `[12.3.2-MariaDB] Database server connection established!` and no SQL failure anywhere, which is the first time the phone's 61 CREATE TABLE statements were actually exercised.
 **Prevention:** a boot test's filter has to match on what a healthy boot SAYS, not only on what a broken one errors with. Absence of an error line is not evidence when the failure is logged as information.
+
+## [2026-11-21 08:40] — The phone ran standalone on v-core and keyed every character on the licence
+**Context:** Bringing v-phone 1.6.4 up to 1.7.27 and reading how its bridge finds the player.
+**Error:** `Bridge.GetPlayer` knew qb-core, ox_core and ESX only, so on v-core it fell through to standalone: citizen id = licence. The `vcore-hooks.lua` hooks query v-core by citizen id and were each verified by probing them with a real citizen id, so they looked right while the app would hand them a licence in game.
+**Root cause:** The hooks were tested in isolation, never through the id the bridge actually passes them.
+**Fix:** A `vcore` branch in `bridge/server/framework.lua` (GetPlayer, HasPlayer, notify), `characters.lua` (identity row, load event), and the raw v-core player no longer hydrates the phone in `server/main.lua`.
+**Prevention:** Test a hook through the caller that feeds it. `tools/test-hotpath.py` now builds a v-core world beside the other frameworks.
+
+## [2026-11-21 08:55] — The phone's compatibility layer makes v-core look started on every server
+**Context:** Adding v-core to the phone's framework detection.
+**Error:** The standalone world of `test-hotpath.py` raised `attempt to index a nil value`: it detected `vcore` with no v-core running.
+**Root cause:** `bridge/shared/compat.lua` overrides `GetResourceState` and answers `started` for every stubbed `v-*` name, `v-core` included.
+**Fix:** compat.lua exposes `RealGetResourceState`; the detection uses it for `v-*` names and never detects one without it.
+**Prevention:** Inside v-phone, never decide that a `v-*` resource exists from `GetResourceState`: the stub answers for it.

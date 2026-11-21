@@ -22,6 +22,9 @@
 local isServer = IsDuplicityVersion()
 local realExports = exports
 local realGetResourceState = GetResourceState
+--- The real answer, for the one caller a stub must not fool: the framework detection, which
+--- would otherwise find `v-core` started on every server, because its stub always is.
+RealGetResourceState = realGetResourceState
 
 --- Does the server run any of these?
 local function anyStarted(list)

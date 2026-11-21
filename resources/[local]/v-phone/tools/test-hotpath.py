@@ -53,6 +53,9 @@ BASE = '5b02d5c'
 BASES = (BASE, '9e6150c')
 PLAYERS = 64
 FRAMEWORKS = ['qb', 'qbx', 'ox', 'esx', 'standalone']
+# The framework this copy ships inside. Held to the existence and cost checks like the others; the
+# comparison against BASE leaves it out, because BASE had no v-core branch to compare with.
+WITH_VCORE = FRAMEWORKS + ['vcore']
 # The files this change touched. Everything else is read from the working tree for both worlds,
 # so the comparison is about these and nothing else.
 CHANGED = {'bridge/server/framework.lua', 'server/adminview.lua', 'server/charging.lua',
@@ -320,6 +323,17 @@ FRAMEWORK_SETUP = {
             return { GetPlayerFromId = funcref(function(src) return PLAYERS[src] end) }
         end }
     ''',
+    'vcore': r'''
+        STARTED['v-core'] = true
+        for i = 1, NPLAYERS do
+            PLAYERS[i] = { source = i, citizenid = 'VC' .. i,
+                charinfo = { firstname = 'Test', lastname = 'Player' .. i },
+                job = { name = 'police', grade = 2 } }
+        end
+        EXPORTS['v-core'] = { GetCore = function()
+            return { GetPlayer = funcref(function(src) return PLAYERS[src] end) }
+        end }
+    ''',
     'standalone': '',
 }
 
@@ -392,6 +406,7 @@ def build(fw, base=False):
     lua.execute("LOCALE_FALLBACK = 'fr'")
     compat = source('bridge/shared/compat.lua')
     load('compat', 'local realGetResourceState = GetResourceState\n'
+                   'RealGetResourceState = realGetResourceState\n'
                    'local function voiceResource() return nil end\n'
          + between(compat, 'local function stubIsLive(name)', '\nend\n')
          + between(compat, 'function GetResourceState(resource)', '\nend\n') + COUNT_WORLD)
@@ -512,6 +527,9 @@ def existence_cases(fw):
     if fw == 'ox':
         cases += [('ox without charId (character selection)', 'PLAYERS[1].charId = nil', '1', None, 'no no'),
                   ('ox with charId false', 'PLAYERS[1].charId = false', '1', None, 'no no')]
+    if fw == 'vcore':
+        cases += [('v-core without citizenid', 'PLAYERS[1].citizenid = nil', '1', None, 'no no'),
+                  ('v-core with citizenid false', 'PLAYERS[1].citizenid = false', '1', None, 'no no')]
     if fw == 'esx':
         cases += [('esx without identifier', 'PLAYERS[1].identifier = nil', '1', None, 'no no'),
                   ('esx with identifier false', 'PLAYERS[1].identifier = false', '1', None, 'no no')]
@@ -531,7 +549,7 @@ def existence_cases(fw):
 
 def test_existence():
     print('existence: HasPlayer answers what GetPlayer does')
-    for fw in FRAMEWORKS:
+    for fw in WITH_VCORE:
         cids = World(fw).ev('function() return tostring(Bridge.GetPlayer(1).citizenid) .. " " '
                             '.. tostring(Bridge.GetPlayer(2).citizenid) end')().split(' ')
         for name, mutate, src, follow, expected in existence_cases(fw):
@@ -590,7 +608,7 @@ def measure(fw, base, which, scenario):
 def test_cost():
     print('cost: one pass of the state tick, %d players' % PLAYERS)
     rows = []
-    for fw in FRAMEWORKS:
+    for fw in WITH_VCORE:
         for which, scenarios in (('state', SCENARIOS), ('drain', SCENARIOS[:1])):
             for sc_name, sc in scenarios:
                 before, k = measure(fw, True, which, sc)

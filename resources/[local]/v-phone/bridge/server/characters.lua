@@ -56,6 +56,13 @@ local function identityOf(src, citizenid)
         if row then
             return row.firstname or '', row.lastname or '', tostring(row.dateofbirth or '')
         end
+
+    elseif Bridge.framework == 'vcore' then
+        local row = MySQL.single.await(
+            'SELECT firstname, lastname, dob FROM characters WHERE citizenid = ?', { citizenid })
+        if row then
+            return row.firstname or '', row.lastname or '', tostring(row.dob or '')
+        end
     end
 
     local first, last = splitName(src and GetPlayerName(src) or '')
@@ -114,6 +121,9 @@ AddEventHandler('ox:playerLoaded', function(src) onLoaded(src) end)
 AddEventHandler('esx:playerLoaded', function(_, xPlayer)
     onLoaded(xPlayer and xPlayer.source)
 end)
+-- v-core passes its own player object as well; only the source is used, so the phone reads the
+-- character through Core.GetPlayer exactly as it does everywhere else.
+AddEventHandler('v-core:server:onPlayerLoaded', function(src) onLoaded(tonumber(src)) end)
 
 --- A standalone server has no such event, and a server whose framework fires one this
 --- file does not know about should still work. The phone asks on its first open too.
