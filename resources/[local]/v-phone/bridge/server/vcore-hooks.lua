@@ -463,3 +463,38 @@ Config.Compat.hooks.societyRemove = function(account, amount, reason)
                math.abs(math.floor(tonumber(amount) or 0)),
                tostring(reason or 'v-phone')) == true
 end
+
+--[[
+    The company account's ledger, for Bank Pro.
+
+    Same account name unpicking as the three above, through `faction()`.
+
+    **The sign is already there, unlike the personal statement.** These two look alike and
+    are not: v-banking stores a positive amount and carries the direction in `type`, so that
+    hook has to derive it, while v-factions writes the signed amount straight into
+    faction_transactions - `move` is called with +amount to deposit and -amount to withdraw,
+    and `record` files exactly what it was handed. Signing it again here would turn every
+    withdrawal back into a credit.
+
+    Shape, from the qb branch beside it: (account, limit) -> { { label, amount, at }, ... }
+]]
+Config.Compat.hooks.societyTransactions = function(account, limit)
+    local name = faction(account)
+    if not name then return nil end
+
+    local rows = ask('v-factions', 'GetTransactions', name, 'job',
+                     math.max(1, math.min(200, math.floor(tonumber(limit) or 50))))
+    if type(rows) ~= 'table' then return nil end
+
+    local out = {}
+    for _, r in ipairs(rows) do
+        if type(r) == 'table' then
+            out[#out + 1] = {
+                label = r.reason,
+                amount = math.floor(tonumber(r.amount) or 0),
+                at = r.at,
+            }
+        end
+    end
+    return out
+end
