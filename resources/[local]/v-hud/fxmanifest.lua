@@ -4,8 +4,8 @@ lua54 'yes'
 
 name 'v-hud'
 author 'vyrriox'
-description 'v-hud — a fully player-configurable HUD: movable elements, five themes, ten speedometers, twenty-one dashboard tell-tales, compass, street names, compact and immersive modes (v-core module)'
-version '1.0.1'
+description 'v-hud — a fully player-configurable HUD: movable elements, seven themes, ten speedometers, twenty-one dashboard tell-tales, compass, street names, compact and immersive modes (v-core module)'
+version '1.0.2'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'

@@ -480,8 +480,8 @@ Server mutator exports: `Get` / `Set` / `Add` / `SetBleed` / `SetSick` / `Heal`.
 - No HUD of its own (by design - `v-hud` renders it), no locales, no in-game tuning UI.
 
 ### `v-hud` ✅ - overlay
-**Done.** The configurable HUD, brought in from a standalone line and re-based on v-core. Five
-themes, ten speedometer styles, twenty-one dashboard tell-tales, a scrolling compass with street
+**Done.** The configurable HUD, brought in from a standalone line and re-based on v-core (v-hud 1.0.2). Seven
+themes, ten speedometer styles, the GPS route distance, twenty-one dashboard tell-tales, a scrolling compass with street
 names, always-visible vitals, money on demand, compact and immersive modes, a per-player in-game
 settings menu, whole-HUD auto-hide on pause / fade / player switch / open menu, KVP persistence,
 fr+en. The framework is read through a `vcore` adapter on each bridge file (`bridge/client/compat.lua`,

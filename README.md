@@ -124,7 +124,7 @@ in-game** - never by editing Lua on a live server.
 - **`v-police`** - cuffs, escort, search, seizure, charges, fines, jail and an MDT (record, warrants,
   licences, vehicles). **Police is a job, not a permission.** The penal code is data - 21 charges with
   fine, jail time and licence points, all editable in-game.
-- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (five themes,
+- **`v-banking`** (Fleeca ATM) · **`v-status`** (hunger/thirst/stress/bleed) · **`v-hud`** (seven themes,
   ten speedometers, twenty-one dashboard tell-tales, a compass, a round minimap and a per-player settings
   menu) · **`v-sport`** (gym training: strength, breath and stamina, with a rhythm QTE) · **`v-notify`**
   · **`v-clothing`** (16 wearable slots, 10 stores, slots & stores editable in-game) · **`v-loadscreen`**.
@@ -390,7 +390,7 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **`v-police`** - menottes, escorte, fouille, saisie, inculpation, amendes, prison et un MDT (casier,
   mandats, permis, véhicules). **La police est un métier, pas une permission.** Le code pénal est une
   donnée : 21 infractions avec amende, prison et points de permis, modifiables en jeu.
-- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (cinq thèmes,
+- **`v-banking`** (DAB Fleeca) · **`v-status`** (faim/soif/stress/saignement) · **`v-hud`** (sept thèmes,
   dix compteurs, vingt et un témoins de tableau de bord, une boussole, une minimap ronde et un menu de
   réglages par joueur) · **`v-sport`** (salle de sport : force, souffle et endurance, avec un QTE rythmé) · **`v-notify`**
   · **`v-clothing`** (16 emplacements portables, 10 boutiques, emplacements & boutiques modifiables en jeu) · **`v-loadscreen`**.
