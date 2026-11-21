@@ -213,6 +213,11 @@ script is never read by the server: the resource reports "Started", registers it
 logs nothing, and the file simply does not run when a player connects. That was measured, not
 assumed - a deliberately broken client file produced a completely clean boot.
 
+`lua-syntax` and the Lua checks the modules carry run on lupa. With no lupa installed, the stand-in
+in `tools/lupa-shim` runs them on the system's own Lua 5.4 library instead, nothing to install:
+`PYTHONPATH=tools/lupa-shim python tools/lua-syntax.py` from the root, or
+`PYTHONPATH=../../../tools/lupa-shim python tools/test-all.py` from a module's folder.
+
 **A fifth needs a database, which is why it is listed apart.** The four above read the
 repository and need nothing else. `sql-check` asks the database whether every SQL statement
 in the framework is one it would accept, which a boot test cannot: booting only ever runs the
@@ -479,6 +484,11 @@ CLIENT cassé n'est jamais lu par le serveur : la ressource annonce « Started �
 réglages et ne journalise rien, et le fichier ne tourne simplement pas quand un joueur se
 connecte. Cela a été mesuré et non supposé : un fichier client volontairement cassé a produit
 un démarrage totalement propre.
+
+`lua-syntax` et les contrôles Lua des modules tournent sur lupa. Sans lupa installé, le substitut
+de `tools/lupa-shim` les fait tourner sur la bibliothèque Lua 5.4 du système, rien à installer :
+`PYTHONPATH=tools/lupa-shim python tools/lua-syntax.py` depuis la racine, ou
+`PYTHONPATH=../../../tools/lupa-shim python tools/test-all.py` depuis le dossier d'un module.
 
 **Un cinquième exige une base de données, d'où sa place à part.** Les quatre ci-dessus lisent
 le dépôt et n'ont besoin de rien d'autre. `sql-check` demande à la base si chaque requête SQL

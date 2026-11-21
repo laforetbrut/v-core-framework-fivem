@@ -29,7 +29,7 @@ import sys
 try:
     from lupa import LuaRuntime
 except ImportError:
-    sys.exit('lua-syntax: needs lupa (pip install lupa)')
+    sys.exit('lua-syntax: needs lupa (pip install lupa), or PYTHONPATH=tools/lupa-shim')
 
 ROOT = os.path.join('resources', '[local]')
 SKIP_DIRS = {'node_modules', '__pycache__', '.git', 'tools'}
