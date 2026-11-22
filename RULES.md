@@ -8,7 +8,7 @@
 | Repository | `laforetbrut/v-core-framework-fivem` (public) |
 | Version | 0.2.0 - every module reads the same number |
 | Type | FiveM **Enhanced** (GTA V Enhanced) roleplay framework |
-| Framework | v-core (custom, in-house - `resources/[local]/v-core`), 34 modules |
+| Framework | v-core (custom, in-house - `resources/[local]/v-core`), 40 modules |
 | Server runtime | **`cfx-server.exe`** - the Enhanced binary. `FXServer.exe` is Legacy and rejects Enhanced clients |
 | Game build | **Never set `sv_enforceGameBuild`** - those are Legacy build numbers and lock Enhanced clients out |
 | Base resources | Official cfx-server-data defaults |
@@ -17,7 +17,7 @@
 | Sync | OneSync enabled |
 | Database | MariaDB / MySQL via `oxmysql`. `database/schema.sql` plus per-module tables created at boot |
 | Author | vyrriox |
-| License | MIT (our code) / cfx defaults keep their own licenses |
+| License | Apache 2.0 (our code) / cfx defaults keep their own licenses |
 
 ## 2. Git Workflow
 
