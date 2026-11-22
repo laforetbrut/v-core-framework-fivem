@@ -6,6 +6,10 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ## [Unreleased]
 
+---
+
+## [0.3.0] - 2026-11-22
+
 ### Added (English first)
 
 - **v-park runs on v-core now, through v-vehicles**. Its bridge has a vcore adapter, picked first when v-core is up: the owner is the citizenid from `character_vehicles`, keys come from v-vehicles, garages from v-garages, fuel from v-fuel and toasts from v-notify. A parked car is put back with `SpawnOwned` and v-park never creates one itself; leaving a car parks it, getting in unparks it, and a car stored in a garage or impounded is forgotten. Only cars `character_vehicles` knows are kept. The phone's Garage app still finds a parked car through `GetVehicleByPlate`, even one v-park has no row for. `server.cfg` starts it after v-notify, v-vehicles, v-garages and v-fuel, and the admin panel lists it with the other modules.

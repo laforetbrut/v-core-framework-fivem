@@ -4,7 +4,7 @@ game 'gta5'
 name 'v-notify'
 author 'vyrriox'
 description 'v-notify — themed NUI notifications / toasts (v-core module)'
-version '0.2.0'
+version '0.3.0'
 
 -- Detected by v-core's module registry (admin panel -> Settings). See DEVELOPERS.md.
 v_module 'yes'
