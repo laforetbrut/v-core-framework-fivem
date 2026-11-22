@@ -64,6 +64,8 @@ local frameworkObject
 local frameworkKind
 
 local FRAMEWORKS = {
+    -- v-core first: it is the framework this copy ships inside. See bridge/server/vcore.lua.
+    { kind = 'vcore', resource = function() return resourceName('vcore', 'v-core') end },
     { kind = 'qbx', resource = function() return resourceName('qbx', 'qbx_core') end },
     { kind = 'qb',  resource = function() return resourceName('qb', 'qb-core') end },
     { kind = 'ox',  resource = function() return resourceName('ox', 'ox_core') end },
@@ -85,7 +87,9 @@ local function resolveFramework()
         if (not force or force == entry.kind) and Park.started(resource) then
             local object
 
-            if entry.kind == 'qb' or entry.kind == 'qbx' then
+            if entry.kind == 'vcore' then
+                object = Park.try(function() return exports[resource]:GetCore() end)
+            elseif entry.kind == 'qb' or entry.kind == 'qbx' then
                 object = Park.try(function() return exports[resource]:GetCoreObject() end)
             elseif entry.kind == 'esx' then
                 -- ESX has published three different ways to get its object over the years.
@@ -139,6 +143,11 @@ end
 function Compat.characterLoaded()
     resolveFramework()
 
+    if frameworkKind == 'vcore' then
+        local data = Park.try(function() return exports[resourceName('vcore', 'v-core')]:GetPlayerData() end)
+        return type(data) == 'table' and data.citizenid ~= nil
+    end
+
     if frameworkKind == 'qb' or frameworkKind == 'qbx' then
         local data = Park.try(function() return frameworkObject.Functions.GetPlayerData() end)
         return type(data) == 'table' and data.citizenid ~= nil
@@ -170,8 +179,12 @@ end
     languages on one screen, and the player's theme choice silently not applying to us.
 
     Then ox_lib, then okokNotify, then the framework's own, then our native toast.
+
+    v-notify before all of them: on v-core it is the framework's own toast, the one every other
+    module of the server uses, so a parked-car message looks like the rest of the server.
 ]]
 local NOTIFY_PROVIDERS = {
+    { key = 'v-notify', test = function() return Park.started('v-notify') end },
     { key = 'v-hud',  test = function() return Park.started('v-hud') end },
     { key = 'ox_lib', test = function() return Park.started(resourceName('oxLib', 'ox_lib')) end },
     { key = 'okok',   test = function() return Park.started('okokNotify') end },
@@ -215,7 +228,15 @@ function Compat.notify(message, kind)
     local duration = (Config.Notify.duration) or 4000
     local provider = resolveNotify()
 
-    if provider == 'v-hud' then
+    if provider == 'v-notify' then
+        if pcall(function()
+            exports['v-notify']:Show({
+                type = kind == 'warn' and 'warning' or kind,
+                message = message,
+                duration = duration,
+            })
+        end) then return end
+    elseif provider == 'v-hud' then
         -- v-hud's kinds are primary | success | error. 'warn' and 'info' have no direct
         -- equivalent, so they map to the two that read closest rather than being dropped.
         local mapped = kind
@@ -298,7 +319,13 @@ end
     So when rcore_fuel is installed, its export IS the fuel level, and everything else is a
     best-effort echo written alongside it for the HUDs that read the native.
 ]]
+--[[
+    v-fuel owns consumption on v-core and keeps the level, 0 to 100, in v-vehicles, whose client
+    exports are what v-fuel itself reads and writes. `detect` is the resource whose presence
+    selects the provider when it is not the one the exports live in.
+]]
 local FUEL_PROVIDERS = {
+    { key = 'v-fuel',         resource = 'v-vehicles',     detect = 'v-fuel', export = 'GetFuel', setter = 'SetFuel' },
     { key = 'rcore_fuel',     resource = 'rcore_fuel',     export = 'GetFuel', setter = 'SetFuel', statebag = 'fuel' },
     { key = 'ox_fuel',        resource = 'ox_fuel',        statebag = 'fuel' },
     { key = 'LegacyFuel',     resource = 'LegacyFuel',     export = 'GetFuel', setter = 'SetFuel' },
@@ -324,7 +351,8 @@ local function resolveFuel()
     end
 
     for _, provider in ipairs(FUEL_PROVIDERS) do
-        if (not force or force == provider.key) and Park.started(provider.resource) then
+        if (not force or force == provider.key) and Park.started(provider.resource)
+            and (not provider.detect or Park.started(provider.detect)) then
             fuelProvider = provider
             Park.debug('fuel provider detected: %s', provider.key)
             return fuelProvider
