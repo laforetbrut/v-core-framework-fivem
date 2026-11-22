@@ -184,5 +184,29 @@ ok(impounded, 'impound'); eq(how, 'impound', 'a real impound on v-core')
 eq(H.row('VR10002').state, S.IMPOUND, 'in the impound lot')
 print('H ok: expiry and impound go through v-vehicles')
 
+-- ── I. the lock and the owner stay v-vehicles': the panel and the API cannot fork them ──
+eq(VP.Config.Compat.framework, 'vcore', 'the shipped config forces v-core')
+eq(VP.Config.Keys.restore, false, 'no keys handed back: the owner has them from ownership')
+eq(VP.Config.Save.fields.lockState, false, 'no native lock restored over v-vehicles')
+eq(VP.Config.Commands.lock.enabled, false, '/vparklock off'); eq(VP.Config.Commands.owner.enabled, false, '/vparkowner off')
+H.addRow({ plate = 'VR10005', citizenid = 'CID1', model = 'sultan', state = S.OUT, garage = 'legion' })
+H.run(VVX('MarkParked'), 'VR10005', vector3(4100.0, 4100.0, 30.0), 0.0)
+VP.Store.add({ id = 'LOCK00001', plate = 'VR10005', model = GetHashKey('sultan'), model_name = 'SULTAN', class = 4,
+    owner = 'CID1', owner_type = 'owned', pos_x = 4100.0, pos_y = 4100.0, pos_z = 30.0, rot_x = 0.0, rot_y = 0.0,
+    rot_z = 0.0, bucket = 0, properties = {}, created_at = os.time(), updated_at = os.time(), touched_at = os.time(),
+    last_used_at = os.time(), offline_secs = 0, rental_until = 0, last_garage = 'legion' }, false)
+local locked, said = H.run(VP.Actions.setLock, 1, 'VR10005', true)
+ok(locked, 'the owner locks it: ' .. tostring(said))
+eq(H.run(VVX('IsLocked'), 'VR10005'), true, 'locked in v-vehicles')
+H.run(VP.Actions.setLock, 1, 'LOCK00001', false)
+eq(H.run(VVX('IsLocked'), 'VR10005'), false, 'unlocked in v-vehicles')
+eq(VP.Store.get('LOCK00001').properties.lockState, nil, 'no second lock state in v-park')
+local moved, why = H.run(VP.Actions.setOwner, 0, 'VR10005', 1)
+eq(moved, false, 'no transfer from the panel'); eq(why, 'error.owner_is_framework', 'and why')
+eq(H.run(VPX('SetOwner'), 'VR10005', 'CID2', 'owned', 'X'), false, 'nor from the API')
+eq(VP.Store.get('LOCK00001').owner, 'CID1', 'the owner is unchanged'); eq(H.row('VR10005').citizenid, 'CID1', 'in both')
+ok(VP.L('error.owner_is_framework') ~= 'error.owner_is_framework', 'the refusal has its text')
+print('I ok: lock and owner go through v-vehicles')
+
 eq(H.creates['v-park'] or 0, 0, 'v-park never created a vehicle in the whole run')
 print(('PASS vcore (%d vehicle(s) created, all by v-vehicles)'):format(H.creates['v-vehicles'] or 0))
