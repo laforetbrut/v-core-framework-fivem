@@ -269,3 +269,10 @@
 **Root cause:** The restore waited up to 1 s for DoesEntityExist, but a CreateVehicleServerSetter entity is orphaned until a client has it in scope and DoesEntityExist stays false until then by design; the world natives after it could also raise on the orphaned entity
 **Fix:** Wait on DoesEntityExist only on the CreateVehicle RPC path (and delete the entity if it never appears), and pcall the plate, rotation and bucket natives; covered by tools/vehicles-selftest/restore-orphaned.lua
 **Prevention:** Never gate a server setter entity on DoesEntityExist: it is registered at once and absent from the world until streamed; only the RPC CreateVehicle has a creation window to wait out
+
+## [2026-11-22 17:40] - v-park panel and API still forked the lock and owner after the commands were off
+**Context:** Setting v-park's config for v-core so nothing duplicates v-vehicles (Commands.lock and Commands.owner disabled)
+**Error:** Actions.setLock set a native lock and Actions.setOwner rewrote v-park's owner from the admin panel (panel.lua lock/unlock/setOwner) and the SetOwner export, bypassing v-vehicles' SetLocked and character_vehicles.citizenid; Config.Keys.restoreLockState is read nowhere
+**Root cause:** A command flag only gates the chat command: the panel and the export call the same Actions directly, and the lock restore follows Config.Save.fields.lockState, not the Keys setting
+**Fix:** Bridge.setLocked routes setLock to v-vehicles' SetLocked and Bridge.mayTransfer refuses setOwner and the SetOwner export on v-core; Save.fields.lockState off; covered by section I of tools/vpark-selftest/vcore.lua (red without the fix)
+**Prevention:** Before calling a v-park feature off, grep every caller of its Actions function (commands, panel.lua, api.lua) and gate it in the bridge, not only in Config.Commands
