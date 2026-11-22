@@ -218,6 +218,12 @@ in `tools/lupa-shim` runs them on the system's own Lua 5.4 library instead, noth
 `PYTHONPATH=tools/lupa-shim python tools/lua-syntax.py` from the root, or
 `PYTHONPATH=../../../tools/lupa-shim python tools/test-all.py` from a module's folder.
 
+`python tools/vehicles-selftest.py` runs v-vehicles' server script outside the game, natives,
+oxmysql and v-core stubbed, on a fake `character_vehicles` that refuses a column it does not have.
+It covers the rules a car parked in the street lives by (no impound, no delete at a stop, the
+restore with no player, no second copy after a restart) and that a car that is not parked needs
+none of the new columns. It checks logic, not the game.
+
 **A fifth needs a database, which is why it is listed apart.** The four above read the
 repository and need nothing else. `sql-check` asks the database whether every SQL statement
 in the framework is one it would accept, which a boot test cannot: booting only ever runs the
@@ -489,6 +495,13 @@ un démarrage totalement propre.
 de `tools/lupa-shim` les fait tourner sur la bibliothèque Lua 5.4 du système, rien à installer :
 `PYTHONPATH=tools/lupa-shim python tools/lua-syntax.py` depuis la racine, ou
 `PYTHONPATH=../../../tools/lupa-shim python tools/test-all.py` depuis le dossier d'un module.
+
+`python tools/vehicles-selftest.py` fait tourner le script serveur de v-vehicles hors du jeu,
+natives, oxmysql et v-core bouchonnés, sur une fausse `character_vehicles` qui refuse une colonne
+qu'elle n'a pas. Il couvre les règles d'une voiture garée dans la rue (pas de fourrière, pas de
+suppression à l'arrêt, la restauration sans joueur, pas de doublon après un redémarrage) et
+vérifie qu'une voiture non garée n'a besoin d'aucune des nouvelles colonnes. Il vérifie la
+logique, pas le jeu.
 
 **Un cinquième exige une base de données, d'où sa place à part.** Les quatre ci-dessus lisent
 le dépôt et n'ont besoin de rien d'autre. `sql-check` demande à la base si chaque requête SQL
