@@ -453,6 +453,8 @@ end
 RegisterNetEvent('QBCore:Server:OnPlayerLoaded', loaded)
 RegisterNetEvent('esx:playerLoaded', loaded)
 RegisterNetEvent('ox:playerLoaded', loaded)
+-- v-core announces a loaded character on the server only, so it is not a net event here.
+AddEventHandler('v-core:server:onPlayerLoaded', loaded)
 
 -- QBCore unloads a character before freeing its player object; cancel pending registrations.
 AddEventHandler('QBCore:Server:OnPlayerUnload', function(src)
@@ -520,6 +522,10 @@ end
     making the owner use their own command.
 ]]
 function Ownership.hasKeys(src, plate)
+    -- A key resource the bridge answers for directly (v-vehicles on v-core).
+    local bridged = Bridge.hasKeys(src, plate)
+    if bridged ~= nil then return bridged end
+
     local provider = Bridge.keyProvider()
     if provider == 'none' then return false end
 

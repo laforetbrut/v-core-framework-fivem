@@ -252,11 +252,16 @@ Config.Webhooks = {
 -- ===========================================================================================
 
 Config.Compat = {
-    -- 'auto' | 'qb' | 'qbx' | 'esx' | 'ox' | 'standalone'
+    -- 'auto' | 'vcore' | 'qb' | 'qbx' | 'esx' | 'ox' | 'standalone'
     --
-    -- Detection order is qbx_core, qb-core, ox_core, es_extended, and the first one started
-    -- wins. Force it on a server that has two installed, which is more common than it sounds
-    -- during a migration between frameworks.
+    -- Detection order is v-core, qbx_core, qb-core, ox_core, es_extended, and the first one
+    -- started wins. Force it on a server that has two installed, which is more common than it
+    -- sounds during a migration between frameworks.
+    --
+    -- On v-core the cars belong to the framework too: v-park keeps deciding when a parked car
+    -- is in the world, and v-vehicles creates it (`SpawnOwned`), keeps its row, its keys and
+    -- where it stands; v-garages is where it goes home, v-fuel and v-notify do the rest. Only
+    -- cars `character_vehicles` knows are kept. See bridge/server/vcore.lua.
     --
     -- 'standalone' is a supported configuration, not a fallback: vehicles are keyed on the
     -- Rockstar licence, ownership is whoever last drove it, and everything else is identical.
@@ -264,6 +269,7 @@ Config.Compat = {
 
     -- The resource folder names, if you renamed one. nil means "the standard name".
     resources = {
+        vcore     = nil, -- default: v-core
         qb        = nil, -- default: qb-core
         qbx       = nil, -- default: qbx_core
         esx       = nil, -- default: es_extended
@@ -279,9 +285,9 @@ Config.Compat = {
     -- development server and nowhere else.
     database = 'auto',
 
-    -- 'auto' | 'v-hud' | 'ox_lib' | 'qb' | 'esx' | 'okok' | 'native' | 'none'
+    -- 'auto' | 'v-notify' | 'v-hud' | 'ox_lib' | 'qb' | 'esx' | 'okok' | 'native' | 'none'
     --
-    -- 'v-hud' is checked first when it is installed, so a server running it gets every
+    -- 'v-notify', v-core's toast, is checked first when it runs. Then 'v-hud' is checked first when it is installed, so a server running it gets every
     -- v-park message in the player's own chosen HUD theme rather than in a second style
     -- sitting next to it.
     --
@@ -289,11 +295,12 @@ Config.Compat = {
     -- that a standalone server is not silent.
     notify = 'auto',
 
-    -- 'auto' | 'rcore_fuel' | 'ox_fuel' | 'LegacyFuel' | 'ps-fuel' | 'cdn-fuel'
+    -- 'auto' | 'v-fuel' | 'rcore_fuel' | 'ox_fuel' | 'LegacyFuel' | 'ps-fuel' | 'cdn-fuel'
     --   | 'qs-fuelstations' | 'lj-fuel' | 'x-fuel' | 'okokGasStation' | 'native' | 'none'
     --
     -- Fuel is the one property that half the ecosystem stores outside the vehicle, in a
-    -- statebag or a decor. Detection covers the ten above; `fuelStatebag` below covers
+    -- statebag or a decor. Detection covers the eleven above ('v-fuel' reads and writes the
+    -- level v-vehicles keeps, which is what v-fuel itself does); `fuelStatebag` below covers
     -- everything else in one line.
     --
     -- rcore_fuel is checked FIRST when several are installed, because it is the one that
@@ -310,8 +317,10 @@ Config.Compat = {
     -- 'fuelLevel'.
     fuelStatebag = nil,
 
-    -- 'auto' | 'qs-vehiclekeys' | 'qb-vehiclekeys' | 'wasabi_carlock' | 'mk_vehiclekeys'
-    --   | 'cd_garage' | 'jaksam' | 'none'
+    -- 'auto' | 'v-vehicles' | 'qs-vehiclekeys' | 'qb-vehiclekeys' | 'wasabi_carlock'
+    --   | 'mk_vehiclekeys' | 'cd_garage' | 'jaksam' | 'none'
+    --
+    -- 'v-vehicles' is only offered on v-core, where it is the key owner and is picked first.
     --
     -- What this does: after a persisted vehicle is restored, its owner should still have the
     -- keys they had before the restart. Section 15 decides whether that happens at all.
@@ -334,7 +343,7 @@ Config.Compat = {
 
     -- Garage resources whose stored vehicles must never be restored into the world.
     --
-    -- 'auto' detects, in order: qs-advancedgarages and qs-smartgarage (Quasar), qb-garages,
+    -- 'auto' detects, in order: v-garages (v-core), qs-advancedgarages and qs-smartgarage (Quasar), qb-garages,
     -- qbx_garages, jg-advancedgarages, cd_garage, loaf_garage, okokGarage, RxGarage.
     --
     -- The mechanism is not a hook into their code: it is that a vehicle they delete stops

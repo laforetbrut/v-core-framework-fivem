@@ -59,6 +59,7 @@ Locale.register('fr', {
     ['refuse.wrecked']              = "Ce véhicule est trop endommagé pour être conservé.",
     ['refuse.zone']                 = "Les véhicules ne sont pas conservés ici (%s).",
     ['refuse.not_owned']            = "Seuls les véhicules qui vous appartiennent sont conservés sur ce serveur.",
+    ['refuse.not_registered']       = "Seuls les véhicules enregistrés au nom d'un personnage sont conservés sur ce serveur.",
     ['refuse.not_claimed']          = "Garez-le d'abord pour qu'il soit conservé.",
     ['refuse.ambient_disabled']     = "Les véhicules que personne n'a conduits ne sont pas conservés.",
     ['refuse.in_garage']            = "Ce véhicule est indiqué comme étant au garage.",

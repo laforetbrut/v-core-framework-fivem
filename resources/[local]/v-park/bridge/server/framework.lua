@@ -22,6 +22,10 @@
         esx     es_extended. Different object, no citizenid, identifier is the stable key.
         ox      ox_core. Different object again, groups instead of jobs, numeric charId.
 
+    A fourth, `vcore`, lives in its own file (bridge/server/vcore.lua) because on v-core the
+    vehicles themselves belong to the framework's modules, not only the player. It registers
+    through `Bridge.adapters` and `Bridge.order` below and is detected first.
+
     Anything else degrades to standalone, where the character key is the Rockstar licence.
     That is a supported configuration, not a failure mode: everything works, and a player with
     two characters shares one set of parked vehicles because the server has no way to know
@@ -371,6 +375,11 @@ ADAPTERS.ox = {
 -- ---------------------------------------------------------------------------------------
 
 local ORDER = { 'qb', 'esx', 'ox' }
+
+-- Open to the adapters that live in their own file (bridge/server/vcore.lua). Read at boot,
+-- so an adapter registered by a file loaded after this one is still detected.
+Bridge.adapters = ADAPTERS
+Bridge.order = ORDER
 
 --[[
     Detect the framework. Called once from the server boot sequence, and re-callable so that

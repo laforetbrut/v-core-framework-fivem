@@ -852,6 +852,14 @@ end
     it works; it is simply not as good as not having the race at all.
 ]]
 local function spawnEntity(record)
+    -- On v-core the entity comes out of v-vehicles, the only module allowed to create an owned
+    -- car, and never out of the natives below. See bridge/server/vcore.lua.
+    local bridged, refusal = Bridge.spawnVehicle(record, spawnLift(record))
+    if bridged ~= nil then
+        if bridged then return bridged, true end
+        return nil, false, refusal
+    end
+
     local heading = record.rot_z or 0.0
 
     if CreateVehicleServerSetter then
@@ -945,7 +953,7 @@ function Spawn.create(record, players)
     local placer = nominate(record, players or onlinePlayers())
     if not placer then return nil end
 
-    local entity, viaSetter = spawnEntity(record)
+    local entity, viaSetter, refusal = spawnEntity(record)
 
     --[[
         A HANDLE OF ZERO IS THE ONLY FAILURE HERE.
@@ -959,7 +967,12 @@ function Spawn.create(record, players)
         concluded the creation had failed, and returned WITHOUT deleting what it had made.
     ]]
     if not entity or entity == 0 then
-        noteFailure(record, 'the game would not create it')
+        -- The bridge asked for a later try that is not this vehicle's fault.
+        if refusal == 'defer' then
+            deferred[record.id] = Park.ticks() + 10000
+            return nil
+        end
+        noteFailure(record, refusal or 'the game would not create it')
         return nil
     end
 
@@ -1189,6 +1202,9 @@ function Spawn.despawn(id, reason)
         nobody has in scope may not answer.
     ]]
     Spawn.savePosition(id, entry)
+
+    -- The framework lets go of its side of the entity too, and keeps the car parked.
+    Bridge.vehicleStreamedOut(Store.get(id))
 
     if placer then
         pcall(TriggerClientEvent, 'vpark:client:forget', placer, id)
@@ -2059,6 +2075,9 @@ RegisterNetEvent('vpark:server:parked', function(id, position, rotation)
     ]]
     if Persist and Persist.touch then Persist.touch(id, 'onExit') end
 
+    -- Parked where the driver left it, for the framework as well.
+    Bridge.vehicleParked(record)
+
     entry.parked = true
     entry.seen = true
     entry.nudged = nil
@@ -2186,6 +2205,9 @@ RegisterNetEvent('vpark:server:touched', function(id, used)
         if entry.entity then
             pcall(function() Entity(entry.entity).state:set('vpark:hold', nil, true) end)
         end
+
+        -- And for the framework it is a car that is out until somebody leaves it.
+        Bridge.vehicleDriven(record)
     end
 
     local now = Park.now()

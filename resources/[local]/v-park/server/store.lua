@@ -551,6 +551,9 @@ function Store.remove(id)
     Store.clearDirty(id)
     Store.setLive(id, nil)
 
+    -- A framework that owns the car decides where it goes once nobody here tracks it.
+    if Bridge and Bridge.vehicleForgotten then Bridge.vehicleForgotten(record) end
+
     return record
 end
 

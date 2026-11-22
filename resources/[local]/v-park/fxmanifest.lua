@@ -91,6 +91,9 @@ server_scripts {
     -- boot sequence is the second step in runtime.lua.
     'bridge/server/framework.lua',
     'bridge/server/garages.lua',
+    -- v-core: the adapter, and the parked car's life through v-vehicles. After both files
+    -- above, whose adapter list and garage readers it adds to.
+    'bridge/server/vcore.lua',
 
     -- The only file that talks to MySQL.
     'server/database.lua',

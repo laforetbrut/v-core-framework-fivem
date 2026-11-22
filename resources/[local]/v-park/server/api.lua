@@ -109,7 +109,8 @@ exports('GetVehicle', function(reference)
 end)
 
 exports('GetVehicleByPlate', function(plate)
-    return publicRecord(Store.byPlate(plate))
+    -- Then a car the framework has parked and we hold no row for (v-core: v-vehicles).
+    return publicRecord(Store.byPlate(plate)) or Bridge.parkedRecord(plate)
 end)
 
 --[[

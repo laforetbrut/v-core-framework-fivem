@@ -317,6 +317,11 @@ function Persist.adopt(src, payload, explicit)
     end
 
     local plate = Park.plate(payload.plate)
+
+    -- A framework that owns the cars as well decides which ones can be kept at all.
+    local keepable, notKeepable = Bridge.mayPersist(plate)
+    if not keepable then return nil, notKeepable end
+
     local existing = plate and Store.byPlate(plate)
     if existing then
         -- The same plate is already persisted somewhere else. That is either a duplicated
@@ -482,6 +487,9 @@ function Persist.adopt(src, payload, explicit)
 
     Park.debug('adopted %s (%s, %s) as %s', record.id, tostring(record.model_name),
         tostring(plate), ownerType)
+
+    -- Left in the street, unless the offer came the moment somebody sat in it.
+    if not payload.onEntry then Bridge.vehicleParked(record) end
 
     if Config.Api and Config.Api.events then
         TriggerEvent('vpark:server:vehicleAdded', record.id, {
@@ -1377,6 +1385,7 @@ function Persist.flush(force)
             for id, revision in pairs(revisions) do Store.clearDirty(id, revision) end
             written = written + #batch
             stats.batches = stats.batches + 1
+            Bridge.vehiclesSaved(batch)
         else
             Park.error('a batch of %d vehicle(s) failed to write - they stay queued', #batch)
         end

@@ -63,6 +63,7 @@ Locale.register('en', {
     ['refuse.wrecked']              = 'This vehicle is too damaged to be kept.',
     ['refuse.zone']                 = 'Vehicles are not kept here (%s).',
     ['refuse.not_owned']            = 'Only vehicles you own are kept on this server.',
+    ['refuse.not_registered']       = 'Only vehicles registered to a character are kept on this server.',
     ['refuse.not_claimed']          = 'Park it first to have it kept.',
     ['refuse.ambient_disabled']     = 'Vehicles nobody has driven are not kept.',
     ['refuse.in_garage']            = 'That vehicle is listed as being in a garage.',
