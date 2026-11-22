@@ -123,7 +123,14 @@ function CreateVehicleServerSetter(model, kind, x, y, z, h)
     H.entities[id].kind = kind
     return id
 end
-function DoesEntityExist(e) return H.entities[e] ~= nil and H.entities[e].alive end
+-- `H.orphanedSetter`: a setter entity stays out of the game world (DoesEntityExist false, the
+-- world natives raise) until a client has it in scope, which a test marks with `streamed`.
+local function orphaned(e)
+    local x = H.entities[e]
+    return H.orphanedSetter and x and x.how == 'setter' and not x.streamed
+end
+H.orphaned = orphaned
+function DoesEntityExist(e) return H.entities[e] ~= nil and H.entities[e].alive and not orphaned(e) end
 function DeleteEntity(e) if H.entities[e] then H.entities[e].alive = false end end
 function SetVehicleNumberPlateText(e, p) H.entities[e].plate = p end
 function GetVehicleNumberPlateText(e) return (H.entities[e].plate .. '        '):sub(1, 8) end
@@ -142,8 +149,12 @@ function GetEntityCoords(e) return H.entities[e].pos end
 function GetEntityHeading(e) return H.entities[e].heading end
 function GetEntityModel(e) return H.entities[e].model end
 function GetVehicleType(e) return H.entities[e].kind or 'automobile' end
-function SetEntityRotation(e, x, y, z) H.entities[e].rot = { x, y, z } end
-function SetEntityRoutingBucket(e, b) H.entities[e].bucket = b end
+local function world(e)
+    if orphaned(e) then error('Tried to access invalid entity: ' .. tostring(e)) end
+    return H.entities[e]
+end
+function SetEntityRotation(e, x, y, z) world(e).rot = { x, y, z } end
+function SetEntityRoutingBucket(e, b) world(e).bucket = b end
 function SetEntityOrphanMode(e, m) H.entities[e].orphan = m end
 function SetEntityDistanceCullingRadius(e, r) H.entities[e].culling = r end
 function GetPlayerPed() return 0 end

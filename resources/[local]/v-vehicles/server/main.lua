@@ -240,29 +240,39 @@ local function spawnOwned(src, plate, coords, heading, opts)
     local h = (tonumber(heading) or 0.0) + 0.0
 
     local model = row.model
-    local veh
+    local veh, viaSetter
     if restore and CreateVehicleServerSetter then
         -- No player may be connected yet. The RPC CreateVehicle needs a client to answer
         -- before the entity is real; the setter registers it with the server at once.
         local kind = tostring(opts.vehicleType or row.vehicle_type or 'automobile')
         local hash = type(model) == 'number' and model or GetHashKey(model)
         local ok, ent = pcall(CreateVehicleServerSetter, hash, kind, x, y, z, h)
-        if ok and ent and ent ~= 0 then veh = ent end
+        if ok and ent and ent ~= 0 then veh, viaSetter = ent, true end
     end
     if not veh then
         veh = CreateVehicle(model, x, y, z, h, true, true)
     end
     if not veh or veh == 0 then return nil, 'spawn' end
 
-    -- wait for the entity to actually exist before touching it
-    local tries = 0
-    while not DoesEntityExist(veh) and tries < 100 do Wait(10); tries = tries + 1 end
-    if not DoesEntityExist(veh) then return nil, 'spawn' end
+    -- Only the RPC entity has a creation window to wait out. A setter entity is registered at
+    -- once and orphaned until a client has it in scope, so DoesEntityExist stays false until
+    -- then BY DESIGN: waiting on it failed every restore nobody was standing next to yet, and
+    -- left the entity behind.
+    if not viaSetter then
+        local tries = 0
+        while not DoesEntityExist(veh) and tries < 100 do Wait(10); tries = tries + 1 end
+        if not DoesEntityExist(veh) then
+            pcall(DeleteEntity, veh)
+            return nil, 'spawn'
+        end
+    end
 
-    SetVehicleNumberPlateText(veh, plate)
+    -- The world natives may refuse an orphaned entity. None of them is worth losing the car:
+    -- the caller places it again once a client has it.
+    pcall(SetVehicleNumberPlateText, veh, plate)
     local rx, ry, rz = toXYZ(opts.rotation)
-    if rx then SetEntityRotation(veh, rx, ry, rz, 2, true) end
-    if tonumber(opts.bucket) then SetEntityRoutingBucket(veh, math.floor(tonumber(opts.bucket))) end
+    if rx then pcall(SetEntityRotation, veh, rx, ry, rz, 2, true) end
+    if tonumber(opts.bucket) then pcall(SetEntityRoutingBucket, veh, math.floor(tonumber(opts.bucket))) end
     local orphan = opts.orphanMode
     if orphan == nil and restore then orphan = 2 end
     if tonumber(orphan) and SetEntityOrphanMode then pcall(SetEntityOrphanMode, veh, math.floor(tonumber(orphan))) end
