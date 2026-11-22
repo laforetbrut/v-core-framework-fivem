@@ -13,7 +13,7 @@ Read it before changing anything.
 | Tech stack | Lua 5.4 (`lua54 'yes'`), one NUI for the admin panel, optional MySQL |
 | Author | vyrriox |
 | Hard dependencies | **OneSync, and nothing else.** That is a feature; defend it. |
-| Optional, all runtime-detected | qb-core, qbx_core, es_extended, ox_core, oxmysql, mysql-async, ghmattimysql, rcore_fuel, ox_fuel, LegacyFuel, ps-fuel, cdn-fuel, qs-fuelstations, lj-fuel, x-fuel, okokGasStation, qb-fuel, qs-vehiclekeys, qb-vehiclekeys, wasabi_carlock, mk_vehiclekeys, cd_garage, jaksam, qs-advancedgarages, qb-garages, jg-advancedgarages, qs-inventory, ox_inventory, qb-inventory, v-hud, ox_lib, okokNotify, jim-mechanic, VehicleDeformation, ox_target, qb-target, qtarget |
+| Optional, all runtime-detected | v-core (v-vehicles, v-garages, v-fuel, v-notify), qb-core, qbx_core, es_extended, ox_core, oxmysql, mysql-async, ghmattimysql, rcore_fuel, ox_fuel, LegacyFuel, ps-fuel, cdn-fuel, qs-fuelstations, lj-fuel, x-fuel, okokGasStation, qb-fuel, qs-vehiclekeys, qb-vehiclekeys, wasabi_carlock, mk_vehiclekeys, cd_garage, jaksam, qs-advancedgarages, qb-garages, jg-advancedgarages, qs-inventory, ox_inventory, qb-inventory, v-hud, ox_lib, okokNotify, jim-mechanic, VehicleDeformation, ox_target, qb-target, qtarget |
 
 **The server owns every decision; the client observes and reports.** No number a client sends
 is trusted. The client runs the shared rules before reporting so the server hears less traffic,

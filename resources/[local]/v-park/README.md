@@ -109,13 +109,13 @@ Everything below is detected at runtime and optional. **Nothing is required exce
 
 | Capability | Detected |
 |---|---|
-| **Framework** | qb-core, qbx_core, es_extended (ESX), ox_core. First one started wins; `Config.Compat.framework` overrides. Anything else runs standalone against the Rockstar licence. |
+| **Framework** | v-core, qb-core, qbx_core, es_extended (ESX), ox_core. First one started wins; `Config.Compat.framework` overrides. Anything else runs standalone against the Rockstar licence. |
 | **Database** | oxmysql, mysql-async, ghmattimysql. Without one, vehicles live in memory for the session and it says so, loudly, once. |
-| **Fuel** | rcore_fuel, ox_fuel, LegacyFuel, ps-fuel, cdn-fuel, qs-fuelstations, lj-fuel, x-fuel, okokGasStation, qb-fuel. Anything else in one line: `Config.Compat.fuelStatebag`. |
-| **Keys** | qs-vehiclekeys (Quasar), qb-vehiclekeys, wasabi_carlock, mk_vehiclekeys, cd_garage, jaksam. |
+| **Fuel** | v-fuel (v-core), rcore_fuel, ox_fuel, LegacyFuel, ps-fuel, cdn-fuel, qs-fuelstations, lj-fuel, x-fuel, okokGasStation, qb-fuel. Anything else in one line: `Config.Compat.fuelStatebag`. |
+| **Keys** | v-vehicles (v-core), qs-vehiclekeys (Quasar), qb-vehiclekeys, wasabi_carlock, mk_vehiclekeys, cd_garage, jaksam. |
 | **Inventory** | qs-inventory (Quasar), ox_inventory, qb-inventory. Trunk and glovebox contents follow the plate, which we preserve exactly and refuse to change in a way that would orphan a stash. |
-| **Garages** | qs-advancedgarages (Quasar), qb-garages, qbx_garages, jg-advancedgarages, cd_garage, loaf_garage, okokGarage, RxGarage. |
-| **Notifications** | v-hud, ox_lib, okokNotify, qb-core, ESX, or the game's own feed. |
+| **Garages** | v-garages (v-core), qs-advancedgarages (Quasar), qb-garages, qbx_garages, jg-advancedgarages, cd_garage, loaf_garage, okokGarage, RxGarage. |
+| **Notifications** | v-notify (v-core), v-hud, ox_lib, okokNotify, qb-core, ESX, or the game's own feed. |
 | **Mechanic / tuning** | jim-mechanic. Fitted parts come through the game's mod slots and need nothing; the nitrous bottle is restored explicitly, including on vehicles the framework does not own. |
 | **Deformation** | Kiminaze's free `VehicleDeformation` resource, if you have it. We defer to it rather than fighting over the same statebag, and still persist what it reports. |
 | **Target** | ox_target, qb-target, qtarget. Only for the optional "park here" option, which is off by default. |
@@ -149,6 +149,18 @@ character suffix on a multi-character ESX and is therefore correct. ox_core uses
 than jobs, and the highest-graded group stands in for the job. Only qb-core has a first-class
 impound state; on ESX and ox_core `onExpiry = 'impound'` falls back to the garage and the
 notification says which happened. Everything else behaves identically.
+
+### On v-core
+
+The cars belong to the framework there, so v-park only decides **when** a parked car is in the
+world. v-vehicles creates it (`SpawnOwned`, the framework's one spawn path), keeps the owner,
+the keys and where it stands in `character_vehicles`, and v-park never calls a vehicle-creating
+native. A car left in the street is `MarkParked`, getting in to drive it `Unpark`s it, streaming
+it out is `DespawnOwned`. Storing it in v-garages or an impound by v-police makes v-park forget
+it; a car v-park stops tracking goes home to its garage. Only cars `character_vehicles` knows
+are kept: an ambient car is refused with `refuse.not_registered`. v-park's own table stays a
+cache of the appearance. The logic is checked outside the game by `tools/vpark-selftest.py` of
+v-core.
 
 Run `/vparkinfo` to print what was actually detected on **your** server.
 
@@ -810,6 +822,19 @@ physique en vingt minutes, et n'est pas simulée du tout.
 
 `/vparkprobe` exécute la sonde là où vous vous tenez et affiche le résultat : c'est comme ça
 qu'on règle `Config.Placement.probe.shrink` sur son propre MLO au lieu de deviner.
+
+## Sur v-core
+
+Les voitures y appartiennent au framework : v-park décide seulement **quand** une voiture garée
+est dans le monde. v-vehicles la crée (`SpawnOwned`, l'unique chemin de création du framework),
+garde son propriétaire, ses clés et sa place dans `character_vehicles`, et v-park n'appelle
+jamais de native qui crée un véhicule. Une voiture laissée dans la rue passe par `MarkParked`,
+monter pour la conduire par `Unpark`, la sortie du rayon de diffusion par `DespawnOwned`. La
+ranger dans v-garages ou la mise en fourrière par v-police la fait oublier à v-park ; une voiture
+que v-park ne suit plus rentre à son garage. Seules les voitures connues de `character_vehicles`
+sont gardées : une voiture ambiante est refusée (`refuse.not_registered`). La table de v-park
+reste un cache de l'apparence. La logique est vérifiée hors jeu par `tools/vpark-selftest.py`
+de v-core. Carburant par v-fuel, notifications par v-notify.
 
 ## Installation
 

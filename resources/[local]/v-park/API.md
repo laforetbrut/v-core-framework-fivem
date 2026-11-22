@@ -68,6 +68,11 @@ id is tried first.
 The same, restricted to plates. Case and padding are normalised, so `"abc 123"` and
 `"ABC123  "` both find the same vehicle.
 
+On v-core, a plate v-park holds no row for but v-vehicles has parked still answers, from
+`character_vehicles`: `plate`, `model`, `modelName`, `owner`, `ownerType = 'owned'`, `coords`,
+`heading`, `rotation` (heading only), `fuel`, `bodyHealth`, `engineHealth`, `live`, `netId`,
+`lastGarage` and `source = 'v-vehicles'`. There is no `id`: the car is not one of our rows.
+
 ### `IsPersisted(entity)`
 
 ```lua
