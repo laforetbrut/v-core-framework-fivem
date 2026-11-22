@@ -265,7 +265,9 @@ Config.Compat = {
     --
     -- 'standalone' is a supported configuration, not a fallback: vehicles are keyed on the
     -- Rockstar licence, ownership is whoever last drove it, and everything else is identical.
-    framework = 'auto',
+    --
+    -- This copy ships inside v-core, so it is forced rather than detected.
+    framework = 'vcore',
 
     -- The resource folder names, if you renamed one. nil means "the standard name".
     resources = {
@@ -469,7 +471,10 @@ Config.Persistence = {
         wants job persistence configures the pattern, and a server that does not keeps nothing
         it did not ask for.
     ]]
-    jobVehicles = true,
+    --
+    -- Off on v-core: a job car is not in `character_vehicles`, so the vcore adapter refuses it
+    -- anyway, and v-jobs / v-rentals own those cars' lives.
+    jobVehicles = false,
 
     -- In 'owned' mode, also keep a vehicle a player explicitly parked with `/vpark`.
     --
@@ -719,7 +724,7 @@ Config.Save = {
         dirt = true,
         fuel = true,
         oil = true,
-        lockState = true,
+        lockState = false,     -- off on v-core: the lock lives in v-vehicles (SetLocked)
         engineState = false,   -- restore the engine running. Off: a parked car is off.
         doorsOpen = false,     -- restore open doors. Off: they close, which looks parked.
         roofState = true,      -- convertible roof up or down
@@ -1882,7 +1887,9 @@ Config.Cleanup = {
 
 Config.SemiPersistence = {
     -- Master switch. Off means every ownership type follows Section 9 only.
-    enabled = true,
+    -- Off on v-core: job and rental cars are not in `character_vehicles`, so none is kept,
+    -- and v-rentals runs its own hire timer.
+    enabled = false,
 
     -- Per ownership type. Any type not listed here is fully persistent and governed by
     -- Section 9 alone.
@@ -2122,7 +2129,8 @@ Config.Commands = {
     list       = { name = 'vparklist',    permission = 'everyone', enabled = true },
     find       = { name = 'vparkfind',    permission = 'owner',    enabled = true },
     info       = { name = 'vparkinfo',    permission = 'everyone', enabled = true },
-    lock       = { name = 'vparklock',    permission = 'owner',    enabled = true },
+    -- Off on v-core: v-vehicles owns the lock (L key, SetLocked).
+    lock       = { name = 'vparklock',    permission = 'owner',    enabled = false },
     -- Drop or raise a boat's anchor. See `Config.Anchor` for what it does and who may do it.
     anchor     = { name = 'vparkanchor',  permission = 'everyone', enabled = true },
     -- Naming a vehicle also exempts it from the Section 9c idle cleanup, because naming a car
@@ -2138,7 +2146,8 @@ Config.Commands = {
     ['goto']   = { name = 'vparkgoto',    permission = 'admin',    enabled = true },
     delete     = { name = 'vparkdelete',  permission = 'admin',    enabled = true },
     restore    = { name = 'vparkrestore', permission = 'admin',    enabled = true },
-    owner      = { name = 'vparkowner',   permission = 'admin',    enabled = true },
+    -- Off on v-core: the owner is `character_vehicles.citizenid`, which this would not change.
+    owner      = { name = 'vparkowner',   permission = 'admin',    enabled = false },
     purge      = { name = 'vparkpurge',   permission = 'admin',    enabled = true },
     save       = { name = 'vparksave',    permission = 'admin',    enabled = true },
     stats      = { name = 'vparkstats',   permission = 'admin',    enabled = true },
@@ -2238,18 +2247,22 @@ Config.Keys = {
     -- Give the owner their keys back when a persisted vehicle is restored.
     --
     -- The single most common complaint about every persistence script: the car came back and
-    -- the owner cannot start it. On by default.
-    restore = true,
+    -- the owner cannot start it. On upstream.
+    --
+    -- Off on v-core: v-vehicles gives the owner the keys from ownership, nothing to hand back.
+    restore = false,
 
     -- Also give keys to whoever had them when the vehicle was saved, not only to the owner.
     --
     -- Off by default because it means storing a list of identifiers per vehicle, which is
     -- data you may not want to keep, and because a shared key from three restarts ago is
     -- rarely still intended.
+    -- Not read by this version: kept for upstream configs that set it.
     restoreShared = false,
 
     -- Restore the lock state the vehicle was saved with. Independent of key handling: a
     -- locked car with no keys is a locked car.
+    -- Not read by this version either: the lock follows `Config.Save.fields.lockState`.
     restoreLockState = true,
 }
 
