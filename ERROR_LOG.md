@@ -255,3 +255,10 @@
 **Root cause:** `bridge/shared/compat.lua` overrides `GetResourceState` and answers `started` for every stubbed `v-*` name, `v-core` included.
 **Fix:** compat.lua exposes `RealGetResourceState`; the detection uses it for `v-*` names and never detects one without it.
 **Prevention:** Inside v-phone, never decide that a `v-*` resource exists from `GetResourceState`: the stub answers for it.
+
+## [2026-11-22 17:06] - v-vehicles lock exports indexed a nil global
+**Context:** Reading v-vehicles server/main.lua while adding the parked state
+**Error:** attempt to index a nil value (global 'Locked') on the first call of exports IsLocked / SetLocked
+**Root cause:** local Locked and local pushLocks were declared below the exports() closures that read them, so the closures captured globals that never exist
+**Fix:** Moved the lock block above the exports; tools/vehicles-selftest.py (locks.lua) calls both
+**Prevention:** Declare a module's locals before any closure that uses them; a selftest that calls each export catches it, lua-syntax cannot
