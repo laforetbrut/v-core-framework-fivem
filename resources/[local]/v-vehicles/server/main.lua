@@ -91,6 +91,16 @@ local function removeKeys(src, plate)
     return true
 end
 
+-- ── Locks ─────────────────────────────────────────────────────
+-- The lock lives here, not on whichever client happens to own the entity. Clients are told
+-- the whole set and apply it to vehicles near them. Declared before the exports that read
+-- it: a local declared further down is invisible to them, and they would index a nil global.
+local Locked = {}      -- [plate] = true
+
+local function pushLocks(src)
+    TriggerClientEvent('v-vehicles:client:locks', src or -1, Locked)
+end
+
 -- ── Persistence ────────────────────────────────────────────────
 --- Write a vehicle's condition back to its row. `data` comes from the client that owns
 --- the entity, so every field is coerced and clamped: a patched client may lie about its
@@ -226,15 +236,6 @@ end)
 -- ── Client-driven checks ───────────────────────────────────────
 -- The client asks before starting an engine or toggling a lock. The answer is derived
 -- server-side; the client-side gate that follows is UX, not security.
--- ── Locks ─────────────────────────────────────────────────────
--- The lock lives here, not on whichever client happens to own the entity. Clients are told
--- the whole set and apply it to vehicles near them.
-local Locked = {}      -- [plate] = true
-
-local function pushLocks(src)
-    TriggerClientEvent('v-vehicles:client:locks', src or -1, Locked)
-end
-
 RegisterNetEvent('v-vehicles:server:requestLocks', function() pushLocks(source) end)
 
 Core.RegisterCallback('v-vehicles:toggleLock', function(source, resolve, data)
