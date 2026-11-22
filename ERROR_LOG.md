@@ -262,3 +262,10 @@
 **Root cause:** local Locked and local pushLocks were declared below the exports() closures that read them, so the closures captured globals that never exist
 **Fix:** Moved the lock block above the exports; tools/vehicles-selftest.py (locks.lua) calls both
 **Prevention:** Declare a module's locals before any closure that uses them; a selftest that calls each export catches it, lua-syntax cannot
+
+## [2026-11-22 17:32] - v-vehicles restore of a parked car fails when no client has it in scope
+**Context:** Wiring v-park's vcore adapter to restore parked cars with SpawnOwned(nil, plate) through the server setter native
+**Error:** SpawnOwned(nil, plate) returned nil, 'spawn' whenever the setter entity was not yet streamed to a client, and the created entity was left in the world untracked (seen in tools/vehicles-selftest restore-orphaned.lua)
+**Root cause:** The restore waited up to 1 s for DoesEntityExist, but a CreateVehicleServerSetter entity is orphaned until a client has it in scope and DoesEntityExist stays false until then by design; the world natives after it could also raise on the orphaned entity
+**Fix:** Wait on DoesEntityExist only on the CreateVehicle RPC path (and delete the entity if it never appears), and pcall the plate, rotation and bucket natives; covered by tools/vehicles-selftest/restore-orphaned.lua
+**Prevention:** Never gate a server setter entity on DoesEntityExist: it is registered at once and absent from the world until streamed; only the RPC CreateVehicle has a creation window to wait out

@@ -766,9 +766,17 @@ as out, the dealership only buys back a garaged car, v-mechanic ignores a spawn 
 car that is not parked goes through exactly the statements it did before, and none of them needs
 the new columns.
 
-**Left to v-park's vcore bridge.** `MarkParked` when a player leaves a car, `Unpark` when one drives
-off, `SpawnOwned(nil, ...)` / `DespawnOwned` to stream, the shared fields (props, fuel, engine,
-body) written back through `MarkParked`'s `data`. Its richer appearance data (deformation, dirt,
+**v-park's vcore bridge** (`resources/[local]/v-park/bridge/server/vcore.lua`). `MarkParked` when a
+player leaves a car, `Unpark` when one gets in, `SpawnOwned(nil, ...)` / `DespawnOwned` to stream,
+fuel, engine and body written back through `MarkParked`'s `data` (not the props: v-park's property
+table is not v-vehicles' format). Only a car `character_vehicles` knows is kept. A garage or an
+impound taking a parked car off the street (`v-vehicles:server:unparked`) makes v-park forget it;
+a car v-park stops tracking is unparked if it stands in the world, sent home to its garage
+otherwise. Every write to v-vehicles runs on one queue, the spawn included, so a despawn still
+waiting for the database never deletes the car that has just come back. `GetVehicleByPlate`
+answers from `character_vehicles` for a parked car v-park holds no row for, which is what the
+phone's Garage app locates. `tools/vpark-selftest.py` runs both server scripts outside the game
+and fails if v-park calls a vehicle-creating native. Its richer appearance data (deformation, dirt,
 windows) stays its own, keyed by plate, as a cache and never as the ownership record. Without a
 parking module running, a `PARKED` row stays in the street with nobody to bring it back; an admin
 moves it with `SetState`.
@@ -1786,7 +1794,7 @@ server - `RULES.md` §3.6.2). Ordered by build order, not by wish.
 | 2 | ✅ **`v-garages`** - storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB - the garage is the only legitimate way an owned car enters the world. |
 | 3 | ✅ **`v-vehicleshop`** - dealerships (**shipped**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) - the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
 | 4 | ✅ **`v-rentals`** - short-term hire (**shipped**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row - that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
-| 4b | 🔨 **`v-park`** - cars parked in the street (**in progress**) | `v-vehicles` | Imported (1.2.12), not started. v-vehicles' side is done: the `PARKED` state, the restore without a player and the parking exports (§4, "One spawn path for parked cars"). Left: the vcore adapter in v-park's bridge, then `ensure v-park`. |
+| 4b | 🔨 **`v-park`** - cars parked in the street (**in progress**) | `v-vehicles` | Imported (1.2.12), not started yet. v-vehicles' side is done: the `PARKED` state, the restore without a player and the parking exports (§4, "One spawn path for parked cars"). v-park's vcore adapter is done too (`bridge/server/vcore.lua`, checked by `tools/vpark-selftest.py`). Left: `ensure v-park`. |
 
 **Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` - one consumption model, four
 fuel types, admin-editable stations),

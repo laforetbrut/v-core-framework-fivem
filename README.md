@@ -224,6 +224,12 @@ It covers the rules a car parked in the street lives by (no impound, no delete a
 restore with no player, no second copy after a restart) and that a car that is not parked needs
 none of the new columns. It checks logic, not the game.
 
+`python tools/vpark-selftest.py` runs v-park's server scripts and v-vehicles' together, each in
+its own environment, on the same stubs. It fails if v-park calls `CreateVehicle` or
+`CreateVehicleServerSetter` on v-core, and checks that a parked car streams out and back through
+v-vehicles, that a car v-garages stores is forgotten, and that `GetVehicleByPlate` answers for a
+car v-vehicles parked. Logic again, not the game.
+
 **A fifth needs a database, which is why it is listed apart.** The four above read the
 repository and need nothing else. `sql-check` asks the database whether every SQL statement
 in the framework is one it would accept, which a boot test cannot: booting only ever runs the
@@ -502,6 +508,12 @@ qu'elle n'a pas. Il couvre les règles d'une voiture garée dans la rue (pas de 
 suppression à l'arrêt, la restauration sans joueur, pas de doublon après un redémarrage) et
 vérifie qu'une voiture non garée n'a besoin d'aucune des nouvelles colonnes. Il vérifie la
 logique, pas le jeu.
+
+`python tools/vpark-selftest.py` fait tourner ensemble les scripts serveur de v-park et de
+v-vehicles, chacun dans son propre environnement, sur les mêmes bouchons. Il échoue si v-park
+appelle `CreateVehicle` ou `CreateVehicleServerSetter` sur v-core, et vérifie qu'une voiture garée
+sort et revient par v-vehicles, qu'une voiture rangée par v-garages est oubliée et que
+`GetVehicleByPlate` répond pour une voiture garée par v-vehicles. La logique encore, pas le jeu.
 
 **Un cinquième exige une base de données, d'où sa place à part.** Les quatre ci-dessus lisent
 le dépôt et n'ont besoin de rien d'autre. `sql-check` demande à la base si chaque requête SQL
