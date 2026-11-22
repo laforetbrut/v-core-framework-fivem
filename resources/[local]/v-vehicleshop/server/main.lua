@@ -230,6 +230,9 @@ Core.RegisterCallback('v-vehicleshop:sell', function(source, resolve, data)
     local veh = exports['v-vehicles']:GetVehicle(plate)
     if not veh or veh.citizenid ~= p.citizenid then resolve({ error = 'notyours' }); return end
     if exports['v-vehicles']:IsLive(plate) then resolve({ error = 'stillout' }); return end
+    -- Garaged only, like the list: the NUI's word is not enough, and an impounded or
+    -- street-parked car sold here would skip the impound fee or vanish from the street.
+    if tonumber(veh.state) ~= 1 then resolve({ error = 'stillout' }); return end
 
     local row = catByModel(veh.model)
     local base = row and row.price or 0
