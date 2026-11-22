@@ -6,16 +6,72 @@
 -- Spawning goes through SpawnOwned(): the server creates the entity (OneSync), so a
 -- client cannot conjure an owned vehicle by asking nicely. The client's only job is to
 -- read/write the visual mod state of an entity it is already near.
+--
+-- A car left in the street (state PARKED) is still one of ours: a parking module (v-park)
+-- marks it with MarkParked(), brings it back with SpawnOwned(nil, plate) and takes it out of
+-- the world with DespawnOwned(). Its row keeps where it stands, and neither the cleanup tick
+-- nor a resource stop touches it. See ARCHITECTURE.md, "One spawn path for parked cars".
 local Core = exports['v-core']:GetCore()
 
 -- Consumers ask for the capability, not the resource: a server that replaces this
 -- module keeps every consumer working.
 V.Provide('vehicles')
 
-local Live = {}      -- plate -> { netid, owner, model, since }
+local Live = {}      -- plate -> { netid, owner, model, since, parked }
 local Keys = {}      -- plate -> { [citizenid] = true }  (session-scoped, see Config.Keys.persist)
 
 local S = Config.State
+
+--- GTA pads a plate to eight characters; a row never carries the padding.
+local function cleanPlate(plate)
+    return (tostring(plate or ''):gsub('^%s+', ''):gsub('%s+$', ''))
+end
+
+--- x, y, z out of a vector3, a vector4 or a plain { x, y, z } table, or nil when any of them
+--- is missing or not a finite number on the map.
+local function toXYZ(c)
+    local t = type(c)
+    if t ~= 'table' and t ~= 'vector3' and t ~= 'vector4' then return nil end
+    local x, y, z = tonumber(c.x or c[1]), tonumber(c.y or c[2]), tonumber(c.z or c[3])
+    if not x or not y or not z then return nil end
+    for _, v in ipairs({ x, y, z }) do
+        if v ~= v or v > 20000.0 or v < -20000.0 then return nil end
+    end
+    return x + 0.0, y + 0.0, z + 0.0
+end
+
+-- ── Schema ─────────────────────────────────────────────────────
+-- Where a parked car stands lives on its own row, so the garage, the phone and the parking
+-- module all read one record. Added at boot for a database imported before these columns
+-- existed; database/schema.sql carries them for a new one. Nothing outside the parked path
+-- writes them, so a database that refused the ALTER still runs every other vehicle.
+local PARK_COLUMNS = {
+    { 'park_x',       'ADD COLUMN `park_x` DOUBLE DEFAULT NULL' },
+    { 'park_y',       'ADD COLUMN `park_y` DOUBLE DEFAULT NULL' },
+    { 'park_z',       'ADD COLUMN `park_z` DOUBLE DEFAULT NULL' },
+    { 'park_heading', 'ADD COLUMN `park_heading` DOUBLE DEFAULT NULL' },
+    { 'vehicle_type', 'ADD COLUMN `vehicle_type` VARCHAR(16) DEFAULT NULL' },
+    { 'parked_at',    'ADD COLUMN `parked_at` TIMESTAMP NULL DEFAULT NULL' },
+}
+local schemaReady = false
+
+local function ensureSchema()
+    for _, col in ipairs(PARK_COLUMNS) do
+        local has = MySQL.scalar.await(
+            'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+            { 'character_vehicles', col[1] })
+        if not has then MySQL.query.await('ALTER TABLE `character_vehicles` ' .. col[2]) end
+    end
+    schemaReady = true
+end
+
+--- The parking exports can be called by a resource that booted first. Wait for the columns
+--- rather than fail on a missing one; false after ten seconds means the migration never ran.
+local function waitSchema()
+    local tries = 0
+    while not schemaReady and tries < 200 do Wait(50); tries = tries + 1 end
+    return schemaReady
+end
 
 -- ── Plates ─────────────────────────────────────────────────────
 local function randomPlate()
@@ -60,10 +116,14 @@ local function ownedBy(citizenid)
 end
 
 -- ── Keys ───────────────────────────────────────────────────────
+local function ownerOf(plate)
+    if not plate or plate == '' then return nil end
+    return MySQL.scalar.await('SELECT citizenid FROM character_vehicles WHERE plate = ?', { plate })
+end
+
 local function ownsPlate(citizenid, plate)
     if not citizenid or not plate then return false end
-    local owner = MySQL.scalar.await('SELECT citizenid FROM character_vehicles WHERE plate = ?', { plate })
-    return owner == citizenid
+    return ownerOf(plate) == citizenid
 end
 
 --- The owner always has keys; anyone else only if they were handed a set this session.
@@ -140,17 +200,58 @@ RegisterNetEvent('v-vehicles:server:reportState', function(plate, data)
 end)
 
 -- ── Spawning (the single legitimate path for an owned vehicle) ──
+--- `src` is the player the car comes out for, and their ownership or keys are checked.
+--- A server resource putting a PARKED car back in the street (a restore at boot, a parking
+--- module streaming it in) passes nil: no player is asking, so none is checked, and the only
+--- rows it may bring back are the ones already standing in the street. With no coords such a
+--- car comes back where its row says it stands.
+---
+--- `opts` (optional, server callers only): `rotation` (vector3, full pitch/roll/yaw, for a
+--- car parked on a slope), `bucket` (routing bucket), `orphanMode` (defaults to 2, keep, for a
+--- spawn without a player: nobody may be near it yet), `cullingRadius`, `vehicleType` (the
+--- CreateVehicleServerSetter type; the row's `vehicle_type`, else 'automobile').
+---
+--- This stays the only function in the framework that creates an owned vehicle's entity.
 --- @return netid|nil, errorstring|nil
-local function spawnOwned(src, plate, coords, heading)
-    local p = Core.GetPlayer(src)
-    if not p then return nil, 'noplayer' end
+local function spawnOwned(src, plate, coords, heading, opts)
+    opts = type(opts) == 'table' and opts or {}
+    local restore = (src == nil or src == 0)
+    local p
+    if not restore then
+        p = Core.GetPlayer(src)
+        if not p then return nil, 'noplayer' end
+    end
     local row = rowByPlate(plate)
     if not row then return nil, 'unknown' end
-    if row.citizenid ~= p.citizenid and not hasKeys(src, plate) then return nil, 'notyours' end
+    local parked = row.state == S.PARKED
+    if restore then
+        if not parked then return nil, 'notparked' end
+    elseif row.citizenid ~= p.citizenid and not hasKeys(src, plate) then
+        return nil, 'notyours'
+    end
     if Live[plate] then return nil, 'already' end
 
+    if coords == nil and parked and row.park_x then
+        coords = { x = row.park_x, y = row.park_y, z = row.park_z }
+        if heading == nil then heading = row.park_heading end
+    end
+    local x, y, z = toXYZ(coords)
+    if not x then return nil, 'coords' end
+    local h = (tonumber(heading) or 0.0) + 0.0
+
     local model = row.model
-    local veh = CreateVehicle(model, coords.x + 0.0, coords.y + 0.0, coords.z + 0.0, (heading or 0.0) + 0.0, true, true)
+    local veh
+    if restore and CreateVehicleServerSetter then
+        -- No player may be connected yet. The RPC CreateVehicle needs a client to answer
+        -- before the entity is real; the setter registers it with the server at once.
+        local kind = tostring(opts.vehicleType or row.vehicle_type or 'automobile')
+        local hash = type(model) == 'number' and model or GetHashKey(model)
+        local ok, ent = pcall(CreateVehicleServerSetter, hash, kind, x, y, z, h)
+        if ok and ent and ent ~= 0 then veh = ent end
+    end
+    if not veh then
+        veh = CreateVehicle(model, x, y, z, h, true, true)
+    end
     if not veh or veh == 0 then return nil, 'spawn' end
 
     -- wait for the entity to actually exist before touching it
@@ -159,32 +260,177 @@ local function spawnOwned(src, plate, coords, heading)
     if not DoesEntityExist(veh) then return nil, 'spawn' end
 
     SetVehicleNumberPlateText(veh, plate)
-    local netid = NetworkGetNetworkIdFromEntity(veh)
-    Live[plate] = { netid = netid, owner = row.citizenid, model = model, since = os.time() }
-    MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.OUT, plate })
+    local rx, ry, rz = toXYZ(opts.rotation)
+    if rx then SetEntityRotation(veh, rx, ry, rz, 2, true) end
+    if tonumber(opts.bucket) then SetEntityRoutingBucket(veh, math.floor(tonumber(opts.bucket))) end
+    local orphan = opts.orphanMode
+    if orphan == nil and restore then orphan = 2 end
+    if tonumber(orphan) and SetEntityOrphanMode then pcall(SetEntityOrphanMode, veh, math.floor(tonumber(orphan))) end
+    if tonumber(opts.cullingRadius) and SetEntityDistanceCullingRadius then
+        pcall(SetEntityDistanceCullingRadius, veh, tonumber(opts.cullingRadius) + 0.0)
+    end
 
-    -- hand the stored condition to the client so it can dress the entity
-    TriggerClientEvent('v-vehicles:client:applyState', src, netid, {
-        props = row.props, fuel = row.fuel, engine = row.engine, body = row.body, plate = plate,
-    })
-    -- let the modules that own their own slice of a vehicle (wear, fuel, …) hydrate it
+    local netid = NetworkGetNetworkIdFromEntity(veh)
+    Live[plate] = { netid = netid, owner = row.citizenid, model = model, since = os.time(), parked = parked or nil }
+    -- A parked car stays parked when it comes back: it is in the street, nobody is driving it.
+    if not parked then
+        MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.OUT, plate })
+    end
+
+    -- hand the stored condition to the client so it can dress the entity. A restore has no
+    -- client to ask: the caller dresses it when a player gets it in scope (v-park does).
+    if not restore then
+        TriggerClientEvent('v-vehicles:client:applyState', src, netid, {
+            props = row.props, fuel = row.fuel, engine = row.engine, body = row.body, plate = plate,
+        })
+    end
+    -- let the modules that own their own slice of a vehicle (wear, fuel, …) hydrate it.
+    -- `src` is nil for a restore.
     TriggerEvent('v-vehicles:server:spawned', src, plate, netid, row)
     return netid, nil
 end
 
+--- Leave the street: the row forgets where the car stood. The only writer of the park
+--- columns besides MarkParked.
+local function clearPark(plate, newState)
+    MySQL.update.await([[UPDATE character_vehicles SET state = ?, park_x = NULL, park_y = NULL,
+        park_z = NULL, park_heading = NULL, parked_at = NULL WHERE plate = ?]], { newState, plate })
+    if Live[plate] then Live[plate].parked = nil end
+    TriggerEvent('v-vehicles:server:unparked', plate, newState)
+end
+
 --- Delete a live owned vehicle and write its condition back. `data` is optional and comes
---- from the caller's client when it has just read the entity.
+--- from the caller's client when it has just read the entity. Without `newState` the state
+--- is kept: a parked car taken out of the world (a parking module streaming it out) is still
+--- parked, and comes back with SpawnOwned(nil, plate).
 local function despawnOwned(plate, data, newState)
     local live = Live[plate]
     if not live then return false end
+    if newState == S.PARKED and not live.parked then return false, 'notparked' end
     persist(plate, data)
     local ent = NetworkGetEntityFromNetworkId(live.netid)
     if ent and ent ~= 0 and DoesEntityExist(ent) then DeleteEntity(ent) end
     Live[plate] = nil
-    if newState then
-        MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { newState, plate })
+    if newState and newState ~= S.PARKED then
+        if live.parked then
+            clearPark(plate, newState)
+        else
+            MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { newState, plate })
+        end
     end
     return true
+end
+
+-- ── Parked in the street ───────────────────────────────────────
+--- The server entity of a live plate, or nil when it is not in the world.
+--- @return entity|nil, netid|nil
+local function liveEntity(plate)
+    local live = Live[plate]
+    if not live then return nil end
+    local ent = NetworkGetEntityFromNetworkId(live.netid)
+    if not ent or ent == 0 or not DoesEntityExist(ent) then return nil end
+    return ent, live.netid
+end
+
+--- Mark a car as parked in the street where it stands. `coords`/`heading` default to the
+--- live entity's own; `data` is the optional condition ({ props, fuel, engine, body }, same
+--- clamping as a client report) plus `vehicleType` for the server-side respawn. Only a car
+--- that is out (or already parked, to move it) can be parked: one in a garage or the impound
+--- is not in the street.
+--- @return true|false, errorstring|nil
+local function markParked(plate, coords, heading, data)
+    plate = cleanPlate(plate)
+    if plate == '' then return false, 'unknown' end
+    if not waitSchema() then return false, 'schema' end
+    local row = rowByPlate(plate)
+    if not row then return false, 'unknown' end
+    if row.state ~= S.OUT and row.state ~= S.PARKED then return false, 'stored' end
+
+    local ent = liveEntity(plate)
+    if coords == nil and ent then
+        coords = GetEntityCoords(ent)
+        if heading == nil then heading = GetEntityHeading(ent) end
+    end
+    local x, y, z = toXYZ(coords)
+    if not x then return false, 'coords' end
+    local h = (tonumber(heading) or 0.0) % 360.0
+
+    data = type(data) == 'table' and data or nil
+    local kind = data and data.vehicleType
+    if not kind and ent and GetVehicleType then
+        local ok, t = pcall(GetVehicleType, ent)
+        if ok and type(t) == 'string' and t ~= '' then kind = t end
+    end
+    kind = kind and tostring(kind):sub(1, 16) or nil
+
+    if data then persist(plate, data) end
+    MySQL.update.await([[UPDATE character_vehicles SET state = ?, park_x = ?, park_y = ?, park_z = ?,
+        park_heading = ?, vehicle_type = COALESCE(?, vehicle_type), parked_at = CURRENT_TIMESTAMP
+        WHERE plate = ?]], { S.PARKED, x, y, z, h, kind, plate })
+    if Live[plate] then Live[plate].parked = true end
+    TriggerEvent('v-vehicles:server:parked', plate, vector3(x, y, z), h)
+    return true
+end
+
+--- A parked car somebody is driving away again: back to OUT, position forgotten. The car
+--- has to be in the world; a parked car that is not goes somewhere with SetState instead.
+local function unpark(plate)
+    plate = cleanPlate(plate)
+    local live = Live[plate]
+    if not live then return false, 'notlive' end
+    if not live.parked then return false, 'notparked' end
+    clearPark(plate, S.OUT)
+    return true
+end
+
+--- Every car standing in the street, optionally one owner's, with `coords`, `heading`,
+--- `parkedAt` (unix seconds) and `live` filled in.
+local function parkedRows(citizenid)
+    if not waitSchema() then return {} end
+    local rows
+    if citizenid then
+        rows = MySQL.query.await([[SELECT *, UNIX_TIMESTAMP(parked_at) AS parked_ts FROM character_vehicles
+            WHERE state = ? AND citizenid = ? ORDER BY id]], { S.PARKED, tostring(citizenid) })
+    else
+        rows = MySQL.query.await([[SELECT *, UNIX_TIMESTAMP(parked_at) AS parked_ts FROM character_vehicles
+            WHERE state = ? ORDER BY id]], { S.PARKED })
+    end
+    local out = {}
+    for _, r in ipairs(rows or {}) do
+        r = decodeRow(r)
+        if r.park_x then
+            r.coords = vector3(r.park_x + 0.0, r.park_y + 0.0, r.park_z + 0.0)
+            r.heading = (tonumber(r.park_heading) or 0.0) + 0.0
+        end
+        r.parkedAt = tonumber(r.parked_ts)
+        r.parked_ts = nil
+        r.live = Live[r.plate] ~= nil
+        out[#out + 1] = r
+    end
+    return out
+end
+
+--- A restart of this resource alone leaves the parked cars standing (onResourceStop spares
+--- them) but forgets their handles. Find them again before anybody spawns a second copy.
+local function adoptParked()
+    local rows = MySQL.query.await('SELECT plate, citizenid, model FROM character_vehicles WHERE state = ?',
+        { S.PARKED }) or {}
+    if #rows == 0 then return 0 end
+    local want = {}
+    for _, r in ipairs(rows) do want[r.plate] = r end
+    local n = 0
+    for _, ent in ipairs(GetAllVehicles() or {}) do
+        local plate = cleanPlate(GetVehicleNumberPlateText(ent))
+        local r = want[plate]
+        -- same model too: a plate text alone is what a fake plate would copy
+        if r and not Live[plate]
+           and (GetEntityModel(ent) & 0xFFFFFFFF) == (GetHashKey(r.model) & 0xFFFFFFFF) then
+            Live[plate] = { netid = NetworkGetNetworkIdFromEntity(ent), owner = r.citizenid,
+                            model = r.model, since = os.time(), parked = true }
+            n = n + 1
+        end
+    end
+    return n
 end
 
 -- ── Creating an owned vehicle (dealership / admin / job grant) ──
@@ -212,7 +458,7 @@ exports('IsOwner',       function(cid, plate) return ownsPlate(cid, plate) end)
 exports('HasKeys',       function(src, plate) return hasKeys(src, plate) end)
 exports('GiveKeys',      function(src, plate) return giveKeys(src, plate) end)
 exports('RemoveKeys',    function(src, plate) return removeKeys(src, plate) end)
-exports('SpawnOwned',    function(src, plate, coords, heading) return spawnOwned(src, plate, coords, heading) end)
+exports('SpawnOwned',    function(src, plate, coords, heading, opts) return spawnOwned(src, plate, coords, heading, opts) end)
 exports('DespawnOwned',  function(plate, data, state) return despawnOwned(plate, data, state) end)
 exports('CreateOwned',   function(cid, model, garage, props) return createOwned(cid, model, garage, props) end)
 exports('IsLive',        function(plate) return Live[plate] ~= nil end)
@@ -225,9 +471,23 @@ exports('SetLocked',     function(plate, on)
     return true
 end)
 exports('SetState',      function(plate, state)
-    MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { state, plate })
+    -- A parked car needs a position, which only MarkParked takes.
+    if tonumber(state) == S.PARKED then return false, 'usemarkparked' end
+    local live = Live[plate]
+    local wasParked = (live and live.parked) or (not live and (rowByPlate(plate) or {}).state == S.PARKED)
+    if wasParked then
+        clearPark(plate, state)
+    else
+        MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { state, plate })
+    end
     return true
 end)
+-- The parking surface (v-park): see ARCHITECTURE.md, "One spawn path for parked cars".
+exports('MarkParked',    function(plate, coords, heading, data) return markParked(plate, coords, heading, data) end)
+exports('Unpark',        function(plate) return unpark(plate) end)
+exports('GetParked',     function(citizenid) return parkedRows(citizenid) end)
+exports('GetPlateOwner', function(plate) return ownerOf(cleanPlate(plate)) end)
+exports('GetEntity',     function(plate) return liveEntity(cleanPlate(plate)) end)
 exports('SetGarage',     function(plate, garage)
     MySQL.update.await('UPDATE character_vehicles SET garage = ? WHERE plate = ?', { garage, plate })
     return true
@@ -387,27 +647,52 @@ AddEventHandler('playerDropped', function()
 end)
 
 -- Remove entities that no longer exist from the live index (a vehicle blown up, or
--- garbage-collected by the engine) so the plate can be taken out again.
+-- garbage-collected by the engine) so the plate can be taken out again. A car that was out
+-- goes to the impound; a parked one only leaves the index: its row still says where it
+-- stands, and the parking module puts it back from there.
 CreateThread(function()
     while true do
         Wait(30000)
+        -- collected first: the awaits below yield, and a spawn in between would add a key
+        -- to the table this loop is walking
+        local gone = {}
         for plate, live in pairs(Live) do
             local ent = NetworkGetEntityFromNetworkId(live.netid)
-            if not ent or ent == 0 or not DoesEntityExist(ent) then
-                Live[plate] = nil
+            if not ent or ent == 0 or not DoesEntityExist(ent) then gone[#gone + 1] = plate end
+        end
+        for _, plate in ipairs(gone) do
+            local live = Live[plate]
+            Live[plate] = nil
+            if live and not live.parked then
                 MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.IMPOUND, plate })
             end
         end
     end
 end)
 
+-- Cars that are out go back to their garage. Parked ones stay exactly where they are, entity
+-- and row: that is what lets a car left in the street survive a restart.
 AddEventHandler('onResourceStop', function(res)
     if res ~= GetCurrentResourceName() then return end
     for plate, live in pairs(Live) do
-        local ent = NetworkGetEntityFromNetworkId(live.netid)
-        if ent and ent ~= 0 and DoesEntityExist(ent) then DeleteEntity(ent) end
-        MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.GARAGED, plate })
+        if not live.parked then
+            local ent = NetworkGetEntityFromNetworkId(live.netid)
+            if ent and ent ~= 0 and DoesEntityExist(ent) then DeleteEntity(ent) end
+            MySQL.update.await('UPDATE character_vehicles SET state = ? WHERE plate = ?', { S.GARAGED, plate })
+        end
     end
+end)
+
+-- Boot: the park columns, then the parked cars a restart of this resource alone left standing.
+CreateThread(function()
+    while GetResourceState('oxmysql') ~= 'started' do Wait(100) end
+    local ok, err = pcall(ensureSchema)
+    if not ok then
+        print(('[v-vehicles] could not add the parking columns to character_vehicles: %s'):format(tostring(err)))
+        return
+    end
+    local n = adoptParked()
+    if n > 0 then print(('[v-vehicles] found %d parked vehicle(s) still in the world'):format(n)) end
 end)
 
 -- ── Admin-tunable settings ─────────────────────────────────────

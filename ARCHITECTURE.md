@@ -309,7 +309,7 @@ Schema lives in **`database/schema.sql`** (25 tables; `world_blips` gains `job`/
 | `world_blips` | v-world | admin-created map blips | ✅ used (Editor → Blips) |
 | `world_shops` | v-world | store positions: coords, heading, ped model, blip | ✅ used (Editor → Stores, consumed by v-shops) |
 | `craft_recipes` | v-world | recipes: station, output, count, time, ingredients JSON | ✅ used (Editor → Craft, consumed by v-crafting) |
-| `character_vehicles` | - | vehicle ownership | ⬜ **empty - v-vehicles not built** |
+| `character_vehicles` | v-vehicles | ownership, condition, state (out / garaged / impound / parked) and where a parked car stands | ✅ used (`park_*`, `vehicle_type`, `parked_at` added at boot) |
 | `jobs` | v-world | jobs & grades | ✅ used (Editor → Jobs, consumed by v-jobs) |
 | `gangs` | - | gangs & grades | ⬜ **empty - v-gangs not built** |
 | `server_config` | - | live server settings | ⬜ **empty - never read or written by anything** |
@@ -712,13 +712,66 @@ car as it really is, and the camera distance is derived from the model's own dim
 a bus both frame sensibly. Shared surface - `v-garages` uses it today, the dealership next.
 
 Exports: `GetOwned` / `GetOwnedByCid` / `GetVehicle` / `IsOwner` / `HasKeys` / `GiveKeys` /
-`RemoveKeys` / `SpawnOwned` / `DespawnOwned` / `CreateOwned` / `IsLive` / `SetState` / `SetGarage`;
+`RemoveKeys` / `SpawnOwned` / `DespawnOwned` / `CreateOwned` / `IsLive` / `IsLocked` / `SetLocked` /
+`SetState` / `SetGarage`, and the parking surface `MarkParked` / `Unpark` / `GetParked` /
+`GetPlateOwner` / `GetEntity` (below);
 client-side `GetProps` / `ApplyProps` / `GetFuel` / `SetFuel` / `OpenPreview` / `ClosePreview` /
 `RotatePreview` / `ZoomPreview` / `IsPreviewOpen`.
 
-**Remaining.** No lockpick/hotwire path yet (the config reserves `hotwireTime` for it), no fuel
-stations, no vehicle-damage → repair economy, and a vehicle whose entity vanishes is moved to
-`impound` by the cleanup tick, which is a blunt rule that will want nuance once players test it.
+**Remaining.** No hotwire path yet (the config reserves `hotwireTime` for it), and a vehicle that
+was out and whose entity vanishes is moved to `impound` by the cleanup tick, which is a blunt rule
+that will want nuance once players test it. A car parked in the street is the exception, below.
+
+#### One spawn path for parked cars - the v-park decision
+
+v-park keeps cars where a player left them, across restarts, and it used to create them itself.
+Two ways to bring it in were on the table:
+
+- **(a) v-park asks, v-vehicles spawns. Chosen.** v-park keeps deciding *when* a parked car is in
+  the world (its streaming radius, placement and ground checks, appearance data), and every entity
+  still comes out of `SpawnOwned`. v-vehicles learns one state, `PARKED`, and stops treating a
+  missing parked entity as a lost car. The rule "one spawn path" (§5.1) holds.
+- **(b) v-park replaces v-vehicles' persistence. Rejected.** Keys, locks, the garages, the impound,
+  the dealership's sell-back, the mechanic's wear and the phone's Garage app all read
+  `character_vehicles` and the `Live` index. A second module creating owned cars from its own table
+  gives one plate two records: a car stored in a garage while it still stands in the street, keys
+  that do not open it, a phone that thinks it is at home.
+
+**What v-vehicles does for a parked car.**
+- `state = 3` (`Config.State.PARKED`), with `park_x` / `park_y` / `park_z` / `park_heading`,
+  `vehicle_type` and `parked_at` on the row (added at boot, and in `database/schema.sql` for a new
+  database). Only `MarkParked(plate[, coords, heading, data])` sets it; `SetState` refuses it. It
+  takes a car that is out (or already parked, to move it), defaults to where the entity stands, and
+  `data` is the same clamped condition a client report carries, plus `vehicleType`.
+- The 30 s cleanup tick drops a vanished parked car from `Live` and leaves its row alone: no
+  impound. `onResourceStop` leaves parked cars standing, entity and row. On start, parked entities
+  still in the world are adopted back into `Live` (same plate, same model), so a restore never
+  makes a second copy.
+- `SpawnOwned(nil, plate[, coords, heading, opts])` is the restore: no player, `PARKED` rows only,
+  at the stored position by default, through `CreateVehicleServerSetter` so no client needs to be
+  connected, orphan mode 2 unless `opts.orphanMode` says otherwise (`opts` also takes `rotation`,
+  `bucket`, `cullingRadius`, `vehicleType`). The car stays parked. It is not dressed: no client has
+  it in scope yet, so the caller applies the appearance when one does. `v-vehicles:server:spawned`
+  fires with a nil source.
+- `DespawnOwned(plate[, data])` with no state takes a parked car out of the world and keeps it
+  parked (streaming out). Into a garage or the impound, it leaves the street and the position is
+  forgotten. `Unpark(plate)` sends a live parked car back to `OUT` when somebody drives it away.
+  Events: `v-vehicles:server:parked (plate, coords, heading)` and
+  `v-vehicles:server:unparked (plate, state)`.
+- Reading: `GetParked([citizenid])` (rows with `coords`, `heading`, `parkedAt`, `live`),
+  `GetPlateOwner(plate)`, `GetEntity(plate) -> entity, netid`.
+
+**Around it.** v-garages stores a parked car like one that is out, the phone's Garage app shows it
+as out, the dealership only buys back a garaged car, v-mechanic ignores a spawn with no driver. A
+car that is not parked goes through exactly the statements it did before, and none of them needs
+the new columns.
+
+**Left to v-park's vcore bridge.** `MarkParked` when a player leaves a car, `Unpark` when one drives
+off, `SpawnOwned(nil, ...)` / `DespawnOwned` to stream, the shared fields (props, fuel, engine,
+body) written back through `MarkParked`'s `data`. Its richer appearance data (deformation, dirt,
+windows) stays its own, keyed by plate, as a cache and never as the ownership record. Without a
+parking module running, a `PARKED` row stays in the street with nobody to bring it back; an admin
+moves it with `SetState`.
 
 ### `v-licenses` ✅ - licences & permits
 **Done.** New module, roadmap §5.3. The single answer to *"is this character allowed to do this"*.
@@ -1733,6 +1786,7 @@ server - `RULES.md` §3.6.2). Ordered by build order, not by wish.
 | 2 | ✅ **`v-garages`** - storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB - the garage is the only legitimate way an owned car enters the world. |
 | 3 | ✅ **`v-vehicleshop`** - dealerships (**shipped**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) - the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
 | 4 | ✅ **`v-rentals`** - short-term hire (**shipped**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row - that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
+| 4b | 🔨 **`v-park`** - cars parked in the street (**in progress**) | `v-vehicles` | Imported (1.2.12), not started. v-vehicles' side is done: the `PARKED` state, the restore without a player and the parking exports (§4, "One spawn path for parked cars"). Left: the vcore adapter in v-park's bridge, then `ensure v-park`. |
 
 **Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` - one consumption model, four
 fuel types, admin-editable stations),

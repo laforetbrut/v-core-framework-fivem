@@ -56,7 +56,10 @@ Config.Keys = {
 }
 
 -- Vehicle state values stored in character_vehicles.state.
-Config.State = { OUT = 0, GARAGED = 1, IMPOUND = 2 }
+-- PARKED is a car left in the street by a parking module (v-park): it keeps its position,
+-- heading and condition on the row, survives a restart, and is never sent to the impound or
+-- back to the garage just because its entity is gone. Only MarkParked() sets it.
+Config.State = { OUT = 0, GARAGED = 1, IMPOUND = 2, PARKED = 3 }
 
 -- Mod slots persisted with a vehicle. Anything not listed here is not restored, so add
 -- to this list rather than inventing a parallel table elsewhere.

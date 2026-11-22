@@ -267,8 +267,9 @@ end)
 
 -- A vehicle just entered the world: hand its driver the condition so the client can
 -- start applying the penalties immediately instead of waiting for the first diagnostic.
+-- A parked car put back by the server has no driver yet (`src` is nil).
 AddEventHandler('v-vehicles:server:spawned', function(src, plate, _, row)
-    if not row then return end
+    if not row or not src then return end
     local isEV = isElectric(row.model)
     TriggerClientEvent('v-mechanic:client:state', src, plate, readParts(row, isEV),
         tonumber(row.mileage) or 0, tonumber(row.last_service) or 0)

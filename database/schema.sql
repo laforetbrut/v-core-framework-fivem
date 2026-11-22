@@ -67,10 +67,16 @@ CREATE TABLE IF NOT EXISTS `character_vehicles` (
   `model`     VARCHAR(50)  NOT NULL,
   `props`     JSON         DEFAULT NULL,
   `garage`    VARCHAR(50)  NOT NULL DEFAULT 'legion',
-  `state`     TINYINT      NOT NULL DEFAULT 1,           -- 0 out, 1 garaged, 2 impound
+  `state`     TINYINT      NOT NULL DEFAULT 1,           -- 0 out, 1 garaged, 2 impound, 3 parked in the street
   `fuel`      INT          NOT NULL DEFAULT 100,
   `engine`    FLOAT        NOT NULL DEFAULT 1000,
   `body`      FLOAT        NOT NULL DEFAULT 1000,
+  `park_x`       DOUBLE      DEFAULT NULL,                -- where a parked car stands (state 3 only)
+  `park_y`       DOUBLE      DEFAULT NULL,
+  `park_z`       DOUBLE      DEFAULT NULL,
+  `park_heading` DOUBLE      DEFAULT NULL,
+  `vehicle_type` VARCHAR(16) DEFAULT NULL,                -- automobile / bike / boat / heli ... for the server-side spawn
+  `parked_at`    TIMESTAMP   NULL DEFAULT NULL,
   `created_at` TIMESTAMP   NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   UNIQUE KEY `plate` (`plate`),

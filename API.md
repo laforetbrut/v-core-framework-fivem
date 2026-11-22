@@ -173,15 +173,26 @@ exports['v-licenses']:LicenseForClass(gtaClass)
 ### v-vehicles - ownership, keys, persistence (server)
 ```lua
 exports['v-vehicles']:CreateOwned(cid, model, garage, props)  -- plate | nil, err
-exports['v-vehicles']:SpawnOwned(src, plate, coords, heading) -- netid | nil, err
-exports['v-vehicles']:DespawnOwned(plate, stateData, newState)
+exports['v-vehicles']:SpawnOwned(src, plate, coords, heading, opts) -- netid | nil, err
+exports['v-vehicles']:DespawnOwned(plate, stateData, newState) -- no newState: state kept
 exports['v-vehicles']:GetOwned(src) / GetOwnedByCid(cid) / GetVehicle(plate)
-exports['v-vehicles']:IsOwner(cid, plate) / IsLive(plate)
+exports['v-vehicles']:IsOwner(cid, plate) / IsLive(plate) / GetPlateOwner(plate)
 exports['v-vehicles']:HasKeys(src, plate) / GiveKeys(src, plate) / RemoveKeys(src, plate)
+exports['v-vehicles']:IsLocked(plate) / SetLocked(plate, on)
 exports['v-vehicles']:SetState(plate, state) / SetGarage(plate, garage)
--- fires v-vehicles:server:spawned(src, plate, netid, row)
+-- parked in the street (state 3), for a parking module such as v-park
+exports['v-vehicles']:MarkParked(plate, coords?, heading?, data?)  -- true | false, err
+exports['v-vehicles']:Unpark(plate)                               -- true | false, err
+exports['v-vehicles']:GetParked(cid?)                             -- rows + coords, heading, parkedAt, live
+exports['v-vehicles']:GetEntity(plate)                            -- entity, netid | nil
+-- fires v-vehicles:server:spawned(src, plate, netid, row)  (src is nil for a restore)
+-- fires v-vehicles:server:parked(plate, coords, heading) / unparked(plate, state)
 ```
 **Nothing else may spawn an owned vehicle.** `SpawnOwned` creates the entity server-side.
+States: 0 out, 1 garaged, 2 impound, 3 parked. `SpawnOwned(nil, plate)` restores a parked car
+with no player (at its stored position, through `CreateVehicleServerSetter`); `opts` takes
+`rotation`, `bucket`, `orphanMode`, `cullingRadius`, `vehicleType`. See ARCHITECTURE.md, "One
+spawn path for parked cars".
 
 ### v-vehicles - client
 ```lua

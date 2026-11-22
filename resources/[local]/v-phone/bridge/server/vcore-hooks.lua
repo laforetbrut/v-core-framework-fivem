@@ -96,7 +96,9 @@ Config.Compat.hooks.vehicles = function(citizenid)
                 plate = tostring(r.plate),
                 model = tostring(r.model or ''),
                 garage = tostring(r.garage or ''),
-                state = r.state,
+                -- 3 is v-vehicles' PARKED: left in the street, so out of the garage as far as
+                -- the Garage app is concerned. The app reads qb's scale, where only 0 is out.
+                state = (tonumber(r.state) == 3) and 0 or r.state,
             }
         end
     end

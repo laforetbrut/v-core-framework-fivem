@@ -12,7 +12,7 @@ V.Provide('garages')
 local Core = exports['v-core']:GetCore()
 
 local Garages = Config.Garages   -- runtime list (DB, or config fallback)
-local S = { OUT = 0, GARAGED = 1, IMPOUND = 2 }
+local S = { OUT = 0, GARAGED = 1, IMPOUND = 2, PARKED = 3 }   -- v-vehicles' Config.State
 
 local function rebuildGarages()
     local rows = (GetResourceState('v-world') == 'started' and exports['v-world']:IsReady())
@@ -133,7 +133,9 @@ Core.RegisterCallback('v-garages:store', function(source, resolve, data)
 
     local row = exports['v-vehicles']:GetVehicle(plate)
     if not row or row.citizenid ~= p.citizenid then resolve({ error = 'notyours' }); return end
-    if row.state ~= S.OUT then resolve({ error = 'notout' }); return end
+    -- A car left parked in the street can be driven to a garage and stored like any other;
+    -- DespawnOwned forgets where it stood.
+    if row.state ~= S.OUT and row.state ~= S.PARKED then resolve({ error = 'notout' }); return end
 
     -- The vehicle itself must be at the garage, not just the player: re-read the entity
     -- from the net id the client sent and measure it server-side.
