@@ -8,6 +8,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Added (English first)
 
+- **v-park 1.2.12 is in the tree, switched off**. The parked-cars module (persistent parked vehicles, about 27k lines of Lua) now lives in `resources/[local]/v-park`, copied as is from the standalone repository. It is deliberately not in `server.cfg` yet: left to itself it would respawn vehicles without going through v-vehicles, so it waits for that wiring.
 - **The Lua checks run on a machine without lupa**. `tools/lupa-shim` stands in for lupa (and for the one `luaparser` call the gym's check makes) on top of the system's Lua 5.4 library, so `lua-syntax`, the phone's thirty-two checks, the gym's validator and the HUD's tests all run with nothing installed. It was seen failing on a deliberately broken file before anything it passed was believed.
 - **The phone's validator checks that an app owned by another module can actually reach it**. Nine of the twenty-four name an `owner` - the bank is v-banking's, the MDT is v-police's, the map is v-world's - and the store hides an app whose owner is not running. What it cannot hide is an owner nothing ever talks to: the resource is up, the app installs and opens, and no answer ever comes. All nine are wired today, verified one by one, and the check keeps it that way.
 
@@ -93,6 +94,7 @@ All notable changes to FiveM Vanilla Dev Server are documented here.
 
 ### Ajouts (miroir français)
 
+- **v-park 1.2.12 est dans l'arbre, éteint**. Le module de voitures garées (véhicules garés persistants, environ 27k lignes de Lua) vit désormais dans `resources/[local]/v-park`, copié tel quel depuis le dépôt autonome. Il n'est volontairement pas dans `server.cfg` : livré à lui-même il recréerait des véhicules sans passer par v-vehicles, il attend donc ce branchement.
 - **Les contrôles Lua tournent sur une machine sans lupa**. `tools/lupa-shim` remplace lupa (et l'unique appel à `luaparser` du validateur de la salle de sport) en s'appuyant sur la bibliothèque Lua 5.4 du système : `lua-syntax`, les trente-deux contrôles du téléphone, le validateur de la salle de sport et les tests du HUD tournent sans rien installer. Il a été vu échouer sur un fichier volontairement cassé avant qu'on croie ce qu'il laissait passer.
 - **Le validateur du téléphone vérifie qu'une application possédée par un autre module peut réellement le joindre**. Neuf des vingt-quatre déclarent un `owner` — la banque appartient à v-banking, le MDT à v-police, la carte à v-world — et le store masque une application dont le propriétaire ne tourne pas. Ce qu'il ne peut pas masquer, c'est un propriétaire à qui personne ne parle : la ressource est là, l'application s'installe et s'ouvre, et aucune réponse ne vient jamais. Les neuf sont câblées aujourd'hui, vérifiées une à une, et le contrôle le maintiendra.
 

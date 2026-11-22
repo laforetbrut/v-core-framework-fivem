@@ -1,0 +1,1114 @@
+/*
+    html/css/panel.css
+
+    Structure and layout. Everything that decides WHERE a thing is.
+
+    Colours, textures and typography live in the theme file that loads after this one, and are
+    reached only through custom properties. That split is what makes "a theme is one CSS file"
+    true rather than aspirational: nothing below sets a literal colour.
+
+    -------------------------------------------------------------------------------------------
+    NO BORDER RADIUS ANYWHERE IN THIS RESOURCE
+    -------------------------------------------------------------------------------------------
+
+    Not as a style preference but as a rule, because a rounded rectangle with a soft shadow and
+    a gradient is the default shape of every generated interface and reads as one on sight.
+    Every edge here is a hard 90 degree corner, every border is a hairline, and depth comes
+    from overlap and from a hard offset shadow rather than from a blur.
+*/
+
+/* ============================================================================== ROOT === */
+
+#root {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+#scrim {
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    /* No blur filter. A backdrop-filter over a full-screen game view costs a real amount of
+       GPU time every frame, for an effect nobody notices behind an opaque panel. */
+}
+
+#panel {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+
+    width: min(1180px, 92vw);
+    height: min(760px, 88vh);
+
+    background: var(--sheet);
+    border: var(--edge);
+    box-shadow: var(--panel-shadow);
+
+    /* Clips the masthead's decorative bleed. */
+    overflow: hidden;
+}
+
+/* ========================================================================= MASTHEAD === */
+
+#masthead {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+
+    padding: 14px 18px;
+    background: var(--mast-bg);
+    border-bottom: var(--edge-strong);
+    flex: 0 0 auto;
+}
+
+.mast-brand {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    padding-right: 16px;
+    border-right: 1px solid var(--mast-divider);
+}
+
+.mast-logo {
+    width: 46px;
+    height: 46px;
+    object-fit: contain;
+    filter: drop-shadow(2px 2px 0 var(--mast-logo-shadow));
+}
+
+/* The two rivets on the left of the sign. Pure decoration, and the cheapest kind: two
+   box-shadows on one element rather than two more nodes. */
+.mast-mark {
+    position: relative;
+    width: 14px;
+    height: 44px;
+    flex: 0 0 auto;
+    background: var(--mast-plate);
+    border: 1px solid var(--mast-plate-edge);
+}
+
+.mast-bolt {
+    position: absolute;
+    left: 3px;
+    width: 6px;
+    height: 6px;
+    background: var(--mast-bolt);
+    border: 1px solid var(--mast-bolt-edge);
+}
+
+.mast-bolt:first-child { top: 5px; }
+.mast-bolt:last-child { bottom: 5px; }
+
+.mast-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding-left: 1px;
+}
+
+.panel-credit { flex: 0 0 auto; margin: 0; padding: 6px 16px 8px; border-top: 1px solid var(--footer-edge); color: var(--footer-fg); font-size: 9px; letter-spacing: 0.12em; text-align: right; text-transform: uppercase; }
+
+#title {
+    font-family: var(--font-display);
+    font-size: 30px;
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    line-height: 1;
+    color: var(--mast-title);
+    text-transform: uppercase;
+}
+
+#subtitle {
+    margin-top: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--mast-subtitle);
+}
+
+.mast-stats {
+    display: flex;
+    gap: 2px;
+    flex: 0 0 auto;
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-width: 78px;
+    padding: 6px 10px;
+    background: var(--stat-bg);
+    border: 1px solid var(--stat-edge);
+}
+
+.stat-value {
+    font-family: var(--font-display);
+    font-size: 20px;
+    line-height: 1;
+    color: var(--stat-value);
+}
+
+.stat-label {
+    margin-top: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--stat-label);
+}
+
+.btn-close {
+    flex: 0 0 auto;
+    width: 34px;
+    height: 34px;
+    font-size: 15px;
+    line-height: 1;
+    color: var(--close-fg);
+    background: var(--close-bg);
+    border: 1px solid var(--close-edge);
+}
+
+.btn-close:hover {
+    background: var(--close-bg-hover);
+    color: var(--close-fg-hover);
+}
+
+/* ============================================================================= TABS === */
+
+#tabs {
+    display: flex;
+    gap: 0;
+    flex: 0 0 auto;
+    background: var(--tabs-bg);
+    border-bottom: var(--edge);
+}
+
+.tab {
+    padding: 9px 22px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--tab-fg);
+    background: transparent;
+    border-right: 1px solid var(--tab-divider);
+    /* The active marker is a hard 3px bar, drawn inset so it does not shift the layout when
+       it appears. */
+    box-shadow: inset 0 -3px 0 transparent;
+    transition: color 90ms linear, background-color 90ms linear;
+}
+
+.tab:hover {
+    color: var(--tab-fg-hover);
+    background: var(--tab-bg-hover);
+}
+
+.tab.is-active {
+    color: var(--tab-fg-active);
+    background: var(--tab-bg-active);
+    box-shadow: inset 0 -3px 0 var(--accent);
+}
+
+/* ============================================================================ VIEWS === */
+
+/*
+    The stage: the views and the detail sheet, side by side.
+
+    -------------------------------------------------------------------------------------------
+    WHY THE SHEET IS DOCKED AND NOT FLOATED
+    -------------------------------------------------------------------------------------------
+
+    1.0.1 gave the detail an absolutely positioned panel on the right-hand edge of the whole
+    panel: `top: 0; right: 0; bottom: 0`. That put it on top of the summary counts in the
+    masthead, on top of the filter and sort controls, and on top of the entire actions column
+    of every visible row.
+
+    The comment above it claimed the list stayed visible. Half of it did.
+
+    Docking it in a flex row means it CANNOT cover anything: the table gets the space that is
+    left and reflows into it. Opening the detail costs the width of the sheet and nothing else.
+*/
+#stage {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.view {
+    display: none;
+    flex: 1 1 auto;
+    /* Both matter. `min-height` lets the table scroll rather than stretching the panel;
+       `min-width` lets the table narrow when the sheet opens rather than overflowing. A flex
+       item's default `min-width: auto` refuses to shrink below its content. */
+    min-height: 0;
+    min-width: 0;
+    flex-direction: column;
+}
+
+.view.is-active {
+    display: flex;
+}
+
+/* ========================================================================== TOOLBAR === */
+
+#toolbar {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    padding: 12px 16px;
+    flex: 0 0 auto;
+    border-bottom: 1px solid var(--rule);
+}
+
+.field {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+}
+
+.field-search {
+    flex: 1 1 auto;
+}
+
+#search,
+#filter,
+#sort,
+#modal-input,
+#modal-select {
+    width: 100%;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    letter-spacing: 0.04em;
+    color: var(--input-fg);
+    background: var(--input-bg);
+    border: 1px solid var(--input-edge);
+}
+
+#search::placeholder {
+    color: var(--input-placeholder);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 11px;
+}
+
+#search:focus,
+#filter:focus,
+#sort:focus,
+#modal-input:focus {
+    border-color: var(--accent);
+    background: var(--input-bg-focus);
+}
+
+#filter,
+#sort {
+    min-width: 168px;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    /* The native arrow is a rounded blue thing on some platforms. Removing it and drawing
+       nothing is more consistent than trying to draw our own. */
+    appearance: none;
+    padding-right: 26px;
+    background-image: var(--select-arrow);
+    background-repeat: no-repeat;
+    background-position: right 9px center;
+}
+
+#filter option,
+#sort option,
+#modal-select option {
+    background: var(--option-bg);
+    color: var(--option-fg);
+}
+
+/* ========================================================================== BUTTONS === */
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    height: 32px;
+    padding: 0 14px;
+
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    white-space: nowrap;
+
+    color: var(--btn-fg);
+    background: var(--btn-bg);
+    border: 1px solid var(--btn-edge);
+
+    transition: background-color 80ms linear, color 80ms linear, border-color 80ms linear;
+}
+
+.btn:hover {
+    color: var(--btn-fg-hover);
+    background: var(--btn-bg-hover);
+    border-color: var(--btn-edge-hover);
+}
+
+.btn:active {
+    /* A one-pixel nudge instead of a scale transform: it reads as a physical press and it
+       does not trigger a repaint of the whole subtree. */
+    transform: translateY(1px);
+}
+
+.btn:disabled {
+    opacity: 0.35;
+    cursor: default;
+    transform: none;
+}
+
+.btn-primary {
+    color: var(--btn-primary-fg);
+    background: var(--btn-primary-bg);
+    border-color: var(--btn-primary-edge);
+}
+
+.btn-primary:hover {
+    background: var(--btn-primary-bg-hover);
+}
+
+.btn-danger {
+    color: var(--btn-danger-fg);
+    background: var(--btn-danger-bg);
+    border-color: var(--btn-danger-edge);
+}
+
+.btn-danger:hover {
+    background: var(--btn-danger-bg-hover);
+}
+
+/*
+    Row actions: three inline, the rest behind an overflow menu.
+
+    THE FIRST DRAFT PUT ALL TWELVE IN THE ROW and let them wrap. With a narrow actions column
+    they stacked into a vertical column twelve buttons tall, and every row in the table became
+    three hundred pixels high - which turned a page of twenty-five vehicles into a page of
+    four. It looked like a bug because it was one.
+
+    Three is the number that fits on one line at the width below, and they are the three an
+    admin actually reaches for: go to it, bring it here, mark it.
+*/
+.act {
+    height: 22px;
+    padding: 0 7px;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+}
+
+.row-actions {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 3px;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+.act-more {
+    width: 24px;
+    padding: 0;
+    font-size: 12px;
+    letter-spacing: 0;
+}
+
+/*
+    ==============================================================================================
+    THE ROW ACTION SHEET. CENTRED, AND THAT IS THE POINT.
+    ==============================================================================================
+
+    Until 1.0.4 the overflow actions were a dropdown: absolutely positioned inside the row,
+    anchored to the right edge of the actions column, opening downwards - or upwards, once
+    1.0.3 taught it to flip, because `#table-wrap` clips its overflow and on the lower rows a
+    ten-item menu ran 239 pixels out of the bottom of the table.
+
+    It was reported as looking bad and being in the wrong place, and that was right. A dark
+    ten-item slab hanging off the right of a light table covered the header and three rows,
+    changed direction depending on where you clicked, and never said which vehicle it was
+    about.
+
+    None of that is fixable by moving it. A list of ten actions is not a dropdown, it is a
+    dialog, so it is one now: centred, on the same scrim as every other dialog in the panel,
+    with the vehicle named at the top. It cannot be clipped, it cannot cover the table, it
+    cannot flip, and there is no geometry to get wrong.
+*/
+#sheet {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 8;
+    background: var(--modal-scrim);
+}
+
+.sheet-box {
+    width: min(400px, 84%);
+    max-height: 82%;
+    display: flex;
+    flex-direction: column;
+    background: var(--sheet);
+    border: var(--edge-strong);
+    box-shadow: var(--hard-shadow);
+}
+
+.sheet-head {
+    padding: 14px 18px 12px;
+    background: var(--mast-bg);
+    border-bottom: var(--edge-strong);
+    flex: 0 0 auto;
+}
+
+#sheet-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mast-title);
+}
+
+#sheet-sub {
+    margin-top: 2px;
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mast-subtitle);
+}
+
+/*
+    One action per line, full width. A grid of small buttons packs more into the box and makes
+    every one of them a smaller target for somebody who is doing this in a game, with a mouse,
+    while something else is happening.
+*/
+#sheet-actions {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+#sheet-actions .act {
+    height: 34px;
+    justify-content: flex-start;
+    padding: 0 14px;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+}
+
+.sheet-foot {
+    display: flex;
+    justify-content: flex-end;
+    padding: 10px 14px;
+    border-top: 1px solid var(--rule);
+    flex: 0 0 auto;
+}
+
+/* ======================================================================= SELECTION === */
+
+#bulkbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 16px;
+    flex: 0 0 auto;
+    background: var(--bulk-bg);
+    border-bottom: var(--edge-strong);
+}
+
+#bulk-count {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--bulk-fg);
+    white-space: nowrap;
+}
+
+#bulk-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    flex: 1 1 auto;
+}
+
+#bulk-clear {
+    flex: 0 0 auto;
+}
+
+.col-pick,
+th.col-pick {
+    width: 34px;
+    text-align: center;
+    padding-left: 10px;
+    padding-right: 4px;
+}
+
+/* A square checkbox, because nothing here is round. */
+input[type="checkbox"] {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--input-bg);
+    border: 1px solid var(--input-edge);
+    cursor: pointer;
+    vertical-align: middle;
+}
+
+input[type="checkbox"]:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+    /* A hard tick drawn with two lines, no font, no image. */
+    background-image: linear-gradient(45deg, transparent 44%, var(--paper) 44%, var(--paper) 56%, transparent 56%),
+                      linear-gradient(-45deg, transparent 44%, var(--paper) 44%, var(--paper) 56%, transparent 56%);
+    background-size: 60% 60%;
+    background-position: center;
+    background-repeat: no-repeat;
+}
+
+tbody tr.is-picked {
+    background: var(--row-picked);
+}
+
+/* =========================================================================== TABLE === */
+
+#table-wrap,
+#table-wrap-trash,
+#table-wrap-cleanup {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+/*
+    13px, not 12. The table is the whole point of this panel and it is read at a glance across
+    five columns; a point smaller saves one row per screen and costs legibility on every one of
+    them.
+*/
+table {
+    font-size: 13px;
+}
+
+/* A sortable header says so, and says which way. */
+thead th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+}
+
+thead th[data-sort]:hover {
+    color: #fff;
+}
+
+thead th[data-sort].is-sorted::after {
+    content: " \25B2";
+    font-size: 8px;
+}
+
+thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+
+    padding: 9px 12px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+
+    color: var(--th-fg);
+    background: var(--th-bg);
+    border-bottom: var(--edge-strong);
+}
+
+tbody td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--td-fg);
+    /* An ellipsis needs a definite width to clip against, and a table cell's width is
+       indefinite by default however many percentages are on the column. */
+    max-width: 0;
+}
+
+/* The actions column is sized in pixels and must not be squeezed by the rule above. */
+tbody td.col-actions {
+    max-width: none;
+}
+
+/* Alternating rows, at a very low contrast: enough to follow a long row across, not enough
+   to read as stripes. */
+tbody tr:nth-child(even) {
+    background: var(--row-alt);
+}
+
+tbody tr:hover {
+    background: var(--row-hover);
+}
+
+/*
+    A fixed actions column rather than `width: 1%`, which is the usual trick for "as narrow as
+    the content" and is exactly wrong here: it makes the column as narrow as it can be and
+    then lets the content wrap inside it.
+*/
+.col-actions,
+th.col-actions {
+    text-align: right;
+    width: 200px;
+    white-space: nowrap;
+}
+
+.col-vehicle { width: 28%; }
+.col-owner   { width: 20%; }
+.col-where   { width: 20%; }
+.col-state   { width: 18%; }
+
+/*
+    The row the detail sheet is showing.
+
+    Without it, an admin who scrolls the table while the sheet is open has no way to tell which
+    of twenty-five rows the sheet belongs to. The left bar is drawn with a box-shadow rather
+    than a border so it does not shift the row by a pixel when it appears.
+*/
+tbody tr.is-detail {
+    background: var(--row-detail);
+    box-shadow: inset 3px 0 0 var(--row-detail-edge);
+}
+
+/*
+    The vehicle cell: model over plate.
+
+    Both lines are single-line with an ellipsis rather than wrapping. A wrapped secondary line
+    triples the row height for a plate that was two characters too long, and the row heights
+    then differ down the table, which is what makes a list hard to scan even when every
+    individual row is legible.
+*/
+.v-model {
+    display: block;
+    font-weight: 600;
+    color: var(--td-strong);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v-sub {
+    display: block;
+    margin-top: 3px;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--td-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.v-label {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 6px;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--label-fg);
+    background: var(--label-bg);
+    border: 1px solid var(--label-edge);
+}
+
+/*
+    Status chips. Square, uppercase, and now with a tinted fill behind the border.
+
+    A 1px outline in a mid-tone colour on a light board is close to invisible at 9px, which is
+    what the first version of these was. The fill costs nothing and is the difference between
+    a chip you notice and one you have to look for.
+*/
+.chip {
+    display: inline-block;
+    padding: 2px 7px;
+    margin: 0 4px 3px 0;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid currentColor;
+}
+
+.chip-live    { color: var(--chip-live);    background: var(--chip-live-bg); }
+.chip-stored  { color: var(--chip-stored);  background: var(--chip-stored-bg); }
+.chip-wrecked { color: var(--chip-wrecked); background: var(--chip-wrecked-bg); }
+.chip-due     { color: var(--chip-due);     background: var(--chip-due-bg); }
+.chip-grace   { color: var(--chip-grace);   background: var(--chip-grace-bg); }
+.chip-broken  { color: var(--chip-broken);  background: var(--chip-broken-bg); }
+
+/* A two-bar condition meter for body and engine health. No animation, no gradient. */
+.meter {
+    display: flex;
+    gap: 2px;
+    margin-top: 4px;
+    width: 84px;
+}
+
+.meter-bar {
+    position: relative;
+    height: 5px;
+    flex: 1 1 0;
+    background: var(--meter-track);
+    border: 1px solid var(--meter-track);
+}
+
+.meter-fill {
+    position: absolute;
+    inset: 0 auto 0 0;
+    background: var(--meter-fill);
+}
+
+.meter-fill.is-low { background: var(--meter-low); }
+.meter-fill.is-dead { background: var(--meter-dead); }
+
+.empty,
+.note {
+    padding: 34px 20px;
+    text-align: center;
+    font-size: 13px;
+    letter-spacing: 0.04em;
+    color: var(--td-muted);
+}
+
+.note {
+    padding: 14px 20px;
+    text-align: left;
+    border-bottom: 1px solid var(--rule);
+    line-height: 1.6;
+}
+
+/* ========================================================================== FOOTER === */
+
+#pager,
+#trash-pager {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    flex: 0 0 auto;
+    border-top: var(--edge-strong);
+    background: var(--footer-bg);
+}
+
+#page-label,
+#trash-page-label {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--td-muted);
+}
+
+.pager-total {
+    margin-left: auto;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--td-muted);
+}
+
+/* =========================================================================== TOAST === */
+
+#toast {
+    position: absolute;
+    left: 50%;
+    bottom: 60px;
+    transform: translateX(-50%);
+    z-index: 6;
+
+    max-width: 70%;
+    padding: 9px 16px;
+
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    text-align: center;
+
+    color: var(--toast-fg);
+    background: var(--toast-bg);
+    border: 1px solid var(--toast-edge);
+    box-shadow: var(--hard-shadow);
+}
+
+#toast.is-error {
+    color: var(--toast-error-fg);
+    background: var(--toast-error-bg);
+    border-color: var(--toast-error-edge);
+}
+
+/* ========================================================================== DETAIL === */
+
+/*
+    A DIFFERENT SURFACE, NOT THE SAME ONE WITH A LINE DOWN IT.
+
+    The old sheet used `--sheet`, the same paper as the table behind it, separated by a single
+    border. On a warm low-contrast board that read as more table rather than as a panel, which
+    is most of what "barely visible" meant: the eye had nothing to catch on and the whole thing
+    looked like an odd empty column.
+
+    It now sits on its own darker board with a hard edge, exactly the way the masthead and the
+    footer are separated from the sheet.
+*/
+#detail {
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 clamp(300px, 31%, 380px);
+    min-height: 0;
+
+    background: var(--detail-bg);
+    border-left: var(--edge-strong);
+}
+
+#detail-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 14px;
+    background: var(--mast-bg);
+    border-bottom: var(--edge-strong);
+    flex: 0 0 auto;
+}
+
+.detail-ident {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+#detail-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--mast-title);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The plate and the model, so two vehicles opened in a row are told apart at a glance. */
+#detail-sub {
+    margin-top: 1px;
+    font-size: 10.5px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--mast-subtitle);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/*
+    The actions, repeated from the row.
+
+    Not duplication for its own sake: the row's actions are one table-width away while the
+    sheet is open, and an admin who has just read that a car is wrecked wants to repair it
+    without hunting back across the table for the right line.
+*/
+#detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 10px;
+    flex: 0 0 auto;
+    background: var(--detail-actions-bg);
+    border-bottom: 1px solid var(--detail-rule);
+}
+
+#detail-actions:empty {
+    display: none;
+}
+
+#detail-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 0 14px;
+    /* 13px, matching the table. The old 12.5 was small enough that the labels, which are the
+       muted half of every line, sat under the size at which this colour is comfortable. */
+    font-size: 13px;
+}
+
+.d-section {
+    margin-bottom: 4px;
+}
+
+/*
+    A banded header rather than an underlined word. The sheet is a list of forty short lines
+    and the bands are what let the eye jump to the right group instead of reading all of them.
+*/
+.d-section h3 {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    margin-bottom: 4px;
+    padding: 6px 14px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--detail-section-fg);
+    background: var(--detail-section-bg);
+    border-top: 1px solid var(--detail-rule);
+    border-bottom: 1px solid var(--detail-rule);
+}
+
+.d-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    gap: 10px;
+    padding: 4px 14px;
+}
+
+/* Zebra striping. Across a 300px column with a right-aligned value, a band is what stops the
+   eye pairing a label with the wrong line. */
+.d-row:nth-child(even) {
+    background: var(--detail-stripe);
+}
+
+.d-row span:first-child {
+    color: var(--detail-label);
+}
+
+.d-row span:last-child {
+    color: var(--detail-value);
+    font-weight: 600;
+    text-align: right;
+    word-break: break-word;
+}
+
+.d-empty {
+    padding: 4px 14px;
+    color: var(--detail-label);
+    font-style: italic;
+}
+
+.d-swatches {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 0 14px;
+}
+
+.d-swatch {
+    width: 26px;
+    height: 18px;
+    border: 1px solid var(--input-edge);
+}
+
+/*
+    The shortcut hint lives INSIDE the pager, not floating over it.
+
+    The first version was absolutely positioned at the bottom left of the panel, which put it
+    straight through the page controls. A hint that obscures the thing it is hinting about is
+    worse than no hint.
+*/
+#shortcuts {
+    margin-left: 18px;
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--td-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    pointer-events: none;
+}
+
+/* ======================================================================== STACKING === */
+
+/*
+    The panel carries two decorative layers from the theme: a worn edge along its top and a
+    faint vignette over the sheet, both pseudo-elements, both `pointer-events: none`. Anything
+    the user can touch has to sit above them.
+
+    -------------------------------------------------------------------------------------------
+    THIS RULE USED TO LIVE IN THE THEME FILE, AND IT BROKE EVERY DIALOG
+    -------------------------------------------------------------------------------------------
+
+    It listed `#toast` and `#modal` as well, and set `position: relative` on all of them. Both
+    of those are `position: absolute` here - and the theme file loads second, so at equal
+    specificity it won.
+
+    `#modal` therefore stopped being an overlay and became a flex ITEM of `#root`. Measured at
+    1280x720: the panel went from 1178 pixels wide at x=51 to 1061 at x=0, and the dialog was
+    squashed into a 175-pixel strip at x=1083 instead of being centred. Refuel, rename, set
+    owner, choose a garage and confirm a delete were all affected, from 1.0.0 to 1.0.3.
+
+    So the list is only the elements that are in NORMAL FLOW and need lifting. Anything already
+    positioned carries its own z-index a few lines from its `position`, where the two can be
+    read together. `tools/check.py` group 14 fails the build if the theme sets a layout
+    property on anything but its own pseudo-elements.
+*/
+#masthead,
+#tabs,
+.view,
+#detail {
+    position: relative;
+    z-index: 2;
+}
+
+/* =========================================================================== MODAL === */
+
+#modal {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 8;
+    background: var(--modal-scrim);
+}
+
+.modal-box {
+    width: min(430px, 80%);
+    padding: 20px;
+    background: var(--sheet);
+    border: var(--edge-strong);
+    box-shadow: var(--hard-shadow);
+}
+
+#modal-title {
+    font-family: var(--font-display);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--td-strong);
+}
+
+#modal-body {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--td-fg);
+}
+
+#modal-select,
+#modal-input {
+    margin-top: 14px;
+    height: 34px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 18px;
+}
