@@ -7,6 +7,11 @@ author 'vyrriox'
 description 'Vehicle persistence for FiveM on qb-core, qbx_core, ESX and ox_core: vehicles stay where they were left across restarts, are restored to the exact spot even in tight spaces, and are streamed in only when somebody is near. Bodywork deformation is stored and synchronised, job and rental vehicles can be semi-persistent, and there is a migration from Advanced Parking.'
 version '1.2.12'
 
+-- Listed by v-core's module registry (v-admin). Its tunables stay in config.lua and /vparkadmin.
+v_module 'yes'
+v_module_label 'Park'
+v_module_category 'vehicles'
+
 -- No hard dependency, on purpose. oxmysql, every framework, every fuel resource, every key
 -- resource, every garage and every notification system are detected at runtime and all
 -- optional. See config.lua -> Config.Compat, bridge/client/compat.lua and
