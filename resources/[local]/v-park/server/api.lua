@@ -357,6 +357,11 @@ exports('SetOwner', function(reference, characterId, ownerType, name)
     local record = Store.resolve(reference)
     if not record then return false, 'no such vehicle' end
 
+    if Bridge.mayTransfer then
+        local allowed = Bridge.mayTransfer()
+        if not allowed then return refuse('the owner is character_vehicles on v-core') end
+    end
+
     return Ownership.transfer(record.id, characterId, ownerType or 'owned', name)
 end)
 

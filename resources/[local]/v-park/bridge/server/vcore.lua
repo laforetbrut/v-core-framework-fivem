@@ -521,6 +521,31 @@ function Bridge.hasKeys(src, plate)
     return ok and has == true
 end
 
+--[[
+    The lock of a car on v-core is v-vehicles' (the L key, `SetLocked`), pushed to every client
+    from there. A native lock set here would be undone, or contradict what the key says. nil
+    off v-core, so `Actions.setLock` locks the entity itself.
+]]
+function Bridge.setLocked(plate, locked)
+    if not active() then return nil end
+
+    local normalised = Park.plate(plate)
+    if not normalised then return false end
+
+    local ok, done = call('SetLocked', normalised, locked == true)
+    return ok and done == true
+end
+
+--[[
+    May v-park hand a car to another owner? Not on v-core: the owner is
+    `character_vehicles.citizenid`, which every other module reads and v-park's transfer would
+    leave as it was. A sale or a gift goes through v-vehicles' own modules.
+]]
+function Bridge.mayTransfer()
+    if not active() then return true end
+    return false, 'error.owner_is_framework'
+end
+
 -- ---------------------------------------------------------------------------------------
 -- The parked car's life. Called from a handful of lines in the feature files.
 -- ---------------------------------------------------------------------------------------

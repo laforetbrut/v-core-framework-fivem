@@ -87,6 +87,7 @@ Locale.register('en', {
     ['error.character_not_loaded']  = 'Your character is not loaded yet.',
     ['error.no_ped']                = 'Your character could not be found.',
     ['error.no_such_player']        = 'No player is online with that id.',
+    ['error.owner_is_framework']    = 'The owner of that vehicle is kept by the framework, not by v-park.',
     ['error.not_in_world']          = 'That vehicle could not be brought into the world.',
     ['error.not_owned_no_garage']   = 'That vehicle has no owner, so it has no garage to go to.',
     ['error.no_garage_support']     = 'This framework has no garage column to write to.',

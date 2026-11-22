@@ -83,6 +83,7 @@ Locale.register('fr', {
     ['error.character_not_loaded']  = "Votre personnage n'est pas encore chargé.",
     ['error.no_ped']                = "Votre personnage est introuvable.",
     ['error.no_such_player']        = "Aucun joueur connecté ne porte cet identifiant.",
+    ['error.owner_is_framework']    = "Le propriétaire de ce véhicule est tenu par le framework, pas par v-park.",
     ['error.not_in_world']          = "Ce véhicule n'a pas pu être fait apparaître.",
     ['error.not_owned_no_garage']   = "Ce véhicule n'a pas de propriétaire, donc pas de garage où aller.",
     ['error.no_garage_support']     = "Ce framework n'a pas de colonne de garage où écrire.",

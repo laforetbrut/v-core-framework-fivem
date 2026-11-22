@@ -571,6 +571,14 @@ function Actions.setLock(src, reference, locked)
     local record, err = target(src, reference, false)
     if not record then return false, err end
 
+    -- On v-core the lock is v-vehicles' own. See bridge/server/vcore.lua.
+    local framework = nil
+    if Bridge.setLocked then framework = Bridge.setLocked(record.plate, locked) end
+    if framework ~= nil then
+        if not framework then return false, 'error.command_failed' end
+        return true, locked and 'notify.locked' or 'notify.unlocked'
+    end
+
     local entity, netId = ensureLive(record)
     if entity then
         mutate(src, record, netId, locked and 'lock' or 'unlock', nil)
@@ -596,6 +604,11 @@ end
 function Actions.setOwner(src, reference, targetSrc)
     local record, err = target(src, reference, true)
     if not record then return false, err end
+
+    if Bridge.mayTransfer then
+        local allowed, why = Bridge.mayTransfer()
+        if not allowed then return false, why end
+    end
 
     targetSrc = tonumber(targetSrc)
     if not Bridge.playerName(targetSrc) then return false, 'error.no_such_player' end
