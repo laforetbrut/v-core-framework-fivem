@@ -141,7 +141,7 @@ rejected rather than stored as something else. Changes fire `v-core:server:setti
 and are mirrored to every client (`Core.GetSetting` client-side), so nothing polls.
 
 **Auto-detection.** A resource with `v_module 'yes'` in its `fxmanifest.lua` is listed even
-before it registers anything - an operator can see it is installed. All 39 modules carry the
+before it registers anything - an operator can see it is installed. All 40 modules carry the
 flag, imported ones included. Full guide: **[DEVELOPERS.md](DEVELOPERS.md)**.
 
 **Settings vs. content.** A *tunable* (a rate, a threshold, a price multiplier) is a
@@ -149,7 +149,7 @@ setting. A *list* (shops, items, recipes, garages) is a **v-world domain** with 
 subtab - §7. Using a setting for a list, or a domain for a single number, is the mistake
 this split exists to prevent.
 
-**36 of the 39 modules register with the core**, and 35 of those carry at least one tunable.
+**36 of the 40 modules register with the core**, and 35 of those carry at least one tunable.
 Counted from the boot log, where the registry prints each module and its setting count. The
 exceptions, each for its own reason:
 
@@ -162,6 +162,8 @@ exceptions, each for its own reason:
   nothing read and that the spawn code deliberately refuses to do - holding there deadlocks
   into a black screen that never lifts. Registering with nothing keeps the panel listing the
   module under its own label rather than as a bare manifest flag.
+- `v-park` is an imported resource that runs on four other frameworks too. Its tunables stay in
+  its `config.lua` and its own panel (`/vparkadmin`); the manifest flag lists it.
 
 `v-loadscreen` is the newest of the 36 and the narrowest. Its screen is HTML the client reads
 before it has a server connection, so wallpapers, tracks and timings cannot be pushed from the
@@ -780,6 +782,57 @@ and fails if v-park calls a vehicle-creating native. Its richer appearance data 
 windows) stays its own, keyed by plate, as a cache and never as the ownership record. Without a
 parking module running, a `PARKED` row stays in the street with nobody to bring it back; an admin
 moves it with `SetState`.
+
+### `v-park` ✅ - cars parked in the street
+
+Imported (1.2.12, `resources/[local]/v-park`) and started by `server.cfg` after `v-notify`,
+`v-vehicles`, `v-garages` and `v-fuel`, before `v-phone`. Its own docs (README "On v-core",
+CONFIG.md, API.md) cover the rest; this is the path of one car.
+
+1. **Left in the street.** The player gets out. v-park's client offers the car, the server checks
+   it (`Bridge.mayPersist`: a `character_vehicles` row, not garaged, not impounded; an ambient or
+   job car is refused with `refuse.not_registered`), keeps an appearance row in `v_park_vehicles`
+   (props, deformation, dirt, windows) and calls `MarkParked(plate, coords, heading, data)`. The row
+   becomes `PARKED` (3) with the position and the fuel, engine and body. The car stays where it is.
+2. **Nobody near.** Past `Config.Streaming.despawnRadius` (350 m) v-park streams it out:
+   `MarkParked` again with the last pose, then `DespawnOwned(plate)`. The row stays `PARKED`.
+3. **Restart.** v-vehicles' `onResourceStop` leaves parked cars alone, and the 30 s cleanup tick
+   never sends a vanished parked car to the impound. After the restart the `PARKED` row is still in
+   `character_vehicles` and v-park's appearance row is still in `v_park_vehicles`. A v-park row whose
+   car is no longer parked in v-vehicles (stored, impounded, sold meanwhile) is dropped, never
+   created.
+4. **Somebody walks up.** Inside `spawnRadius` (250 m) v-park's `spawnEntity` asks
+   `Bridge.spawnVehicle`, which calls `SpawnOwned(nil, plate, coords, heading, opts)` on the one
+   queue of the bridge. v-vehicles creates it through `CreateVehicleServerSetter` (no client
+   needed), indexes it in `Live`, and the row stays `PARKED`. v-park then has the nearest client
+   dress and place it (deformation, ground probe, freeze until touched). v-park itself never calls
+   a vehicle-creating native on v-core.
+5. **Driven off.** Getting in is `Unpark(plate)`: an ordinary car that is `OUT`, v-vehicles' as any
+   other. Getting out again goes back to step 1.
+6. **Back home.** Storing it at a v-garages point or an impound by v-police fires
+   `v-vehicles:server:unparked`, and v-park forgets it. A car v-park drops on its own (idle cleanup
+   after 15 days, `/vparkforget`, an admin delete) is unparked if it stands in the world, sent to
+   its last garage otherwise. An owned car never expires (`Config.Lifecycle.expiry.owned = 0`).
+7. **On the phone.** v-phone's vehicle hook (`bridge/server/vcore-hooks.lua`) shows `PARKED` as out;
+   for a car that is out the Garage app asks `Bridge.Garages.LocatePlate`, which asks
+   `exports['v-park']:GetVehicleByPlate(plate)` when the real `v-park` resource is started (the
+   phone's `v-*` stub layer has no `v-park` entry, so the state is the real one). That answer comes
+   from v-park's row, or from `character_vehicles` for a parked car v-park holds no row for, so a
+   car left across the map is located without being in the world.
+
+**Owned elsewhere, so off in v-park's config on v-core.** `Config.Compat.framework = 'vcore'`
+(forced, not detected). Keys are not handed back on restore (`Config.Keys.restore`): v-vehicles
+gives them to the owner from ownership. The native lock is not restored (`Save.fields.lockState`)
+and `/vparklock` is off: the lock is `SetLocked` in v-vehicles, and the panel's lock button goes
+there too (`Bridge.setLocked`). `/vparkowner` is off and a transfer from the panel or the
+`SetOwner` export is refused (`Bridge.mayTransfer`): the owner is `character_vehicles.citizenid`.
+Job vehicles and semi-persistence are off: job and rental cars have no `character_vehicles` row,
+and v-rentals runs its own timer.
+
+**Checks.** `PYTHONPATH=tools/lupa-shim python3 tools/vpark-selftest.py` runs v-park's and
+v-vehicles' server scripts together outside the game and follows a car through steps 1 to 6 plus
+the lock and the owner; `tools/vehicles-selftest.py` covers v-vehicles alone. Neither runs the
+client, placement or a real database.
 
 ### `v-licenses` ✅ - licences & permits
 **Done.** New module, roadmap §5.3. The single answer to *"is this character allowed to do this"*.
@@ -1794,7 +1847,7 @@ server - `RULES.md` §3.6.2). Ordered by build order, not by wish.
 | 2 | ✅ **`v-garages`** - storage & retrieval (**shipped**) | `v-vehicles` | Garage points (public, **job-owned**, gang-owned, house), each a `v-world` domain row: position, spawn point + heading, blip, type, and a **job/gang lock** reusing the same gate as the clothing stores. Store / retrieve / list, an **impound** that only releases against a fee, and per-garage capacity. Retrieval re-applies the stored properties from the DB - the garage is the only legitimate way an owned car enters the world. |
 | 3 | ✅ **`v-vehicleshop`** - dealerships (**shipped**) | `v-vehicles`, `v-banking` | Concessions at the real GTA V dealerships (Premium Deluxe, Luxury Autos, bike/boat/plane sellers). A **catalogue editable from the admin panel** (model, category, price, stock, **licence required**, job/gang restriction, enabled) - the vehicle catalogue is a `v-world` domain like items and recipes, not a Lua table. Test drive on a timer that returns you where you started, purchase charges **server-side** and mints the `character_vehicles` row + plate atomically, then the car appears in the buyer's garage. Sell-back at a configurable rate. |
 | 4 | ✅ **`v-rentals`** - short-term hire (**shipped**) | `v-vehicles`, `v-garages` | Rental points (airport, train stations, PD/EMS motor pool). A **deposit** is taken, the vehicle is spawned with a temporary plate and a **timer**; returning it to any rental point refunds the deposit minus the fee, and an expired or destroyed rental keeps the deposit. Rentals never create a `character_vehicles` row - that is what separates a rental from a purchase and stops it becoming a free-car exploit. |
-| 4b | 🔨 **`v-park`** - cars parked in the street (**in progress**) | `v-vehicles` | Imported (1.2.12), not started yet. v-vehicles' side is done: the `PARKED` state, the restore without a player and the parking exports (§4, "One spawn path for parked cars"). v-park's vcore adapter is done too (`bridge/server/vcore.lua`, checked by `tools/vpark-selftest.py`). Left: `ensure v-park`. |
+| 4b | ✅ **`v-park`** - cars parked in the street (**shipped**) | `v-vehicles`, `v-garages` | Imported (1.2.12) and started after the vehicle modules. A car left in the street survives a restart and is streamed in when somebody is near, always through `SpawnOwned`: v-park decides when, v-vehicles owns the car (§4, "One spawn path for parked cars" and `v-park`). |
 
 **Cross-cutting for the whole block:** ✅ **fuel is done** (`v-fuel` - one consumption model, four
 fuel types, admin-editable stations),

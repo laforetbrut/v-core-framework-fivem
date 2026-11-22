@@ -7,7 +7,7 @@
 [![Docs EN + FR](https://img.shields.io/badge/docs-EN%20%2B%20FR-e8a33d.svg)](DEVELOPERS.md)
 
 **v-core** is a complete, self-contained roleplay framework for **FiveM Enhanced** - the GTA V
-Enhanced next-gen edition. 39 modules, one shared design system, one database, no external
+Enhanced next-gen edition. 40 modules, one shared design system, one database, no external
 framework dependency. It is not an ESX or QBCore add-on pack, it *is* the framework.
 
 **Why a new framework rather than a port?** ESX and QBCore were written for the **Legacy** branch,
@@ -99,6 +99,9 @@ in-game** - never by editing Lua on a live server.
 - **`v-vehicles` / `v-garages`** - owned-vehicle persistence (mods, fuel, damage), server-minted
   plates, a key system, a **3D showroom preview**, and 9 garages incl. an impound lot and job motor
   pools - all editable in-game.
+- **`v-park`** - a car left in the street stays there across restarts and comes back when someone
+  walks up to it, dents and all. It only decides *when* the car is in the world: v-vehicles still
+  spawns it, keeps its owner and keys, and the phone's Garage app finds it on the map.
 - **`v-fuel`** - four fuel types (regular / premium / diesel / electric), load-based consumption,
   18 stations incl. EV charging points with connector levels and a charge curve, jerry cans;
   stations and prices editable in-game.
@@ -301,7 +304,7 @@ Author: vyrriox
 # v-core - un framework roleplay pour FiveM Enhanced (Version Française)
 
 **v-core** est un framework roleplay complet et autonome pour **FiveM Enhanced** (l'édition next-gen de
-GTA V). 39 modules, un seul design system, une seule base de données, aucune dépendance à un framework
+GTA V). 40 modules, un seul design system, une seule base de données, aucune dépendance à un framework
 externe - ce n'est pas un pack d'add-ons pour ESX ou QBCore, c'est *le* framework.
 
 Développé et testé sur le binaire serveur Enhanced (`cfx-server.exe`), OneSync, MariaDB via `oxmysql`.
@@ -380,6 +383,10 @@ régler est modifiable en jeu** - jamais en éditant du Lua sur un serveur en pr
 - **`v-vehicles` / `v-garages`** - persistance des véhicules possédés (mods, carburant, dégâts),
   plaques générées par le serveur, système de clés, et 9 garages dont une fourrière et les garages
   de métier, et un **aperçu 3D showroom** - le tout modifiable en jeu.
+- **`v-park`** - une voiture laissée dans la rue y reste après un redémarrage et revient quand
+  quelqu'un s'en approche, bosses comprises. Il décide seulement *quand* la voiture est dans le
+  monde : v-vehicles la crée toujours, garde son propriétaire et ses clés, et l'app Garage du
+  téléphone la situe sur la carte.
 - **`v-fuel`** - quatre carburants (91 / 98 / gazole / électrique), consommation selon la charge
   moteur, 18 stations dont des bornes de recharge à plusieurs niveaux avec courbe de charge,
   jerricans ; stations et prix modifiables en jeu.
